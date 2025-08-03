@@ -1,26 +1,27 @@
 :root {
-  /* Updated for Boho Pinkish Theme - Primitive Colors */
+  /* Updated for Lighter, Minimalist Whitish-Pinkish Theme - Primitive Colors */
   --color-white: rgba(255, 255, 255, 1);
   --color-black: rgba(0, 0, 0, 1);
-  --color-cream-50: rgba(252, 252, 249, 1); /* Kept for neutral boho base */
+  --color-cream-50: rgba(252, 252, 249, 1); /* Neutral boho base */
   --color-cream-100: rgba(255, 255, 253, 1);
   --color-gray-200: rgba(245, 245, 245, 1);
   --color-gray-300: rgba(167, 169, 169, 1);
   --color-gray-400: rgba(119, 124, 124, 1);
-  --color-brown-600: rgba(94, 82, 64, 1); /* Earthy accent for boho */
+  --color-brown-600: rgba(94, 82, 64, 1); /* Subtle earthy accent */
   --color-charcoal-700: rgba(31, 33, 33, 1);
   --color-charcoal-800: rgba(38, 40, 40, 1);
-  --color-pink-300: #FFB6C1; /* Soft blush pink for primary */
-  --color-pink-400: #FF69B4; /* Vibrant pink hover */
+  --color-pink-100: #FFF0F5; /* Whitish pink for gradients */
+  --color-pink-300: #FFB6C1; /* Soft blush pink */
+  --color-pink-400: #FF69B4; /* Subtle vibrant pink hover */
   --color-pink-500: #EEBDC0; /* Core boho pink */
-  --color-pink-600: #DDA0DD; /* Deeper rose for active states */
+  --color-pink-600: #DDA0DD; /* Deeper rose for accents */
   --color-pink-700: #CCA7A7; /* Muted pink for borders */
-  --color-gold-400: #E1B54A; /* Gold accent for luxury boho */
-  --color-red-400: rgba(255, 84, 89, 1); /* Kept for errors, but toned down */
+  --color-gold-400: #E1B54A; /* Minimal gold accent */
+  --color-red-400: rgba(255, 84, 89, 1); /* Toned-down errors */
   --color-orange-400: rgba(230, 129, 97, 1); /* Warm accent */
 
   /* RGB versions for opacity */
-  --color-pink-500-rgb: 238, 189, 192; /* For focus rings */
+  --color-pink-500-rgb: 238, 189, 192;
   --color-brown-600-rgb: 94, 82, 64;
   --color-gold-400-rgb: 225, 181, 74;
   --color-red-400-rgb: 255, 84, 89;
@@ -28,43 +29,43 @@
   --color-gray-300-rgb: 167, 169, 169;
   --color-gray-200-rgb: 245, 245, 245;
 
-  /* Semantic Color Tokens (Light Mode) */
-  --color-background: var(--color-cream-50); /* Neutral boho base */
-  --color-surface: #F2D5D5; /* Soft pinkish cream */
+  /* Semantic Color Tokens (Light Mode - Default) */
+  --color-background: linear-gradient(to bottom, var(--color-pink-100), var(--color-pink-300)); /* Whitish-pinkish gradient */
+  --color-surface: #FFF5F7; /* Very light pinkish white */
   --color-text: var(--color-charcoal-700);
   --color-text-secondary: var(--color-gray-400);
-  --color-primary: var(--color-pink-500); /* Main pink for buttons/links */
+  --color-primary: var(--color-pink-500);
   --color-primary-hover: var(--color-pink-400);
   --color-primary-active: var(--color-pink-600);
-  --color-secondary: rgba(var(--color-gold-400-rgb), 0.12); /* Gold for subtle boho accents */
-  --color-secondary-hover: rgba(var(--color-gold-400-rgb), 0.2);
-  --color-secondary-active: rgba(var(--color-gold-400-rgb), 0.25);
-  --color-border: var(--color-pink-700); /* Muted pink borders */
-  --color-btn-primary-text: var(--color-white); /* White text on pink buttons */
-  --color-card-border: rgba(var(--color-brown-600-rgb), 0.12); /* Earthy card edges */
-  --color-card-border-inner: rgba(var(--color-brown-600-rgb), 0.12);
+  --color-secondary: rgba(var(--color-gold-400-rgb), 0.08); /* Minimal opacity */
+  --color-secondary-hover: rgba(var(--color-gold-400-rgb), 0.12);
+  --color-secondary-active: rgba(var(--color-gold-400-rgb), 0.15);
+  --color-border: var(--color-pink-700); /* Thin, muted borders */
+  --color-btn-primary-text: var(--color-white);
+  --color-card-border: rgba(var(--color-brown-600-rgb), 0.08); /* Softer edges */
+  --color-card-border-inner: rgba(var(--color-brown-600-rgb), 0.08);
   --color-error: var(--color-red-400);
-  --color-success: var(--color-pink-300); /* Pink for success notifications */
+  --color-success: var(--color-pink-300);
   --color-warning: var(--color-orange-400);
   --color-info: var(--color-gray-300);
-  --color-focus-ring: rgba(var(--color-pink-500-rgb), 0.4);
+  --color-focus-ring: rgba(var(--color-pink-500-rgb), 0.3); /* Subtle ring */
   --color-select-caret: rgba(var(--color-charcoal-700-rgb), 0.8);
 
-  /* Background color tokens (Light Mode) - Pinkish variations */
-  --color-bg-1: rgba(255, 182, 193, 0.08); /* Light pink */
-  --color-bg-2: rgba(255, 192, 203, 0.08); /* Pink beige */
-  --color-bg-3: rgba(221, 160, 221, 0.08); /* Lavender pink */
-  --color-bg-4: rgba(255, 105, 180, 0.08); /* Hot pink accent */
-  --color-bg-5: rgba(238, 130, 238, 0.08); /* Violet pink */
-  --color-bg-6: rgba(255, 160, 122, 0.08); /* Coral pink */
-  --color-bg-7: rgba(255, 182, 193, 0.08); /* Rose pink */
-  --color-bg-8: rgba(255, 218, 185, 0.08); /* Peach pink */
+  /* Background color tokens (Light Mode) - Gradient variations */
+  --color-bg-1: linear-gradient(to bottom, #FFF0F5, #FFB6C1); /* Main whitish-pinkish */
+  --color-bg-2: linear-gradient(to bottom, #FFF5F7, #FFC0CB); /* Pink beige */
+  --color-bg-3: linear-gradient(to bottom, #FFF0F5, #DDA0DD); /* Lavender pink */
+  --color-bg-4: linear-gradient(to bottom, #FFF5F7, #FF69B4); /* Hot pink accent */
+  --color-bg-5: linear-gradient(to bottom, #FFF0F5, #EE82EE); /* Violet pink */
+  --color-bg-6: linear-gradient(to bottom, #FFF5F7, #FF7F50); /* Coral pink */
+  --color-bg-7: linear-gradient(to bottom, #FFF0F5, #FFB6C1); /* Rose pink */
+  --color-bg-8: linear-gradient(to bottom, #FFF5F7, #FFDAB9); /* Peach pink */
 
   /* Common style patterns */
-  --focus-ring: 0 0 0 3px var(--color-focus-ring);
-  --focus-outline: 2px solid var(--color-primary);
-  --status-bg-opacity: 0.15;
-  --status-border-opacity: 0.25;
+  --focus-ring: 0 0 0 2px var(--color-focus-ring); /* Thinner for minimalism */
+  --focus-outline: 1px solid var(--color-primary);
+  --status-bg-opacity: 0.1;
+  --status-border-opacity: 0.15;
   --select-caret-light: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23134252' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   --select-caret-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23f5f5f5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
 
@@ -139,120 +140,47 @@
   --container-xl: 1280px;
 }
 
-/* Dark Mode Adjustments */
+/* Dark Mode Adjustments (Made Optional and Lighter) */
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-background: var(--color-charcoal-700);
-    --color-surface: #513F3F; /* Deep boho neutral */
+    --color-background: linear-gradient(to bottom, #513F3F, #CCA7A7); /* Softer dark gradient */
+    --color-surface: #513F3F;
     --color-text: var(--color-gray-200);
-    --color-text-secondary: rgba(var(--color-gray-300-rgb), 0.7);
-    --color-primary: var(--color-pink-300); /* Brighter pink for visibility */
+    --color-primary: var(--color-pink-300);
     --color-primary-hover: var(--color-pink-400);
     --color-primary-active: var(--color-pink-500);
-    --color-secondary: rgba(var(--color-gold-400-rgb), 0.15);
-    --color-secondary-hover: rgba(var(--color-gold-400-rgb), 0.25);
-    --color-secondary-active: rgba(var(--color-gold-400-rgb), 0.3);
+    --color-secondary: rgba(var(--color-gold-400-rgb), 0.1);
     --color-border: var(--color-pink-700);
-    --color-btn-primary-text: var(--color-charcoal-700);
-    --color-card-border: rgba(var(--color-gray-400-rgb), 0.2);
-    --color-card-border-inner: rgba(var(--color-gray-400-rgb), 0.15);
-    --color-error: var(--color-red-400);
     --color-success: var(--color-pink-300);
-    --color-warning: var(--color-orange-400);
-    --color-info: var(--color-gray-300);
-    --color-focus-ring: rgba(255, 182, 193, 0.4); /* Pink ring */
-    --color-select-caret: rgba(var(--color-gray-200-rgb), 0.8);
-
-    /* Background color tokens (Dark Mode) */
-    --color-bg-1: rgba(190, 24, 93, 0.15); /* Dark pink */
-    --color-bg-2: rgba(199, 21, 133, 0.15); /* Medium violet red */
-    --color-bg-3: rgba(218, 112, 214, 0.15); /* Orchid pink */
-    --color-bg-4: rgba(255, 20, 147, 0.15); /* Deep pink */
-    --color-bg-5: rgba(221, 160, 221, 0.15); /* Plum */
-    --color-bg-6: rgba(255, 99, 71, 0.15); /* Tomato pink */
-    --color-bg-7: rgba(255, 182, 193, 0.15); /* Light pink */
-    --color-bg-8: rgba(255, 218, 185, 0.15); /* Peach puff */
-
-    /* RGB versions for dark mode */
-    --color-success-rgb: 255, 182, 193;
-    --color-error-rgb: var(--color-red-400-rgb);
-    --color-warning-rgb: var(--color-orange-400-rgb);
-    --color-info-rgb: var(--color-gray-300-rgb);
-
-    --shadow-inset-sm: inset 0 1px 0 rgba(255, 255, 255, 0.1),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+    --color-focus-ring: rgba(255, 182, 193, 0.3);
   }
 }
 
 /* Data attribute for manual theme switching */
 [data-color-scheme="dark"] {
-  --color-background: var(--color-charcoal-700);
-  --color-surface: #513F3F; /* Deep boho neutral */
+  --color-background: linear-gradient(to bottom, #513F3F, #CCA7A7);
+  --color-surface: #513F3F;
   --color-text: var(--color-gray-200);
-  --color-text-secondary: rgba(var(--color-gray-300-rgb), 0.7);
-  --color-primary: var(--color-pink-300); /* Brighter pink for visibility */
+  --color-primary: var(--color-pink-300);
   --color-primary-hover: var(--color-pink-400);
   --color-primary-active: var(--color-pink-500);
-  --color-secondary: rgba(var(--color-gold-400-rgb), 0.15);
-  --color-secondary-hover: rgba(var(--color-gold-400-rgb), 0.25);
-  --color-secondary-active: rgba(var(--color-gold-400-rgb), 0.3);
+  --color-secondary: rgba(var(--color-gold-400-rgb), 0.1);
   --color-border: var(--color-pink-700);
-  --color-btn-primary-text: var(--color-charcoal-700);
-  --color-card-border: rgba(var(--color-gray-400-rgb), 0.15);
-  --color-card-border-inner: rgba(var(--color-gray-400-rgb), 0.15);
-  --color-error: var(--color-red-400);
   --color-success: var(--color-pink-300);
-  --color-warning: var(--color-orange-400);
-  --color-info: var(--color-gray-300);
-  --color-focus-ring: rgba(255, 182, 193, 0.4); /* Pink ring */
-  --color-select-caret: rgba(var(--color-gray-200-rgb), 0.8);
-
-  /* Background color tokens (Dark Mode) */
-  --color-bg-1: rgba(190, 24, 93, 0.15); /* Dark pink */
-  --color-bg-2: rgba(199, 21, 133, 0.15); /* Medium violet red */
-  --color-bg-3: rgba(218, 112, 214, 0.15); /* Orchid pink */
-  --color-bg-4: rgba(255, 20, 147, 0.15); /* Deep pink */
-  --color-bg-5: rgba(221, 160, 221, 0.15); /* Plum */
-  --color-bg-6: rgba(255, 99, 71, 0.15); /* Tomato pink */
-  --color-bg-7: rgba(255, 182, 193, 0.15); /* Light pink */
-  --color-bg-8: rgba(255, 218, 185, 0.15); /* Peach puff */
-
-  /* RGB versions for dark mode */
-  --color-success-rgb: 255, 182, 193;
-  --color-error-rgb: var(--color-red-400-rgb);
-  --color-warning-rgb: var(--color-orange-400-rgb);
-  --color-info-rgb: var(--color-gray-300-rgb);
-
-  --shadow-inset-sm: inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+  --color-focus-ring: rgba(255, 182, 193, 0.3);
 }
 
 [data-color-scheme="light"] {
-  --color-background: var(--color-cream-50);
-  --color-surface: #F2D5D5; /* Soft pinkish cream */
+  --color-background: linear-gradient(to bottom, var(--color-pink-100), var(--color-pink-300));
+  --color-surface: #FFF5F7;
   --color-text: var(--color-charcoal-700);
-  --color-text-secondary: var(--color-gray-400);
   --color-primary: var(--color-pink-500);
   --color-primary-hover: var(--color-pink-400);
   --color-primary-active: var(--color-pink-600);
-  --color-secondary: rgba(var(--color-gold-400-rgb), 0.12);
-  --color-secondary-hover: rgba(var(--color-gold-400-rgb), 0.2);
-  --color-secondary-active: rgba(var(--color-gold-400-rgb), 0.25);
+  --color-secondary: rgba(var(--color-gold-400-rgb), 0.08);
   --color-border: var(--color-pink-700);
-  --color-btn-primary-text: var(--color-white);
-  --color-card-border: rgba(var(--color-brown-600-rgb), 0.12);
-  --color-card-border-inner: rgba(var(--color-brown-600-rgb), 0.12);
-  --color-error: var(--color-red-400);
   --color-success: var(--color-pink-300);
-  --color-warning: var(--color-orange-400);
-  --color-info: var(--color-gray-300);
-  --color-focus-ring: rgba(var(--color-pink-500-rgb), 0.4);
-
-  /* RGB versions for light mode */
-  --color-success-rgb: 255, 182, 193;
-  --color-error-rgb: var(--color-red-400-rgb);
-  --color-warning-rgb: var(--color-orange-400-rgb);
-  --color-info-rgb: var(--color-gray-300-rgb);
+  --color-focus-ring: rgba(var(--color-pink-500-rgb), 0.3);
 }
 
 /* Base styles */
@@ -261,7 +189,7 @@ html {
   font-family: var(--font-family-base);
   line-height: var(--line-height-normal);
   color: var(--color-text);
-  background-color: var(--color-background);
+  background: var(--color-background); /* Consistent gradient */
   -webkit-font-smoothing: antialiased;
   box-sizing: border-box;
 }
@@ -498,7 +426,7 @@ select.form-control {
 
 /* Card component */
 .card {
-  background-color: var(--color-surface);
+  background: var(--color-bg-1); /* Gradient for cards */
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-card-border);
   box-shadow: var(--shadow-sm);
@@ -724,14 +652,14 @@ select.form-control {
 /* Custom styles for The Picnic Story */
 body {
   font-family: var(--font-family-base);
-  background-color: var(--color-background);
+  background: var(--color-background); /* Consistent gradient */
   color: var(--color-text);
   line-height: var(--line-height-normal);
 }
 
 /* Navigation */
 .navbar {
-  background-color: var(--color-surface);
+  background: var(--color-bg-2); /* Subtle gradient */
   border-bottom: 1px solid var(--color-border);
   padding: var(--space-16) 0;
   position: sticky;
@@ -780,7 +708,7 @@ body {
 
 /* Hero Section */
 .hero {
-  background: var(--color-bg-1);
+  background: var(--color-bg-1); /* Whitish-pinkish gradient */
   padding: var(--space-32) 0;
   text-align: center;
 }
@@ -823,6 +751,7 @@ body {
 /* Services Section */
 .services {
   padding: var(--space-32) 0;
+  background: var(--color-bg-2); /* Consistent gradient */
 }
 
 .services-grid {
@@ -832,7 +761,7 @@ body {
 }
 
 .service-card {
-  background: var(--color-surface);
+  background: var(--color-bg-3); /* Gradient for cards */
   padding: var(--space-24);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-card-border);
@@ -859,7 +788,7 @@ body {
 /* Gallery Section */
 .gallery {
   padding: var(--space-32) 0;
-  background: var(--color-bg-2);
+  background: var(--color-bg-3);
 }
 
 .gallery-grid {
@@ -877,7 +806,7 @@ body {
 .gallery-placeholder {
   width: 100%;
   height: 100%;
-  background: var(--color-bg-3);
+  background: var(--color-bg-4);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -892,6 +821,7 @@ body {
 /* Testimonials Section */
 .testimonials {
   padding: var(--space-32) 0;
+  background: var(--color-bg-2);
 }
 
 .testimonials-grid {
@@ -901,7 +831,7 @@ body {
 }
 
 .testimonial-card {
-  background: var(--color-surface);
+  background: var(--color-bg-1);
   padding: var(--space-24);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-card-border);
@@ -931,7 +861,7 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.3); /* Lighter overlay */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -943,7 +873,7 @@ body {
 }
 
 .modal-content {
-  background: var(--color-surface);
+  background: var(--color-bg-1); /* Gradient for modal */
   border-radius: var(--radius-lg);
   max-width: 500px;
   width: 90%;
@@ -1005,6 +935,7 @@ body {
   text-align: center;
   margin-bottom: var(--space-32);
   padding: var(--space-32) 0;
+  background: var(--color-bg-3);
 }
 
 .page-header h1 {
@@ -1022,6 +953,7 @@ body {
   display: grid;
   gap: var(--space-32);
   margin-bottom: var(--space-32);
+  background: var(--color-bg-2);
 }
 
 .menu-section h2 {
@@ -1038,7 +970,7 @@ body {
 }
 
 .menu-item {
-  background: var(--color-surface);
+  background: var(--color-bg-1);
   padding: var(--space-20);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-card-border);
@@ -1064,7 +996,7 @@ body {
 }
 
 .selection-item {
-  background: var(--color-surface);
+  background: var(--color-bg-3);
   padding: var(--space-20);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-card-border);
@@ -1145,7 +1077,7 @@ body {
 .login-card {
   max-width: 400px;
   margin: var(--space-32) auto;
-  background: var(--color-surface);
+  background: var(--color-bg-1);
   padding: var(--space-32);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-card-border);
@@ -1169,6 +1101,7 @@ body {
   margin-bottom: var(--space-32);
   padding: var(--space-24) 0;
   border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-2);
 }
 
 .dashboard-header h2 {
@@ -1216,7 +1149,7 @@ body {
 
 /* Leads Table */
 .leads-table {
-  background: var(--color-surface);
+  background: var(--color-bg-3);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-card-border);
   overflow: hidden;
@@ -1270,7 +1203,7 @@ body {
 
 /* Menu Generator */
 .menu-generator {
-  background: var(--color-surface);
+  background: var(--color-bg-1);
   padding: var(--space-24);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-card-border);
@@ -1295,7 +1228,7 @@ body {
 
 /* Menu Links List */
 .menu-links-list {
-  background: var(--color-surface);
+  background: var(--color-bg-2);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-card-border);
   overflow: hidden;
@@ -1335,7 +1268,7 @@ body {
 
 /* Confirmation Page */
 .confirmation-ticket {
-  background: var(--color-surface);
+  background: var(--color-bg-1);
   border: 2px solid var(--color-primary);
   border-radius: var(--radius-lg);
   margin-bottom: var(--space-32);
