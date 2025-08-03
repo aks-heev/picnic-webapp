@@ -12,6 +12,7 @@
         <div class="container">
             <div class="nav-brand">
                 <h2>The Picnic Story</h2>
+                <p class="brand-tagline">Boho Picnic Experiences</p>
             </div>
             <div class="nav-links">
                 <a href="#" data-route="home" class="nav-link active">Home</a>
@@ -26,11 +27,12 @@
         <section id="home-page" class="page active">
             <!-- Hero Section -->
             <section class="hero">
+                <div class="hero-background"></div>
                 <div class="container">
                     <div class="hero-content">
                         <h1 class="hero-title">The Picnic Story</h1>
                         <p class="hero-tagline">Creating Unforgettable Boho Picnic Experiences</p>
-                        <p class="hero-description">We specialize in curating luxurious boho-style picnic setups for intimate gatherings, romantic dates, celebrations, and corporate events.</p>
+                        <p class="hero-description">We specialize in curating luxurious boho-style picnic setups for intimate gatherings, romantic dates, celebrations, and corporate events in Jaipur and Gurgaon.</p>
                         <button class="btn btn--primary btn--lg" id="book-picnic-btn">Book Your Picnic</button>
                     </div>
                 </div>
@@ -42,14 +44,17 @@
                     <h2 class="section-title">Our Services</h2>
                     <div class="services-grid">
                         <div class="service-card">
+                            <div class="service-icon">🌸</div>
                             <h3>Luxury Boho Setups</h3>
                             <p>Beautifully curated picnic arrangements with boho-chic decor, comfortable seating, and ambient lighting.</p>
                         </div>
                         <div class="service-card">
+                            <div class="service-icon">💕</div>
                             <h3>Intimate Gatherings</h3>
                             <p>Perfect for romantic dates, small celebrations, and meaningful moments with your loved ones.</p>
                         </div>
                         <div class="service-card">
+                            <div class="service-icon">🎉</div>
                             <h3>Special Occasions</h3>
                             <p>Corporate events, birthdays, anniversaries, and any celebration deserving of a magical outdoor experience.</p>
                         </div>
@@ -138,6 +143,10 @@
                 <div class="container">
                     <div class="login-card">
                         <h2>Admin Login</h2>
+                        <div class="database-status" id="database-status">
+                            <span class="status-indicator"></span>
+                            <span class="status-text">Database Status: Connected</span>
+                        </div>
                         <form id="admin-login-form">
                             <div class="form-group">
                                 <label class="form-label">Password</label>
@@ -154,19 +163,40 @@
             <div id="admin-dashboard" class="admin-section hidden">
                 <div class="container">
                     <div class="dashboard-header">
-                        <h2>Admin Dashboard</h2>
-                        <button class="btn btn--secondary" id="admin-logout">Logout</button>
+                        <div>
+                            <h2>Admin Dashboard</h2>
+                            <div class="database-status" id="dashboard-database-status">
+                                <span class="status-indicator connected"></span>
+                                <span class="status-text">Supabase Connected</span>
+                            </div>
+                        </div>
+                        <div class="header-actions">
+                            <button class="btn btn--outline btn--sm" id="export-leads">Export Leads</button>
+                            <button class="btn btn--secondary" id="admin-logout">Logout</button>
+                        </div>
                     </div>
                     
                     <div class="dashboard-tabs">
                         <button class="tab-btn active" data-tab="leads">Customer Leads</button>
                         <button class="tab-btn" data-tab="menu-generator">Menu Generator</button>
                         <button class="tab-btn" data-tab="menu-links">Menu Links</button>
+                        <button class="tab-btn" data-tab="orders">Orders</button>
                     </div>
                     
                     <!-- Leads Tab -->
                     <div id="leads-tab" class="tab-content active">
-                        <h3>Submitted Leads</h3>
+                        <div class="tab-header">
+                            <h3>Submitted Leads</h3>
+                            <div class="search-filters">
+                                <input type="text" placeholder="Search leads..." class="form-control search-input" id="leads-search">
+                                <select class="form-control filter-select" id="location-filter">
+                                    <option value="">All Locations</option>
+                                    <option value="Jaipur">Jaipur</option>
+                                    <option value="Gurgaon">Gurgaon</option>
+                                    <option value="Other Location">Other Location</option>
+                                </select>
+                            </div>
+                        </div>
                         <div id="leads-container">
                             <!-- Leads will be populated here -->
                         </div>
@@ -178,7 +208,7 @@
                         <div class="menu-generator">
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label class="form-label">Number of Food Items (1-10)</label>
+                                    <label class="form-label">Number of Food Items (1-15)</label>
                                     <select class="form-control" id="food-count">
                                         <option value="5">5 items</option>
                                         <option value="1">1 item</option>
@@ -190,10 +220,15 @@
                                         <option value="8">8 items</option>
                                         <option value="9">9 items</option>
                                         <option value="10">10 items</option>
+                                        <option value="11">11 items</option>
+                                        <option value="12">12 items</option>
+                                        <option value="13">13 items</option>
+                                        <option value="14">14 items</option>
+                                        <option value="15">15 items</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Number of Beverage Items (1-8)</label>
+                                    <label class="form-label">Number of Beverage Items (1-10)</label>
                                     <select class="form-control" id="beverage-count">
                                         <option value="4">4 items</option>
                                         <option value="1">1 item</option>
@@ -203,10 +238,15 @@
                                         <option value="6">6 items</option>
                                         <option value="7">7 items</option>
                                         <option value="8">8 items</option>
+                                        <option value="9">9 items</option>
+                                        <option value="10">10 items</option>
                                     </select>
                                 </div>
                             </div>
-                            <button class="btn btn--primary" id="generate-menu-link">Generate Menu Link</button>
+                            <button class="btn btn--primary" id="generate-menu-link">
+                                <span class="btn-text">Generate Menu Link</span>
+                                <span class="loading-spinner hidden">Generating...</span>
+                            </button>
                             
                             <div id="generated-link-container" class="hidden">
                                 <div class="generated-link">
@@ -227,6 +267,14 @@
                             <!-- Menu links will be populated here -->
                         </div>
                     </div>
+
+                    <!-- Orders Tab -->
+                    <div id="orders-tab" class="tab-content">
+                        <h3>Customer Orders</h3>
+                        <div id="orders-container">
+                            <!-- Orders will be populated here -->
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -242,22 +290,32 @@
                 <form id="menu-selection-form">
                     <div class="menu-sections">
                         <div class="menu-section">
-                            <h2>Food Items</h2>
+                            <h2>Food Items <span class="item-count" id="food-item-count"></span></h2>
                             <div id="selection-food-items" class="selection-items">
                                 <!-- Food items with quantity selectors -->
                             </div>
                         </div>
                         
                         <div class="menu-section">
-                            <h2>Beverages</h2>
+                            <h2>Beverages <span class="item-count" id="beverage-item-count"></span></h2>
                             <div id="selection-beverage-items" class="selection-items">
                                 <!-- Beverage items with quantity selectors -->
                             </div>
                         </div>
                     </div>
                     
+                    <div class="selection-summary" id="selection-summary">
+                        <h3>Order Summary</h3>
+                        <div id="summary-items">No items selected</div>
+                        <div class="total-items">Total Items: <span id="total-count">0</span></div>
+                    </div>
+                    
                     <div class="form-actions">
-                        <button type="submit" class="btn btn--primary btn--lg">Submit Menu Selection</button>
+                        <button type="button" class="btn btn--secondary" onclick="navigateToPage('home')">Cancel</button>
+                        <button type="submit" class="btn btn--primary btn--lg">
+                            <span class="btn-text">Submit Menu Selection</span>
+                            <span class="loading-spinner hidden">Submitting...</span>
+                        </button>
                     </div>
                     
                     <div id="menu-selection-error" class="error-message hidden"></div>
@@ -270,7 +328,7 @@
             <div class="container">
                 <div class="confirmation-ticket" id="confirmation-ticket">
                     <div class="ticket-header">
-                        <h1>Booking Confirmation</h1>
+                        <h1>Order Confirmation</h1>
                         <div class="confirmation-number">
                             <span>Confirmation #: <strong id="confirmation-number"></strong></span>
                         </div>
@@ -324,16 +382,19 @@
                     <div class="form-group">
                         <label class="form-label">Full Name *</label>
                         <input type="text" class="form-control" id="full-name" required>
+                        <span class="form-error" id="full-name-error"></span>
                     </div>
                     
                     <div class="form-group">
                         <label class="form-label">Mobile Number *</label>
                         <input type="tel" class="form-control" id="mobile-number" required pattern="[0-9]{10}">
+                        <span class="form-error" id="mobile-number-error"></span>
                     </div>
                     
                     <div class="form-group">
                         <label class="form-label">Email Address *</label>
                         <input type="email" class="form-control" id="email-address" required>
+                        <span class="form-error" id="email-address-error"></span>
                     </div>
                     
                     <div class="form-group">
@@ -344,16 +405,19 @@
                             <option value="Gurgaon">Gurgaon</option>
                             <option value="Other Location">Other Location</option>
                         </select>
+                        <span class="form-error" id="location-error"></span>
                     </div>
                     
                     <div class="form-group">
                         <label class="form-label">Number of Guests *</label>
                         <input type="number" class="form-control" id="guest-count" min="2" required>
+                        <span class="form-error" id="guest-count-error"></span>
                     </div>
                     
                     <div class="form-group">
                         <label class="form-label">Preferred Date *</label>
                         <input type="date" class="form-control" id="preferred-date" required>
+                        <span class="form-error" id="preferred-date-error"></span>
                     </div>
                     
                     <div class="form-group">
@@ -363,7 +427,10 @@
                     
                     <div class="form-actions">
                         <button type="button" class="btn btn--secondary" id="cancel-booking">Cancel</button>
-                        <button type="submit" class="btn btn--primary">Submit Booking</button>
+                        <button type="submit" class="btn btn--primary">
+                            <span class="btn-text">Submit Booking</span>
+                            <span class="loading-spinner hidden">Submitting...</span>
+                        </button>
                     </div>
                     
                     <div id="booking-error" class="error-message hidden"></div>
@@ -372,15 +439,8 @@
         </div>
     </div>
 
-    <!-- Success Notification -->
-    <div id="success-notification" class="notification success hidden">
-        <span id="success-message"></span>
-    </div>
-
-    <!-- Error Notification -->
-    <div id="error-notification" class="notification error hidden">
-        <span id="error-message"></span>
-    </div>
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
 
     <script src="app.js"></script>
 </body>
