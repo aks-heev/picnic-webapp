@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Picnic Story - Boho Picnic Experiences</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <h2>The Picnic Story</h2>
+            </div>
+            <div class="nav-links">
+                <a href="#" data-route="home" class="nav-link active">Home</a>
+                <a href="#" data-route="admin" class="nav-link">Admin</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main id="app">
+        <!-- Landing Page -->
+        <section id="home-page" class="page active">
+            <!-- Hero Section -->
+            <section class="hero">
+                <div class="container">
+                    <div class="hero-content">
+                        <h1 class="hero-title">The Picnic Story</h1>
+                        <p class="hero-tagline">Creating Unforgettable Boho Picnic Experiences</p>
+                        <p class="hero-description">We specialize in curating luxurious boho-style picnic setups for intimate gatherings, romantic dates, celebrations, and corporate events.</p>
+                        <button class="btn btn--primary btn--lg" id="book-picnic-btn">Book Your Picnic</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Services Section -->
+            <section class="services">
+                <div class="container">
+                    <h2 class="section-title">Our Services</h2>
+                    <div class="services-grid">
+                        <div class="service-card">
+                            <h3>Luxury Boho Setups</h3>
+                            <p>Beautifully curated picnic arrangements with boho-chic decor, comfortable seating, and ambient lighting.</p>
+                        </div>
+                        <div class="service-card">
+                            <h3>Intimate Gatherings</h3>
+                            <p>Perfect for romantic dates, small celebrations, and meaningful moments with your loved ones.</p>
+                        </div>
+                        <div class="service-card">
+                            <h3>Special Occasions</h3>
+                            <p>Corporate events, birthdays, anniversaries, and any celebration deserving of a magical outdoor experience.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Gallery Section -->
+            <section class="gallery">
+                <div class="container">
+                    <h2 class="section-title">Gallery</h2>
+                    <div class="gallery-grid">
+                        <div class="gallery-item">
+                            <div class="gallery-placeholder">
+                                <span>Romantic Sunset Picnic</span>
+                            </div>
+                        </div>
+                        <div class="gallery-item">
+                            <div class="gallery-placeholder">
+                                <span>Boho Garden Party</span>
+                            </div>
+                        </div>
+                        <div class="gallery-item">
+                            <div class="gallery-placeholder">
+                                <span>Corporate Team Event</span>
+                            </div>
+                        </div>
+                        <div class="gallery-item">
+                            <div class="gallery-placeholder">
+                                <span>Anniversary Celebration</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Testimonials Section -->
+            <section class="testimonials">
+                <div class="container">
+                    <h2 class="section-title">What Our Clients Say</h2>
+                    <div class="testimonials-grid" id="testimonials-container">
+                        <!-- Testimonials will be populated by JavaScript -->
+                    </div>
+                </div>
+            </section>
+        </section>
+
+        <!-- Menu Preview Page -->
+        <section id="menu-preview-page" class="page">
+            <div class="container">
+                <div class="page-header">
+                    <h1>Your Picnic Menu Preview</h1>
+                    <p>Here's a taste of what we offer. Your personalized menu will be sent to you within 24 hours.</p>
+                </div>
+                
+                <div class="menu-sections">
+                    <div class="menu-section">
+                        <h2>Gourmet Food Items</h2>
+                        <div class="menu-items" id="preview-food-items">
+                            <!-- Sample food items will be populated here -->
+                        </div>
+                    </div>
+                    
+                    <div class="menu-section">
+                        <h2>Premium Beverages</h2>
+                        <div class="menu-items" id="preview-beverage-items">
+                            <!-- Sample beverage items will be populated here -->
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="contact-info">
+                    <h3>Contact Information</h3>
+                    <p>We'll be in touch within 24 hours to finalize your personalized menu and event details.</p>
+                    <p>Email: hello@thepicnicstory.com | Phone: +91 98765 43210</p>
+                </div>
+                
+                <button class="btn btn--secondary" onclick="navigateToPage('home')">Back to Home</button>
+            </div>
+        </section>
+
+        <!-- Admin Dashboard -->
+        <section id="admin-page" class="page">
+            <!-- Admin Login -->
+            <div id="admin-login" class="admin-section">
+                <div class="container">
+                    <div class="login-card">
+                        <h2>Admin Login</h2>
+                        <form id="admin-login-form">
+                            <div class="form-group">
+                                <label class="form-label">Password</label>
+                                <input type="password" class="form-control" id="admin-password" required>
+                            </div>
+                            <button type="submit" class="btn btn--primary btn--full-width">Login</button>
+                        </form>
+                        <div id="login-error" class="error-message hidden"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Admin Dashboard -->
+            <div id="admin-dashboard" class="admin-section hidden">
+                <div class="container">
+                    <div class="dashboard-header">
+                        <h2>Admin Dashboard</h2>
+                        <button class="btn btn--secondary" id="admin-logout">Logout</button>
+                    </div>
+                    
+                    <div class="dashboard-tabs">
+                        <button class="tab-btn active" data-tab="leads">Customer Leads</button>
+                        <button class="tab-btn" data-tab="menu-generator">Menu Generator</button>
+                        <button class="tab-btn" data-tab="menu-links">Menu Links</button>
+                    </div>
+                    
+                    <!-- Leads Tab -->
+                    <div id="leads-tab" class="tab-content active">
+                        <h3>Submitted Leads</h3>
+                        <div id="leads-container">
+                            <!-- Leads will be populated here -->
+                        </div>
+                    </div>
+                    
+                    <!-- Menu Generator Tab -->
+                    <div id="menu-generator-tab" class="tab-content">
+                        <h3>Generate Menu Link</h3>
+                        <div class="menu-generator">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Number of Food Items (1-10)</label>
+                                    <select class="form-control" id="food-count">
+                                        <option value="5">5 items</option>
+                                        <option value="1">1 item</option>
+                                        <option value="2">2 items</option>
+                                        <option value="3">3 items</option>
+                                        <option value="4">4 items</option>
+                                        <option value="6">6 items</option>
+                                        <option value="7">7 items</option>
+                                        <option value="8">8 items</option>
+                                        <option value="9">9 items</option>
+                                        <option value="10">10 items</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Number of Beverage Items (1-8)</label>
+                                    <select class="form-control" id="beverage-count">
+                                        <option value="4">4 items</option>
+                                        <option value="1">1 item</option>
+                                        <option value="2">2 items</option>
+                                        <option value="3">3 items</option>
+                                        <option value="5">5 items</option>
+                                        <option value="6">6 items</option>
+                                        <option value="7">7 items</option>
+                                        <option value="8">8 items</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <button class="btn btn--primary" id="generate-menu-link">Generate Menu Link</button>
+                            
+                            <div id="generated-link-container" class="hidden">
+                                <div class="generated-link">
+                                    <label class="form-label">Generated Menu Link:</label>
+                                    <div class="link-display">
+                                        <input type="text" class="form-control" id="generated-link" readonly>
+                                        <button class="btn btn--secondary" id="copy-link">Copy</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Menu Links Tab -->
+                    <div id="menu-links-tab" class="tab-content">
+                        <h3>Generated Menu Links</h3>
+                        <div id="menu-links-container">
+                            <!-- Menu links will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Customer Menu Selection Page -->
+        <section id="menu-selection-page" class="page">
+            <div class="container">
+                <div class="page-header">
+                    <h1>Select Your Menu Items</h1>
+                    <p>Choose your preferred items and quantities for your picnic experience.</p>
+                </div>
+                
+                <form id="menu-selection-form">
+                    <div class="menu-sections">
+                        <div class="menu-section">
+                            <h2>Food Items</h2>
+                            <div id="selection-food-items" class="selection-items">
+                                <!-- Food items with quantity selectors -->
+                            </div>
+                        </div>
+                        
+                        <div class="menu-section">
+                            <h2>Beverages</h2>
+                            <div id="selection-beverage-items" class="selection-items">
+                                <!-- Beverage items with quantity selectors -->
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn--primary btn--lg">Submit Menu Selection</button>
+                    </div>
+                    
+                    <div id="menu-selection-error" class="error-message hidden"></div>
+                </form>
+            </div>
+        </section>
+
+        <!-- Confirmation Page -->
+        <section id="confirmation-page" class="page">
+            <div class="container">
+                <div class="confirmation-ticket" id="confirmation-ticket">
+                    <div class="ticket-header">
+                        <h1>Booking Confirmation</h1>
+                        <div class="confirmation-number">
+                            <span>Confirmation #: <strong id="confirmation-number"></strong></span>
+                        </div>
+                    </div>
+                    
+                    <div class="ticket-content">
+                        <div class="customer-details">
+                            <h3>Customer Details</h3>
+                            <div id="customer-info"></div>
+                        </div>
+                        
+                        <div class="event-details">
+                            <h3>Event Details</h3>
+                            <div id="event-info"></div>
+                        </div>
+                        
+                        <div class="menu-details">
+                            <h3>Selected Menu Items</h3>
+                            <div id="selected-menu-items"></div>
+                        </div>
+                        
+                        <div class="next-steps">
+                            <h3>Next Steps</h3>
+                            <ul>
+                                <li>We'll contact you within 24 hours to confirm final details</li>
+                                <li>Payment instructions will be sent via email</li>
+                                <li>Setup will begin 2 hours before your event time</li>
+                                <li>Save this confirmation for your records</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="confirmation-actions">
+                    <button class="btn btn--secondary" onclick="window.print()">Print Confirmation</button>
+                    <button class="btn btn--primary" onclick="navigateToPage('home')">Book Another Picnic</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Booking Modal -->
+    <div id="booking-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Book Your Picnic</h2>
+                <button class="modal-close" id="close-booking-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="booking-form">
+                    <div class="form-group">
+                        <label class="form-label">Full Name *</label>
+                        <input type="text" class="form-control" id="full-name" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Mobile Number *</label>
+                        <input type="tel" class="form-control" id="mobile-number" required pattern="[0-9]{10}">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Email Address *</label>
+                        <input type="email" class="form-control" id="email-address" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Location *</label>
+                        <select class="form-control" id="location" required>
+                            <option value="">Select Location</option>
+                            <option value="Jaipur">Jaipur</option>
+                            <option value="Gurgaon">Gurgaon</option>
+                            <option value="Other Location">Other Location</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Number of Guests *</label>
+                        <input type="number" class="form-control" id="guest-count" min="2" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Preferred Date *</label>
+                        <input type="date" class="form-control" id="preferred-date" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Special Requirements</label>
+                        <textarea class="form-control" id="special-requirements" rows="3" placeholder="Any special requests or dietary restrictions..."></textarea>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="btn btn--secondary" id="cancel-booking">Cancel</button>
+                        <button type="submit" class="btn btn--primary">Submit Booking</button>
+                    </div>
+                    
+                    <div id="booking-error" class="error-message hidden"></div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success Notification -->
+    <div id="success-notification" class="notification success hidden">
+        <span id="success-message"></span>
+    </div>
+
+    <!-- Error Notification -->
+    <div id="error-notification" class="notification error hidden">
+        <span id="error-message"></span>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
