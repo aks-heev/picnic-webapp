@@ -41,7 +41,7 @@ const bevList = [
   "Mineral Water","Soda","Mixers"
 ]
 
-// App state and helpers
+// App State
 const appState = {
   isAdminLoggedIn: false,
   currentBooking: null,
@@ -80,83 +80,143 @@ async function handleBookingSubmit(event) {
     created_at: new Date().toISOString(),
   }
 
-  // Basic validations could be here, or rely on form validation
-
   try {
     const { data, error } = await supabase.from('bookings').insert([lead]).select()
     if (error) throw error
     appState.currentBooking = data[0]
     showToast('Booking submitted! You will receive a menu link shortly.', 'success')
-    // You could redirect or show next steps here
+    // TODO: Show menu button or redirect post booking
   } catch (error) {
     console.error(error)
     showToast('Error submitting booking. Please try again.', 'error')
   }
 }
 
-// Admin login
+// Admin login handler
 function handleAdminLogin(event) {
   event.preventDefault()
   const password = event.target['admin-password'].value
-  if (password === 'admin123') {
+  if (password === 'admin123') { // Change password as needed
     appState.isAdminLoggedIn = true
     showToast('Admin logged in', 'success')
-    // Show admin dashboard UI here
+    showAdminDashboard()
   } else {
     showToast('Invalid password', 'error')
   }
 }
 
-// Generate menu link with limits
-async function generateMenuLink(foodCount, bevCount) {
-  if (!appState.isAdminLoggedIn) return showToast('Admin login required', 'error')
-  if (foodCount < 1 || foodCount > 15 || bevCount < 1 || bevCount > 10) {
-    return showToast('Food items must be 1-15, beverages 1-10', 'error')
-  }
-  try {
-    const menuLink = {
-      max_food_items: foodCount,
-      max_bev_items: bevCount,
-      created_at: new Date().toISOString(),
-    }
-    const { data, error } = await supabase.from('menu_links').insert([menuLink]).select()
-    if (error) throw error
-    // Show or copy generated link to admin UI
-    showToast('Menu link generated', 'success')
-    return data[0]
-  } catch (error) {
-    console.error(error)
-    showToast('Failed to generate menu link', 'error')
-  }
+// Show admin dashboard UI (toggle visibility)
+function showAdminDashboard() {
+  document.getElementById('admin-login').classList.add('hidden')
+  document.getElementById('admin-dashboard').classList.remove('hidden')
+  // Load leads, menu links, orders, etc.
+  loadLeads()
+  loadMenuLinks()
+  loadOrders()
 }
 
-// Load existing leads for admin
+// Load leads for admin
 async function loadLeads() {
   if (!appState.isAdminLoggedIn) return
   try {
     const { data, error } = await supabase.from('bookings').select().order('created_at', { ascending: false })
     if (error) throw error
-    // Render leads in admin UI
+    // Render leads in the admin UI.
+    const container = document.getElementById('leads-container')
+    container.innerHTML = '' // Clear existing
+    data.forEach(lead => {
+      const div = document.createElement('div')
+      div.className = 'lead-item'
+      div.innerHTML = `
+        <div class="lead-header">
+          <span class="lead-name">${lead.full_name}</span>
+          <span class="lead-date">${new Date(lead.created_at).toLocaleDateString()}</span>
+        </div>
+        <div class="lead-details">
+          <div class="lead-detail"><strong>Mobile:</strong> ${lead.mobile_number}</div>
+          <div class="lead-detail"><strong>Email:</strong> ${lead.email_address}</div>
+          <div class="lead-detail"><strong>Location:</strong> ${lead.location}</div>
+          <div class="lead-detail"><strong>Guests:</strong> ${lead.guest_count}</div>
+          <div class="lead-detail"><strong>Date:</strong> ${lead.preferred_date}</div>
+        </div>
+      `
+      container.appendChild(div)
+    })
   } catch (error) {
     console.error(error)
   }
 }
 
-// On page load
+// Add further functions for menu link generation, orders, navigation, modal handling, etc.
+
+// Navigation helpers to show/hide pages
+function navigateToPage(pageId) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
+  const page = document.getElementById(pageId)
+  if (page) page.classList.add('active')
+
+  // Update nav links active state
+  document.querySelectorAll('.nav-link').forEach(link =>
+    link.classList.toggle('active', link.dataset.route === pageId)
+  )
+}
+
+// Modal open/close for booking
+function openBookingModal() {
+  const modal = document.getElementById('booking-modal')
+  modal.classList.remove('hidden')
+}
+
+function closeBookingModal() {
+  const modal = document.getElementById('booking-modal')
+  modal.classList.add('hidden')
+}
+
+// Setup all event listeners after DOM loaded
 window.addEventListener('DOMContentLoaded', () => {
-  // Attach event listeners for forms and buttons
+  // Navigation links
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.addEventListener('click', e => {
+      e.preventDefault()
+      const page = link.dataset.route
+      if (page === 'home') {
+        navigateToPage('home-page')
+      } else if (page === 'menu-preview') {
+        navigateToPage('menu-preview-page')
+      } else if (page === 'admin') {
+        navigateToPage('admin-page')
+      }
+    })
+  })
 
+  // Booking Button
+  const bookPicnicBtn = document.getElementById('book-picnic-btn')
+  if (bookPicnicBtn) {
+    bookPicnicBtn.addEventListener('click', () => {
+      openBookingModal()
+    })
+  }
+
+  // Booking modal close button
+  const closeBookingBtn = document.getElementById('close-booking-modal')
+  if (closeBookingBtn) {
+    closeBookingBtn.addEventListener('click', () => {
+      closeBookingModal()
+    })
+  }
+
+  // Booking form submission
   const bookingForm = document.getElementById('booking-form')
-  if (bookingForm) bookingForm.addEventListener('submit', handleBookingSubmit)
+  if (bookingForm) {
+    bookingForm.addEventListener('submit', handleBookingSubmit)
+  }
 
+  // Admin login form
   const adminLoginForm = document.getElementById('admin-login-form')
-  if (adminLoginForm) adminLoginForm.addEventListener('submit', handleAdminLogin)
+  if (adminLoginForm) {
+    adminLoginForm.addEventListener('submit', handleAdminLogin)
+  }
 
-  // More UI handlers: admin logout, tab switch, menu link generation, menu selection page, etc.
-
-  // Render testimonials dynamically from a JS object or fetched data
-
-  // Show/hide pages and modals based on navigation
-
-  // Implement menu link parsing from URL querystring to load menu selection page
+  // Initial page
+  navigateToPage('home-page')
 })
