@@ -1,3 +1,16 @@
+import { createClient } from '@supabase/supabase-js';
+
+// Supabase Configuration from Environment Variables
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+
+// Check if environment variables are set
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    console.error('Missing Supabase environment variables. Please set SUPABASE_URL and SUPABASE_ANON_KEY.');
+}
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 // Application Data with Updated Indian Menu
 const appData = {
     company: {
@@ -118,70 +131,84 @@ const appData = {
 };
 
 // Mock Database Service (Simulating Supabase)
-class MockDatabase {
+class SupabaseDatabase {
     constructor() {
-        this.leads = JSON.parse(localStorage.getItem('picnic_leads') || '[]');
-        this.menuLinks = JSON.parse(localStorage.getItem('picnic_menu_links') || '[]');
-        this.orders = JSON.parse(localStorage.getItem('picnic_orders') || '[]');
-        this.isConnected = true;
+        this.isConnected = true; // Supabase connection is assumed to be active once client is created
     }
 
     async saveLead(lead) {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                this.leads.push({ ...lead, id: this.generateId() });
-                localStorage.setItem('picnic_leads', JSON.stringify(this.leads));
-                resolve({ success: true, id: lead.id });
-            }, 500);
-        });
+        const { data, error } = await supabase
+            .from("leads")
+            .insert([lead])
+            .select();
+
+        if (error) {
+            console.error("Error saving lead:", error);
+            throw new Error("Could not save lead");
+        }
+        return { success: true, id: data[0].id };
     }
 
     async saveMenuLink(menuLink) {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                this.menuLinks.push(menuLink);
-                localStorage.setItem('picnic_menu_links', JSON.stringify(this.menuLinks));
-                resolve({ success: true });
-            }, 300);
-        });
+        const { data, error } = await supabase
+            .from("menu_links")
+            .insert([menuLink])
+            .select();
+
+        if (error) {
+            console.error("Error saving menu link:", error);
+            throw new Error("Could not save menu link");
+        }
+        return { success: true, id: data[0].id };
     }
 
     async saveOrder(order) {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                this.orders.push({ ...order, id: this.generateId() });
-                localStorage.setItem('picnic_orders', JSON.stringify(this.orders));
-                resolve({ success: true, id: order.id });
-            }, 500);
-        });
+        const { data, error } = await supabase
+            .from("orders")
+            .insert([order])
+            .select();
+
+        if (error) {
+            console.error("Error saving order:", error);
+            throw new Error("Could not save order");
+        }
+        return { success: true, id: data[0].id };
     }
 
     async getLeads() {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                resolve(this.leads);
-            }, 200);
-        });
+        const { data, error } = await supabase
+            .from("leads")
+            .select("*");
+
+        if (error) {
+            console.error("Error fetching leads:", error);
+            throw new Error("Could not fetch leads");
+        }
+        return data;
     }
 
     async getMenuLinks() {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                resolve(this.menuLinks);
-            }, 200);
-        });
+        const { data, error } = await supabase
+            .from("menu_links")
+            .select("*");
+
+        if (error) {
+            console.error("Error fetching menu links:", error);
+            throw new Error("Could not fetch menu links");
+        }
+        return data;
     }
 
     async getOrders() {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                resolve(this.orders);
-            }, 200);
-        });
-    }
+        const { data, error } = await supabase
+            .from("orders")
+            .select("*");
 
-    generateId() {
-        return 'id_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        if (error) {
+            console.error("Error fetching orders:", error);
+            throw new Error("Could not fetch orders");
+        }
+        return data;
     }
 
     getConnectionStatus() {
@@ -196,7 +223,7 @@ let appState = {
     currentBooking: null,
     currentMenuLink: null,
     currentMenuSelection: null,
-    database: new MockDatabase()
+    database: new SupabaseDatabase()
 };
 
 // DOM Elements
