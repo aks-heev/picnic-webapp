@@ -138,7 +138,7 @@ class SupabaseDatabase {
 
     async saveLead(lead) {
         const { data, error } = await supabase
-            .from("leads")
+            .from("bookings")
             .insert([lead])
             .select();
 
@@ -177,7 +177,7 @@ class SupabaseDatabase {
 
     async getLeads() {
         const { data, error } = await supabase
-            .from("leads")
+            .from("bookings")
             .select("*");
 
         if (error) {
@@ -503,8 +503,9 @@ async function handleBookingSubmit(e) {
             location: document.getElementById('location').value,
             guestCount: parseInt(document.getElementById('guest-count').value),
             preferredDate: document.getElementById('preferred-date').value,
-            specialRequirements: document.getElementById('special-requirements').value,
-            submittedAt: new Date().toISOString()
+            specialRequirements: document.getElementById("special-requirements").value,
+            submittedAt: new Date().toISOString(),
+            "Food Items": "" // Added to match CSV schema, not collected from form
         };
         
         // Validate all fields
@@ -842,7 +843,7 @@ async function exportLeads() {
         }
         
         const csvContent = [
-            ['Name', 'Mobile', 'Email', 'Location', 'Guests', 'Date', 'Special Requirements', 'Submitted At'],
+            ["Name", "Mobile", "Email", "Location", "Guests", "Date", "Special Requirements", "Submitted At", "Food Items"],
             ...leads.map(lead => [
                 lead.fullName,
                 lead.mobileNumber,
@@ -850,8 +851,9 @@ async function exportLeads() {
                 lead.location,
                 lead.guestCount,
                 lead.preferredDate,
-                lead.specialRequirements || '',
-                formatDate(lead.submittedAt)
+                lead.specialRequirements || "",
+                formatDate(lead.submittedAt),
+                lead["Food Items"] || ""
             ])
         ].map(row => row.map(field => `"${field}"`).join(',')).join('\n');
         
