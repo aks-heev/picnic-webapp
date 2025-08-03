@@ -844,11 +844,13 @@ async function exportLeads() {
 
 // Menu Selection Functions
 function loadMenuSelection(menuLink) {
-    const foodItems = appData.menuItems.food.slice(0, menuLink.foodCount);
-    const beverageItems = appData.menuItems.beverages.slice(0, menuLink.beverageCount);
+    // Show ALL menu items, not just limited count
+    const foodItems = appData.menuItems.food;
+    const beverageItems = appData.menuItems.beverages;
     
-    document.getElementById('food-item-count').textContent = `(${menuLink.foodCount})`;
-    document.getElementById('beverage-item-count').textContent = `(${menuLink.beverageCount})`;
+    // Update the display to show limits instead of current count
+    document.getElementById('food-item-count').textContent = `(Select up to ${menuLink.foodCount} items)`;
+    document.getElementById('beverage-item-count').textContent = `(Select up to ${menuLink.beverageCount} items)`;
     
     loadSelectionItems('selection-food-items', foodItems, 'food');
     loadSelectionItems('selection-beverage-items', beverageItems, 'beverage');
@@ -878,8 +880,39 @@ function changeQuantity(itemId, change) {
     const input = document.getElementById(itemId);
     const currentValue = parseInt(input.value);
     const newValue = Math.max(0, Math.min(10, currentValue + change));
+    
+    // Check if we're trying to increase quantity
+    if (change > 0 && newValue > currentValue) {
+        const itemType = itemId.startsWith('food-') ? 'food' : 'beverage';
+        
+        // Count currently selected items of this type
+        const currentCount = getCurrentSelectionCount(itemType);
+        const maxAllowed = itemType === 'food' ? appState.currentMenuLink.foodCount : appState.currentMenuLink.beverageCount;
+        
+        // If we're already at the limit, don't allow more selections
+        if (currentCount >= maxAllowed) {
+            showToast(`You can only select up to ${maxAllowed} ${itemType} items`, 'warning');
+            return;
+        }
+    }
+    
     input.value = newValue;
     updateSelectionSummary();
+}
+
+// Helper function to count current selections
+function getCurrentSelectionCount(itemType) {
+    let count = 0;
+    const items = itemType === 'food' ? appData.menuItems.food : appData.menuItems.beverages;
+    
+    items.forEach(item => {
+        const quantity = parseInt(document.getElementById(`${itemType}-${item.id}`)?.value || 0);
+        if (quantity > 0) {
+            count++;
+        }
+    });
+    
+    return count;
 }
 
 function updateSelectionSummary() {
@@ -888,9 +921,8 @@ function updateSelectionSummary() {
     const selectedItems = [];
     let totalCount = 0;
     
-    // Check food items
-    const foodItems = appData.menuItems.food.slice(0, appState.currentMenuLink.foodCount);
-    foodItems.forEach(item => {
+    // Check ALL food items, not just limited slice
+    appData.menuItems.food.forEach(item => {
         const quantity = parseInt(document.getElementById(`food-${item.id}`)?.value || 0);
         if (quantity > 0) {
             selectedItems.push(`${item.name} × ${quantity}`);
@@ -898,9 +930,8 @@ function updateSelectionSummary() {
         }
     });
     
-    // Check beverage items
-    const beverageItems = appData.menuItems.beverages.slice(0, appState.currentMenuLink.beverageCount);
-    beverageItems.forEach(item => {
+    // Check ALL beverage items, not just limited slice
+    appData.menuItems.beverages.forEach(item => {
         const quantity = parseInt(document.getElementById(`beverage-${item.id}`)?.value || 0);
         if (quantity > 0) {
             selectedItems.push(`${item.name} × ${quantity}`);
@@ -916,6 +947,16 @@ function updateSelectionSummary() {
     }
     
     document.getElementById('total-count').textContent = totalCount;
+    
+    // Add selection progress indicator
+    const foodCount = getCurrentSelectionCount('food');
+    const beverageCount = getCurrentSelectionCount('beverage');
+    const maxFood = appState.currentMenuLink.foodCount;
+    const maxBeverage = appState.currentMenuLink.beverageCount;
+    
+    // Update the count displays with progress
+    document.getElementById('food-item-count').textContent = `(${foodCount}/${maxFood} selected)`;
+    document.getElementById('beverage-item-count').textContent = `(${beverageCount}/${maxBeverage} selected)`;
 }
 
 async function handleMenuSelectionSubmit(e) {
@@ -937,10 +978,9 @@ async function handleMenuSelectionSubmit(e) {
             submittedAt: new Date().toISOString()
         };
         
-        // Collect food selections
-        const foodItems = appData.menuItems.food.slice(0, appState.currentMenuLink.foodCount);
-        foodItems.forEach(item => {
-            const quantity = parseInt(document.getElementById(`food-${item.id}`).value);
+        // Collect food selections from ALL food items
+        appData.menuItems.food.forEach(item => {
+            const quantity = parseInt(document.getElementById(`food-${item.id}`)?.value || 0);
             if (quantity > 0) {
                 selection.items.push({
                     ...item,
@@ -950,10 +990,9 @@ async function handleMenuSelectionSubmit(e) {
             }
         });
         
-        // Collect beverage selections
-        const beverageItems = appData.menuItems.beverages.slice(0, appState.currentMenuLink.beverageCount);
-        beverageItems.forEach(item => {
-            const quantity = parseInt(document.getElementById(`beverage-${item.id}`).value);
+        // Collect beverage selections from ALL beverage items
+        appData.menuItems.beverages.forEach(item => {
+            const quantity = parseInt(document.getElementById(`beverage-${item.id}`)?.value || 0);
             if (quantity > 0) {
                 selection.items.push({
                     ...item,
