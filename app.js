@@ -376,7 +376,25 @@ async function loadMenuSelection(menuId) {
   }
 }
 
-// Render menu selection page - FIXED VERSION
+// Helper: Calculate current totals by category for display
+function getCurrentTotals() {
+  const selectedItems = Object.values(appState.selectedItems)
+  
+  let totalFood = 0
+  let totalBev = 0
+  
+  selectedItems.forEach(item => {
+    if (item.category === 'food') {
+      totalFood += item.quantity
+    } else {
+      totalBev += item.quantity
+    }
+  })
+  
+  return { totalFood, totalBev }
+}
+
+// Render menu selection page - CORRECTED VERSION WITH PER-ITEM LIMITS
 function renderMenuSelection(menuLink) {
   const container = document.getElementById('menu-selection-page')
   if (!container) return
@@ -387,12 +405,12 @@ function renderMenuSelection(menuLink) {
   container.innerHTML = `
     <div class="page-header">
       <h1>Select Your Menu</h1>
-      <p>Choose up to ${maxFood} food items and ${maxBev} beverage items for your picnic.</p>
+      <p>Choose up to <strong>${maxFood} of each food item</strong> and <strong>${maxBev} of each beverage item</strong> for your picnic.</p>
     </div>
     
     <div class="menu-sections">
       <div class="menu-section">
-        <h2>Food Items <span class="item-count">(Select up to ${maxFood})</span></h2>
+        <h2>Food Items <span class="item-count">(Up to ${maxFood} of each item)</span></h2>
         <div class="selection-items">
           ${foodList.map(item => `
             <div class="selection-item">
@@ -401,8 +419,8 @@ function renderMenuSelection(menuLink) {
                 <p>Delicious ${item.toLowerCase()}</p>
               </div>
               <div class="quantity-selector">
-                <button class="quantity-btn" data-item="${item}" data-category="food" data-change="-1">-</button>
-                <input type="number" class="quantity-input" value="0" min="0" max="5" 
+                <button class="quantity-btn" data-item="${item}" data-category="food" data-change="-1" disabled>-</button>
+                <input type="number" class="quantity-input" value="0" min="0" max="${maxFood}" 
                        id="food-${item.replace(/\s+/g, '-').toLowerCase()}" readonly>
                 <button class="quantity-btn" data-item="${item}" data-category="food" data-change="1">+</button>
               </div>
@@ -412,7 +430,7 @@ function renderMenuSelection(menuLink) {
       </div>
       
       <div class="menu-section">
-        <h2>Beverages <span class="item-count">(Select up to ${maxBev})</span></h2>
+        <h2>Beverages <span class="item-count">(Up to ${maxBev} of each item)</span></h2>
         <div class="selection-items">
           ${bevList.map(item => `
             <div class="selection-item">
@@ -421,8 +439,8 @@ function renderMenuSelection(menuLink) {
                 <p>Refreshing ${item.toLowerCase()}</p>
               </div>
               <div class="quantity-selector">
-                <button class="quantity-btn" data-item="${item}" data-category="beverage" data-change="-1">-</button>
-                <input type="number" class="quantity-input" value="0" min="0" max="5" 
+                <button class="quantity-btn" data-item="${item}" data-category="beverage" data-change="-1" disabled>-</button>
+                <input type="number" class="quantity-input" value="0" min="0" max="${maxBev}" 
                        id="beverage-${item.replace(/\s+/g, '-').toLowerCase()}" readonly>
                 <button class="quantity-btn" data-item="${item}" data-category="beverage" data-change="1">+</button>
               </div>
@@ -438,7 +456,7 @@ function renderMenuSelection(menuLink) {
         <p>No items selected yet.</p>
       </div>
       <div class="total-items">
-        <strong>Food Items: <span id="total-food">0</span>/${maxFood} | Beverages: <span id="total-bev">0</span>/${maxBev}</strong>
+        <strong>Total Food Items: <span id="total-food">0</span> | Total Beverages: <span id="total-bev">0</span></strong>
       </div>
       <button id="submit-menu-selection" class="btn btn--primary btn--full-width" disabled>
         Submit Menu Selection
@@ -447,8 +465,10 @@ function renderMenuSelection(menuLink) {
   `
 }
 
-// Update quantity for menu items - FIXED VERSION
+// Update quantity for menu items - CORRECTED VERSION WITH PER-ITEM LIMITS
 function updateQuantity(itemName, category, change) {
+  if (!appState.currentMenuLink) return
+  
   const inputId = `${category}-${itemName.replace(/\s+/g, '-').toLowerCase()}`
   const input = document.getElementById(inputId)
   
@@ -458,8 +478,20 @@ function updateQuantity(itemName, category, change) {
   }
   
   const currentValue = parseInt(input.value, 10) || 0
-  const newValue = Math.max(0, Math.min(5, currentValue + change))
+  const maxFood = appState.currentMenuLink.max_food_items
+  const maxBev = appState.currentMenuLink.max_bev_items
   
+  // Calculate new value with per-item limits
+  let newValue = currentValue + change
+  
+  // Apply per-item constraints
+  if (category === 'food') {
+    newValue = Math.max(0, Math.min(newValue, maxFood))
+  } else {
+    newValue = Math.max(0, Math.min(newValue, maxBev))
+  }
+  
+  // Update input value
   input.value = newValue
   
   // Update app state
@@ -470,30 +502,70 @@ function updateQuantity(itemName, category, change) {
     delete appState.selectedItems[key]
   }
   
+  // Update UI
   updateSelectionSummary()
+  updateButtonStates()
 }
 
-// Update selection summary
-function updateSelectionSummary() {
-  const selectedItems = Object.values(appState.selectedItems)
+// Helper: Update button states based on per-item limits
+function updateButtonStates() {
+  if (!appState.currentMenuLink) return
   
-  let totalFood = 0
-  let totalBev = 0
+  const maxFood = appState.currentMenuLink.max_food_items
+  const maxBev = appState.currentMenuLink.max_bev_items
   
-  selectedItems.forEach(item => {
-    if (item.category === 'food') {
-      totalFood += item.quantity
-    } else {
-      totalBev += item.quantity
+  // Update all food buttons
+  foodList.forEach(item => {
+    const inputId = `food-${item.replace(/\s+/g, '-').toLowerCase()}`
+    const input = document.getElementById(inputId)
+    if (!input) return
+    
+    const currentValue = parseInt(input.value, 10) || 0
+    const plusBtn = document.querySelector(`[data-item="${item}"][data-category="food"][data-change="1"]`)
+    const minusBtn = document.querySelector(`[data-item="${item}"][data-category="food"][data-change="-1"]`)
+    
+    if (plusBtn) {
+      plusBtn.disabled = currentValue >= maxFood
+    }
+    
+    if (minusBtn) {
+      minusBtn.disabled = currentValue <= 0
     }
   })
   
+  // Update all beverage buttons
+  bevList.forEach(item => {
+    const inputId = `beverage-${item.replace(/\s+/g, '-').toLowerCase()}`
+    const input = document.getElementById(inputId)
+    if (!input) return
+    
+    const currentValue = parseInt(input.value, 10) || 0
+    const plusBtn = document.querySelector(`[data-item="${item}"][data-category="beverage"][data-change="1"]`)
+    const minusBtn = document.querySelector(`[data-item="${item}"][data-category="beverage"][data-change="-1"]`)
+    
+    if (plusBtn) {
+      plusBtn.disabled = currentValue >= maxBev
+    }
+    
+    if (minusBtn) {
+      minusBtn.disabled = currentValue <= 0
+    }
+  })
+}
+
+// Update selection summary - CORRECTED VERSION
+function updateSelectionSummary() {
+  const selectedItems = Object.values(appState.selectedItems)
+  const { totalFood, totalBev } = getCurrentTotals()
+  
+  // Update totals display
   const totalFoodSpan = document.getElementById('total-food')
   const totalBevSpan = document.getElementById('total-bev')
   
   if (totalFoodSpan) totalFoodSpan.textContent = totalFood
   if (totalBevSpan) totalBevSpan.textContent = totalBev
   
+  // Update summary content
   const summaryContent = document.getElementById('selection-summary-content')
   if (summaryContent) {
     if (selectedItems.length === 0) {
@@ -508,13 +580,19 @@ function updateSelectionSummary() {
     }
   }
   
+  // Enable/disable submit button
   const submitBtn = document.getElementById('submit-menu-selection')
-  const maxFood = appState.currentMenuLink?.max_food_items || 0
-  const maxBev = appState.currentMenuLink?.max_bev_items || 0
   
   if (submitBtn) {
-    const isValid = totalFood <= maxFood && totalBev <= maxBev && selectedItems.length > 0
-    submitBtn.disabled = !isValid
+    const hasItems = selectedItems.length > 0
+    submitBtn.disabled = !hasItems
+    
+    // Update submit button text
+    if (!hasItems) {
+      submitBtn.textContent = 'Select Items to Continue'
+    } else {
+      submitBtn.textContent = 'Submit Menu Selection'
+    }
   }
 }
 
@@ -729,9 +807,9 @@ window.addEventListener('DOMContentLoaded', () => {
   // Load testimonials
   loadTestimonials()
 
-  // Event delegation for dynamically created buttons - FIXED VERSION
+  // Event delegation for dynamically created buttons
   document.addEventListener('click', (event) => {
-    if (event.target.classList.contains('quantity-btn')) {
+    if (event.target.classList.contains('quantity-btn') && !event.target.disabled) {
       const itemName = event.target.getAttribute('data-item')
       const category = event.target.getAttribute('data-category')
       const change = parseInt(event.target.getAttribute('data-change'), 10)
