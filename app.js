@@ -236,21 +236,33 @@ async function loadQueries() {
 // NEW: Load bookings (confirmed bookings)
 async function loadBookings() {
   if (!appState.isAdminLoggedIn) return
-  
+
   try {
-    const { data, error } = await supabase
+    // Fetch confirmed bookings
+    const { data: bookings, error: bErr } = await supabase
       .from('bookings')
       .select()
       .eq('confirmed', true)
       .order('created_at', { ascending: false })
-    
-    if (error) throw error
-    renderBookings(data)
+    if (bErr) throw bErr
+
+    // For each booking, fetch its orders
+    const bookingsWithOrders = await Promise.all(bookings.map(async booking => {
+      const { data: orders, error: oErr } = await supabase
+        .from('orders')
+        .select('id, selected_items, created_at')
+        .eq('booking_id', booking.id)
+      if (oErr) throw oErr
+      return { ...booking, orders }
+    }))
+
+    renderBookings(bookingsWithOrders)
   } catch (error) {
     console.error(error)
     showToast('Failed to load bookings', 'error')
   }
 }
+
 
 // Load menu links for admin
 async function loadMenuLinks() {
@@ -307,52 +319,25 @@ function renderQueries(queries) {
 function renderBookings(bookings) {
   const container = document.getElementById('bookings-container')
   if (!container) return
-  
-  if (!bookings || bookings.length === 0) {
-    container.innerHTML = '<div class="empty-state"><h3>No confirmed bookings yet</h3><p>Confirmed bookings will appear here.</p></div>'
+
+  if (!bookings.length) {
+    container.innerHTML = '<p>No confirmed bookings yet.</p>'
     return
   }
-  
+
   container.innerHTML = bookings.map(booking => `
-    <div class="booking-item" data-id="${booking.id}">
-      <div class="booking-header">
-        <span class="booking-name">${booking.full_name}</span>
-        <span class="booking-date">${new Date(booking.created_at).toLocaleDateString()}</span>
-        <span class="advance-badge">₹${booking.advance_amount || 0} paid</span>
-      </div>
-      <div class="booking-details">
-        <div class="booking-detail"><strong>Mobile:</strong> ${booking.mobile_number}</div>
-        <div class="booking-detail"><strong>Email:</strong> ${booking.email_address}</div>
-        <div class="booking-detail"><strong>Location:</strong> ${booking.location}</div>
-        <div class="booking-detail"><strong>Guests:</strong> ${booking.guest_count}</div>
-        <div class="booking-detail"><strong>Date:</strong> ${new Date(booking.preferred_date).toLocaleDateString()}</div>
-        ${booking.special_requirements ? `<div class="booking-detail"><strong>Requirements:</strong> ${booking.special_requirements}</div>` : ''}
-      </div>
-      <div class="menu-generator">
-        <div class="menu-controls">
-          <div class="control-group">
-            <label for="food-count-${booking.id}">Food Items:</label>
-            <input type="number" id="food-count-${booking.id}" value="3" min="1" max="15">
-          </div>
-          <div class="control-group">
-            <label for="bev-count-${booking.id}">Beverages:</label>
-            <input type="number" id="bev-count-${booking.id}" value="2" min="1" max="10">
-          </div>
-          <button class="btn btn--secondary generate-menu-btn" data-booking-id="${booking.id}">
-            Generate Menu Link
-          </button>
-        </div>
-        <div class="generated-menu-link" id="generated-link-${booking.id}" style="display: none;">
-          <label>Generated Link:</label>
-          <div class="link-container">
-            <input type="text" id="menu-url-${booking.id}" readonly>
-            <button class="btn btn--outline copy-menu-btn" data-booking-id="${booking.id}">Copy</button>
-          </div>
-        </div>
-      </div>
+    <div class="booking-item">
+      <h4>Booking #${booking.id} — ₹${booking.advance_amount} advance</h4>
+      <p>${booking.full_name} | ${new Date(booking.preferred_date).toLocaleDateString()}</p>
+      <h5>Orders for this booking:</h5>
+      <ul>
+        ${booking.orders.map(o => `<li>Order #${o.id} — ${o.selected_items.map(i=>i.name+'×'+i.quantity).join(', ')}</li>`).join('')}
+      </ul>
+      <!-- existing menu-link generator controls here -->
     </div>
   `).join('')
 }
+
 
 // Render menu links in admin dashboard
 function renderMenuLinks(links) {
@@ -804,26 +789,26 @@ function updateSelectionSummary() {
 // Submit menu selection
 async function submitMenuSelection() {
   const selectedItems = Object.values(appState.selectedItems)
-  
   try {
-    const order = {
-      menu_link_id: appState.currentMenuLink.id,
+    const orderPayload = {
+      booking_id: appState.currentBooking.id,      // booking’s bigint ID
       selected_items: selectedItems,
       created_at: new Date().toISOString(),
     }
-    
-    const { data, error } = await supabase.from('orders').insert([order]).select()
+    const { data, error } = await supabase
+      .from('orders')
+      .insert([orderPayload])
+      .select()
     if (error) throw error
-    
     appState.currentOrder = data[0]
     showToast('Menu selection submitted successfully!', 'success')
     showOrderConfirmation(data[0])
-    
   } catch (error) {
     console.error(error)
     showToast('Error submitting menu selection. Please try again.', 'error')
   }
 }
+
 
 // Show order confirmation
 function showOrderConfirmation(order) {
