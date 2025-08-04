@@ -10,6 +10,52 @@
     <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>
 
+<<<<<<< HEAD
+  <!-- Main pages here -->
+  <section id="home-page" class="page active container">
+    <!-- Hero and book picnic button -->
+    <h1>Welcome to The Picnic Story</h1>
+    <button id="book-picnic-btn" class="btn btn--primary">Book Your Picnic</button>
+  </section>
+
+  <section id="menu-preview-page" class="page container"></section>
+  <section id="admin-page" class="page container hidden">
+    <div id="admin-login">
+      <form id="admin-login-form">
+        <input type="password" id="admin-password" required placeholder="Admin Password" />
+        <button type="submit">Login</button>
+      </form>
+    </div>
+    <div id="admin-dashboard" class="hidden">
+      <!-- Admin dashboard UI -->
+    </div>
+  </section>
+
+  <!-- Booking modal -->
+  <div id="booking-modal" class="modal hidden" aria-modal="true" role="dialog">
+    <div class="modal-content">
+      <button id="close-booking-modal" aria-label="Close booking modal">&times;</button>
+      <form id="booking-form">
+        <input id="full-name" name="full-name" placeholder="Full Name" required />
+        <input id="mobile-number" name="mobile-number" placeholder="Mobile Number" required />
+        <input id="email-address" name="email-address" type="email" placeholder="Email" required />
+        <select id="location" name="location" required>
+          <option value="">Select Location</option>
+          <option value="Jaipur">Jaipur</option>
+          <option value="Gurgaon">Gurgaon</option>
+          <option value="Other Location">Other Location</option>
+        </select>
+        <input id="guest-count" name="guest-count" type="number" min="2" max="50" placeholder="Number of Guests" required />
+        <input id="preferred-date" name="preferred-date" type="date" required />
+        <textarea id="special-requirements" name="special-requirements" placeholder="Special Requirements"></textarea>
+        <button type="submit">Submit Booking</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container" class="toast-container" aria-live="assertive"></div>
+=======
     <!-- Navigation -->
     <nav class="navbar">
         <div class="container">
@@ -165,6 +211,7 @@
             </div>
         </div>
     </div>
+>>>>>>> 5c94c78 (button listener changes)
 
     <!-- Admin Login Modal -->
     <div id="admin-login-modal" class="modal hidden">
