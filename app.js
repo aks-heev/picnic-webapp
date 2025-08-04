@@ -354,7 +354,7 @@ function handleNavigation(route) {
   }
 }
 
-// *** MENU SELECTION FUNCTIONALITY - THIS WAS MISSING! ***
+// *** MENU SELECTION FUNCTIONALITY ***
 // Load menu selection for specific menu link
 async function loadMenuSelection(menuId) {
   try {
@@ -376,7 +376,7 @@ async function loadMenuSelection(menuId) {
   }
 }
 
-// Render menu selection page - NOW USES foodList AND bevList!
+// Render menu selection page - FIXED VERSION
 function renderMenuSelection(menuLink) {
   const container = document.getElementById('menu-selection-page')
   if (!container) return
@@ -401,10 +401,10 @@ function renderMenuSelection(menuLink) {
                 <p>Delicious ${item.toLowerCase()}</p>
               </div>
               <div class="quantity-selector">
-                <button class="quantity-btn" onclick="updateQuantity('${item}', 'food', -1)">-</button>
+                <button class="quantity-btn" data-item="${item}" data-category="food" data-change="-1">-</button>
                 <input type="number" class="quantity-input" value="0" min="0" max="5" 
-                       id="food-${item.replace(/\\s+/g, '-').toLowerCase()}" readonly>
-                <button class="quantity-btn" onclick="updateQuantity('${item}', 'food', 1)">+</button>
+                       id="food-${item.replace(/\s+/g, '-').toLowerCase()}" readonly>
+                <button class="quantity-btn" data-item="${item}" data-category="food" data-change="1">+</button>
               </div>
             </div>
           `).join('')}
@@ -421,10 +421,10 @@ function renderMenuSelection(menuLink) {
                 <p>Refreshing ${item.toLowerCase()}</p>
               </div>
               <div class="quantity-selector">
-                <button class="quantity-btn" onclick="updateQuantity('${item}', 'beverage', -1)">-</button>
+                <button class="quantity-btn" data-item="${item}" data-category="beverage" data-change="-1">-</button>
                 <input type="number" class="quantity-input" value="0" min="0" max="5" 
-                       id="beverage-${item.replace(/\\s+/g, '-').toLowerCase()}" readonly>
-                <button class="quantity-btn" onclick="updateQuantity('${item}', 'beverage', 1)">+</button>
+                       id="beverage-${item.replace(/\s+/g, '-').toLowerCase()}" readonly>
+                <button class="quantity-btn" data-item="${item}" data-category="beverage" data-change="1">+</button>
               </div>
             </div>
           `).join('')}
@@ -447,14 +447,17 @@ function renderMenuSelection(menuLink) {
   `
 }
 
-// Update quantity for menu items
+// Update quantity for menu items - FIXED VERSION
 function updateQuantity(itemName, category, change) {
-  const inputId = `${category}-${itemName.replace(/\\s+/g, '-').toLowerCase()}`
+  const inputId = `${category}-${itemName.replace(/\s+/g, '-').toLowerCase()}`
   const input = document.getElementById(inputId)
   
-  if (!input) return
+  if (!input) {
+    console.error('Input not found:', inputId)
+    return
+  }
   
-  const currentValue = parseInt(input.value, 10)
+  const currentValue = parseInt(input.value, 10) || 0
   const newValue = Math.max(0, Math.min(5, currentValue + change))
   
   input.value = newValue
@@ -618,7 +621,7 @@ function loadTestimonials() {
 
 // On page load
 window.addEventListener('DOMContentLoaded', () => {
-  // *** THE KEY FIX: Check URL for menu parameter ***
+  // Check URL for menu parameter
   const urlParams = new URLSearchParams(window.location.search)
   const menuId = urlParams.get('menu')
   if (menuId) {
@@ -726,8 +729,16 @@ window.addEventListener('DOMContentLoaded', () => {
   // Load testimonials
   loadTestimonials()
 
-  // Event delegation for dynamically created buttons
+  // Event delegation for dynamically created buttons - FIXED VERSION
   document.addEventListener('click', (event) => {
+    if (event.target.classList.contains('quantity-btn')) {
+      const itemName = event.target.getAttribute('data-item')
+      const category = event.target.getAttribute('data-category')
+      const change = parseInt(event.target.getAttribute('data-change'), 10)
+      
+      updateQuantity(itemName, category, change)
+    }
+    
     if (event.target.id === 'submit-menu-selection') {
       submitMenuSelection()
     }
