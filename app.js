@@ -103,7 +103,7 @@ function showPage(pageId) {
   }
 }
 
-// Booking form submit handler
+// Booking form submit handler - UPDATED to set confirmed = false by default
 async function handleBookingSubmit(event) {
   event.preventDefault()
   const form = event.target
@@ -117,6 +117,8 @@ async function handleBookingSubmit(event) {
     guest_count: parseInt(form['guest-count'].value, 10),
     preferred_date: form['preferred-date'].value,
     special_requirements: form['special-requirements'].value.trim(),
+    confirmed: false, // NEW: Default to false (query)
+    advance_amount: 0, // NEW: Default to 0
     created_at: new Date().toISOString(),
   }
 
@@ -125,13 +127,13 @@ async function handleBookingSubmit(event) {
     if (error) throw error
     
     appState.currentBooking = data[0]
-    showToast('Booking submitted! You will receive a menu link shortly.', 'success')
+    showToast('Query submitted! We will contact you soon.', 'success')
     hideModal('booking-modal')
     form.reset()
     
   } catch (error) {
     console.error(error)
-    showToast('Error submitting booking. Please try again.', 'error')
+    showToast('Error submitting query. Please try again.', 'error')
   }
 }
 
@@ -152,7 +154,7 @@ function handleAdminLogin(event) {
     if (adminDashboard) adminDashboard.classList.remove('hidden')
     
     // Load initial data
-    loadLeads()
+    loadQueries()
     loadMenuLinks()
   } else {
     showToast('Invalid password', 'error')
@@ -212,17 +214,41 @@ async function generateMenuLink(foodCount, bevCount) {
   }
 }
 
-// Load existing leads for admin
-async function loadLeads() {
+// NEW: Load queries (unconfirmed bookings)
+async function loadQueries() {
   if (!appState.isAdminLoggedIn) return
   
   try {
-    const { data, error } = await supabase.from('bookings').select().order('created_at', { ascending: false })
+    const { data, error } = await supabase
+      .from('bookings')
+      .select()
+      .eq('confirmed', false)
+      .order('created_at', { ascending: false })
+    
     if (error) throw error
-    renderLeads(data)
+    renderQueries(data)
   } catch (error) {
     console.error(error)
-    showToast('Failed to load leads', 'error')
+    showToast('Failed to load queries', 'error')
+  }
+}
+
+// NEW: Load bookings (confirmed bookings)
+async function loadBookings() {
+  if (!appState.isAdminLoggedIn) return
+  
+  try {
+    const { data, error } = await supabase
+      .from('bookings')
+      .select()
+      .eq('confirmed', true)
+      .order('created_at', { ascending: false })
+    
+    if (error) throw error
+    renderBookings(data)
+  } catch (error) {
+    console.error(error)
+    showToast('Failed to load bookings', 'error')
   }
 }
 
@@ -240,29 +266,89 @@ async function loadMenuLinks() {
   }
 }
 
-// Render leads in admin dashboard
-function renderLeads(leads) {
-  const container = document.getElementById('leads-container')
+// NEW: Render queries (unconfirmed bookings) with confirm functionality
+function renderQueries(queries) {
+  const container = document.getElementById('queries-container')
   if (!container) return
   
-  if (!leads || leads.length === 0) {
-    container.innerHTML = '<div class="empty-state"><h3>No leads yet</h3><p>Leads will appear here once customers submit bookings.</p></div>'
+  if (!queries || queries.length === 0) {
+    container.innerHTML = '<div class="empty-state"><h3>No queries yet</h3><p>New customer queries will appear here.</p></div>'
     return
   }
   
-  container.innerHTML = leads.map(lead => `
-    <div class="lead-item">
-      <div class="lead-header">
-        <span class="lead-name">${lead.full_name}</span>
-        <span class="lead-date">${new Date(lead.created_at).toLocaleDateString()}</span>
+  container.innerHTML = queries.map(query => `
+    <div class="query-item" data-id="${query.id}">
+      <div class="query-header">
+        <span class="query-name">${query.full_name}</span>
+        <span class="query-date">${new Date(query.created_at).toLocaleDateString()}</span>
       </div>
-      <div class="lead-details">
-        <div class="lead-detail"><strong>Mobile:</strong> ${lead.mobile_number}</div>
-        <div class="lead-detail"><strong>Email:</strong> ${lead.email_address}</div>
-        <div class="lead-detail"><strong>Location:</strong> ${lead.location}</div>
-        <div class="lead-detail"><strong>Guests:</strong> ${lead.guest_count}</div>
-        <div class="lead-detail"><strong>Date:</strong> ${new Date(lead.preferred_date).toLocaleDateString()}</div>
-        ${lead.special_requirements ? `<div class="lead-detail"><strong>Requirements:</strong> ${lead.special_requirements}</div>` : ''}
+      <div class="query-details">
+        <div class="query-detail"><strong>Mobile:</strong> ${query.mobile_number}</div>
+        <div class="query-detail"><strong>Email:</strong> ${query.email_address}</div>
+        <div class="query-detail"><strong>Location:</strong> ${query.location}</div>
+        <div class="query-detail"><strong>Guests:</strong> ${query.guest_count}</div>
+        <div class="query-detail"><strong>Date:</strong> ${new Date(query.preferred_date).toLocaleDateString()}</div>
+        ${query.special_requirements ? `<div class="query-detail"><strong>Requirements:</strong> ${query.special_requirements}</div>` : ''}
+      </div>
+      <div class="query-actions">
+        <div class="advance-input-group">
+          <label for="advance-${query.id}">Advance Amount:</label>
+          <input type="number" id="advance-${query.id}" placeholder="Enter amount" min="0" step="0.01">
+        </div>
+        <button class="btn btn--primary confirm-booking-btn" data-id="${query.id}">
+          Confirm Booking
+        </button>
+      </div>
+    </div>
+  `).join('')
+}
+
+// NEW: Render bookings (confirmed bookings) with menu link generator
+function renderBookings(bookings) {
+  const container = document.getElementById('bookings-container')
+  if (!container) return
+  
+  if (!bookings || bookings.length === 0) {
+    container.innerHTML = '<div class="empty-state"><h3>No confirmed bookings yet</h3><p>Confirmed bookings will appear here.</p></div>'
+    return
+  }
+  
+  container.innerHTML = bookings.map(booking => `
+    <div class="booking-item" data-id="${booking.id}">
+      <div class="booking-header">
+        <span class="booking-name">${booking.full_name}</span>
+        <span class="booking-date">${new Date(booking.created_at).toLocaleDateString()}</span>
+        <span class="advance-badge">₹${booking.advance_amount || 0} paid</span>
+      </div>
+      <div class="booking-details">
+        <div class="booking-detail"><strong>Mobile:</strong> ${booking.mobile_number}</div>
+        <div class="booking-detail"><strong>Email:</strong> ${booking.email_address}</div>
+        <div class="booking-detail"><strong>Location:</strong> ${booking.location}</div>
+        <div class="booking-detail"><strong>Guests:</strong> ${booking.guest_count}</div>
+        <div class="booking-detail"><strong>Date:</strong> ${new Date(booking.preferred_date).toLocaleDateString()}</div>
+        ${booking.special_requirements ? `<div class="booking-detail"><strong>Requirements:</strong> ${booking.special_requirements}</div>` : ''}
+      </div>
+      <div class="menu-generator">
+        <div class="menu-controls">
+          <div class="control-group">
+            <label for="food-count-${booking.id}">Food Items:</label>
+            <input type="number" id="food-count-${booking.id}" value="3" min="1" max="15">
+          </div>
+          <div class="control-group">
+            <label for="bev-count-${booking.id}">Beverages:</label>
+            <input type="number" id="bev-count-${booking.id}" value="2" min="1" max="10">
+          </div>
+          <button class="btn btn--secondary generate-menu-btn" data-booking-id="${booking.id}">
+            Generate Menu Link
+          </button>
+        </div>
+        <div class="generated-menu-link" id="generated-link-${booking.id}" style="display: none;">
+          <label>Generated Link:</label>
+          <div class="link-container">
+            <input type="text" id="menu-url-${booking.id}" readonly>
+            <button class="btn btn--outline copy-menu-btn" data-booking-id="${booking.id}">Copy</button>
+          </div>
+        </div>
       </div>
     </div>
   `).join('')
@@ -304,7 +390,94 @@ function copyMenuLink(linkId) {
   })
 }
 
-// Handle tab switching in admin dashboard
+// NEW: Confirm booking function
+async function confirmBooking(queryId) {
+  const advanceInput = document.getElementById(`advance-${queryId}`)
+  const advanceAmount = parseFloat(advanceInput.value) || 0
+  
+  if (advanceAmount <= 0) {
+    showToast('Please enter a valid advance amount', 'error')
+    return
+  }
+  
+  try {
+    const { error } = await supabase
+      .from('bookings')
+      .update({ 
+        confirmed: true, 
+        advance_amount: advanceAmount 
+      })
+      .eq('id', queryId)
+    
+    if (error) throw error
+    
+    showToast('Booking confirmed successfully!', 'success')
+    
+    // Refresh both queries and bookings
+    loadQueries()
+    loadBookings()
+    
+  } catch (error) {
+    console.error(error)
+    showToast('Failed to confirm booking', 'error')
+  }
+}
+
+// NEW: Generate menu link for specific booking
+async function generateBookingMenuLink(bookingId) {
+  const foodCountInput = document.getElementById(`food-count-${bookingId}`)
+  const bevCountInput = document.getElementById(`bev-count-${bookingId}`)
+  
+  const foodCount = parseInt(foodCountInput.value, 10)
+  const bevCount = parseInt(bevCountInput.value, 10)
+  
+  if (foodCount < 1 || foodCount > 15 || bevCount < 1 || bevCount > 10) {
+    showToast('Food items must be 1-15, beverages 1-10', 'error')
+    return
+  }
+  
+  try {
+    const menuLink = {
+      max_food_items: foodCount,
+      max_bev_items: bevCount,
+      created_at: new Date().toISOString(),
+    }
+
+    const { data, error } = await supabase.from('menu_links').insert([menuLink]).select()
+    if (error) throw error
+    
+    // Show generated link in the booking row
+    const generatedLinkDiv = document.getElementById(`generated-link-${bookingId}`)
+    const linkInput = document.getElementById(`menu-url-${bookingId}`)
+    
+    if (generatedLinkDiv && linkInput) {
+      const fullUrl = `${window.location.origin}?menu=${data[0].id}`
+      linkInput.value = fullUrl
+      generatedLinkDiv.style.display = 'block'
+    }
+    
+    showToast('Menu link generated for booking!', 'success')
+    loadMenuLinks() // Refresh menu links list
+    
+  } catch (error) {
+    console.error(error)
+    showToast('Failed to generate menu link', 'error')
+  }
+}
+
+// NEW: Copy booking menu link
+function copyBookingMenuLink(bookingId) {
+  const linkInput = document.getElementById(`menu-url-${bookingId}`)
+  if (linkInput && linkInput.value) {
+    navigator.clipboard.writeText(linkInput.value).then(() => {
+      showToast('Menu link copied to clipboard', 'success')
+    }).catch(() => {
+      showToast('Failed to copy link', 'error')
+    })
+  }
+}
+
+// Handle tab switching in admin dashboard - UPDATED for new tabs
 function switchTab(tabName) {
   const allTabContents = document.querySelectorAll('.tab-content')
   allTabContents.forEach(content => {
@@ -330,8 +503,11 @@ function switchTab(tabName) {
     targetButton.setAttribute('aria-selected', 'true')
   }
   
-  if (tabName === 'leads') {
-    loadLeads()
+  // Load appropriate data based on tab
+  if (tabName === 'queries') {
+    loadQueries()
+  } else if (tabName === 'bookings') {
+    loadBookings()
   } else if (tabName === 'menu-link') {
     loadMenuLinks()
   }
@@ -836,8 +1012,9 @@ window.addEventListener('DOMContentLoaded', () => {
   // Load testimonials
   loadTestimonials()
 
-  // Event delegation for dynamically created buttons - FIXED FOR TOTAL CATEGORY LIMITS
+  // Event delegation for dynamically created buttons
   document.addEventListener('click', (event) => {
+    // Menu selection quantity buttons
     if (event.target.classList.contains('quantity-btn') && !event.target.disabled) {
       const itemName = event.target.getAttribute('data-item')
       const category = event.target.getAttribute('data-category')
@@ -846,8 +1023,27 @@ window.addEventListener('DOMContentLoaded', () => {
       updateQuantity(itemName, category, change)
     }
     
+    // Submit menu selection
     if (event.target.id === 'submit-menu-selection') {
       submitMenuSelection()
+    }
+    
+    // NEW: Confirm booking button
+    if (event.target.classList.contains('confirm-booking-btn')) {
+      const queryId = event.target.getAttribute('data-id')
+      confirmBooking(queryId)
+    }
+    
+    // NEW: Generate menu link for booking
+    if (event.target.classList.contains('generate-menu-btn')) {
+      const bookingId = event.target.getAttribute('data-booking-id')
+      generateBookingMenuLink(bookingId)
+    }
+    
+    // NEW: Copy booking menu link
+    if (event.target.classList.contains('copy-menu-btn')) {
+      const bookingId = event.target.getAttribute('data-booking-id')
+      copyBookingMenuLink(bookingId)
     }
   })
 })
