@@ -354,7 +354,7 @@ function handleNavigation(route) {
   }
 }
 
-// *** MENU SELECTION FUNCTIONALITY ***
+// *** MENU SELECTION FUNCTIONALITY WITH TOTAL CATEGORY LIMITS ***
 // Load menu selection for specific menu link
 async function loadMenuSelection(menuId) {
   try {
@@ -376,7 +376,7 @@ async function loadMenuSelection(menuId) {
   }
 }
 
-// Helper: Calculate current totals by category for display
+// Helper: Calculate current totals by category
 function getCurrentTotals() {
   const selectedItems = Object.values(appState.selectedItems)
   
@@ -394,7 +394,20 @@ function getCurrentTotals() {
   return { totalFood, totalBev }
 }
 
-// Render menu selection page - CORRECTED VERSION WITH PER-ITEM LIMITS
+// Helper: Check if adding one more item would exceed category limit
+function withinCategoryLimit(category) {
+  const { totalFood, totalBev } = getCurrentTotals()
+  const maxFood = appState.currentMenuLink.max_food_items
+  const maxBev = appState.currentMenuLink.max_bev_items
+  
+  if (category === 'food') {
+    return totalFood < maxFood
+  } else {
+    return totalBev < maxBev
+  }
+}
+
+// Render menu selection page - FIXED WITH TOTAL CATEGORY LIMITS
 function renderMenuSelection(menuLink) {
   const container = document.getElementById('menu-selection-page')
   if (!container) return
@@ -405,12 +418,13 @@ function renderMenuSelection(menuLink) {
   container.innerHTML = `
     <div class="page-header">
       <h1>Select Your Menu</h1>
-      <p>Choose up to <strong>${maxFood} of each food item</strong> and <strong>${maxBev} of each beverage item</strong> for your picnic.</p>
+      <p>Choose up to <strong>${maxFood} total food items</strong> and <strong>${maxBev} total beverage items</strong> for your picnic.</p>
+      <p class="help-text">Mix and match any combination - e.g., 2 Parathas + 1 Maggi = 3 food items total</p>
     </div>
     
     <div class="menu-sections">
       <div class="menu-section">
-        <h2>Food Items <span class="item-count">(Up to ${maxFood} of each item)</span></h2>
+        <h2>Food Items <span class="item-count">(${maxFood} total items allowed)</span></h2>
         <div class="selection-items">
           ${foodList.map(item => `
             <div class="selection-item">
@@ -420,7 +434,7 @@ function renderMenuSelection(menuLink) {
               </div>
               <div class="quantity-selector">
                 <button class="quantity-btn" data-item="${item}" data-category="food" data-change="-1" disabled>-</button>
-                <input type="number" class="quantity-input" value="0" min="0" max="${maxFood}" 
+                <input type="number" class="quantity-input" value="0" min="0" max="5" 
                        id="food-${item.replace(/\s+/g, '-').toLowerCase()}" readonly>
                 <button class="quantity-btn" data-item="${item}" data-category="food" data-change="1">+</button>
               </div>
@@ -430,7 +444,7 @@ function renderMenuSelection(menuLink) {
       </div>
       
       <div class="menu-section">
-        <h2>Beverages <span class="item-count">(Up to ${maxBev} of each item)</span></h2>
+        <h2>Beverages <span class="item-count">(${maxBev} total items allowed)</span></h2>
         <div class="selection-items">
           ${bevList.map(item => `
             <div class="selection-item">
@@ -440,7 +454,7 @@ function renderMenuSelection(menuLink) {
               </div>
               <div class="quantity-selector">
                 <button class="quantity-btn" data-item="${item}" data-category="beverage" data-change="-1" disabled>-</button>
-                <input type="number" class="quantity-input" value="0" min="0" max="${maxBev}" 
+                <input type="number" class="quantity-input" value="0" min="0" max="5" 
                        id="beverage-${item.replace(/\s+/g, '-').toLowerCase()}" readonly>
                 <button class="quantity-btn" data-item="${item}" data-category="beverage" data-change="1">+</button>
               </div>
@@ -456,16 +470,19 @@ function renderMenuSelection(menuLink) {
         <p>No items selected yet.</p>
       </div>
       <div class="total-items">
-        <strong>Total Food Items: <span id="total-food">0</span> | Total Beverages: <span id="total-bev">0</span></strong>
+        <strong>Total Food Items: <span id="total-food">0</span>/${maxFood} | Total Beverages: <span id="total-bev">0</span>/${maxBev}</strong>
       </div>
       <button id="submit-menu-selection" class="btn btn--primary btn--full-width" disabled>
         Submit Menu Selection
       </button>
     </div>
   `
+  
+  // Initialize button states
+  updateButtonStates()
 }
 
-// Update quantity for menu items - CORRECTED VERSION WITH PER-ITEM LIMITS
+// Update quantity for menu items - FIXED WITH TOTAL CATEGORY LIMITS
 function updateQuantity(itemName, category, change) {
   if (!appState.currentMenuLink) return
   
@@ -478,17 +495,22 @@ function updateQuantity(itemName, category, change) {
   }
   
   const currentValue = parseInt(input.value, 10) || 0
-  const maxFood = appState.currentMenuLink.max_food_items
-  const maxBev = appState.currentMenuLink.max_bev_items
-  
-  // Calculate new value with per-item limits
   let newValue = currentValue + change
   
-  // Apply per-item constraints
-  if (category === 'food') {
-    newValue = Math.max(0, Math.min(newValue, maxFood))
+  // Apply constraints
+  if (change > 0) {
+    // Check if we can add more items to this category
+    if (!withinCategoryLimit(category)) {
+      const categoryName = category === 'food' ? 'food' : 'beverage'
+      const limit = category === 'food' ? appState.currentMenuLink.max_food_items : appState.currentMenuLink.max_bev_items
+      showToast(`Maximum ${limit} ${categoryName} items allowed in total`, 'error')
+      return
+    }
+    // Individual item limit of 5
+    newValue = Math.min(newValue, 5)
   } else {
-    newValue = Math.max(0, Math.min(newValue, maxBev))
+    // Ensure minimum is 0
+    newValue = Math.max(0, newValue)
   }
   
   // Update input value
@@ -507,10 +529,11 @@ function updateQuantity(itemName, category, change) {
   updateButtonStates()
 }
 
-// Helper: Update button states based on per-item limits
+// Helper: Update button states based on category limits
 function updateButtonStates() {
   if (!appState.currentMenuLink) return
   
+  const { totalFood, totalBev } = getCurrentTotals()
   const maxFood = appState.currentMenuLink.max_food_items
   const maxBev = appState.currentMenuLink.max_bev_items
   
@@ -525,7 +548,8 @@ function updateButtonStates() {
     const minusBtn = document.querySelector(`[data-item="${item}"][data-category="food"][data-change="-1"]`)
     
     if (plusBtn) {
-      plusBtn.disabled = currentValue >= maxFood
+      // Disable + button if total food limit reached OR individual item at max (5)
+      plusBtn.disabled = (totalFood >= maxFood) || (currentValue >= 5)
     }
     
     if (minusBtn) {
@@ -544,7 +568,8 @@ function updateButtonStates() {
     const minusBtn = document.querySelector(`[data-item="${item}"][data-category="beverage"][data-change="-1"]`)
     
     if (plusBtn) {
-      plusBtn.disabled = currentValue >= maxBev
+      // Disable + button if total beverage limit reached OR individual item at max (5)
+      plusBtn.disabled = (totalBev >= maxBev) || (currentValue >= 5)
     }
     
     if (minusBtn) {
@@ -553,7 +578,7 @@ function updateButtonStates() {
   })
 }
 
-// Update selection summary - CORRECTED VERSION
+// Update selection summary
 function updateSelectionSummary() {
   const selectedItems = Object.values(appState.selectedItems)
   const { totalFood, totalBev } = getCurrentTotals()
@@ -582,14 +607,18 @@ function updateSelectionSummary() {
   
   // Enable/disable submit button
   const submitBtn = document.getElementById('submit-menu-selection')
+  const maxFood = appState.currentMenuLink?.max_food_items || 0
+  const maxBev = appState.currentMenuLink?.max_bev_items || 0
   
   if (submitBtn) {
-    const hasItems = selectedItems.length > 0
-    submitBtn.disabled = !hasItems
+    const isValid = totalFood <= maxFood && totalBev <= maxBev && selectedItems.length > 0
+    submitBtn.disabled = !isValid
     
-    // Update submit button text
-    if (!hasItems) {
+    // Update submit button text with helpful message
+    if (selectedItems.length === 0) {
       submitBtn.textContent = 'Select Items to Continue'
+    } else if (totalFood > maxFood || totalBev > maxBev) {
+      submitBtn.textContent = 'Too Many Items Selected'
     } else {
       submitBtn.textContent = 'Submit Menu Selection'
     }
@@ -807,7 +836,7 @@ window.addEventListener('DOMContentLoaded', () => {
   // Load testimonials
   loadTestimonials()
 
-  // Event delegation for dynamically created buttons
+  // Event delegation for dynamically created buttons - FIXED FOR TOTAL CATEGORY LIMITS
   document.addEventListener('click', (event) => {
     if (event.target.classList.contains('quantity-btn') && !event.target.disabled) {
       const itemName = event.target.getAttribute('data-item')
