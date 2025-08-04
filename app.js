@@ -111,12 +111,12 @@ async function handleBookingSubmit(event) {
   
   // Gather form data
   const lead = {
-    full_name: form['full-name'].value.trim(),
-    mobile_number: form['mobile-number'].value.trim(),
-    email_address: form['email-address'].value.trim(),
+    name: form['full-name'].value.trim(),
+    mobile: form['mobile-number'].value.trim(),
+    email: form['email-address'].value.trim(),
     location: form['location'].value,
-    guest_count: parseInt(form['guest-count'].value, 10),
-    preferred_date: form['preferred-date'].value,
+    guests: parseInt(form['guest-count'].value, 10),
+    date: form['preferred-date'].value,
     special_requirements: form['special-requirements'].value.trim(),
     submitted_at: new Date().toISOString(),
   }
@@ -262,17 +262,17 @@ function renderLeads(leads) {
   container.innerHTML = leads.map(lead => `
     <div class="lead-item">
       <div class="lead-header">
-        <span class="lead-name">${lead.full_name}</span>
+        <span class="lead-name">${lead.name}</span>
         <span class="lead-date">${new Date(lead.submitted_at).toLocaleDateString()}</span>
       </div>
       <div class="lead-details">
         <div class="lead-detail">
           <strong>Mobile:</strong>
-          ${lead.mobile_number}
+          ${lead.mobile}
         </div>
         <div class="lead-detail">
           <strong>Email:</strong>
-          ${lead.email_address}
+          ${lead.email}
         </div>
         <div class="lead-detail">
           <strong>Location:</strong>
@@ -280,11 +280,11 @@ function renderLeads(leads) {
         </div>
         <div class="lead-detail">
           <strong>Guests:</strong>
-          ${lead.guest_count}
+          ${lead.guests}
         </div>
         <div class="lead-detail">
           <strong>Date:</strong>
-          ${new Date(lead.preferred_date).toLocaleDateString()}
+          ${new Date(lead.date).toLocaleDateString()}
         </div>
         ${lead.special_requirements ? `
         <div class="lead-detail">
