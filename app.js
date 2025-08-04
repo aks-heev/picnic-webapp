@@ -111,14 +111,14 @@ async function handleBookingSubmit(event) {
   
   // Gather form data
   const lead = {
-    name: form['full-name'].value.trim(),
-    mobile: form['mobile-number'].value.trim(),
-    email: form['email-address'].value.trim(),
+    full_name: form['full-name'].value.trim(),
+    mobile_number: form['mobile-number'].value.trim(),
+    email_address: form['email-address'].value.trim(),
     location: form['location'].value,
-    guests: parseInt(form['guest-count'].value, 10),
-    date: form['preferred-date'].value,
+    guest_count: parseInt(form['guest-count'].value, 10),
+    preferred_date: form['preferred-date'].value,
     special_requirements: form['special-requirements'].value.trim(),
-    submitted_at: new Date().toISOString(),
+    created_at: new Date().toISOString(),
   }
 
   // Basic validations could be here, or rely on form validation
@@ -192,7 +192,7 @@ async function generateMenuLink(foodCount, bevCount) {
     const menuLink = {
       max_food_items: foodCount,
       max_bev_items: bevCount,
-      submitted_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
     }
 
     const { data, error } = await supabase.from('menu_links').insert([menuLink]).select()
@@ -222,7 +222,7 @@ async function loadLeads() {
   if (!appState.isAdminLoggedIn) return
   
   try {
-    const { data, error } = await supabase.from('bookings').select().order('submitted_at', { ascending: false })
+    const { data, error } = await supabase.from('bookings').select().order('created_at', { ascending: false })
     if (error) throw error
     
     // Render leads in admin UI
@@ -238,7 +238,7 @@ async function loadMenuLinks() {
   if (!appState.isAdminLoggedIn) return
   
   try {
-    const { data, error } = await supabase.from('menu_links').select().order('submitted_at', { ascending: false })
+    const { data, error } = await supabase.from('menu_links').select().order('created_at', { ascending: false })
     if (error) throw error
     
     // Render menu links in admin UI
@@ -262,17 +262,17 @@ function renderLeads(leads) {
   container.innerHTML = leads.map(lead => `
     <div class="lead-item">
       <div class="lead-header">
-        <span class="lead-name">${lead.name}</span>
-        <span class="lead-date">${new Date(lead.submitted_at).toLocaleDateString()}</span>
+        <span class="lead-name">${lead.full_name}</span>
+        <span class="lead-date">${new Date(lead.created_at).toLocaleDateString()}</span>
       </div>
       <div class="lead-details">
         <div class="lead-detail">
           <strong>Mobile:</strong>
-          ${lead.mobile}
+          ${lead.mobile_number}
         </div>
         <div class="lead-detail">
           <strong>Email:</strong>
-          ${lead.email}
+          ${lead.email_address}
         </div>
         <div class="lead-detail">
           <strong>Location:</strong>
@@ -280,11 +280,11 @@ function renderLeads(leads) {
         </div>
         <div class="lead-detail">
           <strong>Guests:</strong>
-          ${lead.guests}
+          ${lead.guest_count}
         </div>
         <div class="lead-detail">
           <strong>Date:</strong>
-          ${new Date(lead.date).toLocaleDateString()}
+          ${new Date(lead.preferred_date).toLocaleDateString()}
         </div>
         ${lead.special_requirements ? `
         <div class="lead-detail">
@@ -313,7 +313,7 @@ function renderMenuLinks(links) {
         <div class="menu-link-id">Menu Link #${link.id}</div>
         <div class="menu-link-details">
           Food Items: ${link.max_food_items} | Beverages: ${link.max_bev_items} | 
-          Created: ${new Date(link.submitted_at).toLocaleDateString()}
+          Created: ${new Date(link.created_at).toLocaleDateString()}
         </div>
       </div>
       <div class="menu-link-actions">
