@@ -8,8 +8,6 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.error(
     'Supabase environment variables are missing! Please set SUPABASE_URL and SUPABASE_ANON_KEY.'
   )
-  // Add return to prevent further execution with undefined values
-  // But we can continue for demo purposes - just will show errors when trying to use Supabase
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
@@ -49,6 +47,7 @@ const appState = {
   currentBooking: null,
   currentMenuLink: null,
   currentOrder: null,
+  selectedItems: {}
 }
 
 // Helper: show toast notification
@@ -121,7 +120,6 @@ async function handleBookingSubmit(event) {
     created_at: new Date().toISOString(),
   }
 
-  // Basic validations could be here, or rely on form validation
   try {
     const { data, error } = await supabase.from('bookings').insert([lead]).select()
     if (error) throw error
@@ -129,11 +127,8 @@ async function handleBookingSubmit(event) {
     appState.currentBooking = data[0]
     showToast('Booking submitted! You will receive a menu link shortly.', 'success')
     hideModal('booking-modal')
-    
-    // Reset form
     form.reset()
     
-    // You could redirect or show next steps here
   } catch (error) {
     console.error(error)
     showToast('Error submitting booking. Please try again.', 'error')
@@ -209,7 +204,7 @@ async function generateMenuLink(foodCount, bevCount) {
     }
     
     showToast('Menu link generated', 'success')
-    loadMenuLinks() // Refresh the list
+    loadMenuLinks()
     return data[0]
   } catch (error) {
     console.error(error)
@@ -224,8 +219,6 @@ async function loadLeads() {
   try {
     const { data, error } = await supabase.from('bookings').select().order('created_at', { ascending: false })
     if (error) throw error
-    
-    // Render leads in admin UI
     renderLeads(data)
   } catch (error) {
     console.error(error)
@@ -240,8 +233,6 @@ async function loadMenuLinks() {
   try {
     const { data, error } = await supabase.from('menu_links').select().order('created_at', { ascending: false })
     if (error) throw error
-    
-    // Render menu links in admin UI
     renderMenuLinks(data)
   } catch (error) {
     console.error(error)
@@ -266,32 +257,12 @@ function renderLeads(leads) {
         <span class="lead-date">${new Date(lead.created_at).toLocaleDateString()}</span>
       </div>
       <div class="lead-details">
-        <div class="lead-detail">
-          <strong>Mobile:</strong>
-          ${lead.mobile_number}
-        </div>
-        <div class="lead-detail">
-          <strong>Email:</strong>
-          ${lead.email_address}
-        </div>
-        <div class="lead-detail">
-          <strong>Location:</strong>
-          ${lead.location}
-        </div>
-        <div class="lead-detail">
-          <strong>Guests:</strong>
-          ${lead.guest_count}
-        </div>
-        <div class="lead-detail">
-          <strong>Date:</strong>
-          ${new Date(lead.preferred_date).toLocaleDateString()}
-        </div>
-        ${lead.special_requirements ? `
-        <div class="lead-detail">
-          <strong>Requirements:</strong>
-          ${lead.special_requirements}
-        </div>
-        ` : ''}
+        <div class="lead-detail"><strong>Mobile:</strong> ${lead.mobile_number}</div>
+        <div class="lead-detail"><strong>Email:</strong> ${lead.email_address}</div>
+        <div class="lead-detail"><strong>Location:</strong> ${lead.location}</div>
+        <div class="lead-detail"><strong>Guests:</strong> ${lead.guest_count}</div>
+        <div class="lead-detail"><strong>Date:</strong> ${new Date(lead.preferred_date).toLocaleDateString()}</div>
+        ${lead.special_requirements ? `<div class="lead-detail"><strong>Requirements:</strong> ${lead.special_requirements}</div>` : ''}
       </div>
     </div>
   `).join('')
@@ -335,35 +306,30 @@ function copyMenuLink(linkId) {
 
 // Handle tab switching in admin dashboard
 function switchTab(tabName) {
-  // Hide all tab contents
   const allTabContents = document.querySelectorAll('.tab-content')
   allTabContents.forEach(content => {
     content.classList.remove('active')
     content.hidden = true
   })
   
-  // Remove active state from all tab buttons
   const allTabButtons = document.querySelectorAll('.tab-btn')
   allTabButtons.forEach(button => {
     button.classList.remove('active')
     button.setAttribute('aria-selected', 'false')
   })
   
-  // Show target tab content
   const targetContent = document.getElementById(`${tabName}-tab`)
   if (targetContent) {
     targetContent.classList.add('active')
     targetContent.hidden = false
   }
   
-  // Set active state on clicked tab button
   const targetButton = document.querySelector(`[data-tab="${tabName}"]`)
   if (targetButton) {
     targetButton.classList.add('active')
     targetButton.setAttribute('aria-selected', 'true')
   }
   
-  // Load data for specific tabs
   if (tabName === 'leads') {
     loadLeads()
   } else if (tabName === 'menu-link') {
@@ -386,6 +352,234 @@ function handleNavigation(route) {
     default:
       showPage('home-page')
   }
+}
+
+// *** MENU SELECTION FUNCTIONALITY - THIS WAS MISSING! ***
+// Load menu selection for specific menu link
+async function loadMenuSelection(menuId) {
+  try {
+    const { data, error } = await supabase
+      .from('menu_links')
+      .select()
+      .eq('id', menuId)
+      .single()
+    
+    if (error) throw error
+    
+    appState.currentMenuLink = data
+    appState.selectedItems = {}
+    renderMenuSelection(data)
+  } catch (error) {
+    console.error(error)
+    showToast('Invalid menu link', 'error')
+    handleNavigation('home')
+  }
+}
+
+// Render menu selection page - NOW USES foodList AND bevList!
+function renderMenuSelection(menuLink) {
+  const container = document.getElementById('menu-selection-page')
+  if (!container) return
+  
+  const maxFood = menuLink.max_food_items
+  const maxBev = menuLink.max_bev_items
+  
+  container.innerHTML = `
+    <div class="page-header">
+      <h1>Select Your Menu</h1>
+      <p>Choose up to ${maxFood} food items and ${maxBev} beverage items for your picnic.</p>
+    </div>
+    
+    <div class="menu-sections">
+      <div class="menu-section">
+        <h2>Food Items <span class="item-count">(Select up to ${maxFood})</span></h2>
+        <div class="selection-items">
+          ${foodList.map(item => `
+            <div class="selection-item">
+              <div class="selection-item-info">
+                <h4>${item}</h4>
+                <p>Delicious ${item.toLowerCase()}</p>
+              </div>
+              <div class="quantity-selector">
+                <button class="quantity-btn" onclick="updateQuantity('${item}', 'food', -1)">-</button>
+                <input type="number" class="quantity-input" value="0" min="0" max="5" 
+                       id="food-${item.replace(/\\s+/g, '-').toLowerCase()}" readonly>
+                <button class="quantity-btn" onclick="updateQuantity('${item}', 'food', 1)">+</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      
+      <div class="menu-section">
+        <h2>Beverages <span class="item-count">(Select up to ${maxBev})</span></h2>
+        <div class="selection-items">
+          ${bevList.map(item => `
+            <div class="selection-item">
+              <div class="selection-item-info">
+                <h4>${item}</h4>
+                <p>Refreshing ${item.toLowerCase()}</p>
+              </div>
+              <div class="quantity-selector">
+                <button class="quantity-btn" onclick="updateQuantity('${item}', 'beverage', -1)">-</button>
+                <input type="number" class="quantity-input" value="0" min="0" max="5" 
+                       id="beverage-${item.replace(/\\s+/g, '-').toLowerCase()}" readonly>
+                <button class="quantity-btn" onclick="updateQuantity('${item}', 'beverage', 1)">+</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+    
+    <div class="selection-summary">
+      <h3>Your Selection</h3>
+      <div id="selection-summary-content">
+        <p>No items selected yet.</p>
+      </div>
+      <div class="total-items">
+        <strong>Food Items: <span id="total-food">0</span>/${maxFood} | Beverages: <span id="total-bev">0</span>/${maxBev}</strong>
+      </div>
+      <button id="submit-menu-selection" class="btn btn--primary btn--full-width" disabled>
+        Submit Menu Selection
+      </button>
+    </div>
+  `
+}
+
+// Update quantity for menu items
+function updateQuantity(itemName, category, change) {
+  const inputId = `${category}-${itemName.replace(/\\s+/g, '-').toLowerCase()}`
+  const input = document.getElementById(inputId)
+  
+  if (!input) return
+  
+  const currentValue = parseInt(input.value, 10)
+  const newValue = Math.max(0, Math.min(5, currentValue + change))
+  
+  input.value = newValue
+  
+  // Update app state
+  const key = `${category}-${itemName}`
+  if (newValue > 0) {
+    appState.selectedItems[key] = { name: itemName, quantity: newValue, category }
+  } else {
+    delete appState.selectedItems[key]
+  }
+  
+  updateSelectionSummary()
+}
+
+// Update selection summary
+function updateSelectionSummary() {
+  const selectedItems = Object.values(appState.selectedItems)
+  
+  let totalFood = 0
+  let totalBev = 0
+  
+  selectedItems.forEach(item => {
+    if (item.category === 'food') {
+      totalFood += item.quantity
+    } else {
+      totalBev += item.quantity
+    }
+  })
+  
+  const totalFoodSpan = document.getElementById('total-food')
+  const totalBevSpan = document.getElementById('total-bev')
+  
+  if (totalFoodSpan) totalFoodSpan.textContent = totalFood
+  if (totalBevSpan) totalBevSpan.textContent = totalBev
+  
+  const summaryContent = document.getElementById('selection-summary-content')
+  if (summaryContent) {
+    if (selectedItems.length === 0) {
+      summaryContent.innerHTML = '<p>No items selected yet.</p>'
+    } else {
+      summaryContent.innerHTML = selectedItems.map(item => `
+        <div class="selected-item">
+          <span class="selected-item-name">${item.name}</span>
+          <span class="selected-item-quantity">${item.quantity}x</span>
+        </div>
+      `).join('')
+    }
+  }
+  
+  const submitBtn = document.getElementById('submit-menu-selection')
+  const maxFood = appState.currentMenuLink?.max_food_items || 0
+  const maxBev = appState.currentMenuLink?.max_bev_items || 0
+  
+  if (submitBtn) {
+    const isValid = totalFood <= maxFood && totalBev <= maxBev && selectedItems.length > 0
+    submitBtn.disabled = !isValid
+  }
+}
+
+// Submit menu selection
+async function submitMenuSelection() {
+  const selectedItems = Object.values(appState.selectedItems)
+  
+  try {
+    const order = {
+      menu_link_id: appState.currentMenuLink.id,
+      selected_items: selectedItems,
+      created_at: new Date().toISOString(),
+    }
+    
+    const { data, error } = await supabase.from('orders').insert([order]).select()
+    if (error) throw error
+    
+    appState.currentOrder = data[0]
+    showToast('Menu selection submitted successfully!', 'success')
+    showOrderConfirmation(data[0])
+    
+  } catch (error) {
+    console.error(error)
+    showToast('Error submitting menu selection. Please try again.', 'error')
+  }
+}
+
+// Show order confirmation
+function showOrderConfirmation(order) {
+  const container = document.getElementById('menu-selection-page')
+  if (!container) return
+  
+  container.innerHTML = `
+    <div class="confirmation-ticket">
+      <div class="ticket-header">
+        <h1>Order Confirmed!</h1>
+        <p class="confirmation-number">Order #${order.id}</p>
+      </div>
+      <div class="ticket-content">
+        <div>
+          <h3>Your Selected Items</h3>
+          <div class="selected-items">
+            ${order.selected_items.map(item => `
+              <div class="selected-item">
+                <span class="selected-item-name">${item.name}</span>
+                <span class="selected-item-quantity">${item.quantity}x</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        
+        <div class="next-steps">
+          <h3>Next Steps</h3>
+          <ul>
+            <li>We will contact you within 24 hours to confirm your booking</li>
+            <li>Final menu confirmation and dietary adjustments can be made during the call</li>
+            <li>Payment details and picnic setup will be discussed</li>
+            <li>We'll send you the exact location and timing details</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    
+    <div class="confirmation-actions">
+      <button class="btn btn--primary" onclick="handleNavigation('home')">Back to Home</button>
+      <button class="btn btn--secondary" onclick="window.print()">Print Confirmation</button>
+    </div>
+  `
 }
 
 // Load testimonials
@@ -424,7 +618,15 @@ function loadTestimonials() {
 
 // On page load
 window.addEventListener('DOMContentLoaded', () => {
-  // Main CTA button - this was missing!
+  // *** THE KEY FIX: Check URL for menu parameter ***
+  const urlParams = new URLSearchParams(window.location.search)
+  const menuId = urlParams.get('menu')
+  if (menuId) {
+    showPage('menu-selection-page')
+    loadMenuSelection(menuId)
+  }
+
+  // Main CTA button
   const bookPicnicBtn = document.getElementById('book-picnic-btn')
   if (bookPicnicBtn) {
     bookPicnicBtn.addEventListener('click', () => {
@@ -523,4 +725,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // Load testimonials
   loadTestimonials()
+
+  // Event delegation for dynamically created buttons
+  document.addEventListener('click', (event) => {
+    if (event.target.id === 'submit-menu-selection') {
+      submitMenuSelection()
+    }
+  })
 })
