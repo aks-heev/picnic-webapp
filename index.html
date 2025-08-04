@@ -172,23 +172,30 @@
       </div>
 
       <div class="dashboard-tabs" role="tablist">
-        <button class="tab-btn active" data-tab="leads" role="tab" aria-selected="true">Leads</button>
+        <button class="tab-btn active" data-tab="queries" role="tab" aria-selected="true">Queries</button>
+        <button class="tab-btn" data-tab="bookings" role="tab" aria-selected="false">Bookings</button>
         <button class="tab-btn" data-tab="menu-link" role="tab" aria-selected="false">Menu Link Generator</button>
-        <button class="tab-btn" data-tab="orders" role="tab" aria-selected="false">Orders</button>
       </div>
 
-      <div id="leads-tab" class="tab-content active" role="tabpanel">
-        <input id="leads-search" class="search-input" type="search" placeholder="Search leads..." />
+      <!-- Queries Tab -->
+      <div id="queries-tab" class="tab-content active" role="tabpanel">
+        <input id="leads-search" class="search-input" type="search" placeholder="Search queries..." />
         <select id="location-filter" class="filter-select">
           <option value="">All Locations</option>
           <option value="Jaipur">Jaipur</option>
           <option value="Gurgaon">Gurgaon</option>
           <option value="Other Location">Other Location</option>
         </select>
-        <div id="leads-container" class="leads-table" tabindex="0" aria-live="polite" aria-relevant="additions"></div>
-        <button id="export-leads" class="btn btn--outline">Export Leads (CSV)</button>
+        <div id="queries-container" class="leads-table" tabindex="0" aria-live="polite" aria-relevant="additions"></div>
+        <button id="export-queries" class="btn btn--outline">Export Queries (CSV)</button>
       </div>
 
+      <!-- Bookings Tab -->
+      <div id="bookings-tab" class="tab-content" role="tabpanel" hidden>
+        <div id="bookings-container" tabindex="0" aria-live="polite" class="orders-table"></div>
+      </div>
+
+      <!-- Menu Link Generator Tab -->
       <div id="menu-link-tab" class="tab-content" role="tabpanel" hidden>
         <div class="menu-generator">
           <label for="food-count">Number of Food Items (1-15):</label>
@@ -208,12 +215,9 @@
 
         <div id="menu-links-list" class="menu-links-list" tabindex="0" aria-live="polite"></div>
       </div>
-
-      <div id="orders-tab" class="tab-content" role="tabpanel" hidden>
-        <div id="orders-container" tabindex="0" aria-live="polite" class="orders-table"></div>
-      </div>
     </div>
   </section>
+
 
   <!-- Toast Notifications -->
   <div id="toast-container" class="toast-container" aria-live="assertive" aria-atomic="true"></div>
