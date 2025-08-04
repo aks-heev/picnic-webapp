@@ -326,17 +326,43 @@ function renderBookings(bookings) {
   }
 
   container.innerHTML = bookings.map(booking => `
-    <div class="booking-item">
-      <h4>Booking #${booking.id} — ₹${booking.advance_amount} advance</h4>
-      <p>${booking.full_name} | ${new Date(booking.preferred_date).toLocaleDateString()}</p>
-      <h5>Orders for this booking:</h5>
+    <div class="booking-item" data-id="${booking.id}">
+      <div class="booking-header">
+        <h4>Booking #${booking.id} — ₹${booking.advance_amount} advance</h4>
+        <p>${booking.full_name} | ${new Date(booking.preferred_date).toLocaleDateString()}</p>
+      </div>
+
+      <h5>Previous Orders:</h5>
       <ul>
-        ${booking.orders.map(o => `<li>Order #${o.id} — ${o.selected_items.map(i=>i.name+'×'+i.quantity).join(', ')}</li>`).join('')}
+        ${booking.orders.map(o =>
+          `<li>Order #${o.id} — ${o.selected_items.map(i=>i.name+'×'+i.quantity).join(', ')}</li>`
+        ).join('')}
       </ul>
-      <!-- existing menu-link generator controls here -->
+
+      <!-- Menu Generator Controls -->
+      <div class="menu-generator">
+        <div class="control-group">
+          <label>Food Items (1-15):</label>
+          <input type="number" id="food-count-${booking.id}" min="1" max="15" value="${booking.max_food_items||3}">
+        </div>
+        <div class="control-group">
+          <label>Beverages (1-10):</label>
+          <input type="number" id="bev-count-${booking.id}" min="1" max="10" value="${booking.max_bev_items||2}">
+        </div>
+        <button class="btn btn--secondary generate-menu-btn" data-booking-id="${booking.id}">
+          Generate Link
+        </button>
+      </div>
+
+      <div id="generated-link-${booking.id}" class="generated-link" style="display:none;">
+        <label>Link:</label>
+        <input type="text" id="menu-url-${booking.id}" readonly>
+        <button class="btn btn--outline copy-menu-btn" data-booking-id="${booking.id}">Copy</button>
+      </div>
     </div>
   `).join('')
 }
+
 
 
 // Render menu links in admin dashboard
@@ -999,35 +1025,34 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // Event delegation for dynamically created buttons
   document.addEventListener('click', (event) => {
-    // Menu selection quantity buttons
+    // 1. Quantity buttons
     if (event.target.classList.contains('quantity-btn') && !event.target.disabled) {
-      const itemName = event.target.getAttribute('data-item')
-      const category = event.target.getAttribute('data-category')
-      const change = parseInt(event.target.getAttribute('data-change'), 10)
-      
+      const itemName = event.target.dataset.item
+      const category = event.target.dataset.category
+      const change = parseInt(event.target.dataset.change, 10)
       updateQuantity(itemName, category, change)
     }
-    
-    // Submit menu selection
+
+    // 2. Submit menu selection
     if (event.target.id === 'submit-menu-selection') {
       submitMenuSelection()
     }
-    
-    // NEW: Confirm booking button
+
+    // 3. Confirm booking in Queries tab
     if (event.target.classList.contains('confirm-booking-btn')) {
-      const queryId = event.target.getAttribute('data-id')
+      const queryId = event.target.dataset.id
       confirmBooking(queryId)
     }
-    
-    // NEW: Generate menu link for booking
+
+    // 4. Generate per-booking menu link
     if (event.target.classList.contains('generate-menu-btn')) {
-      const bookingId = event.target.getAttribute('data-booking-id')
+      const bookingId = event.target.dataset.bookingId
       generateBookingMenuLink(bookingId)
     }
-    
-    // NEW: Copy booking menu link
+
+    // 5. Copy per-booking menu link
     if (event.target.classList.contains('copy-menu-btn')) {
-      const bookingId = event.target.getAttribute('data-booking-id')
+      const bookingId = event.target.dataset.bookingId
       copyBookingMenuLink(bookingId)
     }
   })
