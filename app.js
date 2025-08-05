@@ -457,12 +457,12 @@ async function generateBookingMenuLink(bookingId) {
     const { data, error } = await supabase.from('menu_links').insert([menuLink]).select()
     if (error) throw error
     
-    // Show generated link in the booking row
+    // Show generated link in the booking row WITH booking ID
     const generatedLinkDiv = document.getElementById(`generated-link-${bookingId}`)
     const linkInput = document.getElementById(`menu-url-${bookingId}`)
     
     if (generatedLinkDiv && linkInput) {
-      const fullUrl = `${window.location.origin}?menu=${data[0].id}`
+      const fullUrl = `${window.location.origin}?menu=${data[0].id}&booking=${bookingId}`
       linkInput.value = fullUrl
       generatedLinkDiv.style.display = 'block'
     }
@@ -475,6 +475,7 @@ async function generateBookingMenuLink(bookingId) {
     showToast('Failed to generate menu link', 'error')
   }
 }
+
 
 // NEW: Copy booking menu link
 function copyBookingMenuLink(bookingId) {
@@ -918,9 +919,16 @@ window.addEventListener('DOMContentLoaded', () => {
   // Check URL for menu parameter
   const urlParams = new URLSearchParams(window.location.search)
   const menuId = urlParams.get('menu')
+  const bookingId = urlParams.get('booking')
+  
   if (menuId) {
     showPage('menu-selection-page')
     loadMenuSelection(menuId)
+    
+    // Set booking ID if provided in URL
+    if (bookingId) {
+      appState.currentBooking = { id: parseInt(bookingId, 10) }
+    }
   }
 
   // Main CTA button
