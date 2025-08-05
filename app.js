@@ -818,6 +818,7 @@ async function submitMenuSelection() {
   const selectedItems = Object.values(appState.selectedItems)
   try {
     const orderPayload = {
+      menu_link_id: appState.currentMenuLink.id,
       booking_id: appState.currentBooking.id,      // booking’s bigint ID
       selected_items: selectedItems,
       created_at: new Date().toISOString(),
