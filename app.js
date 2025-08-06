@@ -88,93 +88,83 @@ function showPage(pageId) {
   if (activeNavLink) activeNavLink.classList.add('active')
 }
 
-// Initialize menu preview
+// Initialize menu preview - THIS IS THE KEY FIX
 function initializeMenuPreview() {
+  console.log('Initializing menu preview...')
+  
   const foodsGrid = document.getElementById('food-preview-grid')
   const beveragesGrid = document.getElementById('beverage-preview-grid')
   
   if (foodsGrid) {
+    console.log('Populating food grid with', foodList.length, 'items')
     foodsGrid.innerHTML = foodList.map(item => `
       <div class="menu-item-preview">
         <h4>${item}</h4>
         <p>Deliciously prepared</p>
       </div>
     `).join('')
+  } else {
+    console.error('Food grid not found!')
   }
   
   if (beveragesGrid) {
+    console.log('Populating beverage grid with', bevList.length, 'items')
     beveragesGrid.innerHTML = bevList.map(item => `
       <div class="menu-item-preview">
         <h4>${item}</h4>
         <p>Refreshing drink</p>
       </div>
     `).join('')
+  } else {
+    console.error('Beverage grid not found!')
   }
 }
 
-// Handle menu preview tabs
+// Handle menu preview tabs - FIXED VERSION
 function handleMenuPreviewTabs() {
-  document.querySelectorAll('.menu-tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+  const menuTabBtns = document.querySelectorAll('.menu-tab-btn')
+  console.log('Setting up menu tabs for', menuTabBtns.length, 'buttons')
+  
+  menuTabBtns.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault()
       const tab = btn.dataset.tab
+      console.log('Tab clicked:', tab)
       
       // Update button states
-      document.querySelectorAll('.menu-tab-btn').forEach(b => b.classList.remove('active'))
+      menuTabBtns.forEach(b => b.classList.remove('active'))
       btn.classList.add('active')
       
       // Show/hide content
       document.querySelectorAll('.menu-tab-content').forEach(content => {
         content.style.display = 'none'
       })
-      document.getElementById(`${tab}-preview`).style.display = 'block'
+      
+      const targetContent = document.getElementById(`${tab}-preview`)
+      if (targetContent) {
+        targetContent.style.display = 'block'
+        console.log('Showing content for:', tab)
+      }
     })
   })
 }
 
-// Handle menu selection tabs
-function handleMenuSelectionTabs() {
-  document.querySelectorAll('.selection-tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tab = btn.dataset.tab
-      
-      // Update button states
-      document.querySelectorAll('.selection-tab-btn').forEach(b => b.classList.remove('active'))
-      btn.classList.add('active')
-      
-      // Show/hide content
-      document.querySelectorAll('#menu-selection-page .menu-tab-content').forEach(content => {
-        content.style.display = 'none'
-      })
-      document.getElementById(tab).style.display = 'block'
-    })
-  })
-}
-
-// Update tab counters
-function updateTabCounters() {
-  const foodCount = Object.values(appState.selectedItems).filter(item => item.category === 'food').reduce((sum, item) => sum + item.quantity, 0)
-  const bevCount = Object.values(appState.selectedItems).filter(item => item.category === 'bev').reduce((sum, item) => sum + item.quantity, 0)
-  
-  const foodCountEl = document.getElementById('selection-food-count')
-  const bevCountEl = document.getElementById('selection-bev-count')
-  
-  if (foodCountEl) foodCountEl.textContent = foodCount
-  if (bevCountEl) bevCountEl.textContent = bevCount
-}
-
-// Booking form submit - UPDATED to show success page
+// Booking form submit - FIXED TO SHOW SUCCESS PAGE
 async function handleBookingSubmit(event) {
   event.preventDefault()
+  console.log('Form submitted!')
+  
   const form = event.target
-
+  const formData = new FormData(form)
+  
   const lead = {
-    full_name: form['full-name'].value.trim(),
-    mobile_number: form['mobile-number'].value.trim(),
-    email_address: form['email-address'].value.trim(),
-    location: form['location'].value,
-    guest_count: parseInt(form['guest-count'].value, 10),
-    preferred_date: form['preferred-date'].value,
-    special_requirements: form['special-requirements'].value.trim(),
+    full_name: formData.get('full-name').trim(),
+    mobile_number: formData.get('mobile-number').trim(),
+    email_address: formData.get('email-address').trim(),
+    location: formData.get('location'),
+    guest_count: parseInt(formData.get('guest-count'), 10),
+    preferred_date: formData.get('preferred-date'),
+    special_requirements: formData.get('special-requirements').trim(),
     confirmed: false,
     advance_amount: 0,
     created_at: new Date().toISOString(),
@@ -185,15 +175,18 @@ async function handleBookingSubmit(event) {
     if (error) throw error
 
     appState.currentBooking = data[0]
+    console.log('Booking saved:', data[0])
+    
     showToast('Query submitted! We will contact you soon.', 'success')
     hideModal('booking-modal')
     form.reset()
     
-    // Show success page
+    // THIS IS THE CRITICAL FIX - Show success page
+    console.log('Redirecting to success page...')
     showPage('query-success-page')
     
   } catch (error) {
-    console.error(error)
+    console.error('Error submitting booking:', error)
     showToast('Error submitting query. Please try again.', 'error')
   }
 }
@@ -387,36 +380,12 @@ function renderBookings(bookings) {
         <div class="booking-detail"><strong>Date:</strong> ${new Date(booking.preferred_date).toLocaleDateString()}</div>
         ${booking.special_requirements ? `<div class="booking-detail"><strong>Requirements:</strong> ${booking.special_requirements}</div>` : ''}
       </div>
-
       <h5>Previous Orders:</h5>
       <ul>
         ${booking.orders.map(o =>
           `<li>Order #${o.id} — ${o.selected_items.map(i=>i.name+'×'+i.quantity).join(', ')}</li>`
         ).join('')}
       </ul>
-
-      <div class="menu-generator">
-        <div class="menu-controls">
-          <div class="control-group">
-            <label for="food-count-${booking.id}">Food Items:</label>
-            <input type="number" id="food-count-${booking.id}" value="3" min="1" max="15">
-          </div>
-          <div class="control-group">
-            <label for="bev-count-${booking.id}">Beverages:</label>
-            <input type="number" id="bev-count-${booking.id}" value="2" min="1" max="10">
-          </div>
-          <button class="generate-menu-btn" data-booking-id="${booking.id}">
-            Generate Menu Link
-          </button>
-        </div>
-        <div class="generated-menu-link" id="generated-link-${booking.id}" style="display: none;">
-          <label>Generated Link:</label>
-          <div class="link-container">
-            <input type="text" id="menu-url-${booking.id}" readonly>
-            <button class="copy-menu-btn" data-booking-id="${booking.id}">Copy</button>
-          </div>
-        </div>
-      </div>
     </div>
   `).join('')
 }
@@ -488,59 +457,6 @@ async function confirmBooking(queryId) {
   }
 }
 
-// Generate menu link for booking
-async function generateBookingMenuLink(bookingId) {
-  const foodCountInput = document.getElementById(`food-count-${bookingId}`)
-  const bevCountInput = document.getElementById(`bev-count-${bookingId}`)
-  
-  const foodCount = parseInt(foodCountInput.value, 10)
-  const bevCount = parseInt(bevCountInput.value, 10)
-  
-  if (foodCount < 1 || foodCount > 15 || bevCount < 1 || bevCount > 10) {
-    showToast('Food items must be 1-15, beverages 1-10', 'error')
-    return
-  }
-  
-  try {
-    const menuLink = {
-      max_food_items: foodCount,
-      max_bev_items: bevCount,
-      created_at: new Date().toISOString(),
-    }
-
-    const { data, error } = await supabase.from('menu_links').insert([menuLink]).select()
-    if (error) throw error
-    
-    const generatedLinkDiv = document.getElementById(`generated-link-${bookingId}`)
-    const linkInput = document.getElementById(`menu-url-${bookingId}`)
-    
-    if (generatedLinkDiv && linkInput) {
-      const fullUrl = `${window.location.origin}?menu=${data[0].id}&booking=${bookingId}`
-      linkInput.value = fullUrl
-      generatedLinkDiv.style.display = 'block'
-    }
-    
-    showToast('Menu link generated for booking!', 'success')
-    loadMenuLinks()
-    
-  } catch (error) {
-    console.error(error)
-    showToast('Failed to generate menu link', 'error')
-  }
-}
-
-// Copy booking menu link
-function copyBookingMenuLink(bookingId) {
-  const linkInput = document.getElementById(`menu-url-${bookingId}`)
-  if (linkInput && linkInput.value) {
-    navigator.clipboard.writeText(linkInput.value).then(() => {
-      showToast('Menu link copied to clipboard', 'success')
-    }).catch(() => {
-      showToast('Failed to copy link', 'error')
-    })
-  }
-}
-
 // Tab switching
 function switchTab(tabName) {
   document.querySelectorAll('.tab-content').forEach(content => {
@@ -591,279 +507,6 @@ function handleNavigation(route) {
   }
 }
 
-// Menu selection functionality
-async function loadMenuSelection(menuId) {
-  try {
-    const { data, error } = await supabase
-      .from('menu_links')
-      .select()
-      .eq('id', menuId)
-      .single()
-    
-    if (error) throw error
-    
-    appState.currentMenuLink = data
-    appState.selectedItems = {}
-    renderMenuSelection(data)
-  } catch (error) {
-    console.error(error)
-    showToast('Invalid menu link', 'error')
-    handleNavigation('home')
-  }
-}
-
-// Render menu selection page with tabs
-function renderMenuSelection(menuLink) {
-  const container = document.getElementById('menu-selection-page')
-  if (!container) return
-  
-  const maxFood = menuLink.max_food_items
-  const maxBev = menuLink.max_bev_items
-  
-  container.innerHTML = `
-    <div class="page-header">
-      <h1>Select Your Menu</h1>
-      <p>Choose up to <strong>${maxFood} total food items</strong> and <strong>${maxBev} total beverages</strong> for your picnic.</p>
-    </div>
-    
-    <!-- Menu Selection Tabs -->
-    <div class="menu-tabs">
-      <button class="selection-tab-btn active" data-tab="food-items">
-        🍽️ Food Items (<span id="selection-food-count">0</span>/${maxFood})
-      </button>
-      <button class="selection-tab-btn" data-tab="bev-items">
-        🥤 Beverages (<span id="selection-bev-count">0</span>/${maxBev})
-      </button>
-    </div>
-
-    <!-- Food Items Tab -->
-    <div id="food-items" class="menu-tab-content" style="padding: 0 var(--space-16);">
-      <div id="food-list" class="selection-items">
-        ${foodList.map(item => `
-          <div class="menu-selection-item">
-            <span class="item-name">${item}</span>
-            <div class="quantity-controls">
-              <button class="quantity-btn" data-item="${item}" data-category="food" data-change="-1">-</button>
-              <span class="quantity-display" id="qty-food-${item.replace(/\s+/g, '-').toLowerCase()}">0</span>
-              <button class="quantity-btn" data-item="${item}" data-category="food" data-change="1">+</button>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-
-    <!-- Beverages Tab -->
-    <div id="bev-items" class="menu-tab-content" style="display: none; padding: 0 var(--space-16);">
-      <div id="bev-list" class="selection-items">
-        ${bevList.map(item => `
-          <div class="menu-selection-item">
-            <span class="item-name">${item}</span>
-            <div class="quantity-controls">
-              <button class="quantity-btn" data-item="${item}" data-category="bev" data-change="-1">-</button>
-              <span class="quantity-display" id="qty-bev-${item.replace(/\s+/g, '-').toLowerCase()}">0</span>
-              <button class="quantity-btn" data-item="${item}" data-category="bev" data-change="1">+</button>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-    
-    <div class="selection-summary">
-      <h3>Your Selection</h3>
-      <div id="selection-summary-content">
-        <p>No items selected yet.</p>
-      </div>
-      <button id="submit-menu-selection" class="btn btn--primary btn--full-width" disabled>
-        Submit Menu Selection
-      </button>
-    </div>
-  `
-  
-  setTimeout(handleMenuSelectionTabs, 100)
-  updateButtonStates()
-}
-
-// Update quantity
-function updateQuantity(itemName, category, change) {
-  if (!appState.currentMenuLink) return
-  
-  const key = `${category}-${itemName}`
-  if (!appState.selectedItems[key]) {
-    appState.selectedItems[key] = { name: itemName, category, quantity: 0 }
-  }
-  
-  const currentItem = appState.selectedItems[key]
-  const newQuantity = currentItem.quantity + change
-  
-  if (newQuantity < 0) return
-  if (newQuantity > 5) return
-  
-  const { totalFood, totalBev } = getCurrentTotals()
-  const maxFood = appState.currentMenuLink.max_food_items
-  const maxBev = appState.currentMenuLink.max_bev_items
-  
-  if (change > 0) {
-    if (category === 'food' && totalFood >= maxFood) {
-      showToast(`Maximum ${maxFood} food items allowed in total`, 'error')
-      return
-    }
-    if (category === 'bev' && totalBev >= maxBev) {
-      showToast(`Maximum ${maxBev} beverages allowed in total`, 'error')
-      return
-    }
-  }
-  
-  currentItem.quantity = newQuantity
-  if (newQuantity === 0) {
-    delete appState.selectedItems[key]
-  }
-  
-  const qtyDisplay = document.getElementById(`qty-${category}-${itemName.replace(/\s+/g, '-').toLowerCase()}`)
-  if (qtyDisplay) {
-    qtyDisplay.textContent = newQuantity
-  }
-  
-  updateTabCounters()
-  updateSelectionSummary()
-  updateButtonStates()
-}
-
-// Get current totals
-function getCurrentTotals() {
-  const selectedItems = Object.values(appState.selectedItems)
-  
-  let totalFood = 0
-  let totalBev = 0
-  
-  selectedItems.forEach(item => {
-    if (item.category === 'food') {
-      totalFood += item.quantity
-    } else {
-      totalBev += item.quantity
-    }
-  })
-  
-  return { totalFood, totalBev }
-}
-
-// Update button states
-function updateButtonStates() {
-  if (!appState.currentMenuLink) return
-  
-  const { totalFood, totalBev } = getCurrentTotals()
-  const maxFood = appState.currentMenuLink.max_food_items
-  const maxBev = appState.currentMenuLink.max_bev_items
-  
-  document.querySelectorAll('.quantity-btn').forEach(btn => {
-    const itemName = btn.dataset.item
-    const category = btn.dataset.category
-    const change = parseInt(btn.dataset.change, 10)
-    
-    const key = `${category}-${itemName}`
-    const currentQuantity = appState.selectedItems[key]?.quantity || 0
-    
-    if (change > 0) {
-      const categoryTotal = category === 'food' ? totalFood : totalBev
-      const categoryMax = category === 'food' ? maxFood : maxBev
-      btn.disabled = (categoryTotal >= categoryMax) || (currentQuantity >= 5)
-    } else {
-      btn.disabled = currentQuantity <= 0
-    }
-  })
-}
-
-// Update selection summary
-function updateSelectionSummary() {
-  const selectedItems = Object.values(appState.selectedItems).filter(item => item.quantity > 0)
-  
-  const summaryContent = document.getElementById('selection-summary-content')
-  if (summaryContent) {
-    if (selectedItems.length === 0) {
-      summaryContent.innerHTML = '<p>No items selected yet.</p>'
-    } else {
-      summaryContent.innerHTML = selectedItems.map(item => `
-        <div class="selected-item">
-          <span class="selected-item-name">${item.name}</span>
-          <span class="selected-item-quantity">${item.quantity}x</span>
-        </div>
-      `).join('')
-    }
-  }
-  
-  const submitBtn = document.getElementById('submit-menu-selection')
-  if (submitBtn) {
-    submitBtn.disabled = selectedItems.length === 0
-  }
-}
-
-// Submit menu selection
-async function submitMenuSelection() {
-  const selectedItems = Object.values(appState.selectedItems).filter(item => item.quantity > 0)
-  
-  try {
-    const order = {
-      menu_link_id: appState.currentMenuLink.id,
-      booking_id: appState.currentBooking?.id || null,
-      selected_items: selectedItems,
-      created_at: new Date().toISOString(),
-    }
-    
-    const { data, error } = await supabase.from('orders').insert([order]).select()
-    if (error) throw error
-    
-    appState.currentOrder = data[0]
-    showToast('Menu selection submitted successfully!', 'success')
-    showOrderConfirmation(data[0])
-    
-  } catch (error) {
-    console.error(error)
-    showToast('Error submitting menu selection. Please try again.', 'error')
-  }
-}
-
-// Show order confirmation
-function showOrderConfirmation(order) {
-  const container = document.getElementById('menu-selection-page')
-  if (!container) return
-  
-  container.innerHTML = `
-    <div class="confirmation-ticket">
-      <div class="ticket-header">
-        <h1>Order Confirmed!</h1>
-        <p class="confirmation-number">Order #${order.id}</p>
-      </div>
-      <div class="ticket-content">
-        <div>
-          <h3>Your Selected Items</h3>
-          <div class="selected-items">
-            ${order.selected_items.map(item => `
-              <div class="selected-item">
-                <span class="selected-item-name">${item.name}</span>
-                <span class="selected-item-quantity">${item.quantity}x</span>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-        
-        <div style="margin-top: var(--space-32); padding: var(--space-24); background: rgba(16, 185, 129, 0.1); border-radius: var(--radius-lg);">
-          <h3>Next Steps</h3>
-          <ul style="list-style: none; padding: 0; margin: var(--space-16) 0;">
-            <li style="padding: var(--space-8) 0; border-bottom: 1px solid rgba(16, 185, 129, 0.2);">✅ We will contact you within 24 hours to confirm your booking</li>
-            <li style="padding: var(--space-8) 0; border-bottom: 1px solid rgba(16, 185, 129, 0.2);">✅ Final menu confirmation and dietary adjustments can be made during the call</li>
-            <li style="padding: var(--space-8) 0; border-bottom: 1px solid rgba(16, 185, 129, 0.2);">✅ Payment details and picnic setup will be discussed</li>
-            <li style="padding: var(--space-8) 0;">✅ We'll send you the exact location and timing details</li>
-          </ul>
-        </div>
-      </div>
-      
-      <div class="confirmation-actions">
-        <button class="btn btn--primary" onclick="handleNavigation('home')">Back to Home</button>
-        <button class="btn btn--outline" onclick="window.print()">Print Confirmation</button>
-      </div>
-    </div>
-  `
-}
-
 // Load testimonials
 function loadTestimonials() {
   const testimonialsContainer = document.getElementById('testimonials-container')
@@ -898,32 +541,33 @@ function loadTestimonials() {
   `).join('')
 }
 
-// Initialize on page load
-window.addEventListener('DOMContentLoaded', () => {
-  // Initialize menu preview
+// Make functions globally available
+window.showModal = showModal
+window.hideModal = hideModal
+window.showPage = showPage
+window.copyMenuLink = copyMenuLink
+
+// Initialize on page load - THE COMPLETE SOLUTION
+function initializeApp() {
+  console.log('App initializing...')
+  
+  // Initialize menu preview FIRST
   initializeMenuPreview()
   handleMenuPreviewTabs()
   
-  // Check URL parameters
-  const urlParams = new URLSearchParams(window.location.search)
-  const menuId = urlParams.get('menu')
-  const bookingId = urlParams.get('booking')
-  
-  if (menuId) {
-    showPage('menu-selection-page')
-    loadMenuSelection(menuId)
-    
-    if (bookingId) {
-      appState.currentBooking = { id: parseInt(bookingId, 10) }
-    }
-  }
+  // Load testimonials
+  loadTestimonials()
 
-  // Event listeners
+  // Event listeners for buttons
   const bookPicnicBtn = document.getElementById('book-picnic-btn')
   if (bookPicnicBtn) {
-    bookPicnicBtn.addEventListener('click', () => showModal('booking-modal'))
+    bookPicnicBtn.addEventListener('click', () => {
+      console.log('Book picnic button clicked')
+      showModal('booking-modal')
+    })
   }
 
+  // Modal controls
   const closeBookingModalBtn = document.getElementById('close-booking-modal')
   if (closeBookingModalBtn) {
     closeBookingModalBtn.addEventListener('click', () => hideModal('booking-modal'))
@@ -934,28 +578,23 @@ window.addEventListener('DOMContentLoaded', () => {
     cancelBookingBtn.addEventListener('click', () => hideModal('booking-modal'))
   }
 
+  // Form submission - THE MOST CRITICAL PART
   const bookingForm = document.getElementById('booking-form')
-  if (bookingForm) bookingForm.addEventListener('submit', handleBookingSubmit)
+  if (bookingForm) {
+    console.log('Setting up booking form listener')
+    bookingForm.addEventListener('submit', handleBookingSubmit)
+  } else {
+    console.error('Booking form not found!')
+  }
 
+  // Admin functionality
   const adminLoginForm = document.getElementById('admin-login-form')
   if (adminLoginForm) adminLoginForm.addEventListener('submit', handleAdminLogin)
 
   const adminLogoutBtn = document.getElementById('admin-logout')
-  if (adminLogoutBtn) {
-    adminLogoutBtn.addEventListener('click', handleAdminLogout)
-  }
+  if (adminLogoutBtn) adminLogoutBtn.addEventListener('click', handleAdminLogout)
 
-  // Modal close on outside click
-  const bookingModal = document.getElementById('booking-modal')
-  if (bookingModal) {
-    bookingModal.addEventListener('click', (event) => {
-      if (event.target === bookingModal) {
-        hideModal('booking-modal')
-      }
-    })
-  }
-
-  // Navigation links
+  // Navigation
   document.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', (event) => {
       event.preventDefault()
@@ -997,6 +636,16 @@ window.addEventListener('DOMContentLoaded', () => {
     })
   }
 
+  // Modal close on outside click
+  const bookingModal = document.getElementById('booking-modal')
+  if (bookingModal) {
+    bookingModal.addEventListener('click', (event) => {
+      if (event.target === bookingModal) {
+        hideModal('booking-modal')
+      }
+    })
+  }
+
   // Set minimum date
   const preferredDateInput = document.getElementById('preferred-date')
   if (preferredDateInput) {
@@ -1004,41 +653,21 @@ window.addEventListener('DOMContentLoaded', () => {
     preferredDateInput.min = today
   }
 
-  // Load testimonials
-  loadTestimonials()
-
-  // Event delegation
+  // Event delegation for admin actions
   document.addEventListener('click', (event) => {
-    // Menu selection quantity buttons
-    if (event.target.classList.contains('quantity-btn') && !event.target.disabled) {
-      const itemName = event.target.getAttribute('data-item')
-      const category = event.target.getAttribute('data-category')
-      const change = parseInt(event.target.getAttribute('data-change'), 10)
-      
-      updateQuantity(itemName, category, change)
-    }
-    
-    // Submit menu selection
-    if (event.target.id === 'submit-menu-selection') {
-      submitMenuSelection()
-    }
-    
     // Confirm booking
     if (event.target.classList.contains('confirm-booking-btn')) {
       const queryId = event.target.getAttribute('data-id')
       confirmBooking(queryId)
     }
-    
-    // Generate menu link for booking
-    if (event.target.classList.contains('generate-menu-btn')) {
-      const bookingId = event.target.getAttribute('data-booking-id')
-      generateBookingMenuLink(bookingId)
-    }
-    
-    // Copy booking menu link
-    if (event.target.classList.contains('copy-menu-btn')) {
-      const bookingId = event.target.getAttribute('data-booking-id')
-      copyBookingMenuLink(bookingId)
-    }
   })
-})
+
+  console.log('App initialization complete!')
+}
+
+// MAIN INITIALIZATION - The complete solution
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeApp)
+} else {
+  initializeApp()
+}
