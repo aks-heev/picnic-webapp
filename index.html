@@ -70,6 +70,73 @@
       <h2 class="section-title">What Our Clients Say</h2>
       <div id="testimonials-container" class="testimonials-grid"></div>
     </section>
+
+    <!-- Menu Preview Section -->
+    <section id="menu-preview-page" class="page" style="padding: 2rem 0;">
+      <div class="container">
+        <h2 style="text-align: center; margin-bottom: 2rem;">Our Menu Preview</h2>
+        
+        <!-- Menu Tabs -->
+        <div class="menu-tabs" style="display: flex; justify-content: center; margin-bottom: 2rem; gap: 1rem;">
+          <button class="menu-tab-btn active" data-tab="foods" style="padding: 0.75rem 1.5rem; border: none; background: var(--primary-color); color: white; border-radius: 25px; cursor: pointer;">
+            Food Items
+          </button>
+          <button class="menu-tab-btn" data-tab="beverages" style="padding: 0.75rem 1.5rem; border: 2px solid var(--primary-color); background: transparent; color: var(--primary-color); border-radius: 25px; cursor: pointer;">
+            Beverages
+          </button>
+        </div>
+
+        <!-- Menu Content -->
+        <div id="foods-preview" class="menu-tab-content active">
+          <h3 style="text-align: center; margin-bottom: 1.5rem;">Food Items</h3>
+          <div class="menu-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+            <!-- Food items will be populated by JavaScript -->
+          </div>
+        </div>
+
+        <div id="beverages-preview" class="menu-tab-content" style="display: none;">
+          <h3 style="text-align: center; margin-bottom: 1.5rem;">Beverages</h3>
+          <div class="menu-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+            <!-- Beverage items will be populated by JavaScript -->
+          </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 2rem;">
+          <button class="btn btn--primary" onclick="showModal('booking-modal')">
+            Book Your Picnic Now
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Query Success Page -->
+    <section id="query-success-page" class="page" style="padding: 4rem 0; text-align: center;">
+      <div class="container">
+        <div style="max-width: 600px; margin: 0 auto;">
+          <div style="font-size: 4rem; margin-bottom: 1rem;">🎉</div>
+          <h2 style="color: var(--primary-color); margin-bottom: 1rem;">Query Submitted Successfully!</h2>
+          <p style="font-size: 1.2rem; margin-bottom: 2rem; color: #666;">
+            Thank you for your interest! We'll contact you within 24 hours to discuss your picnic requirements.
+          </p>
+          <div style="background: #f8f9fa; padding: 2rem; border-radius: 10px; margin-bottom: 2rem;">
+            <h3 style="margin-bottom: 1rem;">Want to fast-track your booking?</h3>
+            <p style="margin-bottom: 1rem;">Call us directly:</p>
+            <a href="tel:+919999999999" style="font-size: 1.5rem; font-weight: bold; color: var(--primary-color); text-decoration: none;">
+              📞 +91 99999-99999
+            </a>
+          </div>
+          <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+            <button class="btn btn--primary" onclick="showPage('menu-preview-page')">
+              View Menu Preview
+            </button>
+            <button class="btn btn--outline" onclick="showPage('home-page')">
+              Back to Home
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </section>
 
   <!-- Booking Modal -->
