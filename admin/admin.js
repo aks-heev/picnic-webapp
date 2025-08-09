@@ -241,27 +241,3 @@ document.getElementById('generate-menu-link')?.addEventListener('click', () => {
 // Make certain functions global for inline onclick
 window.confirmBooking = confirmBooking;
 
-// ===== Tab Switching =====
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach(b => {
-      b.classList.remove('active');
-      b.setAttribute('aria-selected', 'false');
-    });
-
-    document.querySelectorAll('.tab-content').forEach(content => {
-      content.classList.add('hidden');
-      content.classList.remove('active');
-    });
-
-    btn.classList.add('active');
-    btn.setAttribute('aria-selected', 'true');
-
-    const targetId = btn.getAttribute('data-tab');
-    const targetEl = document.getElementById(targetId);
-    if (targetEl) {
-      targetEl.classList.remove('hidden');
-      targetEl.classList.add('active');
-    }
-  });
-});
