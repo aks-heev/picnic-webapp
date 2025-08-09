@@ -1079,38 +1079,79 @@ window.addEventListener('DOMContentLoaded', () => {
   loadTestimonials()
 
   // Event delegation
-  document.addEventListener('click', (event) => {
-    // Menu selection quantity buttons
-    if (event.target.closest('.modern-qty-btn') && !event.target.closest('.modern-qty-btn').disabled) {
+  // Event delegation - UPDATED FOR MODERN DESIGN
+document.addEventListener('click', (event) => {
+  // Modern quantity buttons - FIXED
+  if (event.target.closest('.modern-qty-btn') && !event.target.closest('.modern-qty-btn').disabled) {
     const btn = event.target.closest('.modern-qty-btn')
     const itemName = btn.getAttribute('data-item')
     const category = btn.getAttribute('data-category')
     const change = parseInt(btn.getAttribute('data-change'), 10)
     
     updateQuantity(itemName, category, change)
-    }
+    return
+  }
+  
+  // Legacy quantity buttons (for backward compatibility)
+  if (event.target.classList.contains('quantity-btn') && !event.target.disabled) {
+    const itemName = event.target.getAttribute('data-item')
+    const category = event.target.getAttribute('data-category')
+    const change = parseInt(event.target.getAttribute('data-change'), 10)
     
-    // Submit menu selection
-    if (event.target.id === 'submit-menu-selection') {
-      submitMenuSelection()
-    }
+    updateQuantity(itemName, category, change)
+    return
+  }
+  
+  // Modern tab buttons
+  if (event.target.closest('.modern-tab-btn')) {
+    const btn = event.target.closest('.modern-tab-btn')
+    const tab = btn.getAttribute('data-tab')
     
-    // Confirm booking
-    if (event.target.classList.contains('confirm-booking-btn')) {
-      const queryId = event.target.getAttribute('data-id')
-      confirmBooking(queryId)
+    if (tab) {
+      // Update button states
+      document.querySelectorAll('.modern-tab-btn').forEach(b => b.classList.remove('active'))
+      btn.classList.add('active')
+      
+      // Show/hide content
+      document.querySelectorAll('.modern-tab-content').forEach(content => {
+        content.classList.remove('active')
+        content.style.display = 'none'
+      })
+      
+      const targetContent = document.getElementById(tab)
+      if (targetContent) {
+        targetContent.classList.add('active')
+        targetContent.style.display = 'block'
+      }
     }
-    
-    // Generate menu link for booking
-    if (event.target.classList.contains('generate-menu-btn')) {
-      const bookingId = event.target.getAttribute('data-booking-id')
-      generateBookingMenuLink(bookingId)
-    }
-    
-    // Copy booking menu link
-    if (event.target.classList.contains('copy-menu-btn')) {
-      const bookingId = event.target.getAttribute('data-booking-id')
-      copyBookingMenuLink(bookingId)
-    }
+    return
+  }
+  
+  // Submit menu selection
+  if (event.target.id === 'submit-menu-selection') {
+    submitMenuSelection()
+    return
+  }
+  
+  // Confirm booking
+  if (event.target.classList.contains('confirm-booking-btn')) {
+    const queryId = event.target.getAttribute('data-id')
+    confirmBooking(queryId)
+    return
+  }
+  
+  // Generate menu link for booking
+  if (event.target.classList.contains('generate-menu-btn')) {
+    const bookingId = event.target.getAttribute('data-booking-id')
+    generateBookingMenuLink(bookingId)
+    return
+  }
+  
+  // Copy booking menu link
+  if (event.target.classList.contains('copy-menu-btn')) {
+    const bookingId = event.target.getAttribute('data-booking-id')
+    copyBookingMenuLink(bookingId)
+    return
+  }
   })
 })
