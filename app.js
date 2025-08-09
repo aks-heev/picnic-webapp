@@ -7,9 +7,32 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) console.error('Supabase variables missi
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 // Menu data
-const foodList = [ /* same items as before */ ]
-const bevList  = [ /* same items as before */ ]
-
+const foodList = [
+  "Plain Omelette","Cheese Burst Omelette","Chicken Omelette","Bread Omelette",
+  "Egg Bhurji with Toast","Aloo Paratha","Aloo Pyaz Paratha","Gobi Paratha",
+  "Paneer Paratha","Egg Paratha","Chicken Paratha","Garden Fresh Sandwich",
+  "Cheese Corn Sandwich","Paneer Tikka Sandwich","Chicken Tikka Sandwich",
+  "Plain Maggi","Veg Maggi","Egg & Cheese Maggi","Cheese Maggi","Chicken Maggi",
+  "Salted Fries","Peri Peri Fries","Mix Fries","Paneer Pakoda","Bun Maska",
+  "Masala Bun","Malai Bun","Anda Bun","Aloo Bun","Keema Bun","Cheesy Crazy",
+  "Chicken Chakna","Peanut Masala","Crispy Corn","Loaded Nachos","Chicken Nuggets",
+  "Chicken Strips","Chicken Popcorn","Veg Hakka Noodles","Chilli Garlic Noodles",
+  "Egg Noodles","Chicken Noodles","Veg Fried Rice","Egg Fried Rice",
+  "Chicken Fried Rice","Honey Chilli Potato","Chilli Mushroom","Chilli Paneer",
+  "Veg Manchurian","Chilli Chicken","Crispy Chicken","Chicken Manchurian",
+  "Paneer Tikka","Paneer Malai Tikka","Mushroom Tikka","Dahi Kebab",
+  "Hara Bhara Kebab","Tandoori Chicken","Chicken Tikka","Chicken Malai Tikka",
+  "Chicken Seekh Kebab","Paneer Butter Masala","Kadhai Paneer","Dal Makhni",
+  "Dal Tadka","Mix Veg","Butter Chicken","Kadhai Chicken","Chicken Curry",
+  "Roti","Naan","Garlic Naan","Steamed Rice","Jeera Rice"
+]
+const bevList = [
+  "Ginger Tea","Black Tea","Masala Tea","Elaichi Tea","Green Tea","Lemon Ginger Tea",
+  "Hot Coffee","Americano","Cold Coffee","Ice Tea","Virgin Mojito","Fresh Lime",
+  "Lemonade","Blue Lagoon","Watermelon Mojito","Watermelon Lemonade",
+  "Oreo Shake","KitKat Shake","Chocolate Shake","Sweet Lassi","Salty Lassi",
+  "Mineral Water","Soda","Mixers"
+]
 // State
 const appState = { selectedItems: {} }
 
