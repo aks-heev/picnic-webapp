@@ -2,119 +2,62 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>The Picnic Story – Admin Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Admin Dashboard</title>
   <link rel="stylesheet" href="../style.css" />
 </head>
 <body>
-  <!-- Toast Container -->
-  <div id="toast-container" class="toast-container"></div>
+  <div id="toast-container"></div>
 
   <!-- Admin Login -->
-  <div id="admin-login" class="login-card">
+  <div id="admin-login">
     <h2>Admin Login</h2>
-    <form id="admin-login-form" novalidate>
-      <div class="form-group">
-        <label for="admin-email" class="form-label">Email</label>
-        <input id="admin-email" type="email" class="form-control" required />
-      </div>
-      <div class="form-group">
-        <label for="admin-password" class="form-label">Password</label>
-        <input id="admin-password" type="password" class="form-control" required />
-      </div>
-      <button type="submit" class="btn btn--primary">Login</button>
+    <form id="admin-login-form">
+      <input type="email" id="admin-email" placeholder="Email" required>
+      <input type="password" id="admin-password" placeholder="Password" required>
+      <button type="submit">Login</button>
     </form>
   </div>
 
   <!-- Admin Dashboard -->
-  <div id="admin-dashboard" class="admin-section hidden">
-    <div class="database-status">
-      <span class="status-indicator connected"></span>
-      <span class="status-text">Database Status: Connected</span>
-    </div>
-
-    <div class="dashboard-header">
-      <h2>Admin Dashboard</h2>
-      <button id="admin-logout" class="btn btn--secondary">Logout</button>
-    </div>
+  <div id="admin-dashboard" class="hidden">
+    <button id="admin-logout">Logout</button>
 
     <!-- Tabs -->
     <div class="dashboard-tabs" role="tablist">
-      <button class="tab-btn active" data-tab="queries" role="tab" aria-selected="true">Queries</button>
-      <button class="tab-btn" data-tab="bookings" role="tab" aria-selected="false">Bookings</button>
-      <button class="tab-btn" data-tab="menu-link" role="tab" aria-selected="false">Menu Link Generator</button>
+      <button class="tab-btn active" data-tab="queries-tab" role="tab" aria-selected="true">Queries</button>
+      <button class="tab-btn" data-tab="bookings-tab" role="tab" aria-selected="false">Bookings</button>
+      <button class="tab-btn" data-tab="menu-link-tab" role="tab" aria-selected="false">Menu Link Generator</button>
     </div>
 
-    <!-- Queries Tab -->
-    <div id="queries-tab" class="tab-content active" role="tabpanel">
-      <div class="tab-header">
-        <h3>Customer Queries</h3>
-        <div class="search-filters">
-          <input id="leads-search" class="search-input" type="search" placeholder="Search queries..." />
-          <select id="location-filter" class="filter-select">
-            <option value="">All Locations</option>
-            <option value="jaipur-city">Jaipur City</option>
-            <option value="jaipur-outskirts">Jaipur Outskirts</option>
-            <option value="amber-fort">Near Amber Fort</option>
-            <option value="jal-mahal">Near Jal Mahal</option>
-            <option value="nahargarh">Nahargarh Area</option>
-            <option value="custom">Custom Location</option>
-          </select>
-        </div>
-      </div>
-      <div id="queries-container" class="data-container">
-        <!-- Queries will be populated by admin.js -->
-      </div>
-      <button id="export-queries" class="btn btn--outline">Export Queries (CSV)</button>
+    <!-- Queries -->
+    <div id="queries-tab" class="tab-content">
+      <h3>Customer Queries</h3>
+      <div id="queries-container"></div>
     </div>
 
-    <!-- Bookings Tab -->
-    <div id="bookings-tab" class="tab-content" role="tabpanel" hidden>
-      <div class="tab-header">
-        <h3>Confirmed Bookings</h3>
-        <p>Bookings that have been confirmed with advance payment</p>
-      </div>
-      <div id="bookings-container" class="data-container">
-        <!-- Bookings will be populated by admin.js -->
-      </div>
+    <!-- Bookings -->
+    <div id="bookings-tab" class="tab-content hidden">
+      <h3>Confirmed Bookings</h3>
+      <div id="bookings-container"></div>
     </div>
 
-    <!-- Menu Link Generator Tab -->
-    <div id="menu-link-tab" class="tab-content" role="tabpanel" hidden>
-      <div class="tab-header">
-        <h3>Generate Menu Links</h3>
-        <p>Create custom menu links with specific item limits for customers</p>
+    <!-- Menu Generator -->
+    <div id="menu-link-tab" class="tab-content hidden">
+      <h3>Generate Menu Link</h3>
+      <input type="number" id="food-count" placeholder="Food items" min="1" max="15">
+      <input type="number" id="bev-count" placeholder="Beverage items" min="1" max="10">
+      <button id="generate-menu-link">Generate</button>
+
+      <div class="generated-link" style="display:none;">
+        <input type="text" id="generated-link-url" readonly>
       </div>
 
-      <div class="menu-generator">
-        <div class="menu-controls">
-          <div class="control-group">
-            <label for="food-count">Food Items (1-15):</label>
-            <input type="number" id="food-count" min="1" max="15" value="3" />
-          </div>
-          <div class="control-group">
-            <label for="bev-count">Beverages (1-10):</label>
-            <input type="number" id="bev-count" min="1" max="10" value="2" />
-          </div>
-          <button id="generate-menu-link" class="btn btn--primary">Generate Link</button>
-        </div>
-
-        <div class="generated-link" style="display: none;">
-          <label>Generated Menu Link:</label>
-          <div class="link-display">
-            <input type="text" id="generated-link-url" readonly />
-            <button id="copy-link" class="btn btn--outline">Copy Link</button>
-          </div>
-        </div>
-      </div>
-
-      <div id="menu-links-list" class="menu-links-list">
-        <!-- Menu links will be populated by admin.js -->
-      </div>
+      <h4>Previous Links</h4>
+      <div id="menu-links-list"></div>
     </div>
   </div>
 
-  <!-- Scripts -->
-  <script src="admin.js" type="module"></script>
+  <script type="module" src="admin.js"></script>
 </body>
 </html>
