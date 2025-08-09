@@ -2312,3 +2312,38 @@ body {
     margin: 0;
   }
 }
+
+/* Existing design system... */
+
+/* Menu card styling */
+.modern-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px,1fr));
+  gap: 1.5rem;
+}
+
+.modern-menu-card {
+  background: var(--gradient-card);
+  padding: 1rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+  transition: transform var(--duration-fast) var(--ease-standard),
+              box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.modern-menu-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+}
+
+.menu-card-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  color: var(--color-text);
+}
+
+/* Hide unused quantity-controls */
+.modern-quantity-controls { display: none; }
+
+/* Rest of your existing CSS */
