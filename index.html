@@ -1,294 +1,350 @@
 <!DOCTYPE html>
-<html lang="en" data-color-scheme="light">
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>The Picnic Story - Boho Picnic Event Management</title>
-  <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Picnic Story - Premium Picnic Experiences</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <nav class="navbar">
-    <div class="container nav-container">
-      <div class="nav-brand">
-        <h2>The Picnic Story</h2>
-        <p class="brand-tagline">Creating Unforgettable Boho Picnic Experiences</p>
-      </div>
-      <div class="nav-links">
-        <a href="#" class="nav-link active" data-route="home">Home</a>
-        <a href="#" class="nav-link" data-route="menu-preview">Menu Preview</a>
-        <a href="#" class="nav-link" data-route="admin">Admin</a>
-      </div>
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <h2>The Picnic Story</h2>
+                <p class="brand-tagline">Magical Moments</p>
+            </div>
+            <div class="nav-links">
+                <a href="#" class="nav-link active" data-route="home">Home</a>
+                <a href="#" class="nav-link" data-route="menu-preview">Menu Preview</a>
+                <a href="#" class="nav-link" data-route="admin">Admin</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Home Page -->
+    <div id="home-page" class="page active">
+        <!-- Hero Section -->
+        <section class="hero">
+            <div class="hero-background"></div>
+            <div class="container">
+                <div class="hero-content">
+                    <h1 class="hero-title">Create Magical Picnic Memories</h1>
+                    <p class="hero-tagline">Premium Boho-Chic Experiences</p>
+                    <p class="hero-description">Beautifully curated picnic arrangements with boho-chic decor, comfortable seating, and ambient lighting.</p>
+                    <button id="book-picnic-btn" class="btn btn--primary btn--lg">Book Your Picnic</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Services Section -->
+        <section class="services">
+            <div class="container">
+                <h2 class="section-title">Our Services</h2>
+                <div class="services-grid">
+                    <div class="service-card">
+                        <span class="service-icon">💕</span>
+                        <h3>Romantic Picnics</h3>
+                        <p>Perfect for romantic dates, small celebrations, and meaningful moments with your loved ones.</p>
+                    </div>
+                    <div class="service-card">
+                        <span class="service-icon">🏢</span>
+                        <h3>Corporate Events</h3>
+                        <p>Corporate events, birthdays, anniversaries, and any celebration deserving of a magical outdoor experience.</p>
+                    </div>
+                    <div class="service-card">
+                        <span class="service-icon">🎉</span>
+                        <h3>Special Occasions</h3>
+                        <p>Make your special moments unforgettable with our premium picnic setups and gourmet food options.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Gallery Section -->
+        <section class="gallery">
+            <div class="container">
+                <h2 class="section-title">Picture Perfect Moments</h2>
+                <div class="gallery-grid">
+                    <div class="gallery-item">
+                        <div class="gallery-placeholder">Beautiful Boho Setup</div>
+                    </div>
+                    <div class="gallery-item">
+                        <div class="gallery-placeholder">Romantic Ambiance</div>
+                    </div>
+                    <div class="gallery-item">
+                        <div class="gallery-placeholder">Gourmet Food</div>
+                    </div>
+                    <div class="gallery-item">
+                        <div class="gallery-placeholder">Family Fun</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Testimonials Section -->
+        <section class="testimonials">
+            <div class="container">
+                <h2 class="section-title">What Our Customers Say</h2>
+                <div id="testimonials-container" class="testimonials-grid">
+                    <!-- Testimonials will be loaded by JavaScript -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Contact Section -->
+        <section class="contact-info">
+            <div class="container">
+                <h3>Ready for Your Perfect Picnic?</h3>
+                <p>Thank you for your interest! We'll contact you within 24 hours to discuss your picnic requirements.</p>
+                <p>Call us directly:📞 +91 99999-99999</p>
+                <button class="btn btn--primary btn--lg" onclick="document.getElementById('book-picnic-btn').click()">Get Started</button>
+            </div>
+        </section>
     </div>
-  </nav>
 
-  <!-- Pages -->
+    <!-- Menu Preview Page -->
+    <div id="menu-preview-page" class="page">
+        <div class="container">
+            <div class="page-header">
+                <h1>Our Delicious Menu</h1>
+                <p>A carefully curated selection of authentic Indian dishes to make your picnic memorable</p>
+            </div>
+            
+            <!-- Menu Preview Tabs -->
+            <div class="menu-tabs">
+                <button class="menu-tab-btn active" data-tab="foods">
+                    🍽️ Food Items
+                </button>
+                <button class="menu-tab-btn" data-tab="beverages">
+                    🥤 Beverages
+                </button>
+            </div>
 
-  <!-- Home / Landing Page -->
-  <section id="home-page" class="page active container">
-    <header class="hero">
-      <div class="hero-background"></div>
-      <div class="hero-content">
-        <h1 class="hero-title">Welcome to The Picnic Story</h1>
-        <p class="hero-tagline">Experience luxury boho-style picnics in Jaipur & Gurgaon.</p>
-        <button id="book-picnic-btn" class="btn btn--primary">Book Your Picnic</button>
-      </div>
-    </header>
+            <!-- Food Items Tab -->
+            <div id="foods-preview" class="menu-tab-content">
+                <div class="menu-grid" id="food-preview-grid">
+                    <!-- Food items will be populated by JavaScript -->
+                </div>
+            </div>
 
-    <section class="services">
-      <h2 class="section-title">Our Services</h2>
-      <div class="services-grid">
-        <div class="service-card">
-          <span class="service-icon">🌿</span>
-          <h3>Luxury Boho Setups</h3>
-          <p>Beautifully curated picnic arrangements with boho-chic decor, comfortable seating, and ambient lighting.</p>
+            <!-- Beverages Tab -->
+            <div id="beverages-preview" class="menu-tab-content" style="display: none;">
+                <div class="menu-grid" id="beverage-preview-grid">
+                    <!-- Beverage items will be populated by JavaScript -->
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: var(--space-32);">
+                <button class="btn btn--primary btn--lg" onclick="showModal('booking-modal')">
+                    Book Your Picnic Now
+                </button>
+            </div>
         </div>
-        <div class="service-card">
-          <span class="service-icon">💖</span>
-          <h3>Intimate Gatherings</h3>
-          <p>Perfect for romantic dates, small celebrations, and meaningful moments with your loved ones.</p>
-        </div>
-        <div class="service-card">
-          <span class="service-icon">🎉</span>
-          <h3>Special Occasions</h3>
-          <p>Corporate events, birthdays, anniversaries, and any celebration deserving of a magical outdoor experience.</p>
-        </div>
-      </div>
-    </section>
-
-    <section class="gallery">
-      <h2 class="section-title">Gallery</h2>
-      <div class="gallery-grid">
-        <!-- Placeholder images or actual photos can go here -->
-        <div class="gallery-item" aria-label="Romantic Sunset Picnic"></div>
-        <div class="gallery-item" aria-label="Boho Garden Party"></div>
-        <div class="gallery-item" aria-label="Corporate Team Event"></div>
-        <div class="gallery-item" aria-label="Anniversary Celebration"></div>
-      </div>
-    </section>
-
-    <section class="testimonials">
-      <h2 class="section-title">What Our Clients Say</h2>
-      <div id="testimonials-container" class="testimonials-grid"></div>
-    </section>
-
-    <!-- Menu Preview Section -->
-    <section id="menu-preview-page" class="page" style="padding: 2rem 0;">
-      <div class="container">
-        <h2 style="text-align: center; margin-bottom: 2rem;">Our Menu Preview</h2>
-        
-        <!-- Menu Tabs -->
-        <div class="menu-tabs" style="display: flex; justify-content: center; margin-bottom: 2rem; gap: 1rem;">
-          <button class="menu-tab-btn active" data-tab="foods" style="padding: 0.75rem 1.5rem; border: none; background: var(--primary-color); color: white; border-radius: 25px; cursor: pointer;">
-            Food Items
-          </button>
-          <button class="menu-tab-btn" data-tab="beverages" style="padding: 0.75rem 1.5rem; border: 2px solid var(--primary-color); background: transparent; color: var(--primary-color); border-radius: 25px; cursor: pointer;">
-            Beverages
-          </button>
-        </div>
-
-        <!-- Menu Content -->
-        <div id="foods-preview" class="menu-tab-content active">
-          <h3 style="text-align: center; margin-bottom: 1.5rem;">Food Items</h3>
-          <div class="menu-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
-            <!-- Food items will be populated by JavaScript -->
-          </div>
-        </div>
-
-        <div id="beverages-preview" class="menu-tab-content" style="display: none;">
-          <h3 style="text-align: center; margin-bottom: 1.5rem;">Beverages</h3>
-          <div class="menu-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
-            <!-- Beverage items will be populated by JavaScript -->
-          </div>
-        </div>
-
-        <div style="text-align: center; margin-top: 2rem;">
-          <button class="btn btn--primary" onclick="showModal('booking-modal')">
-            Book Your Picnic Now
-          </button>
-        </div>
-      </div>
-    </section>
+    </div>
 
     <!-- Query Success Page -->
-    <section id="query-success-page" class="page" style="padding: 4rem 0; text-align: center;">
-      <div class="container">
-        <div style="max-width: 600px; margin: 0 auto;">
-          <div style="font-size: 4rem; margin-bottom: 1rem;">🎉</div>
-          <h2 style="color: var(--primary-color); margin-bottom: 1rem;">Query Submitted Successfully!</h2>
-          <p style="font-size: 1.2rem; margin-bottom: 2rem; color: #666;">
-            Thank you for your interest! We'll contact you within 24 hours to discuss your picnic requirements.
-          </p>
-          <div style="background: #f8f9fa; padding: 2rem; border-radius: 10px; margin-bottom: 2rem;">
-            <h3 style="margin-bottom: 1rem;">Want to fast-track your booking?</h3>
-            <p style="margin-bottom: 1rem;">Call us directly:</p>
-            <a href="tel:+919999999999" style="font-size: 1.5rem; font-weight: bold; color: var(--primary-color); text-decoration: none;">
-              📞 +91 99999-99999
-            </a>
-          </div>
-          <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-            <button class="btn btn--primary" onclick="showPage('menu-preview-page')">
-              View Menu Preview
-            </button>
-            <button class="btn btn--outline" onclick="showPage('home-page')">
-              Back to Home
-            </button>
-          </div>
+    <div id="query-success-page" class="page">
+        <div class="container" style="padding: var(--space-32) 0;">
+            <div class="success-container">
+                <div class="success-icon">🎉</div>
+                <h2 style="color: var(--color-primary); margin-bottom: var(--space-16);">Query Submitted Successfully!</h2>
+                <p style="font-size: var(--font-size-xl); margin-bottom: var(--space-24); color: var(--color-text-secondary);">
+                    Thank you for your interest! We'll contact you within 24 hours to discuss your picnic requirements.
+                </p>
+                <div class="contact-highlight">
+                    <h3 style="margin-bottom: var(--space-16);">Want to fast-track your booking?</h3>
+                    <p style="margin-bottom: var(--space-16);">Call us directly:</p>
+                    <a href="tel:+919999999999" class="contact-number">
+                        📞 +91 99999-99999
+                    </a>
+                </div>
+                <div class="action-buttons">
+                    <button class="btn btn--primary btn--lg" onclick="showPage('menu-preview-page')">
+                        View Menu Preview
+                    </button>
+                    <button class="btn btn--outline btn--lg" onclick="showPage('home-page')">
+                        Back to Home
+                    </button>
+                </div>
+            </div>
         </div>
-      </div>
+    </div>
+
+    <!-- Admin Page -->
+    <section id="admin-page" class="page container">
+        <!-- Admin login -->
+        <div id="admin-login" class="login-card">
+            <h2>Admin Login</h2>
+            <form id="admin-login-form" novalidate>
+                <div class="form-group">
+                    <label for="admin-password" class="form-label">Password</label>
+                    <input id="admin-password" type="password" class="form-control" required />
+                    <div id="admin-password-error" class="form-error" aria-live="polite"></div>
+                </div>
+                <button type="submit" class="btn btn--primary">Login</button>
+            </form>
+        </div>
+
+        <!-- Admin dashboard -->
+        <div id="admin-dashboard" class="admin-section hidden">
+            <div class="database-status">
+                <span class="status-indicator connected"></span>
+                <span class="status-text">Database Status: Connected</span>
+            </div>
+
+            <div class="dashboard-header">
+                <h2>Admin Dashboard</h2>
+                <button id="admin-logout" class="btn btn--secondary">Logout</button>
+            </div>
+
+            <div class="dashboard-tabs" role="tablist">
+                <button class="tab-btn active" data-tab="queries" role="tab" aria-selected="true">Queries</button>
+                <button class="tab-btn" data-tab="bookings" role="tab" aria-selected="false">Bookings</button>
+                <button class="tab-btn" data-tab="menu-link" role="tab" aria-selected="false">Menu Link Generator</button>
+            </div>
+
+            <!-- Queries Tab -->
+            <div id="queries-tab" class="tab-content active" role="tabpanel">
+                <div class="tab-header">
+                    <h3>Customer Queries</h3>
+                    <div class="search-filters">
+                        <input id="leads-search" class="search-input" type="search" placeholder="Search queries..." />
+                        <select id="location-filter" class="filter-select">
+                            <option value="">All Locations</option>
+                            <option value="jaipur-city">Jaipur City</option>
+                            <option value="jaipur-outskirts">Jaipur Outskirts</option>
+                            <option value="amber-fort">Near Amber Fort</option>
+                            <option value="jal-mahal">Near Jal Mahal</option>
+                            <option value="nahargarh">Nahargarh Area</option>
+                            <option value="custom">Custom Location</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="queries-container" class="data-container">
+                    <!-- Queries will be populated here by JavaScript -->
+                </div>
+                <button id="export-queries" class="btn btn--outline">Export Queries (CSV)</button>
+            </div>
+
+            <!-- Bookings Tab -->
+            <div id="bookings-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="tab-header">
+                    <h3>Confirmed Bookings</h3>
+                    <p>Bookings that have been confirmed with advance payment</p>
+                </div>
+                <div id="bookings-container" class="data-container">
+                    <!-- Bookings will be populated here by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Menu Link Generator Tab -->
+            <div id="menu-link-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="tab-header">
+                    <h3>Generate Menu Links</h3>
+                    <p>Create custom menu links with specific item limits for customers</p>
+                </div>
+                
+                <div class="menu-generator">
+                    <div class="menu-controls">
+                        <div class="control-group">
+                            <label for="food-count">Food Items (1-15):</label>
+                            <input type="number" id="food-count" min="1" max="15" value="3">
+                        </div>
+                        <div class="control-group">
+                            <label for="bev-count">Beverages (1-10):</label>
+                            <input type="number" id="bev-count" min="1" max="10" value="2">
+                        </div>
+                        <button id="generate-menu-link" class="btn btn--primary">Generate Link</button>
+                    </div>
+                    
+                    <div class="generated-link" style="display: none;">
+                        <label>Generated Menu Link:</label>
+                        <div class="link-display">
+                            <input type="text" id="generated-link-url" readonly>
+                            <button id="copy-link" class="btn btn--outline">Copy Link</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="menu-links-list" class="menu-links-list">
+                    <!-- Menu links will be populated here by JavaScript -->
+                </div>
+            </div>
+        </div>
     </section>
 
-  </section>
-
-  <!-- Booking Modal -->
-  <div id="booking-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="booking-modal-title">
-    <div class="modal-content">
-      <header class="modal-header">
-        <h2 id="booking-modal-title">Book Your Picnic</h2>
-        <button id="close-booking-modal" class="modal-close" aria-label="Close Booking Modal">&times;</button>
-      </header>
-      <main class="modal-body">
-        <form id="booking-form" novalidate>
-          <div class="form-group">
-            <label for="full-name" class="form-label">Full Name*</label>
-            <input id="full-name" class="form-control" type="text" required minlength="2" />
-            <div id="full-name-error" class="form-error" aria-live="polite"></div>
-          </div>
-          <div class="form-group">
-            <label for="mobile-number" class="form-label">Mobile Number*</label>
-            <input id="mobile-number" class="form-control" type="tel" pattern="[0-9]{10}" required />
-            <div id="mobile-number-error" class="form-error" aria-live="polite"></div>
-          </div>
-          <div class="form-group">
-            <label for="email-address" class="form-label">Email Address*</label>
-            <input id="email-address" class="form-control" type="email" required />
-            <div id="email-address-error" class="form-error" aria-live="polite"></div>
-          </div>
-          <div class="form-group">
-            <label for="location" class="form-label">Location*</label>
-            <select id="location" class="form-control" required>
-              <option value="">Select a location</option>
-              <option value="Jaipur">Jaipur</option>
-              <option value="Gurgaon">Gurgaon</option>
-              <option value="Other Location">Other Location</option>
-            </select>
-            <div id="location-error" class="form-error" aria-live="polite"></div>
-          </div>
-          <div class="form-group">
-            <label for="guest-count" class="form-label">Number of Guests*</label>
-            <input id="guest-count" class="form-control" type="number" min="2" max="50" required />
-            <div id="guest-count-error" class="form-error" aria-live="polite"></div>
-          </div>
-          <div class="form-group">
-            <label for="preferred-date" class="form-label">Preferred Date*</label>
-            <input id="preferred-date" class="form-control" type="date" required />
-            <div id="preferred-date-error" class="form-error" aria-live="polite"></div>
-          </div>
-          <div class="form-group">
-            <label for="special-requirements" class="form-label">Special Requirements</label>
-            <textarea id="special-requirements" class="form-control" rows="3" placeholder="Any dietary or setup preferences"></textarea>
-          </div>
-          <div class="form-actions">
-            <button type="submit" class="btn btn--primary">
-              <span class="btn-text">Submit Booking</span>
-              <span class="loading-spinner hidden">⏳</span>
-            </button>
-            <button type="button" id="cancel-booking" class="btn btn--secondary">Cancel</button>
-          </div>
-        </form>
-      </main>
-    </div>
-  </div>
-
-  <!-- Menu Preview Page -->
-  <section id="menu-preview-page" class="page container">
-    <header class="page-header">
-      <h1>Menu Preview</h1>
-      <p>Thank you for your inquiry! Once you submit your booking, you'll get a unique menu link to choose your menu.</p>
-      <button id="view-menu-link-btn" class="btn btn--primary" style="display:none;">View Menu</button>
-    </header>
-  </section>
-
-  <!-- Menu Selection Page -->
-  <section id="menu-selection-page" class="page container" aria-live="polite"></section>
-
-  <!-- Admin Page -->
-  <section id="admin-page" class="page container">
-    <!-- Admin login -->
-    <div id="admin-login" class="login-card">
-      <h2>Admin Login</h2>
-      <form id="admin-login-form" novalidate>
-        <div class="form-group">
-          <label for="admin-password" class="form-label">Password</label>
-          <input id="admin-password" type="password" class="form-control" required />
-          <div id="admin-password-error" class="form-error" aria-live="polite"></div>
-        </div>
-        <button type="submit" class="btn btn--primary">Login</button>
-      </form>
+    <!-- Menu Selection Page (Dynamic) -->
+    <div id="menu-selection-page" class="page">
+        <!-- Content will be dynamically generated by JavaScript -->
     </div>
 
-    <!-- Admin dashboard -->
-    <div id="admin-dashboard" class="admin-section hidden">
-      <div class="database-status">
-        <span class="status-indicator connected"></span>
-        <span class="status-text">Database Status: Connected</span>
-      </div>
-
-      <div class="dashboard-header">
-        <h2>Admin Dashboard</h2>
-        <button id="admin-logout" class="btn btn--secondary">Logout</button>
-      </div>
-
-      <div class="dashboard-tabs" role="tablist">
-        <button class="tab-btn active" data-tab="queries" role="tab" aria-selected="true">Queries</button>
-        <button class="tab-btn" data-tab="bookings" role="tab" aria-selected="false">Bookings</button>
-        <button class="tab-btn" data-tab="menu-link" role="tab" aria-selected="false">Menu Link Generator</button>
-      </div>
-
-      <!-- Queries Tab -->
-      <div id="queries-tab" class="tab-content active" role="tabpanel">
-        <input id="leads-search" class="search-input" type="search" placeholder="Search queries..." />
-        <select id="location-filter" class="filter-select">
-          <option value="">All Locations</option>
-          <option value="Jaipur">Jaipur</option>
-          <option value="Gurgaon">Gurgaon</option>
-          <option value="Other Location">Other Location</option>
-        </select>
-        <div id="queries-container" class="leads-table" tabindex="0" aria-live="polite" aria-relevant="additions"></div>
-        <button id="export-queries" class="btn btn--outline">Export Queries (CSV)</button>
-      </div>
-
-      <!-- Bookings Tab -->
-      <div id="bookings-tab" class="tab-content" role="tabpanel" hidden>
-        <div id="bookings-container" tabindex="0" aria-live="polite" class="orders-table"></div>
-      </div>
-
-      <!-- Menu Link Generator Tab -->
-      <div id="menu-link-tab" class="tab-content" role="tabpanel" hidden>
-        <div class="menu-generator">
-          <label for="food-count">Number of Food Items (1-15):</label>
-          <input id="food-count" type="number" min="1" max="15" value="3" />
-          <label for="bev-count">Number of Beverage Items (1-10):</label>
-          <input id="bev-count" type="number" min="1" max="10" value="2" />
-          <button id="generate-menu-link" class="btn btn--primary">Generate Menu Link</button>
-
-          <div class="generated-link" style="display:none;">
-            <p>Your menu link:</p>
-            <div class="link-display">
-              <input type="text" id="generated-link-url" readonly />
-              <button id="copy-link" class="btn btn--secondary">Copy</button>
+    <!-- Booking Modal -->
+    <div id="booking-modal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Book Your Perfect Picnic</h2>
+                <button id="close-booking-modal" class="modal-close" aria-label="Close">&times;</button>
             </div>
-          </div>
+            
+            <div class="modal-body">
+                <form id="booking-form" class="booking-form">
+                    <div class="form-group">
+                        <label for="full-name" class="form-label">Full Name *</label>
+                        <input type="text" id="full-name" name="full-name" class="form-control" required placeholder="Enter your full name">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="mobile-number" class="form-label">Mobile Number *</label>
+                        <input type="tel" id="mobile-number" name="mobile-number" class="form-control" required placeholder="+91 9876543210">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="email-address" class="form-label">Email Address *</label>
+                        <input type="email" id="email-address" name="email-address" class="form-control" required placeholder="your.email@example.com">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="location" class="form-label">Preferred Location *</label>
+                        <select id="location" name="location" class="form-control" required>
+                            <option value="">Select a location</option>
+                            <option value="jaipur-city">Jaipur City</option>
+                            <option value="jaipur-outskirts">Jaipur Outskirts</option>
+                            <option value="amber-fort">Near Amber Fort</option>
+                            <option value="jal-mahal">Near Jal Mahal</option>
+                            <option value="nahargarh">Nahargarh Area</option>
+                            <option value="custom">Custom Location (Please specify in requirements)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="guest-count" class="form-label">Number of Guests *</label>
+                        <input type="number" id="guest-count" name="guest-count" class="form-control" min="1" max="20" required placeholder="How many guests?">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="preferred-date" class="form-label">Preferred Date *</label>
+                        <input type="date" id="preferred-date" name="preferred-date" class="form-control" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="special-requirements" class="form-label">Special Requirements</label>
+                        <textarea id="special-requirements" name="special-requirements" class="form-control" rows="3" placeholder="Any special requests, dietary restrictions, decorations, or other preferences..."></textarea>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" id="cancel-booking" class="btn btn--outline">Cancel</button>
+                        <button type="submit" class="btn btn--primary">Submit Query</button>
+                    </div>
+                </form>
+            </div>
         </div>
-
-        <div id="menu-links-list" class="menu-links-list" tabindex="0" aria-live="polite"></div>
-      </div>
     </div>
-  </section>
 
-
-  <!-- Toast Notifications -->
-  <div id="toast-container" class="toast-container" aria-live="assertive" aria-atomic="true"></div>
-
-  <script type="module" src="app.js"></script>
+    <script type="module" src="app.js"></script>
 </body>
 </html>

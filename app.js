@@ -56,7 +56,7 @@ function showToast(message, type = 'success') {
   if (!container) return
   
   const toast = document.createElement('div')
-  toast.className = `toast show toast--${type}`
+  toast.className = `toast show ${type === 'success' ? 'success' : 'error'}`
   toast.textContent = message
   container.appendChild(toast)
   
@@ -103,11 +103,85 @@ function showPage(pageId) {
   }
 }
 
-// Booking form submit handler - UPDATED to set confirmed = false by default
+// Initialize menu preview with tabs functionality
+function initializeMenuPreview() {
+  const foodsGrid = document.getElementById('food-preview-grid')
+  const beveragesGrid = document.getElementById('beverage-preview-grid')
+  
+  if (foodsGrid) {
+    foodsGrid.innerHTML = foodList.map(item => `
+      <div class="menu-item-preview">
+        <h4>${item}</h4>
+        <p>Deliciously prepared</p>
+      </div>
+    `).join('')
+  }
+  
+  if (beveragesGrid) {
+    beveragesGrid.innerHTML = bevList.map(item => `
+      <div class="menu-item-preview">
+        <h4>${item}</h4>
+        <p>Refreshing drink</p>
+      </div>
+    `).join('')
+  }
+}
+
+// Handle menu preview tabs
+function handleMenuPreviewTabs() {
+  document.querySelectorAll('.menu-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.tab
+      
+      // Update button states
+      document.querySelectorAll('.menu-tab-btn').forEach(b => b.classList.remove('active'))
+      btn.classList.add('active')
+      
+      // Show/hide content
+      document.querySelectorAll('.menu-tab-content').forEach(content => {
+        content.style.display = 'none'
+      })
+      document.getElementById(`${tab}-preview`).style.display = 'block'
+    })
+  })
+}
+
+// Handle menu selection tabs
+function handleMenuSelectionTabs() {
+  document.querySelectorAll('.selection-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.tab
+      
+      // Update button states
+      document.querySelectorAll('.selection-tab-btn').forEach(b => b.classList.remove('active'))
+      btn.classList.add('active')
+      
+      // Show/hide content
+      document.querySelectorAll('#menu-selection-page .menu-tab-content').forEach(content => {
+        content.style.display = 'none'
+      })
+      document.getElementById(tab).style.display = 'block'
+    })
+  })
+}
+
+// Update tab counters
+function updateTabCounters() {
+  const foodCount = Object.values(appState.selectedItems).filter(item => item.category === 'food').reduce((sum, item) => sum + item.quantity, 0)
+  const bevCount = Object.values(appState.selectedItems).filter(item => item.category === 'bev').reduce((sum, item) => sum + item.quantity, 0)
+  
+  const foodCountEl = document.getElementById('selection-food-count')
+  const bevCountEl = document.getElementById('selection-bev-count')
+  
+  if (foodCountEl) foodCountEl.textContent = foodCount
+  if (bevCountEl) bevCountEl.textContent = bevCount
+}
+
+// Booking form submit handler - UPDATED to show success page
 async function handleBookingSubmit(event) {
   event.preventDefault()
   const form = event.target
-  
+
   // Gather form data
   const lead = {
     full_name: form['full-name'].value.trim(),
@@ -117,19 +191,22 @@ async function handleBookingSubmit(event) {
     guest_count: parseInt(form['guest-count'].value, 10),
     preferred_date: form['preferred-date'].value,
     special_requirements: form['special-requirements'].value.trim(),
-    confirmed: false, // NEW: Default to false (query)
-    advance_amount: 0, // NEW: Default to 0
+    confirmed: false, // Default to false (query)
+    advance_amount: 0, // Default to 0
     created_at: new Date().toISOString(),
   }
 
   try {
     const { data, error } = await supabase.from('bookings').insert([lead]).select()
     if (error) throw error
-    
+
     appState.currentBooking = data[0]
     showToast('Query submitted! We will contact you soon.', 'success')
     hideModal('booking-modal')
     form.reset()
+    
+    // Show success page instead of going back to home
+    showPage('query-success-page')
     
   } catch (error) {
     console.error(error)
@@ -149,7 +226,6 @@ function handleAdminLogin(event) {
     // Show admin dashboard
     const adminLogin = document.getElementById('admin-login')
     const adminDashboard = document.getElementById('admin-dashboard')
-    
     if (adminLogin) adminLogin.classList.add('hidden')
     if (adminDashboard) adminDashboard.classList.remove('hidden')
     
@@ -169,7 +245,6 @@ function handleAdminLogout() {
   // Show login form, hide dashboard
   const adminLogin = document.getElementById('admin-login')
   const adminDashboard = document.getElementById('admin-dashboard')
-  
   if (adminLogin) adminLogin.classList.remove('hidden')
   if (adminDashboard) adminDashboard.classList.add('hidden')
   
@@ -214,7 +289,7 @@ async function generateMenuLink(foodCount, bevCount) {
   }
 }
 
-// NEW: Load queries (unconfirmed bookings)
+// Load queries (unconfirmed bookings)
 async function loadQueries() {
   if (!appState.isAdminLoggedIn) return
   
@@ -233,10 +308,10 @@ async function loadQueries() {
   }
 }
 
-// NEW: Load bookings (confirmed bookings)
+// Load bookings (confirmed bookings)
 async function loadBookings() {
   if (!appState.isAdminLoggedIn) return
-
+  
   try {
     // Fetch confirmed bookings
     const { data: bookings, error: bErr } = await supabase
@@ -244,6 +319,7 @@ async function loadBookings() {
       .select()
       .eq('confirmed', true)
       .order('created_at', { ascending: false })
+    
     if (bErr) throw bErr
 
     // For each booking, fetch its orders
@@ -263,7 +339,6 @@ async function loadBookings() {
   }
 }
 
-
 // Load menu links for admin
 async function loadMenuLinks() {
   if (!appState.isAdminLoggedIn) return
@@ -278,7 +353,7 @@ async function loadMenuLinks() {
   }
 }
 
-// NEW: Render queries (unconfirmed bookings) with confirm functionality
+// Render queries (unconfirmed bookings) with confirm functionality
 function renderQueries(queries) {
   const container = document.getElementById('queries-container')
   if (!container) return
@@ -307,7 +382,7 @@ function renderQueries(queries) {
           <label for="advance-${query.id}">Advance Amount:</label>
           <input type="number" id="advance-${query.id}" placeholder="Enter amount" min="0" step="0.01">
         </div>
-        <button class="btn btn--primary confirm-booking-btn" data-id="${query.id}">
+        <button class="confirm-booking-btn" data-id="${query.id}">
           Confirm Booking
         </button>
       </div>
@@ -315,21 +390,30 @@ function renderQueries(queries) {
   `).join('')
 }
 
-// NEW: Render bookings (confirmed bookings) with menu link generator
+// Render bookings (confirmed bookings) 
 function renderBookings(bookings) {
   const container = document.getElementById('bookings-container')
   if (!container) return
-
-  if (!bookings.length) {
-    container.innerHTML = '<p>No confirmed bookings yet.</p>'
+  
+  if (!bookings || bookings.length === 0) {
+    container.innerHTML = '<div class="empty-state"><h3>No confirmed bookings yet</h3><p>Confirmed bookings will appear here.</p></div>'
     return
   }
-
+  
   container.innerHTML = bookings.map(booking => `
     <div class="booking-item" data-id="${booking.id}">
       <div class="booking-header">
-        <h4>Booking #${booking.id} — ₹${booking.advance_amount} advance</h4>
-        <p>${booking.full_name} | ${new Date(booking.preferred_date).toLocaleDateString()}</p>
+        <span class="booking-name">${booking.full_name}</span>
+        <span class="booking-date">${new Date(booking.created_at).toLocaleDateString()}</span>
+        <span class="advance-badge">₹${booking.advance_amount || 0} paid</span>
+      </div>
+      <div class="booking-details">
+        <div class="booking-detail"><strong>Mobile:</strong> ${booking.mobile_number}</div>
+        <div class="booking-detail"><strong>Email:</strong> ${booking.email_address}</div>
+        <div class="booking-detail"><strong>Location:</strong> ${booking.location}</div>
+        <div class="booking-detail"><strong>Guests:</strong> ${booking.guest_count}</div>
+        <div class="booking-detail"><strong>Date:</strong> ${new Date(booking.preferred_date).toLocaleDateString()}</div>
+        ${booking.special_requirements ? `<div class="booking-detail"><strong>Requirements:</strong> ${booking.special_requirements}</div>` : ''}
       </div>
 
       <h5>Previous Orders:</h5>
@@ -339,33 +423,33 @@ function renderBookings(bookings) {
         ).join('')}
       </ul>
 
-      <!-- Menu Generator Controls -->
       <div class="menu-generator">
-        <div class="control-group">
-          <label>Food Items (1-15):</label>
-          <input type="number" id="food-count-${booking.id}" min="1" max="15" value="${booking.max_food_items||3}">
+        <div class="menu-controls">
+          <div class="control-group">
+            <label for="food-count-${booking.id}">Food Items:</label>
+            <input type="number" id="food-count-${booking.id}" value="3" min="1" max="15">
+          </div>
+          <div class="control-group">
+            <label for="bev-count-${booking.id}">Beverages:</label>
+            <input type="number" id="bev-count-${booking.id}" value="2" min="1" max="10">
+          </div>
+          <button class="generate-menu-btn" data-booking-id="${booking.id}">
+            Generate Menu Link
+          </button>
         </div>
-        <div class="control-group">
-          <label>Beverages (1-10):</label>
-          <input type="number" id="bev-count-${booking.id}" min="1" max="10" value="${booking.max_bev_items||2}">
+        <div class="generated-menu-link" id="generated-link-${booking.id}" style="display: none;">
+          <label>Generated Link:</label>
+          <div class="link-container">
+            <input type="text" id="menu-url-${booking.id}" readonly>
+            <button class="copy-menu-btn" data-booking-id="${booking.id}">Copy</button>
+          </div>
         </div>
-        <button class="btn btn--secondary generate-menu-btn" data-booking-id="${booking.id}">
-          Generate Link
-        </button>
-      </div>
-
-      <div id="generated-link-${booking.id}" class="generated-link" style="display:none;">
-        <label>Link:</label>
-        <input type="text" id="menu-url-${booking.id}" readonly>
-        <button class="btn btn--outline copy-menu-btn" data-booking-id="${booking.id}">Copy</button>
       </div>
     </div>
   `).join('')
 }
 
-
-
-// Render menu links in admin dashboard
+// Render menu links
 function renderMenuLinks(links) {
   const container = document.getElementById('menu-links-list')
   if (!container) return
@@ -391,7 +475,7 @@ function renderMenuLinks(links) {
   `).join('')
 }
 
-// Copy menu link to clipboard
+// Copy menu link
 function copyMenuLink(linkId) {
   const url = `${window.location.origin}?menu=${linkId}`
   navigator.clipboard.writeText(url).then(() => {
@@ -401,7 +485,7 @@ function copyMenuLink(linkId) {
   })
 }
 
-// NEW: Confirm booking function
+// Confirm booking
 async function confirmBooking(queryId) {
   const advanceInput = document.getElementById(`advance-${queryId}`)
   const advanceAmount = parseFloat(advanceInput.value) || 0
@@ -423,8 +507,6 @@ async function confirmBooking(queryId) {
     if (error) throw error
     
     showToast('Booking confirmed successfully!', 'success')
-    
-    // Refresh both queries and bookings
     loadQueries()
     loadBookings()
     
@@ -434,7 +516,7 @@ async function confirmBooking(queryId) {
   }
 }
 
-// NEW: Generate menu link for specific booking
+// Generate menu link for booking
 async function generateBookingMenuLink(bookingId) {
   const foodCountInput = document.getElementById(`food-count-${bookingId}`)
   const bevCountInput = document.getElementById(`bev-count-${bookingId}`)
@@ -457,7 +539,6 @@ async function generateBookingMenuLink(bookingId) {
     const { data, error } = await supabase.from('menu_links').insert([menuLink]).select()
     if (error) throw error
     
-    // Show generated link in the booking row WITH booking ID
     const generatedLinkDiv = document.getElementById(`generated-link-${bookingId}`)
     const linkInput = document.getElementById(`menu-url-${bookingId}`)
     
@@ -468,7 +549,7 @@ async function generateBookingMenuLink(bookingId) {
     }
     
     showToast('Menu link generated for booking!', 'success')
-    loadMenuLinks() // Refresh menu links list
+    loadMenuLinks()
     
   } catch (error) {
     console.error(error)
@@ -476,8 +557,7 @@ async function generateBookingMenuLink(bookingId) {
   }
 }
 
-
-// NEW: Copy booking menu link
+// Copy booking menu link
 function copyBookingMenuLink(bookingId) {
   const linkInput = document.getElementById(`menu-url-${bookingId}`)
   if (linkInput && linkInput.value) {
@@ -489,16 +569,14 @@ function copyBookingMenuLink(bookingId) {
   }
 }
 
-// Handle tab switching in admin dashboard - UPDATED for new tabs
+// Tab switching
 function switchTab(tabName) {
-  const allTabContents = document.querySelectorAll('.tab-content')
-  allTabContents.forEach(content => {
+  document.querySelectorAll('.tab-content').forEach(content => {
     content.classList.remove('active')
     content.hidden = true
   })
   
-  const allTabButtons = document.querySelectorAll('.tab-btn')
-  allTabButtons.forEach(button => {
+  document.querySelectorAll('.tab-btn').forEach(button => {
     button.classList.remove('active')
     button.setAttribute('aria-selected', 'false')
   })
@@ -515,7 +593,6 @@ function switchTab(tabName) {
     targetButton.setAttribute('aria-selected', 'true')
   }
   
-  // Load appropriate data based on tab
   if (tabName === 'queries') {
     loadQueries()
   } else if (tabName === 'bookings') {
@@ -525,7 +602,7 @@ function switchTab(tabName) {
   }
 }
 
-// Handle navigation
+// Navigation
 function handleNavigation(route) {
   switch (route) {
     case 'home':
@@ -542,8 +619,7 @@ function handleNavigation(route) {
   }
 }
 
-// *** MENU SELECTION FUNCTIONALITY WITH TOTAL CATEGORY LIMITS ***
-// Load menu selection for specific menu link
+// Menu selection functionality
 async function loadMenuSelection(menuId) {
   try {
     const { data, error } = await supabase
@@ -564,7 +640,126 @@ async function loadMenuSelection(menuId) {
   }
 }
 
-// Helper: Calculate current totals by category
+// Render menu selection page with tabs
+function renderMenuSelection(menuLink) {
+  const container = document.getElementById('menu-selection-page')
+  if (!container) return
+  
+  const maxFood = menuLink.max_food_items
+  const maxBev = menuLink.max_bev_items
+  
+  container.innerHTML = `
+    <div class="page-header">
+      <h1>Select Your Menu</h1>
+      <p>Choose up to <strong>${maxFood} total food items</strong> and <strong>${maxBev} total beverage items</strong> for your picnic.</p>
+      <p><em>Mix and match any combination - e.g., 2 Parathas + 1 Maggi = 3 food items total</em></p>
+    </div>
+    
+    <!-- Menu Selection Tabs -->
+    <div class="menu-tabs">
+      <button class="selection-tab-btn active" data-tab="food-items">
+        🍽️ Food Items (<span id="selection-food-count">0</span>/${maxFood})
+      </button>
+      <button class="selection-tab-btn" data-tab="bev-items">
+        🥤 Beverages (<span id="selection-bev-count">0</span>/${maxBev})
+      </button>
+    </div>
+
+    <!-- Food Items Tab -->
+    <div id="food-items" class="menu-tab-content" style="padding: 0 var(--space-16);">
+      <div id="food-list" class="selection-items">
+        ${foodList.map(item => `
+          <div class="menu-selection-item">
+            <span class="item-name">${item}</span>
+            <div class="quantity-controls">
+              <button class="quantity-btn" data-item="${item}" data-category="food" data-change="-1">-</button>
+              <span class="quantity-display" id="qty-food-${item.replace(/\s+/g, '-').toLowerCase()}">0</span>
+              <button class="quantity-btn" data-item="${item}" data-category="food" data-change="1">+</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+
+    <!-- Beverages Tab -->
+    <div id="bev-items" class="menu-tab-content" style="display: none; padding: 0 var(--space-16);">
+      <div id="bev-list" class="selection-items">
+        ${bevList.map(item => `
+          <div class="menu-selection-item">
+            <span class="item-name">${item}</span>
+            <div class="quantity-controls">
+              <button class="quantity-btn" data-item="${item}" data-category="bev" data-change="-1">-</button>
+              <span class="quantity-display" id="qty-bev-${item.replace(/\s+/g, '-').toLowerCase()}">0</span>
+              <button class="quantity-btn" data-item="${item}" data-category="bev" data-change="1">+</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    
+    <div class="selection-summary">
+      <h3>Your Selection</h3>
+      <div id="selection-summary-content">
+        <p>No items selected yet.</p>
+      </div>
+      <button id="submit-menu-selection" class="btn btn--primary btn--full-width" disabled>
+        Submit Menu Selection
+      </button>
+    </div>
+  `
+  
+  setTimeout(handleMenuSelectionTabs, 100)
+  updateButtonStates()
+}
+
+// Update quantity
+function updateQuantity(itemName, category, change) {
+  if (!appState.currentMenuLink) return
+  
+  const key = `${category}-${itemName}`
+  if (!appState.selectedItems[key]) {
+    appState.selectedItems[key] = { name: itemName, category, quantity: 0 }
+  }
+  
+  const currentItem = appState.selectedItems[key]
+  const newQuantity = currentItem.quantity + change
+  
+  if (newQuantity < 0) return
+  if (newQuantity > 5) return // Max 5 per item
+  
+  // Check total limits
+  const { totalFood, totalBev } = getCurrentTotals()
+  const maxFood = appState.currentMenuLink.max_food_items
+  const maxBev = appState.currentMenuLink.max_bev_items
+  
+  if (change > 0) { // Adding item
+    if (category === 'food' && totalFood >= maxFood) {
+      showToast(`Maximum ${maxFood} food items allowed in total`, 'error')
+      return
+    }
+    if (category === 'bev' && totalBev >= maxBev) {
+      showToast(`Maximum ${maxBev} beverages allowed in total`, 'error')
+      return
+    }
+  }
+  
+  currentItem.quantity = newQuantity
+  if (newQuantity === 0) {
+    delete appState.selectedItems[key]
+  }
+  
+  // Update display
+  const qtyDisplay = document.getElementById(`qty-${category}-${itemName.replace(/\s+/g, '-').toLowerCase()}`)
+  if (qtyDisplay) {
+    qtyDisplay.textContent = newQuantity
+  }
+  
+  updateTabCounters()
+  updateSelectionSummary()
+  updateButtonStates()
+}
+
+// Get current totals
 function getCurrentTotals() {
   const selectedItems = Object.values(appState.selectedItems)
   
@@ -582,142 +777,7 @@ function getCurrentTotals() {
   return { totalFood, totalBev }
 }
 
-// Helper: Check if adding one more item would exceed category limit
-function withinCategoryLimit(category) {
-  const { totalFood, totalBev } = getCurrentTotals()
-  const maxFood = appState.currentMenuLink.max_food_items
-  const maxBev = appState.currentMenuLink.max_bev_items
-  
-  if (category === 'food') {
-    return totalFood < maxFood
-  } else {
-    return totalBev < maxBev
-  }
-}
-
-// Render menu selection page - FIXED WITH TOTAL CATEGORY LIMITS
-function renderMenuSelection(menuLink) {
-  const container = document.getElementById('menu-selection-page')
-  if (!container) return
-  
-  const maxFood = menuLink.max_food_items
-  const maxBev = menuLink.max_bev_items
-  
-  container.innerHTML = `
-    <div class="page-header">
-      <h1>Select Your Menu</h1>
-      <p>Choose up to <strong>${maxFood} total food items</strong> and <strong>${maxBev} total beverage items</strong> for your picnic.</p>
-      <p class="help-text">Mix and match any combination - e.g., 2 Parathas + 1 Maggi = 3 food items total</p>
-    </div>
-    
-    <div class="menu-sections">
-      <div class="menu-section">
-        <h2>Food Items <span class="item-count">(${maxFood} total items allowed)</span></h2>
-        <div class="selection-items">
-          ${foodList.map(item => `
-            <div class="selection-item">
-              <div class="selection-item-info">
-                <h4>${item}</h4>
-                <p>Delicious ${item.toLowerCase()}</p>
-              </div>
-              <div class="quantity-selector">
-                <button class="quantity-btn" data-item="${item}" data-category="food" data-change="-1" disabled>-</button>
-                <input type="number" class="quantity-input" value="0" min="0" max="5" 
-                       id="food-${item.replace(/\s+/g, '-').toLowerCase()}" readonly>
-                <button class="quantity-btn" data-item="${item}" data-category="food" data-change="1">+</button>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-      
-      <div class="menu-section">
-        <h2>Beverages <span class="item-count">(${maxBev} total items allowed)</span></h2>
-        <div class="selection-items">
-          ${bevList.map(item => `
-            <div class="selection-item">
-              <div class="selection-item-info">
-                <h4>${item}</h4>
-                <p>Refreshing ${item.toLowerCase()}</p>
-              </div>
-              <div class="quantity-selector">
-                <button class="quantity-btn" data-item="${item}" data-category="beverage" data-change="-1" disabled>-</button>
-                <input type="number" class="quantity-input" value="0" min="0" max="5" 
-                       id="beverage-${item.replace(/\s+/g, '-').toLowerCase()}" readonly>
-                <button class="quantity-btn" data-item="${item}" data-category="beverage" data-change="1">+</button>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    </div>
-    
-    <div class="selection-summary">
-      <h3>Your Selection</h3>
-      <div id="selection-summary-content">
-        <p>No items selected yet.</p>
-      </div>
-      <div class="total-items">
-        <strong>Total Food Items: <span id="total-food">0</span>/${maxFood} | Total Beverages: <span id="total-bev">0</span>/${maxBev}</strong>
-      </div>
-      <button id="submit-menu-selection" class="btn btn--primary btn--full-width" disabled>
-        Submit Menu Selection
-      </button>
-    </div>
-  `
-  
-  // Initialize button states
-  updateButtonStates()
-}
-
-// Update quantity for menu items - FIXED WITH TOTAL CATEGORY LIMITS
-function updateQuantity(itemName, category, change) {
-  if (!appState.currentMenuLink) return
-  
-  const inputId = `${category}-${itemName.replace(/\s+/g, '-').toLowerCase()}`
-  const input = document.getElementById(inputId)
-  
-  if (!input) {
-    console.error('Input not found:', inputId)
-    return
-  }
-  
-  const currentValue = parseInt(input.value, 10) || 0
-  let newValue = currentValue + change
-  
-  // Apply constraints
-  if (change > 0) {
-    // Check if we can add more items to this category
-    if (!withinCategoryLimit(category)) {
-      const categoryName = category === 'food' ? 'food' : 'beverage'
-      const limit = category === 'food' ? appState.currentMenuLink.max_food_items : appState.currentMenuLink.max_bev_items
-      showToast(`Maximum ${limit} ${categoryName} items allowed in total`, 'error')
-      return
-    }
-    // Individual item limit of 5
-    newValue = Math.min(newValue, 5)
-  } else {
-    // Ensure minimum is 0
-    newValue = Math.max(0, newValue)
-  }
-  
-  // Update input value
-  input.value = newValue
-  
-  // Update app state
-  const key = `${category}-${itemName}`
-  if (newValue > 0) {
-    appState.selectedItems[key] = { name: itemName, quantity: newValue, category }
-  } else {
-    delete appState.selectedItems[key]
-  }
-  
-  // Update UI
-  updateSelectionSummary()
-  updateButtonStates()
-}
-
-// Helper: Update button states based on category limits
+// Update button states
 function updateButtonStates() {
   if (!appState.currentMenuLink) return
   
@@ -725,60 +785,28 @@ function updateButtonStates() {
   const maxFood = appState.currentMenuLink.max_food_items
   const maxBev = appState.currentMenuLink.max_bev_items
   
-  // Update all food buttons
-  foodList.forEach(item => {
-    const inputId = `food-${item.replace(/\s+/g, '-').toLowerCase()}`
-    const input = document.getElementById(inputId)
-    if (!input) return
+  document.querySelectorAll('.quantity-btn').forEach(btn => {
+    const itemName = btn.dataset.item
+    const category = btn.dataset.category
+    const change = parseInt(btn.dataset.change, 10)
     
-    const currentValue = parseInt(input.value, 10) || 0
-    const plusBtn = document.querySelector(`[data-item="${item}"][data-category="food"][data-change="1"]`)
-    const minusBtn = document.querySelector(`[data-item="${item}"][data-category="food"][data-change="-1"]`)
+    const key = `${category}-${itemName}`
+    const currentQuantity = appState.selectedItems[key]?.quantity || 0
     
-    if (plusBtn) {
-      // Disable + button if total food limit reached OR individual item at max (5)
-      plusBtn.disabled = (totalFood >= maxFood) || (currentValue >= 5)
-    }
-    
-    if (minusBtn) {
-      minusBtn.disabled = currentValue <= 0
-    }
-  })
-  
-  // Update all beverage buttons
-  bevList.forEach(item => {
-    const inputId = `beverage-${item.replace(/\s+/g, '-').toLowerCase()}`
-    const input = document.getElementById(inputId)
-    if (!input) return
-    
-    const currentValue = parseInt(input.value, 10) || 0
-    const plusBtn = document.querySelector(`[data-item="${item}"][data-category="beverage"][data-change="1"]`)
-    const minusBtn = document.querySelector(`[data-item="${item}"][data-category="beverage"][data-change="-1"]`)
-    
-    if (plusBtn) {
-      // Disable + button if total beverage limit reached OR individual item at max (5)
-      plusBtn.disabled = (totalBev >= maxBev) || (currentValue >= 5)
-    }
-    
-    if (minusBtn) {
-      minusBtn.disabled = currentValue <= 0
+    if (change > 0) { // Add button
+      const categoryTotal = category === 'food' ? totalFood : totalBev
+      const categoryMax = category === 'food' ? maxFood : maxBev
+      btn.disabled = (categoryTotal >= categoryMax) || (currentQuantity >= 5)
+    } else { // Minus button
+      btn.disabled = currentQuantity <= 0
     }
   })
 }
 
 // Update selection summary
 function updateSelectionSummary() {
-  const selectedItems = Object.values(appState.selectedItems)
-  const { totalFood, totalBev } = getCurrentTotals()
+  const selectedItems = Object.values(appState.selectedItems).filter(item => item.quantity > 0)
   
-  // Update totals display
-  const totalFoodSpan = document.getElementById('total-food')
-  const totalBevSpan = document.getElementById('total-bev')
-  
-  if (totalFoodSpan) totalFoodSpan.textContent = totalFood
-  if (totalBevSpan) totalBevSpan.textContent = totalBev
-  
-  // Update summary content
   const summaryContent = document.getElementById('selection-summary-content')
   if (summaryContent) {
     if (selectedItems.length === 0) {
@@ -793,50 +821,36 @@ function updateSelectionSummary() {
     }
   }
   
-  // Enable/disable submit button
   const submitBtn = document.getElementById('submit-menu-selection')
-  const maxFood = appState.currentMenuLink?.max_food_items || 0
-  const maxBev = appState.currentMenuLink?.max_bev_items || 0
-  
   if (submitBtn) {
-    const isValid = totalFood <= maxFood && totalBev <= maxBev && selectedItems.length > 0
-    submitBtn.disabled = !isValid
-    
-    // Update submit button text with helpful message
-    if (selectedItems.length === 0) {
-      submitBtn.textContent = 'Select Items to Continue'
-    } else if (totalFood > maxFood || totalBev > maxBev) {
-      submitBtn.textContent = 'Too Many Items Selected'
-    } else {
-      submitBtn.textContent = 'Submit Menu Selection'
-    }
+    submitBtn.disabled = selectedItems.length === 0
   }
 }
 
 // Submit menu selection
 async function submitMenuSelection() {
-  const selectedItems = Object.values(appState.selectedItems)
+  const selectedItems = Object.values(appState.selectedItems).filter(item => item.quantity > 0)
+  
   try {
-    const orderPayload = {
+    const order = {
       menu_link_id: appState.currentMenuLink.id,
-      booking_id: appState.currentBooking.id,      // booking’s bigint ID
+      booking_id: appState.currentBooking?.id || null,
       selected_items: selectedItems,
       created_at: new Date().toISOString(),
     }
-    const { data, error } = await supabase
-      .from('orders')
-      .insert([orderPayload])
-      .select()
+    
+    const { data, error } = await supabase.from('orders').insert([order]).select()
     if (error) throw error
+    
     appState.currentOrder = data[0]
     showToast('Menu selection submitted successfully!', 'success')
     showOrderConfirmation(data[0])
+    
   } catch (error) {
     console.error(error)
     showToast('Error submitting menu selection. Please try again.', 'error')
   }
 }
-
 
 // Show order confirmation
 function showOrderConfirmation(order) {
@@ -862,21 +876,21 @@ function showOrderConfirmation(order) {
           </div>
         </div>
         
-        <div class="next-steps">
+        <div style="margin-top: var(--space-32); padding: var(--space-24); background: rgba(16, 185, 129, 0.1); border-radius: var(--radius-lg);">
           <h3>Next Steps</h3>
-          <ul>
-            <li>We will contact you within 24 hours to confirm your booking</li>
-            <li>Final menu confirmation and dietary adjustments can be made during the call</li>
-            <li>Payment details and picnic setup will be discussed</li>
-            <li>We'll send you the exact location and timing details</li>
+          <ul style="list-style: none; padding: 0; margin: var(--space-16) 0;">
+            <li style="padding: var(--space-8) 0; border-bottom: 1px solid rgba(16, 185, 129, 0.2);">✅ We will contact you within 24 hours to confirm your booking</li>
+            <li style="padding: var(--space-8) 0; border-bottom: 1px solid rgba(16, 185, 129, 0.2);">✅ Final menu confirmation and dietary adjustments can be made during the call</li>
+            <li style="padding: var(--space-8) 0; border-bottom: 1px solid rgba(16, 185, 129, 0.2);">✅ Payment details and picnic setup will be discussed</li>
+            <li style="padding: var(--space-8) 0;">✅ We'll send you the exact location and timing details</li>
           </ul>
         </div>
       </div>
-    </div>
-    
-    <div class="confirmation-actions">
-      <button class="btn btn--primary" onclick="handleNavigation('home')">Back to Home</button>
-      <button class="btn btn--secondary" onclick="window.print()">Print Confirmation</button>
+      
+      <div class="confirmation-actions">
+        <button class="btn btn--primary" onclick="handleNavigation('home')">Back to Home</button>
+        <button class="btn btn--outline" onclick="window.print()">Print Confirmation</button>
+      </div>
     </div>
   `
 }
@@ -915,9 +929,20 @@ function loadTestimonials() {
   `).join('')
 }
 
-// On page load
+// Make functions globally available
+window.showModal = showModal
+window.hideModal = hideModal
+window.showPage = showPage
+window.copyMenuLink = copyMenuLink
+window.handleNavigation = handleNavigation
+
+// Initialize on page load
 window.addEventListener('DOMContentLoaded', () => {
-  // Check URL for menu parameter
+  // Initialize menu preview
+  initializeMenuPreview()
+  handleMenuPreviewTabs()
+  
+  // Check URL parameters
   const urlParams = new URLSearchParams(window.location.search)
   const menuId = urlParams.get('menu')
   const bookingId = urlParams.get('booking')
@@ -926,49 +951,39 @@ window.addEventListener('DOMContentLoaded', () => {
     showPage('menu-selection-page')
     loadMenuSelection(menuId)
     
-    // Set booking ID if provided in URL
     if (bookingId) {
       appState.currentBooking = { id: parseInt(bookingId, 10) }
     }
   }
 
-  // Main CTA button
+  // Event listeners
   const bookPicnicBtn = document.getElementById('book-picnic-btn')
   if (bookPicnicBtn) {
-    bookPicnicBtn.addEventListener('click', () => {
-      showModal('booking-modal')
-    })
+    bookPicnicBtn.addEventListener('click', () => showModal('booking-modal'))
   }
 
-  // Modal close buttons
   const closeBookingModalBtn = document.getElementById('close-booking-modal')
   if (closeBookingModalBtn) {
-    closeBookingModalBtn.addEventListener('click', () => {
-      hideModal('booking-modal')
-    })
+    closeBookingModalBtn.addEventListener('click', () => hideModal('booking-modal'))
   }
 
   const cancelBookingBtn = document.getElementById('cancel-booking')
   if (cancelBookingBtn) {
-    cancelBookingBtn.addEventListener('click', () => {
-      hideModal('booking-modal')
-    })
+    cancelBookingBtn.addEventListener('click', () => hideModal('booking-modal'))
   }
 
-  // Form submissions
   const bookingForm = document.getElementById('booking-form')
   if (bookingForm) bookingForm.addEventListener('submit', handleBookingSubmit)
 
   const adminLoginForm = document.getElementById('admin-login-form')
   if (adminLoginForm) adminLoginForm.addEventListener('submit', handleAdminLogin)
 
-  // Admin logout
   const adminLogoutBtn = document.getElementById('admin-logout')
   if (adminLogoutBtn) {
     adminLogoutBtn.addEventListener('click', handleAdminLogout)
   }
 
-  // Close modal when clicking outside
+  // Modal close on outside click
   const bookingModal = document.getElementById('booking-modal')
   if (bookingModal) {
     bookingModal.addEventListener('click', (event) => {
@@ -979,8 +994,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   // Navigation links
-  const navLinks = document.querySelectorAll('.nav-link')
-  navLinks.forEach(link => {
+  document.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', (event) => {
       event.preventDefault()
       const route = link.getAttribute('data-route')
@@ -988,9 +1002,8 @@ window.addEventListener('DOMContentLoaded', () => {
     })
   })
 
-  // Admin tab buttons
-  const tabButtons = document.querySelectorAll('.tab-btn')
-  tabButtons.forEach(button => {
+  // Admin tabs
+  document.querySelectorAll('.tab-btn').forEach(button => {
     button.addEventListener('click', () => {
       const tabName = button.getAttribute('data-tab')
       switchTab(tabName)
@@ -1007,7 +1020,7 @@ window.addEventListener('DOMContentLoaded', () => {
     })
   }
 
-  // Copy generated link button
+  // Copy link
   const copyLinkBtn = document.getElementById('copy-link')
   if (copyLinkBtn) {
     copyLinkBtn.addEventListener('click', () => {
@@ -1022,7 +1035,7 @@ window.addEventListener('DOMContentLoaded', () => {
     })
   }
 
-  // Set minimum date for booking form (today)
+  // Set minimum date
   const preferredDateInput = document.getElementById('preferred-date')
   if (preferredDateInput) {
     const today = new Date().toISOString().split('T')[0]
@@ -1032,36 +1045,37 @@ window.addEventListener('DOMContentLoaded', () => {
   // Load testimonials
   loadTestimonials()
 
-  // Event delegation for dynamically created buttons
+  // Event delegation
   document.addEventListener('click', (event) => {
-    // 1. Quantity buttons
+    // Menu selection quantity buttons
     if (event.target.classList.contains('quantity-btn') && !event.target.disabled) {
-      const itemName = event.target.dataset.item
-      const category = event.target.dataset.category
-      const change = parseInt(event.target.dataset.change, 10)
+      const itemName = event.target.getAttribute('data-item')
+      const category = event.target.getAttribute('data-category')
+      const change = parseInt(event.target.getAttribute('data-change'), 10)
+      
       updateQuantity(itemName, category, change)
     }
-
-    // 2. Submit menu selection
+    
+    // Submit menu selection
     if (event.target.id === 'submit-menu-selection') {
       submitMenuSelection()
     }
-
-    // 3. Confirm booking in Queries tab
+    
+    // Confirm booking
     if (event.target.classList.contains('confirm-booking-btn')) {
-      const queryId = event.target.dataset.id
+      const queryId = event.target.getAttribute('data-id')
       confirmBooking(queryId)
     }
-
-    // 4. Generate per-booking menu link
+    
+    // Generate menu link for booking
     if (event.target.classList.contains('generate-menu-btn')) {
-      const bookingId = event.target.dataset.bookingId
+      const bookingId = event.target.getAttribute('data-booking-id')
       generateBookingMenuLink(bookingId)
     }
-
-    // 5. Copy per-booking menu link
+    
+    // Copy booking menu link
     if (event.target.classList.contains('copy-menu-btn')) {
-      const bookingId = event.target.dataset.bookingId
+      const bookingId = event.target.getAttribute('data-booking-id')
       copyBookingMenuLink(bookingId)
     }
   })
