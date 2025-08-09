@@ -641,6 +641,7 @@ async function loadMenuSelection(menuId) {
 }
 
 // Render menu selection page with tabs
+// Render menu selection page with modern design
 function renderMenuSelection(menuLink) {
   const container = document.getElementById('menu-selection-page')
   if (!container) return
@@ -649,62 +650,94 @@ function renderMenuSelection(menuLink) {
   const maxBev = menuLink.max_bev_items
   
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Select Your Menu</h1>
-      <p>Choose up to <strong>${maxFood} total food items</strong> and <strong>${maxBev} total beverage items</strong> for your picnic.</p>
-      <p><em>Mix and match any combination - e.g., 2 Parathas + 1 Maggi = 3 food items total</em></p>
-    </div>
-    
-    <!-- Menu Selection Tabs -->
-    <div class="menu-tabs">
-      <button class="selection-tab-btn active" data-tab="food-items">
-        🍽️ Food Items (<span id="selection-food-count">0</span>/${maxFood})
-      </button>
-      <button class="selection-tab-btn" data-tab="bev-items">
-        🥤 Beverages (<span id="selection-bev-count">0</span>/${maxBev})
-      </button>
-    </div>
+    <div class="container">
+      <div class="modern-page-header">
+        <h1>Select Your Menu Items</h1>
+        <p>Choose up to <strong>${maxFood} food items</strong> and <strong>${maxBev} beverages</strong></p>
+      </div>
+      
+      <!-- Modern Menu Tabs -->
+      <div class="modern-menu-tabs">
+        <button class="modern-tab-btn active" data-tab="food-items">
+          <span class="tab-icon">🍽️</span>
+          <span class="tab-text">Food Items</span>
+          <span class="tab-counter" id="selection-food-count">0</span>/<span>${maxFood}</span>
+        </button>
+        <button class="modern-tab-btn" data-tab="bev-items">
+          <span class="tab-icon">🥤</span>
+          <span class="tab-text">Beverages</span>
+          <span class="tab-counter" id="selection-bev-count">0</span>/<span>${maxBev}</span>
+        </button>
+      </div>
 
-    <!-- Food Items Tab -->
-    <div id="food-items" class="menu-tab-content" style="padding: 0 var(--space-16);">
-      <div id="food-list" class="selection-items">
-        ${foodList.map(item => `
-          <div class="menu-selection-item">
-            <span class="item-name">${item}</span>
-            <div class="quantity-controls">
-              <button class="quantity-btn" data-item="${item}" data-category="food" data-change="-1">-</button>
-              <span class="quantity-display" id="qty-food-${item.replace(/\s+/g, '-').toLowerCase()}">0</span>
-              <button class="quantity-btn" data-item="${item}" data-category="food" data-change="1">+</button>
+      <!-- Food Items Tab -->
+      <div id="food-items" class="modern-tab-content active">
+        <div class="modern-menu-grid">
+          ${foodList.map(item => `
+            <div class="modern-menu-item">
+              <div class="item-info">
+                <h4 class="item-name">${item}</h4>
+                <p class="item-desc">Freshly prepared</p>
+              </div>
+              <div class="modern-quantity-controls">
+                <button class="modern-qty-btn minus" data-item="${item}" data-category="food" data-change="-1">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                </button>
+                <span class="modern-qty-display" id="qty-food-${item.replace(/\s+/g, '-').toLowerCase()}">0</span>
+                <button class="modern-qty-btn plus" data-item="${item}" data-category="food" data-change="1">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                </button>
+              </div>
             </div>
-          </div>
-        `).join('')}
+          `).join('')}
+        </div>
       </div>
-    </div>
 
-    <!-- Beverages Tab -->
-    <div id="bev-items" class="menu-tab-content" style="display: none; padding: 0 var(--space-16);">
-      <div id="bev-list" class="selection-items">
-        ${bevList.map(item => `
-          <div class="menu-selection-item">
-            <span class="item-name">${item}</span>
-            <div class="quantity-controls">
-              <button class="quantity-btn" data-item="${item}" data-category="bev" data-change="-1">-</button>
-              <span class="quantity-display" id="qty-bev-${item.replace(/\s+/g, '-').toLowerCase()}">0</span>
-              <button class="quantity-btn" data-item="${item}" data-category="bev" data-change="1">+</button>
+      <!-- Beverages Tab -->
+      <div id="bev-items" class="modern-tab-content">
+        <div class="modern-menu-grid">
+          ${bevList.map(item => `
+            <div class="modern-menu-item">
+              <div class="item-info">
+                <h4 class="item-name">${item}</h4>
+                <p class="item-desc">Refreshing drink</p>
+              </div>
+              <div class="modern-quantity-controls">
+                <button class="modern-qty-btn minus" data-item="${item}" data-category="bev" data-change="-1">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                </button>
+                <span class="modern-qty-display" id="qty-bev-${item.replace(/\s+/g, '-').toLowerCase()}">0</span>
+                <button class="modern-qty-btn plus" data-item="${item}" data-category="bev" data-change="1">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                </button>
+              </div>
             </div>
+          `).join('')}
+        </div>
+      </div>
+      
+      <!-- Modern Selection Summary -->
+      <div class="modern-selection-summary">
+        <div class="summary-header">
+          <h3>Your Selection</h3>
+          <div class="summary-items" id="selection-summary-content">
+            <p class="empty-state">No items selected yet</p>
           </div>
-        `).join('')}
+        </div>
+        <button id="submit-menu-selection" class="modern-submit-btn" disabled>
+          Continue to Checkout
+        </button>
       </div>
-    </div>
-    
-    <div class="selection-summary">
-      <h3>Your Selection</h3>
-      <div id="selection-summary-content">
-        <p>No items selected yet.</p>
-      </div>
-      <button id="submit-menu-selection" class="btn btn--primary btn--full-width" disabled>
-        Submit Menu Selection
-      </button>
     </div>
   `
   
@@ -1048,12 +1081,13 @@ window.addEventListener('DOMContentLoaded', () => {
   // Event delegation
   document.addEventListener('click', (event) => {
     // Menu selection quantity buttons
-    if (event.target.classList.contains('quantity-btn') && !event.target.disabled) {
-      const itemName = event.target.getAttribute('data-item')
-      const category = event.target.getAttribute('data-category')
-      const change = parseInt(event.target.getAttribute('data-change'), 10)
-      
-      updateQuantity(itemName, category, change)
+    if (event.target.closest('.modern-qty-btn') && !event.target.closest('.modern-qty-btn').disabled) {
+    const btn = event.target.closest('.modern-qty-btn')
+    const itemName = btn.getAttribute('data-item')
+    const category = btn.getAttribute('data-category')
+    const change = parseInt(btn.getAttribute('data-change'), 10)
+    
+    updateQuantity(itemName, category, change)
     }
     
     // Submit menu selection
