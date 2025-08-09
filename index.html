@@ -15,11 +15,7 @@
       </div>
       <div class="nav-links">
         <a href="/" class="nav-link active">Home</a>
-        <a href="#services" class="nav-link">Services</a>
-        <a href="#gallery" class="nav-link">Gallery</a>
-        <a href="#testimonials" class="nav-link">Testimonials</a>
-        <a href="#contact" class="nav-link">Contact</a>
-        <!-- Admin link -->
+        <a href="#menu" class="nav-link">Menu</a>
         <a href="/admin" class="nav-link" style="font-size:12px; opacity:0.7;">Admin</a>
       </div>
     </div>
@@ -32,41 +28,37 @@
       <h1 class="hero-title">Premium Boho-Chic Experiences</h1>
       <p class="hero-tagline">Beautifully curated picnic arrangements with boho-chic decor and ambient lighting.</p>
       <p class="hero-description">Perfect for romantic dates, small celebrations, and meaningful moments with your loved ones.</p>
-      <a href="#services" class="btn btn--primary">Explore Services</a>
+      <button id="booking-open" class="btn btn--primary">Book Your Picnic</button>
     </div>
   </section>
 
-  <!-- Services Section -->
-  <section id="services" class="services container">
-    <h2 class="section-title">Our Services</h2>
-    <div class="services-grid">
-      <!-- Service cards… -->
-    </div>
-  </section>
+  <!-- Menu Section -->
+    <section id="menu" class="services container">
+        <h2 class="section-title">Our Menu</h2>
 
-  <!-- Gallery Section -->
-  <section id="gallery" class="gallery container">
-    <h2 class="section-title">Gallery</h2>
-    <div class="gallery-grid">
-      <!-- Gallery items… -->
-    </div>
-  </section>
+        <!-- Menu Tabs -->
+        <div class="modern-menu-tabs" style="margin-bottom:24px;">
+            <button class="modern-tab-btn active" data-tab="food-items">
+            Food Items
+            </button>
+            <button class="modern-tab-btn" data-tab="bev-items">
+            Beverages
+            </button>
+        </div>
 
-  <!-- Testimonials Section -->
-  <section id="testimonials" class="testimonials container">
-    <h2 class="section-title">What Our Customers Say</h2>
-    <div class="testimonials-grid">
-      <!-- Testimonial cards… -->
-    </div>
-  </section>
+        <!-- Menu Content -->
+        <div id="food-items" class="modern-tab-content active">
+            <div class="modern-menu-grid">
+            <!-- Food items will be injected here -->
+            </div>
+        </div>
+        <div id="bev-items" class="modern-tab-content" style="display:none;">
+            <div class="modern-menu-grid">
+            <!-- Beverage items will be injected here -->
+            </div>
+        </div>
+    </section>
 
-  <!-- Contact/Booking Section -->
-  <section id="contact" class="contact-info container">
-    <h2 class="section-title">Get in Touch</h2>
-    <p>Thank you for your interest! We'll contact you within 24 hours to discuss your picnic requirements.</p>
-    <p>Call us directly: 📞 +91 99999-99999</p>
-    <button id="booking-open" class="btn btn--primary">Enquire Now</button>
-  </section>
 
   <!-- Booking Modal -->
   <div id="booking-modal" class="modal hidden">

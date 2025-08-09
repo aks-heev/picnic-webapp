@@ -27,6 +27,45 @@ const bevList = [
   "Oreo Shake","KitKat Shake","Chocolate Shake","Sweet Lassi","Salty Lassi",
   "Mineral Water","Soda","Mixers"
 ]
+// In app.js, after definitions of foodList and bevList, add:
+
+function renderMenuItems() {
+  const foodContainer = document.querySelector('#food-items .modern-menu-grid');
+  const bevContainer = document.querySelector('#bev-items .modern-menu-grid');
+
+  foodContainer.innerHTML = foodList.map(item => `
+    <div class="modern-menu-item">
+      <div class="item-info">
+        <h4 class="item-name">${item}</h4>
+      </div>
+      <div class="modern-quantity-controls">
+        <button class="modern-qty-btn minus" data-item="${item}" data-category="food" data-change="-1" disabled>−</button>
+        <span class="modern-qty-display" id="qty-food-${item.replace(/\s+/g,'-').toLowerCase()}">0</span>
+        <button class="modern-qty-btn plus" data-item="${item}" data-category="food" data-change="1">+</button>
+      </div>
+    </div>
+  `).join('');
+
+  bevContainer.innerHTML = bevList.map(item => `
+    <div class="modern-menu-item">
+      <div class="item-info">
+        <h4 class="item-name">${item}</h4>
+      </div>
+      <div class="modern-quantity-controls">
+        <button class="modern-qty-btn minus" data-item="${item}" data-category="bev" data-change="-1" disabled>−</button>
+        <span class="modern-qty-display" id="qty-bev-${item.replace(/\s+/g,'-').toLowerCase()}">0</span>
+        <button class="modern-qty-btn plus" data-item="${item}" data-category="bev" data-change="1">+</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+// Call on page load
+window.addEventListener('DOMContentLoaded', () => {
+  renderMenuItems();
+  handleMenuSelectionTabs();  // ensure tab click logic attached
+  // existing init code...
+});
 
 // App state
 const appState = {
