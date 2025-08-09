@@ -7,6 +7,9 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <!-- Toast container -->
+  <div id="toast-container"></div>
+
   <!-- Navigation -->
   <nav class="navbar">
     <div class="container">
@@ -14,51 +17,49 @@
         <h2>The Picnic Story</h2>
       </div>
       <div class="nav-links">
-        <a href="/" class="nav-link active">Home</a>
-        <a href="#menu" class="nav-link">Menu</a>
+        <a href="#" class="nav-link active" data-route="home">Home</a>
+        <a href="#" class="nav-link" data-route="menu-page">Menu</a>
         <a href="/admin" class="nav-link" style="font-size:12px; opacity:0.7;">Admin</a>
       </div>
     </div>
   </nav>
 
-  <!-- Hero Section -->
-  <section id="home" class="hero">
-    <div class="hero-background"></div>
-    <div class="hero-content">
-      <h1 class="hero-title">Premium Boho-Chic Experiences</h1>
-      <p class="hero-tagline">Beautifully curated picnic arrangements with boho-chic decor and ambient lighting.</p>
-      <p class="hero-description">Perfect for romantic dates, small celebrations, and meaningful moments with your loved ones.</p>
-      <button id="booking-open" class="btn btn--primary">Book Your Picnic</button>
-    </div>
-  </section>
-
-  <!-- Menu Section -->
-    <section id="menu" class="services container">
-        <h2 class="section-title">Our Menu</h2>
-
-        <!-- Menu Tabs -->
-        <div class="modern-menu-tabs" style="margin-bottom:24px;">
-            <button class="modern-tab-btn active" data-tab="food-items">
-            Food Items
-            </button>
-            <button class="modern-tab-btn" data-tab="bev-items">
-            Beverages
-            </button>
-        </div>
-
-        <!-- Menu Content -->
-        <div id="food-items" class="modern-tab-content active">
-            <div class="modern-menu-grid">
-            <!-- Food items will be injected here -->
-            </div>
-        </div>
-        <div id="bev-items" class="modern-tab-content" style="display:none;">
-            <div class="modern-menu-grid">
-            <!-- Beverage items will be injected here -->
-            </div>
-        </div>
+  <!-- Home Page -->
+  <div id="home-page" class="page active">
+    <section id="home" class="hero">
+      <div class="hero-background"></div>
+      <div class="hero-content">
+        <h1 class="hero-title">Premium Boho-Chic Experiences</h1>
+        <p class="hero-tagline">Beautifully curated picnic arrangements with boho-chic decor and ambient lighting.</p>
+        <p class="hero-description">Perfect for romantic dates, small celebrations, and meaningful moments with your loved ones.</p>
+        <button id="booking-open" class="btn btn--primary">Book Your Picnic</button>
+      </div>
     </section>
 
+    <!-- Contact/Booking Section -->
+    <section id="contact" class="contact-info container">
+      <h2 class="section-title">Get in Touch</h2>
+      <p>Thank you for your interest! We'll contact you within 24 hours to discuss your picnic requirements.</p>
+      <p>Call us directly: 📞 +91 99999-99999</p>
+    </section>
+  </div>
+
+  <!-- Menu Page -->
+  <div id="menu-page" class="page">
+    <section class="services container">
+      <h2 class="section-title">Our Menu</h2>
+      <div class="modern-menu-tabs" style="margin-bottom:24px;">
+        <button class="modern-tab-btn active" data-tab="food-items">Food Items</button>
+        <button class="modern-tab-btn" data-tab="bev-items">Beverages</button>
+      </div>
+      <div id="food-items" class="modern-tab-content active">
+        <div class="modern-menu-grid"></div>
+      </div>
+      <div id="bev-items" class="modern-tab-content" style="display:none;">
+        <div class="modern-menu-grid"></div>
+      </div>
+    </section>
+  </div>
 
   <!-- Booking Modal -->
   <div id="booking-modal" class="modal hidden">
@@ -97,9 +98,7 @@
           <label class="form-label" for="special-requirements">Special Requirements</label>
           <textarea id="special-requirements" name="special-requirements" class="form-control"></textarea>
 
-          <button type="submit" class="btn btn--primary btn--full-width">
-            Submit Enquiry
-          </button>
+          <button type="submit" class="btn btn--primary btn--full-width">Submit Enquiry</button>
         </form>
       </div>
     </div>
@@ -108,9 +107,7 @@
   <!-- Query Success Page -->
   <div id="query-success-page" class="page">
     <div class="confirmation-ticket">
-      <div class="ticket-header">
-        <h1>Thank You!</h1>
-      </div>
+      <div class="ticket-header"><h1>Thank You!</h1></div>
       <div class="ticket-content">
         <p>Your enquiry has been submitted successfully. We will contact you soon to finalize your booking!</p>
       </div>
