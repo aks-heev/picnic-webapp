@@ -1,20 +1,19 @@
-// Import Supabase client (for bookings)
 import { createClient } from '@supabase/supabase-js'
+
+// Supabase init
 const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  console.error('Supabase variables missing!')
-}
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) console.error('Supabase variables missing!')
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 // Menu data
-const foodList = [/* … same as before … */]
-const bevList  = [/* … same as before … */]
+const foodList = [ /* same items as before */ ]
+const bevList  = [ /* same items as before */ ]
 
-// App state
+// State
 const appState = { selectedItems: {} }
 
-// Toast helper
+// Toast
 function showToast(msg,type='success'){
   const c=document.getElementById('toast-container')
   if(!c)return
@@ -28,11 +27,11 @@ function showToast(msg,type='success'){
   },3000)
 }
 
-// Modal helpers
+// Modal
 const showModal=id=>document.getElementById(id)?.classList.remove('hidden')
 const hideModal=id=>document.getElementById(id)?.classList.add('hidden')
 
-// Page switching
+// Page switch
 function showPage(id){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'))
   document.getElementById(id)?.classList.add('active')
@@ -79,7 +78,7 @@ function renderMenuItems(){
   `).join('')
 }
 
-// Tabs for menu
+// Tabs
 function handleMenuSelectionTabs(){
   document.querySelectorAll('.modern-tab-btn').forEach(btn=>{
     btn.addEventListener('click',()=>{
@@ -92,7 +91,7 @@ function handleMenuSelectionTabs(){
   })
 }
 
-// Booking form
+// Booking submit
 async function handleBookingSubmit(e){
   e.preventDefault()
   const f=e.target
@@ -104,11 +103,13 @@ async function handleBookingSubmit(e){
     guest_count:parseInt(f['guest-count'].value,10),
     preferred_date:f['preferred-date'].value,
     special_requirements:f['special-requirements'].value.trim(),
-    confirmed:false,advance_amount:0,created_at:new Date().toISOString()
+    confirmed:false,
+    advance_amount:0,
+    created_at:new Date().toISOString()
   }
   try{
     const { data,error } = await supabase.from('bookings').insert([lead]).select()
-    if(error)throw error
+    if(error) throw error
     showToast('Enquiry submitted! We will contact you soon.','success')
     hideModal('booking-modal')
     f.reset()
@@ -123,25 +124,21 @@ async function handleBookingSubmit(e){
 window.addEventListener('DOMContentLoaded',()=>{
   // Navigation
   document.querySelectorAll('.nav-link').forEach(link=>{
-    link.addEventListener('click', e=>{
-      e.preventDefault()
-      const route=link.dataset.route
-      showPage(route==='home'? 'home-page' : route)
+    link.addEventListener('click',ev=>{
+      ev.preventDefault()
+      showPage(link.dataset.route==='home-page'?'home-page':'menu-page')
     })
   })
 
-  // Render & tabs
   renderMenuItems()
   handleMenuSelectionTabs()
 
-  // Booking modal & form
   document.getElementById('booking-open')?.addEventListener('click',()=>showModal('booking-modal'))
   document.querySelector('.modal-close')?.addEventListener('click',()=>hideModal('booking-modal'))
   document.getElementById('booking-form')?.addEventListener('submit',handleBookingSubmit)
 
-  // Quantity controls
-  document.addEventListener('click',e=>{
-    const btn=e.target.closest('.modern-qty-btn')
+  document.addEventListener('click',ev=>{
+    const btn=ev.target.closest('.modern-qty-btn')
     if(btn&&!btn.disabled){
       updateQuantity(btn.dataset.item,btn.dataset.category,parseInt(btn.dataset.change,10))
     }
