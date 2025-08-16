@@ -104,6 +104,7 @@ async function loadMenuLinks() {
 // ===== Render Functions =====
 function renderQueries(queries) {
   const container = document.getElementById('queries-container');
+  if (!container) return;
   if (!queries || queries.length === 0) {
     container.innerHTML = '<div class="empty-state"><h3>No Pending Queries</h3></div>';
     return;
@@ -148,6 +149,7 @@ function renderQueries(queries) {
 
 function renderBookings(bookings) {
   const container = document.getElementById('bookings-container');
+  if (!container) return;
   if (!bookings || bookings.length === 0) {
     container.innerHTML = '<div class="empty-state"><h3>No Confirmed Bookings</h3></div>';
     return;
@@ -176,7 +178,8 @@ function renderBookings(bookings) {
 }
 
 function renderMenuLinks(links) {
-  const container = document.getElementById('menu-links-container');
+  const container = document.getElementById('menu-links-container') || document.getElementById('menu-links-list');
+  if (!container) return;
   if (!links || links.length === 0) {
     container.innerHTML = '<div class="empty-state"><h3>No Menu Links</h3></div>';
     return;
@@ -265,17 +268,24 @@ function copyToClipboard(text) {
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('admin-login-form')?.addEventListener('submit', handleAdminLogin);
   document.getElementById('admin-logout')?.addEventListener('click', handleAdminLogout);
-  
+
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const tab = btn.dataset.tab;
+      const tab = btn.dataset.tab + "-tab";
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-      document.getElementById(tab).classList.add('active');
+      document.querySelectorAll('.tab-content').forEach(c => {
+        c.classList.remove('active');
+        c.setAttribute('hidden', true);
+      });
+      const target = document.getElementById(tab);
+      if (target) {
+        target.classList.add('active');
+        target.removeAttribute('hidden');
+      }
     });
   });
-  
+
   document.getElementById('generate-menu-link')?.addEventListener('click', generateMenuLink);
 });
 
