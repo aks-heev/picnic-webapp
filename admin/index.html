@@ -3,125 +3,286 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard - The Picnic Story</title>
+    <title>The Picnic Story - Admin Panel</title>
     <link rel="stylesheet" href="../style.css">
+    <style>
+        /* Additional admin-specific styles */
+        .admin-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .admin-header {
+            text-align: center;
+            margin-bottom: 2rem;
+            padding: 2rem;
+            background: var(--gradient-card);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--color-card-border);
+        }
+        
+        .admin-tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            border-bottom: 2px solid var(--color-border);
+            padding-bottom: 1rem;
+        }
+        
+        .tab-btn {
+            padding: 0.75rem 1.5rem;
+            background: transparent;
+            border: none;
+            border-radius: var(--radius-base);
+            cursor: pointer;
+            font-weight: var(--font-weight-medium);
+            color: var(--color-text-secondary);
+            transition: all var(--duration-fast) var(--ease-standard);
+        }
+        
+        .tab-btn.active {
+            background: var(--color-primary);
+            color: white;
+            box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3);
+        }
+        
+        .tab-btn:hover:not(.active) {
+            background: var(--color-secondary);
+            color: var(--color-primary);
+        }
+        
+        .tab-content {
+            display: none;
+            min-height: 400px;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--color-text-secondary);
+            background: var(--gradient-card);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--color-card-border);
+        }
+        
+        .data-container {
+            background: var(--gradient-card);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--color-card-border);
+            min-height: 300px;
+            padding: 1.5rem;
+        }
+        
+        .login-section {
+            max-width: 400px;
+            margin: 4rem auto;
+            padding: 2rem;
+            background: var(--gradient-card);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--color-card-border);
+            box-shadow: 0 8px 30px rgba(236, 72, 153, 0.1);
+        }
+        
+        .logout-btn {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+        }
+        
+        .menu-generator-form {
+            background: var(--gradient-card);
+            padding: 2rem;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--color-card-border);
+            margin-bottom: 2rem;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        @media (max-width: 768px) {
+            .admin-tabs {
+                flex-direction: column;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .logout-btn {
+                position: static;
+                margin-top: 1rem;
+                width: 100%;
+            }
+        }
+    </style>
 </head>
 <body>
     <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>
-
-    <!-- Admin Page -->
-    <section class="container" style="padding-top: var(--space-32);">
-        <!-- Admin login -->
-        <div id="admin-login" class="login-card">
-            <h2>Admin Login</h2>
-            <form id="admin-login-form" novalidate>
-                <div class="form-group">
-                    <label for="admin-email" class="form-label">Email</label>
-                    <input id="admin-email" type="email" class="form-control" required placeholder="admin@picnic.com" />
-                </div>
-                <div class="form-group">
-                    <label for="admin-password" class="form-label">Password</label>
-                    <input id="admin-password" type="password" class="form-control" required />
-                    <div id="admin-password-error" class="form-error" aria-live="polite"></div>
-                </div>
-                <button type="submit" class="btn btn--primary btn--full-width">Login</button>
-            </form>
-        </div>
-
-        <!-- Admin dashboard -->
-        <div id="admin-dashboard" class="admin-section hidden">
-            <div class="database-status">
-                <span class="status-indicator connected"></span>
-                <span class="status-text">Database Status: Connected</span>
+    
+    <!-- Admin Login Section -->
+    <div id="admin-login" class="login-section">
+        <h2>Admin Login</h2>
+        <form id="admin-login-form">
+            <div class="form-group">
+                <label for="admin-email" class="form-label">Email</label>
+                <input type="email" id="admin-email" name="admin-email" class="form-control" required>
             </div>
-
-            <div class="dashboard-header">
-                <div>
-                    <h2>Admin Dashboard</h2>
-                    <p>The Picnic Story Management System</p>
-                </div>
-                <div class="header-actions">
-                    <button id="admin-logout" class="btn btn--secondary">Logout</button>
-                </div>
+            <div class="form-group">
+                <label for="admin-password" class="form-label">Password</label>
+                <input type="password" id="admin-password" name="admin-password" class="form-control" required>
             </div>
-
-            <div class="dashboard-tabs" role="tablist">
-                <button class="tab-btn active" data-tab="queries" role="tab" aria-selected="true">Queries</button>
-                <button class="tab-btn" data-tab="bookings" role="tab" aria-selected="false">Bookings</button>
-                <button class="tab-btn" data-tab="menu-link" role="tab" aria-selected="false">Menu Link Generator</button>
+            <button type="submit" class="btn btn--primary btn--full-width">Login</button>
+        </form>
+    </div>
+    
+    <!-- Admin Dashboard -->
+    <div id="admin-dashboard" class="hidden">
+        <div class="admin-container">
+            <!-- Header -->
+            <div class="admin-header">
+                <h1>The Picnic Story - Admin Panel</h1>
+                <p>Manage bookings, queries, and menu links</p>
+                <button id="logout-btn" class="btn btn--secondary logout-btn">Logout</button>
             </div>
-
+            
+            <!-- Navigation Tabs -->
+            <div class="admin-tabs">
+                <button class="tab-btn active" data-tab="queries">Customer Queries</button>
+                <button class="tab-btn" data-tab="bookings">Confirmed Bookings</button>
+                <button class="tab-btn" data-tab="menu-generator">Menu Link Generator</button>
+            </div>
+            
             <!-- Queries Tab -->
-            <div id="queries-tab" class="tab-content active" role="tabpanel">
-                <div class="tab-header">
-                    <h3>Customer Queries</h3>
-                    <div class="search-filters">
-                        <input id="leads-search" class="search-input form-control" type="search" placeholder="Search queries..." />
-                        <select id="location-filter" class="filter-select form-control">
-                            <option value="">All Locations</option>
-                            <option value="jaipur-city">Jaipur City</option>
-                            <option value="jaipur-outskirts">Jaipur Outskirts</option>
-                            <option value="amber-fort">Near Amber Fort</option>
-                            <option value="jal-mahal">Near Jal Mahal</option>
-                            <option value="nahargarh">Nahargarh Area</option>
-                            <option value="custom">Custom Location</option>
-                        </select>
+            <div id="tab-queries" class="tab-content active">
+                <h3>Customer Queries</h3>
+                <p>Bookings that need confirmation and advance payment</p>
+                <div id="queries-container" class="data-container">
+                    <div class="empty-state">
+                        <h4>No customer queries</h4>
+                        <p>All queries have been processed</p>
                     </div>
                 </div>
-                <div id="queries-container" class="data-container">
-                    <!-- Queries will be populated here by JavaScript -->
-                </div>
-                <button id="export-queries" class="btn btn--outline">Export Queries (CSV)</button>
             </div>
-
+            
             <!-- Bookings Tab -->
-            <div id="bookings-tab" class="tab-content" role="tabpanel" hidden>
-                <div class="tab-header">
-                    <h3>Confirmed Bookings</h3>
-                    <p>Bookings that have been confirmed with advance payment</p>
-                </div>
+            <div id="tab-bookings" class="tab-content">
+                <h3>Confirmed Bookings</h3>
+                <p>Bookings that have been confirmed with advance payment</p>
                 <div id="bookings-container" class="data-container">
-                    <!-- Bookings will be populated here by JavaScript -->
+                    <div class="empty-state">
+                        <h4>No confirmed bookings</h4>
+                        <p>No bookings have been confirmed yet</p>
+                    </div>
                 </div>
             </div>
-
-            <!-- Menu Link Generator Tab -->
-            <div id="menu-link-tab" class="tab-content" role="tabpanel" hidden>
-                <div class="tab-header">
-                    <h3>Generate Menu Links</h3>
-                    <p>Create custom menu links with specific item limits for customers</p>
+            
+            <!-- Menu Generator Tab -->
+            <div id="tab-menu-generator" class="tab-content">
+                <h3>Menu Link Generator</h3>
+                <p>Create custom menu links with specific item limits for customers</p>
+                
+                <!-- Menu Generator Form -->
+                <div class="menu-generator-form">
+                    <h4>Generate New Menu Link</h4>
+                    <form id="menu-generator-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="customer-name" class="form-label">Customer Name</label>
+                                <input type="text" id="customer-name" name="customer-name" class="form-control" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="event-date" class="form-label">Event Date</label>
+                                <input type="date" id="event-date" name="event-date" class="form-control" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="food-limit" class="form-label">Food Items Limit</label>
+                                <input type="number" id="food-limit" name="food-limit" class="form-control" min="1" max="74" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="beverage-limit" class="form-label">Beverage Items Limit</label>
+                                <input type="number" id="beverage-limit" name="beverage-limit" class="form-control" min="1" max="24" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn--primary">Generate Menu Link</button>
+                    </form>
                 </div>
                 
-                <div class="menu-generator">
-                    <div class="menu-controls">
-                        <div class="control-group">
-                            <label for="food-count">Food Items (1-15):</label>
-                            <input type="number" id="food-count" min="1" max="15" value="3" class="form-control">
-                        </div>
-                        <div class="control-group">
-                            <label for="bev-count">Beverages (1-10):</label>
-                            <input type="number" id="bev-count" min="1" max="10" value="2" class="form-control">
-                        </div>
-                        <button id="generate-menu-link" class="btn btn--primary">Generate Link</button>
+                <!-- Generated Links List -->
+                <div id="menu-links-container" class="data-container">
+                    <div class="empty-state">
+                        <h4>No menu links generated</h4>
+                        <p>Generate your first custom menu link above</p>
                     </div>
-                    
-                    <div class="generated-link" style="display: none;">
-                        <label>Generated Menu Link:</label>
-                        <div class="link-display">
-                            <input type="text" id="generated-link-url" readonly class="form-control">
-                            <button id="copy-link" class="btn btn--outline">Copy Link</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="menu-links-list" class="menu-links-list">
-                    <!-- Menu links will be populated here by JavaScript -->
                 </div>
             </div>
         </div>
-    </section>
-
+    </div>
+    
+    <!-- Scripts -->
     <script type="module" src="admin.js"></script>
+    <script>
+        // Tab switching functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            // Tab switching
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const tabName = this.dataset.tab;
+                    
+                    // Remove active class from all tabs and content
+                    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    
+                    // Add active class to clicked tab and corresponding content
+                    this.classList.add('active');
+                    const tabContent = document.getElementById(`tab-${tabName}`);
+                    if (tabContent) {
+                        tabContent.classList.add('active');
+                    }
+                });
+            });
+            
+            // Logout button
+            document.getElementById('logout-btn')?.addEventListener('click', function() {
+                if (window.handleAdminLogout) {
+                    window.handleAdminLogout();
+                }
+            });
+            
+            // Login form
+            document.getElementById('admin-login-form')?.addEventListener('submit', function(e) {
+                if (window.handleAdminLogin) {
+                    window.handleAdminLogin(e);
+                }
+            });
+            
+            // Menu generator form
+            document.getElementById('menu-generator-form')?.addEventListener('submit', function(e) {
+                e.preventDefault();
+                if (window.generateMenuLink) {
+                    const formData = new FormData(this);
+                    const data = {
+                        customerName: formData.get('customer-name'),
+                        eventDate: formData.get('event-date'),
+                        foodLimit: parseInt(formData.get('food-limit')),
+                        beverageLimit: parseInt(formData.get('beverage-limit'))
+                    };
+                    window.generateMenuLink(data);
+                }
+            });
+        });
+    </script>
 </body>
 </html>
