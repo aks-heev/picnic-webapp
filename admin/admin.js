@@ -147,35 +147,87 @@ function renderQueries(queries) {
   `).join('');
 }
 
+// Modified renderBookings to include menu link generator per booking
 function renderBookings(bookings) {
   const container = document.getElementById('bookings-container');
   if (!container) return;
+
   if (!bookings || bookings.length === 0) {
-    container.innerHTML = '<div class="empty-state"><h3>No Confirmed Bookings</h3></div>';
-    return;
-  }
-  container.innerHTML = bookings.map(b => {
-    const balance = (b.booking_amount || 0) - (b.advance_amount || 0);
-    return `
-      <div class="leads-table">
-        <div class="lead-item">
-          <div class="lead-header">
-            <div class="lead-name">${b.full_name}</div>
-            <div class="lead-date">${new Date(b.created_at).toLocaleDateString()}</div>
-          </div>
-          <div class="lead-details">
-            <div class="lead-detail"><strong>Total:</strong><span>₹${b.booking_amount || 0}</span></div>
-            <div class="lead-detail"><strong>Advance:</strong><span>₹${b.advance_amount || 0}</span></div>
-            <div class="lead-detail"><strong>Balance:</strong><span>₹${balance}</span></div>
-          </div>
-          <button class="btn btn--secondary" onclick="updateBookingAmount(${b.id})">
-            Update Amount
-          </button>
-        </div>
+    container.innerHTML = `
+      <div class="empty-state">
+        <h4>No confirmed bookings.</h4>
+        <p>No bookings have been confirmed yet.</p>
       </div>
     `;
-  }).join('');
+    return;
+  }
+
+  container.innerHTML = bookings.map(booking => `
+    <div class="booking-card" data-booking-id="${booking.id}">
+      <h4>${booking.full_name}</h4>
+      <p>Event Date: ${booking.preferred_date}</p>
+      <p>Guest Count: ${booking.guest_count}</p>
+
+      <!-- Menu Link Generator Form for this booking -->
+      <form class="menu-link-generator">
+        <label>
+          Food Items Limit:
+          <input type="number" name="food-limit" min="1" max="74" required />
+        </label>
+        <label>
+          Beverage Items Limit:
+          <input type="number" name="beverage-limit" min="1" max="24" required />
+        </label>
+        <button type="submit">Generate Menu Link</button>
+      </form>
+
+      <div class="menu-link-result" id="menu-link-result-${booking.id}"></div>
+    </div>
+  `).join('');
 }
+
+// Add event listener for menu link generator form submissions (delegated)
+document.getElementById('bookings-container').addEventListener('submit', async function(event) {
+  if (!event.target.classList.contains('menu-link-generator')) return;
+
+  event.preventDefault();
+
+  const form = event.target;
+  const bookingCard = form.closest('.booking-card');
+  if (!bookingCard) return;
+
+  const bookingId = bookingCard.dataset.bookingId;
+  const foodLimit = parseInt(form['food-limit'].value, 10);
+  const beverageLimit = parseInt(form['beverage-limit'].value, 10);
+
+  const customerName = bookingCard.querySelector('h4')?.textContent || '';
+
+  const eventDateText = bookingCard.querySelector('p')?.textContent || '';
+  const eventDate = bookingCard.querySelector('p') ? bookingCard.querySelector('p').textContent.replace('Event Date: ', '') : '';
+
+  try {
+    const { data, error } = await supabase
+      .from('menu_links')
+      .insert([{
+        customer_name: customerName,
+        event_date: eventDate,
+        food_limit: foodLimit,
+        beverage_limit: beverageLimit,
+        booking_id: bookingId
+      }]);
+
+    if (error) throw error;
+
+    const linkId = data[0]?.link_id || 'N/A';
+    const resultContainer = bookingCard.querySelector('.menu-link-result');
+    const url = `${window.location.origin}/menu/${linkId}`;
+    resultContainer.innerHTML = `<p>Menu Link Generated: <a href="${url}" target="_blank">${url}</a></p>`;
+    showToast('Menu link generated successfully.', 'success');
+  } catch (err) {
+    console.error(err);
+    showToast('Failed to generate menu link.', 'error');
+  }
+});
 
 function renderMenuLinks(links) {
   const container = document.getElementById('menu-links-container') || document.getElementById('menu-links-list');
