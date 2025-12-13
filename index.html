@@ -102,6 +102,49 @@
     </div>
   </div>
 
+  <!-- Menu Selection Page (for customers with menu link) -->
+  <div id="menu-selection-page" class="page">
+    <section class="services container">
+      <div class="page-header">
+        <h1>Select Your Menu Items</h1>
+        <p id="selection-limits">Loading...</p>
+      </div>
+      
+      <div class="selection-summary" id="selection-summary">
+        <h3>Your Selection</h3>
+        <div id="selected-food-count">Food Items: 0 / 0</div>
+        <div id="selected-bev-count">Beverages: 0 / 0</div>
+      </div>
+
+      <div class="modern-menu-tabs" style="margin-bottom:24px;">
+        <button class="selection-tab-btn active" data-tab="food-selection">Food Items</button>
+        <button class="selection-tab-btn" data-tab="bev-selection">Beverages</button>
+      </div>
+      
+      <div id="food-selection" class="selection-tab-content active">
+        <div class="selection-menu-grid"></div>
+      </div>
+      <div id="bev-selection" class="selection-tab-content" style="display:none;">
+        <div class="selection-menu-grid"></div>
+      </div>
+
+      <div class="form-actions" style="margin-top:32px; justify-content:center;">
+        <button id="submit-selection" class="btn btn--primary btn--lg">Submit My Selection</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- Selection Success Page -->
+  <div id="selection-success-page" class="page">
+    <div class="confirmation-ticket">
+      <div class="ticket-header"><h1>Selection Submitted!</h1></div>
+      <div class="ticket-content">
+        <p>Thank you! Your menu selection has been submitted successfully.</p>
+        <p>We'll prepare these items for your picnic experience.</p>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="app.js"></script>
 </body>
 </html>

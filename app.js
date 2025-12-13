@@ -6,6 +6,11 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 )
 
+// Menu link state
+let menuLinkData = null
+let selectedFood = new Set()
+let selectedBev = new Set()
+
 // Menu data
 const foodList = [
   "Plain Omelette","Cheese Burst Omelette","Chicken Omelette","Bread Omelette",
@@ -116,9 +121,153 @@ async function handleBookingSubmit(e) {
   }
 }
 
+// Check for menu link parameter
+async function checkMenuLink() {
+  const params = new URLSearchParams(window.location.search)
+  const menuId = params.get('menu')
+  
+  if (!menuId) return false
+  
+  try {
+    const { data, error } = await supabase
+      .from('menu_links')
+      .select()
+      .eq('id', menuId)
+      .single()
+    
+    if (error || !data) {
+      showToast('Invalid or expired menu link', 'error')
+      return false
+    }
+    
+    menuLinkData = data
+    return true
+  } catch (err) {
+    console.error(err)
+    showToast('Error loading menu link', 'error')
+    return false
+  }
+}
+
+// Render selectable menu items
+function renderSelectableMenuItems() {
+  if (!menuLinkData) return
+  
+  const foodGrid = document.querySelector('#food-selection .selection-menu-grid')
+  const bevGrid = document.querySelector('#bev-selection .selection-menu-grid')
+  
+  const createCard = (name, type) => {
+    const isSelected = type === 'food' ? selectedFood.has(name) : selectedBev.has(name)
+    return `
+      <div class="modern-menu-card selectable ${isSelected ? 'selected' : ''}" data-item="${name}" data-type="${type}">
+        <h4 class="menu-card-title">${name}</h4>
+        <span class="selection-check">${isSelected ? '✓' : ''}</span>
+      </div>
+    `
+  }
+  
+  foodGrid.innerHTML = foodList.map(name => createCard(name, 'food')).join('')
+  bevGrid.innerHTML = bevList.map(name => createCard(name, 'bev')).join('')
+  
+  updateSelectionCounts()
+}
+
+// Update selection counts display
+function updateSelectionCounts() {
+  if (!menuLinkData) return
+  
+  const maxFood = menuLinkData.max_food_items
+  const maxBev = menuLinkData.max_bev_items
+  
+  document.getElementById('selection-limits').textContent = 
+    `Select up to ${maxFood} food items and ${maxBev} beverages`
+  document.getElementById('selected-food-count').textContent = 
+    `Food Items: ${selectedFood.size} / ${maxFood}`
+  document.getElementById('selected-bev-count').textContent = 
+    `Beverages: ${selectedBev.size} / ${maxBev}`
+}
+
+// Handle item selection
+function handleItemSelection(e) {
+  const card = e.target.closest('.modern-menu-card.selectable')
+  if (!card) return
+  
+  const item = card.dataset.item
+  const type = card.dataset.type
+  const maxFood = menuLinkData.max_food_items
+  const maxBev = menuLinkData.max_bev_items
+  
+  if (type === 'food') {
+    if (selectedFood.has(item)) {
+      selectedFood.delete(item)
+    } else if (selectedFood.size < maxFood) {
+      selectedFood.add(item)
+    } else {
+      showToast(`Maximum ${maxFood} food items allowed`, 'error')
+      return
+    }
+  } else {
+    if (selectedBev.has(item)) {
+      selectedBev.delete(item)
+    } else if (selectedBev.size < maxBev) {
+      selectedBev.add(item)
+    } else {
+      showToast(`Maximum ${maxBev} beverages allowed`, 'error')
+      return
+    }
+  }
+  
+  renderSelectableMenuItems()
+}
+
+// Handle selection tabs
+function handleSelectionTabs() {
+  document.querySelectorAll('.selection-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.tab
+      document.querySelectorAll('.selection-tab-btn').forEach(b => b.classList.remove('active'))
+      btn.classList.add('active')
+      document.querySelectorAll('.selection-tab-content').forEach(c => c.style.display = 'none')
+      document.getElementById(tab).style.display = 'block'
+    })
+  })
+}
+
+// Submit selection
+async function handleSubmitSelection() {
+  if (selectedFood.size === 0 && selectedBev.size === 0) {
+    showToast('Please select at least one item', 'error')
+    return
+  }
+  
+  // For now, just show success (you can save to DB later)
+  showToast('Selection submitted successfully!', 'success')
+  showPage('selection-success-page')
+  
+  // Hide navbar for cleaner success page
+  document.querySelector('.navbar').style.display = 'none'
+}
+
 // Init
-window.addEventListener('DOMContentLoaded', ()=>{
-  // Navigation
+window.addEventListener('DOMContentLoaded', async ()=>{
+  // Check if this is a menu selection link
+  const isMenuLink = await checkMenuLink()
+  
+  if (isMenuLink) {
+    // Hide navbar for customer menu selection
+    document.querySelector('.navbar').style.display = 'none'
+    showPage('menu-selection-page')
+    renderSelectableMenuItems()
+    handleSelectionTabs()
+    
+    // Add click handlers for selection
+    document.querySelector('#food-selection')?.addEventListener('click', handleItemSelection)
+    document.querySelector('#bev-selection')?.addEventListener('click', handleItemSelection)
+    document.getElementById('submit-selection')?.addEventListener('click', handleSubmitSelection)
+    return
+  }
+  
+  // Normal site navigation
   document.querySelectorAll('.nav-link').forEach(link=>{
     link.addEventListener('click', ev=>{
       ev.preventDefault()
