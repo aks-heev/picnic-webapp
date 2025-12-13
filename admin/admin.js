@@ -196,22 +196,15 @@ async function handleMenuLinkGeneration(event) {
   const bookingCard = form.closest('.booking-card');
   if (!bookingCard) return;
 
-  const bookingId = bookingCard.dataset.bookingId;
   const foodLimit = parseInt(form['food-limit'].value, 10);
   const beverageLimit = parseInt(form['beverage-limit'].value, 10);
-
-  const customerName = bookingCard.querySelector('h4')?.textContent || '';
-  const eventDate = bookingCard.querySelector('p')?.textContent?.replace('Event Date: ', '') || '';
 
   try {
     const { data, error } = await supabase
       .from('menu_links')
       .insert([{
-        customer_name: customerName,
-        event_date: eventDate,
         max_food_items: foodLimit,
-        max_bev_items: beverageLimit,
-        booking_id: bookingId
+        max_bev_items: beverageLimit
       }])
       .select();
 
