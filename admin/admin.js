@@ -186,8 +186,8 @@ function renderBookings(bookings) {
   `).join('');
 }
 
-// Add event listener for menu link generator form submissions (delegated)
-document.getElementById('bookings-container').addEventListener('submit', async function(event) {
+// Handler for menu link generator form submissions (called via event delegation)
+async function handleMenuLinkGeneration(event) {
   if (!event.target.classList.contains('menu-link-generator')) return;
 
   event.preventDefault();
@@ -201,9 +201,7 @@ document.getElementById('bookings-container').addEventListener('submit', async f
   const beverageLimit = parseInt(form['beverage-limit'].value, 10);
 
   const customerName = bookingCard.querySelector('h4')?.textContent || '';
-
-  const eventDateText = bookingCard.querySelector('p')?.textContent || '';
-  const eventDate = bookingCard.querySelector('p') ? bookingCard.querySelector('p').textContent.replace('Event Date: ', '') : '';
+  const eventDate = bookingCard.querySelector('p')?.textContent?.replace('Event Date: ', '') || '';
 
   try {
     const { data, error } = await supabase
@@ -211,23 +209,27 @@ document.getElementById('bookings-container').addEventListener('submit', async f
       .insert([{
         customer_name: customerName,
         event_date: eventDate,
-        food_limit: foodLimit,
-        beverage_limit: beverageLimit,
+        max_food_items: foodLimit,
+        max_bev_items: beverageLimit,
         booking_id: bookingId
-      }]);
+      }])
+      .select();
 
     if (error) throw error;
 
-    const linkId = data[0]?.link_id || 'N/A';
+    const linkId = data?.[0]?.id;
+    if (!linkId) throw new Error('No link ID returned');
+    
     const resultContainer = bookingCard.querySelector('.menu-link-result');
-    const url = `${window.location.origin}/menu/${linkId}`;
+    const url = `${window.location.origin}?menu=${linkId}`;
     resultContainer.innerHTML = `<p>Menu Link Generated: <a href="${url}" target="_blank">${url}</a></p>`;
     showToast('Menu link generated successfully.', 'success');
+    loadMenuLinks();
   } catch (err) {
     console.error(err);
     showToast('Failed to generate menu link.', 'error');
   }
-});
+}
 
 function renderMenuLinks(links) {
   const container = document.getElementById('menu-links-container') || document.getElementById('menu-links-list');
@@ -320,6 +322,9 @@ function copyToClipboard(text) {
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('admin-login-form')?.addEventListener('submit', handleAdminLogin);
   document.getElementById('admin-logout')?.addEventListener('click', handleAdminLogout);
+
+  // Delegated event listener for menu link generation in bookings tab
+  document.getElementById('bookings-container')?.addEventListener('submit', handleMenuLinkGeneration);
 
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
