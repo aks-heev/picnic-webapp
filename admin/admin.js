@@ -127,7 +127,7 @@ function renderQueries(queries) {
   }
   container.innerHTML = queries.map(q => `
     <div class="leads-table">
-      <div class="lead-item">
+      <div class="lead-item" data-query-id="${q.id}">
         <div class="lead-header">
           <div class="lead-name">${q.full_name}</div>
           <div class="lead-date">${new Date(q.created_at).toLocaleDateString()}</div>
@@ -137,7 +137,7 @@ function renderQueries(queries) {
           <div class="lead-detail"><strong>Email:</strong><span>${q.email_address}</span></div>
           <div class="lead-detail"><strong>Location:</strong><span>${q.location}</span></div>
           <div class="lead-detail"><strong>Guests:</strong><span>${q.guest_count}</span></div>
-          <div class="lead-detail"><strong>Date:</strong><span>${q.preferred_date}</span></div>
+          <div class="lead-detail"><strong>Preferred Date:</strong><span>${q.preferred_date}</span></div>
         </div>
         ${q.special_requirements ? `
           <div style="margin-top:12px;">
@@ -145,17 +145,34 @@ function renderQueries(queries) {
             <p>${q.special_requirements}</p>
           </div>
         ` : ''}
-        <div style="margin-top:16px;">
-          <div class="form-group">
-            <label class="form-label" for="booking-${q.id}">Total Booking Amount (₹)</label>
-            <input id="booking-${q.id}" type="number" class="form-control" placeholder="Total amount" min="0" step="50" required>
+        <div class="confirm-booking-form" style="margin-top:16px;">
+          <h5 style="margin-bottom:12px; color:var(--color-primary);">Confirm Booking Details</h5>
+          <div class="form-row-grid">
+            <div class="form-group">
+              <label class="form-label" for="time-${q.id}">Event Time</label>
+              <input id="time-${q.id}" type="time" class="form-control" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="booking-${q.id}">Total Amount (₹)</label>
+              <input id="booking-${q.id}" type="number" class="form-control" placeholder="Total amount" min="0" step="50" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="advance-${q.id}">Advance Amount (₹)</label>
+              <input id="advance-${q.id}" type="number" class="form-control" placeholder="Advance" min="0" step="50">
+            </div>
           </div>
-          <div class="form-group">
-            <label class="form-label" for="advance-${q.id}">Advance Amount (₹)</label>
-            <input id="advance-${q.id}" type="number" class="form-control" placeholder="Advance amount" min="0" step="50">
+          <div class="form-row-grid">
+            <div class="form-group">
+              <label class="form-label" for="food-limit-${q.id}">Food Items Limit</label>
+              <input id="food-limit-${q.id}" type="number" class="form-control" placeholder="e.g. 5" min="1" max="74" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="bev-limit-${q.id}">Beverages Limit</label>
+              <input id="bev-limit-${q.id}" type="number" class="form-control" placeholder="e.g. 3" min="1" max="24" required>
+            </div>
           </div>
           <button class="btn btn--primary" onclick="confirmBooking(${q.id})">
-            Confirm Booking
+            Confirm Booking & Generate Menu Link
           </button>
         </div>
       </div>
@@ -163,7 +180,7 @@ function renderQueries(queries) {
   `).join('');
 }
 
-// Modified renderBookings to include menu link generator per booking
+// Modified renderBookings to include editable fields and menu selections
 function renderBookings(bookings, menuLinksByBooking = {}) {
   const container = document.getElementById('bookings-container');
   if (!container) return;
@@ -186,16 +203,84 @@ function renderBookings(bookings, menuLinksByBooking = {}) {
     return `
     <div class="booking-card" data-booking-id="${booking.id}">
       <div class="booking-header">
-        <h4>${booking.full_name}</h4>
-        <span class="booking-status ${hasSelections ? 'status-complete' : hasMenuLink ? 'status-pending' : 'status-new'}">
-          ${hasSelections ? '✓ Menu Selected' : hasMenuLink ? '⏳ Awaiting Selection' : 'New'}
-        </span>
+        <h4 class="editable-name" contenteditable="false">${booking.full_name}</h4>
+        <div class="booking-header-actions">
+          <span class="booking-status ${hasSelections ? 'status-complete' : hasMenuLink ? 'status-pending' : 'status-new'}">
+            ${hasSelections ? '✓ Menu Selected' : hasMenuLink ? '⏳ Awaiting Selection' : 'New'}
+          </span>
+          <button class="btn btn--sm btn--outline edit-booking-btn" onclick="toggleEditBooking(${booking.id})">✏️ Edit</button>
+        </div>
       </div>
-      <div class="booking-details">
-        <p><strong>Event Date:</strong> ${booking.preferred_date}</p>
-        <p><strong>Guest Count:</strong> ${booking.guest_count}</p>
-        <p><strong>Mobile:</strong> ${booking.mobile_number || 'N/A'}</p>
-        <p><strong>Location:</strong> ${booking.location || 'N/A'}</p>
+      
+      <div class="booking-details-view" id="booking-view-${booking.id}">
+        <div class="booking-details-grid">
+          <p><strong>📅 Date:</strong> ${booking.preferred_date || 'N/A'}</p>
+          <p><strong>🕐 Time:</strong> ${booking.event_time || 'N/A'}</p>
+          <p><strong>👥 Guests:</strong> ${booking.guest_count || 'N/A'}</p>
+          <p><strong>📍 Location:</strong> ${booking.location || 'N/A'}</p>
+          <p><strong>📱 Mobile:</strong> ${booking.mobile_number || 'N/A'}</p>
+          <p><strong>📧 Email:</strong> ${booking.email_address || 'N/A'}</p>
+          <p><strong>💰 Total:</strong> ₹${booking.booking_amount || 0}</p>
+          <p><strong>💵 Advance:</strong> ₹${booking.advance_amount || 0}</p>
+        </div>
+        ${booking.special_requirements ? `<p style="margin-top:8px;"><strong>📝 Special:</strong> ${booking.special_requirements}</p>` : ''}
+      </div>
+
+      <div class="booking-details-edit hidden" id="booking-edit-${booking.id}">
+        <div class="form-row-grid">
+          <div class="form-group">
+            <label class="form-label">Full Name</label>
+            <input type="text" class="form-control" id="edit-name-${booking.id}" value="${booking.full_name || ''}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Mobile</label>
+            <input type="tel" class="form-control" id="edit-mobile-${booking.id}" value="${booking.mobile_number || ''}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="email" class="form-control" id="edit-email-${booking.id}" value="${booking.email_address || ''}">
+          </div>
+        </div>
+        <div class="form-row-grid">
+          <div class="form-group">
+            <label class="form-label">Event Date</label>
+            <input type="date" class="form-control" id="edit-date-${booking.id}" value="${booking.preferred_date || ''}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Event Time</label>
+            <input type="time" class="form-control" id="edit-time-${booking.id}" value="${booking.event_time || ''}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Guest Count</label>
+            <input type="number" class="form-control" id="edit-guests-${booking.id}" value="${booking.guest_count || ''}" min="1">
+          </div>
+        </div>
+        <div class="form-row-grid">
+          <div class="form-group">
+            <label class="form-label">Location</label>
+            <select class="form-control" id="edit-location-${booking.id}">
+              <option value="jaipur" ${booking.location === 'jaipur' ? 'selected' : ''}>Jaipur</option>
+              <option value="gurugram" ${booking.location === 'gurugram' ? 'selected' : ''}>Gurugram</option>
+              <option value="custom" ${booking.location === 'custom' ? 'selected' : ''}>Custom Location</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Total Amount (₹)</label>
+            <input type="number" class="form-control" id="edit-total-${booking.id}" value="${booking.booking_amount || ''}" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Advance Amount (₹)</label>
+            <input type="number" class="form-control" id="edit-advance-${booking.id}" value="${booking.advance_amount || ''}" min="0">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Special Requirements</label>
+          <textarea class="form-control" id="edit-special-${booking.id}" rows="2">${booking.special_requirements || ''}</textarea>
+        </div>
+        <div class="edit-actions">
+          <button class="btn btn--primary btn--sm" onclick="saveBookingEdit(${booking.id})">💾 Save Changes</button>
+          <button class="btn btn--outline btn--sm" onclick="toggleEditBooking(${booking.id})">Cancel</button>
+        </div>
       </div>
 
       ${hasSelections ? `
@@ -211,26 +296,19 @@ function renderBookings(bookings, menuLinksByBooking = {}) {
           </div>
         </div>
       ` : `
-        <!-- Menu Link Generator Form for this booking -->
-        ${hasMenuLink ? `
-          <div class="menu-link-result">
-            <p>Menu Link: <a href="${window.location.origin}?menu=${menuLink.id}" target="_blank">${window.location.origin}?menu=${menuLink.id}</a></p>
-            <button class="btn btn--sm btn--outline" onclick="copyToClipboard('${window.location.origin}?menu=${menuLink.id}')">Copy Link</button>
-          </div>
-        ` : `
-          <form class="menu-link-generator">
-            <label>
-              Food Items Limit:
-              <input type="number" name="food-limit" min="1" max="74" required />
-            </label>
-            <label>
-              Beverage Items Limit:
-              <input type="number" name="beverage-limit" min="1" max="24" required />
-            </label>
-            <button type="submit">Generate Menu Link</button>
-          </form>
-          <div class="menu-link-result" id="menu-link-result-${booking.id}"></div>
-        `}
+        <div class="menu-link-section">
+          ${hasMenuLink ? `
+            <div class="menu-link-result">
+              <p><strong>🔗 Menu Link:</strong></p>
+              <div class="link-copy-row">
+                <input type="text" class="form-control" value="${window.location.origin}?menu=${menuLink.id}" readonly>
+                <button class="btn btn--sm btn--primary" onclick="copyToClipboard('${window.location.origin}?menu=${menuLink.id}')">Copy</button>
+              </div>
+            </div>
+          ` : `
+            <p class="menu-link-note">⚠️ No menu link generated. Menu link was created during booking confirmation.</p>
+          `}
+        </div>
       `}
     </div>
   `}).join('');
@@ -301,11 +379,22 @@ function renderMenuLinks(links) {
 
 // ===== Actions =====
 async function confirmBooking(queryId) {
+  const timeInput = document.getElementById(`time-${queryId}`);
   const bookingInput = document.getElementById(`booking-${queryId}`);
   const advanceInput = document.getElementById(`advance-${queryId}`);
-  const bookingAmount = parseFloat(bookingInput.value);
-  const advanceAmount = parseFloat(advanceInput.value) || 0;
+  const foodLimitInput = document.getElementById(`food-limit-${queryId}`);
+  const bevLimitInput = document.getElementById(`bev-limit-${queryId}`);
 
+  const eventTime = timeInput?.value;
+  const bookingAmount = parseFloat(bookingInput?.value);
+  const advanceAmount = parseFloat(advanceInput?.value) || 0;
+  const foodLimit = parseInt(foodLimitInput?.value, 10);
+  const bevLimit = parseInt(bevLimitInput?.value, 10);
+
+  if (!eventTime) {
+    showToast('Please enter event time', 'error');
+    return;
+  }
   if (!bookingAmount || bookingAmount <= 0) {
     showToast('Please enter a valid total booking amount', 'error');
     return;
@@ -314,23 +403,98 @@ async function confirmBooking(queryId) {
     showToast('Please enter a valid advance amount (0 to total)', 'error');
     return;
   }
+  if (!foodLimit || foodLimit < 1) {
+    showToast('Please enter food items limit', 'error');
+    return;
+  }
+  if (!bevLimit || bevLimit < 1) {
+    showToast('Please enter beverages limit', 'error');
+    return;
+  }
 
   try {
-    const { error } = await supabase
+    // Update booking
+    const { error: bookingError } = await supabase
       .from('bookings')
       .update({
         confirmed: true,
+        event_time: eventTime,
         booking_amount: bookingAmount,
         advance_amount: advanceAmount
       })
       .eq('id', queryId);
-    if (error) throw error;
-    showToast('Booking confirmed', 'success');
+    if (bookingError) throw bookingError;
+
+    // Create menu link for this booking
+    const { data: linkData, error: linkError } = await supabase
+      .from('menu_links')
+      .insert([{
+        max_food_items: foodLimit,
+        max_bev_items: bevLimit,
+        booking_id: queryId
+      }])
+      .select();
+    if (linkError) throw linkError;
+
+    const menuLinkUrl = `${window.location.origin}?menu=${linkData[0].id}`;
+    showToast('Booking confirmed & menu link generated!', 'success');
+    
+    // Copy link to clipboard
+    try {
+      await navigator.clipboard.writeText(menuLinkUrl);
+      showToast('Menu link copied to clipboard!', 'success');
+    } catch (e) {
+      console.log('Could not copy to clipboard');
+    }
+
     loadQueries();
     loadBookings();
+    loadMenuLinks();
   } catch (err) {
     console.error(err);
     showToast('Failed to confirm booking', 'error');
+  }
+}
+
+// Toggle edit mode for booking
+function toggleEditBooking(bookingId) {
+  const viewSection = document.getElementById(`booking-view-${bookingId}`);
+  const editSection = document.getElementById(`booking-edit-${bookingId}`);
+  
+  if (viewSection && editSection) {
+    viewSection.classList.toggle('hidden');
+    editSection.classList.toggle('hidden');
+  }
+}
+
+// Save booking edits
+async function saveBookingEdit(bookingId) {
+  const updates = {
+    full_name: document.getElementById(`edit-name-${bookingId}`)?.value,
+    mobile_number: document.getElementById(`edit-mobile-${bookingId}`)?.value,
+    email_address: document.getElementById(`edit-email-${bookingId}`)?.value,
+    preferred_date: document.getElementById(`edit-date-${bookingId}`)?.value,
+    event_time: document.getElementById(`edit-time-${bookingId}`)?.value,
+    guest_count: parseInt(document.getElementById(`edit-guests-${bookingId}`)?.value, 10) || null,
+    location: document.getElementById(`edit-location-${bookingId}`)?.value,
+    booking_amount: parseFloat(document.getElementById(`edit-total-${bookingId}`)?.value) || 0,
+    advance_amount: parseFloat(document.getElementById(`edit-advance-${bookingId}`)?.value) || 0,
+    special_requirements: document.getElementById(`edit-special-${bookingId}`)?.value
+  };
+
+  try {
+    const { error } = await supabase
+      .from('bookings')
+      .update(updates)
+      .eq('id', bookingId);
+    
+    if (error) throw error;
+    
+    showToast('Booking updated successfully', 'success');
+    loadBookings();
+  } catch (err) {
+    console.error(err);
+    showToast('Failed to update booking', 'error');
   }
 }
 
@@ -395,3 +559,5 @@ window.addEventListener('DOMContentLoaded', () => {
 // Expose functions globally
 window.confirmBooking = confirmBooking;
 window.copyToClipboard = copyToClipboard;
+window.toggleEditBooking = toggleEditBooking;
+window.saveBookingEdit = saveBookingEdit;

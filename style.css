@@ -2474,6 +2474,17 @@ body {
   gap: 0.5rem;
 }
 
+.booking-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.edit-booking-btn {
+  padding: 4px 10px !important;
+  font-size: 0.8rem !important;
+}
+
 /* Booking header */
 .booking-card h4 {
   margin: 0;
@@ -2505,6 +2516,79 @@ body {
 .booking-status.status-complete {
   background: rgba(16, 185, 129, 0.15);
   color: #059669;
+}
+
+.booking-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.5rem;
+}
+
+.booking-details-grid p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+.booking-details-grid strong {
+  color: var(--color-text);
+}
+
+.booking-details-view,
+.booking-details-edit {
+  margin-top: 1rem;
+}
+
+.booking-details-edit.hidden,
+.booking-details-view.hidden {
+  display: none;
+}
+
+.form-row-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.link-copy-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.link-copy-row input {
+  flex: 1;
+}
+
+.menu-link-section {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(236, 72, 153, 0.1);
+}
+
+.menu-link-note {
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.confirm-booking-form {
+  background: rgba(236, 72, 153, 0.03);
+  border: 1px solid rgba(236, 72, 153, 0.1);
+  border-radius: var(--radius-base);
+  padding: 1rem;
+}
+
+.confirm-booking-form h5 {
+  margin: 0;
+  font-size: 0.95rem;
 }
 
 .booking-details {
