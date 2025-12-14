@@ -8,8 +8,8 @@ const supabase = createClient(
 
 // Menu link state
 let menuLinkData = null
-let selectedFood = new Set()
-let selectedBev = new Set()
+let selectedFood = new Map()  // Map of item -> quantity
+let selectedBev = new Map()   // Map of item -> quantity
 
 // Menu data
 const foodList = [
@@ -157,11 +157,16 @@ function renderSelectableMenuItems() {
   const bevGrid = document.querySelector('#bev-selection .selection-menu-grid')
   
   const createCard = (name, type) => {
-    const isSelected = type === 'food' ? selectedFood.has(name) : selectedBev.has(name)
+    const quantity = type === 'food' ? (selectedFood.get(name) || 0) : (selectedBev.get(name) || 0)
+    const hasQuantity = quantity > 0
     return `
-      <div class="modern-menu-card selectable ${isSelected ? 'selected' : ''}" data-item="${name}" data-type="${type}">
+      <div class="modern-menu-card selectable ${hasQuantity ? 'selected' : ''}" data-item="${name}" data-type="${type}">
         <h4 class="menu-card-title">${name}</h4>
-        <span class="selection-check">${isSelected ? '✓' : ''}</span>
+        <div class="quantity-controls">
+          <button class="qty-btn minus" data-action="decrease" ${!hasQuantity ? 'disabled' : ''}>−</button>
+          <span class="qty-value">${quantity}</span>
+          <button class="qty-btn plus" data-action="increase">+</button>
+        </div>
       </div>
     `
   }
@@ -172,48 +177,62 @@ function renderSelectableMenuItems() {
   updateSelectionCounts()
 }
 
+// Get total quantity from a Map
+function getTotalQuantity(map) {
+  let total = 0
+  for (const qty of map.values()) {
+    total += qty
+  }
+  return total
+}
+
 // Update selection counts display
 function updateSelectionCounts() {
   if (!menuLinkData) return
   
   const maxFood = menuLinkData.max_food_items
   const maxBev = menuLinkData.max_bev_items
+  const totalFood = getTotalQuantity(selectedFood)
+  const totalBev = getTotalQuantity(selectedBev)
   
   document.getElementById('selection-limits').textContent = 
     `Select up to ${maxFood} food items and ${maxBev} beverages`
   document.getElementById('selected-food-count').textContent = 
-    `Food Items: ${selectedFood.size} / ${maxFood}`
+    `Food Items: ${totalFood} / ${maxFood}`
   document.getElementById('selected-bev-count').textContent = 
-    `Beverages: ${selectedBev.size} / ${maxBev}`
+    `Beverages: ${totalBev} / ${maxBev}`
 }
 
 // Handle item selection
 function handleItemSelection(e) {
-  const card = e.target.closest('.modern-menu-card.selectable')
+  const btn = e.target.closest('.qty-btn')
+  if (!btn) return
+  
+  const card = btn.closest('.modern-menu-card.selectable')
   if (!card) return
   
   const item = card.dataset.item
   const type = card.dataset.type
+  const action = btn.dataset.action
   const maxFood = menuLinkData.max_food_items
   const maxBev = menuLinkData.max_bev_items
   
-  if (type === 'food') {
-    if (selectedFood.has(item)) {
-      selectedFood.delete(item)
-    } else if (selectedFood.size < maxFood) {
-      selectedFood.add(item)
-    } else {
-      showToast(`Maximum ${maxFood} food items allowed`, 'error')
+  const map = type === 'food' ? selectedFood : selectedBev
+  const max = type === 'food' ? maxFood : maxBev
+  const currentQty = map.get(item) || 0
+  const totalQty = getTotalQuantity(map)
+  
+  if (action === 'increase') {
+    if (totalQty >= max) {
+      showToast(`Maximum ${max} ${type === 'food' ? 'food items' : 'beverages'} allowed`, 'error')
       return
     }
-  } else {
-    if (selectedBev.has(item)) {
-      selectedBev.delete(item)
-    } else if (selectedBev.size < maxBev) {
-      selectedBev.add(item)
+    map.set(item, currentQty + 1)
+  } else if (action === 'decrease') {
+    if (currentQty <= 1) {
+      map.delete(item)
     } else {
-      showToast(`Maximum ${maxBev} beverages allowed`, 'error')
-      return
+      map.set(item, currentQty - 1)
     }
   }
   
@@ -233,19 +252,42 @@ function handleSelectionTabs() {
   })
 }
 
+// Convert Map to array of "item x quantity" strings
+function mapToArray(map) {
+  const result = []
+  for (const [item, qty] of map.entries()) {
+    result.push(`${item} x${qty}`)
+  }
+  return result
+}
+
 // Submit selection
 async function handleSubmitSelection() {
-  if (selectedFood.size === 0 && selectedBev.size === 0) {
+  if (getTotalQuantity(selectedFood) === 0 && getTotalQuantity(selectedBev) === 0) {
     showToast('Please select at least one item', 'error')
     return
   }
   
-  // For now, just show success (you can save to DB later)
-  showToast('Selection submitted successfully!', 'success')
-  showPage('selection-success-page')
-  
-  // Hide navbar for cleaner success page
-  document.querySelector('.navbar').style.display = 'none'
+  try {
+    const { error } = await supabase
+      .from('menu_links')
+      .update({
+        selected_food: mapToArray(selectedFood),
+        selected_beverages: mapToArray(selectedBev)
+      })
+      .eq('id', menuLinkData.id)
+    
+    if (error) throw error
+    
+    showToast('Selection submitted successfully!', 'success')
+    showPage('selection-success-page')
+    
+    // Hide navbar for cleaner success page
+    document.querySelector('.navbar').style.display = 'none'
+  } catch (err) {
+    console.error(err)
+    showToast('Error saving selection. Please try again.', 'error')
+  }
 }
 
 // Init
