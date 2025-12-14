@@ -73,13 +73,29 @@ async function loadQueries() {
 async function loadBookings() {
   if (!isAdminLoggedIn) return;
   try {
-    const { data: bookings, error } = await supabase
+    // Fetch bookings
+    const { data: bookings, error: bookingsError } = await supabase
       .from('bookings')
       .select()
       .eq('confirmed', true)
       .order('created_at', { ascending: false });
-    if (error) throw error;
-    renderBookings(bookings);
+    if (bookingsError) throw bookingsError;
+
+    // Fetch menu links to get selections
+    const { data: menuLinks, error: linksError } = await supabase
+      .from('menu_links')
+      .select();
+    if (linksError) throw linksError;
+
+    // Create a map of booking_id -> menu_link
+    const menuLinksByBooking = {};
+    menuLinks?.forEach(link => {
+      if (link.booking_id) {
+        menuLinksByBooking[link.booking_id] = link;
+      }
+    });
+
+    renderBookings(bookings, menuLinksByBooking);
   } catch (err) {
     console.error(err);
     showToast('Failed to load bookings', 'error');
@@ -148,7 +164,7 @@ function renderQueries(queries) {
 }
 
 // Modified renderBookings to include menu link generator per booking
-function renderBookings(bookings) {
+function renderBookings(bookings, menuLinksByBooking = {}) {
   const container = document.getElementById('bookings-container');
   if (!container) return;
 
@@ -162,28 +178,62 @@ function renderBookings(bookings) {
     return;
   }
 
-  container.innerHTML = bookings.map(booking => `
+  container.innerHTML = bookings.map(booking => {
+    const menuLink = menuLinksByBooking[booking.id];
+    const hasSelections = menuLink && (menuLink.selected_food?.length > 0 || menuLink.selected_beverages?.length > 0);
+    const hasMenuLink = !!menuLink;
+
+    return `
     <div class="booking-card" data-booking-id="${booking.id}">
-      <h4>${booking.full_name}</h4>
-      <p>Event Date: ${booking.preferred_date}</p>
-      <p>Guest Count: ${booking.guest_count}</p>
+      <div class="booking-header">
+        <h4>${booking.full_name}</h4>
+        <span class="booking-status ${hasSelections ? 'status-complete' : hasMenuLink ? 'status-pending' : 'status-new'}">
+          ${hasSelections ? '✓ Menu Selected' : hasMenuLink ? '⏳ Awaiting Selection' : 'New'}
+        </span>
+      </div>
+      <div class="booking-details">
+        <p><strong>Event Date:</strong> ${booking.preferred_date}</p>
+        <p><strong>Guest Count:</strong> ${booking.guest_count}</p>
+        <p><strong>Mobile:</strong> ${booking.mobile_number || 'N/A'}</p>
+        <p><strong>Location:</strong> ${booking.location || 'N/A'}</p>
+      </div>
 
-      <!-- Menu Link Generator Form for this booking -->
-      <form class="menu-link-generator">
-        <label>
-          Food Items Limit:
-          <input type="number" name="food-limit" min="1" max="74" required />
-        </label>
-        <label>
-          Beverage Items Limit:
-          <input type="number" name="beverage-limit" min="1" max="24" required />
-        </label>
-        <button type="submit">Generate Menu Link</button>
-      </form>
-
-      <div class="menu-link-result" id="menu-link-result-${booking.id}"></div>
+      ${hasSelections ? `
+        <div class="selected-items-section">
+          <h5>🍽️ Selected Food Items (${menuLink.selected_food?.length || 0})</h5>
+          <div class="selected-items-list">
+            ${menuLink.selected_food?.map(item => `<span class="selected-item-tag">${item}</span>`).join('') || '<em>None selected</em>'}
+          </div>
+          
+          <h5>🥤 Selected Beverages (${menuLink.selected_beverages?.length || 0})</h5>
+          <div class="selected-items-list">
+            ${menuLink.selected_beverages?.map(item => `<span class="selected-item-tag bev">${item}</span>`).join('') || '<em>None selected</em>'}
+          </div>
+        </div>
+      ` : `
+        <!-- Menu Link Generator Form for this booking -->
+        ${hasMenuLink ? `
+          <div class="menu-link-result">
+            <p>Menu Link: <a href="${window.location.origin}?menu=${menuLink.id}" target="_blank">${window.location.origin}?menu=${menuLink.id}</a></p>
+            <button class="btn btn--sm btn--outline" onclick="copyToClipboard('${window.location.origin}?menu=${menuLink.id}')">Copy Link</button>
+          </div>
+        ` : `
+          <form class="menu-link-generator">
+            <label>
+              Food Items Limit:
+              <input type="number" name="food-limit" min="1" max="74" required />
+            </label>
+            <label>
+              Beverage Items Limit:
+              <input type="number" name="beverage-limit" min="1" max="24" required />
+            </label>
+            <button type="submit">Generate Menu Link</button>
+          </form>
+          <div class="menu-link-result" id="menu-link-result-${booking.id}"></div>
+        `}
+      `}
     </div>
-  `).join('');
+  `}).join('');
 }
 
 // Handler for menu link generator form submissions (called via event delegation)
@@ -196,6 +246,7 @@ async function handleMenuLinkGeneration(event) {
   const bookingCard = form.closest('.booking-card');
   if (!bookingCard) return;
 
+  const bookingId = parseInt(bookingCard.dataset.bookingId, 10);
   const foodLimit = parseInt(form['food-limit'].value, 10);
   const beverageLimit = parseInt(form['beverage-limit'].value, 10);
 
@@ -204,7 +255,8 @@ async function handleMenuLinkGeneration(event) {
       .from('menu_links')
       .insert([{
         max_food_items: foodLimit,
-        max_bev_items: beverageLimit
+        max_bev_items: beverageLimit,
+        booking_id: bookingId
       }])
       .select();
 
@@ -213,10 +265,11 @@ async function handleMenuLinkGeneration(event) {
     const linkId = data?.[0]?.id;
     if (!linkId) throw new Error('No link ID returned');
     
-    const resultContainer = bookingCard.querySelector('.menu-link-result');
     const url = `${window.location.origin}?menu=${linkId}`;
-    resultContainer.innerHTML = `<p>Menu Link Generated: <a href="${url}" target="_blank">${url}</a></p>`;
     showToast('Menu link generated successfully.', 'success');
+    
+    // Reload bookings to show updated state
+    loadBookings();
     loadMenuLinks();
   } catch (err) {
     console.error(err);

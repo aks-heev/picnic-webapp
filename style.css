@@ -2466,6 +2466,14 @@ body {
   gap: 1rem;
 }
 
+.booking-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 /* Booking header */
 .booking-card h4 {
   margin: 0;
@@ -2475,8 +2483,90 @@ body {
   letter-spacing: -0.02em;
 }
 
+.booking-status {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.booking-status.status-new {
+  background: rgba(107, 114, 128, 0.15);
+  color: #6b7280;
+}
+
+.booking-status.status-pending {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+}
+
+.booking-status.status-complete {
+  background: rgba(16, 185, 129, 0.15);
+  color: #059669;
+}
+
+.booking-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.5rem;
+}
+
+.booking-details p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+.booking-details strong {
+  color: var(--color-text);
+}
+
+/* Selected items section */
+.selected-items-section {
+  background: rgba(16, 185, 129, 0.05);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: var(--radius-base);
+  padding: 1rem 1.25rem;
+  margin-top: 0.5rem;
+}
+
+.selected-items-section h5 {
+  margin: 0 0 0.75rem 0;
+  color: var(--color-text);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.selected-items-section h5:not(:first-child) {
+  margin-top: 1rem;
+}
+
+.selected-items-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.selected-item-tag {
+  background: rgba(236, 72, 153, 0.1);
+  color: var(--color-primary);
+  padding: 4px 10px;
+  border-radius: 15px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border: 1px solid rgba(236, 72, 153, 0.2);
+}
+
+.selected-item-tag.bev {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
 /* Booking details paragraph */
-.booking-card p {
+.booking-card > p {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: 0.9rem;
