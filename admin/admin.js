@@ -26,6 +26,79 @@ function showToast(message, type = 'success') {
 // ===== State =====
 let isAdminLoggedIn = false;
 
+// Helper function to build complete booking JSON
+function buildBookingJSON(booking, menuLink = null) {
+  return {
+    booking_id: booking.id,
+    customer: {
+      full_name: booking.full_name,
+      mobile_number: booking.mobile_number,
+      email_address: booking.email_address
+    },
+    event: {
+      date: booking.preferred_date,
+      time: booking.event_time,
+      location: booking.location,
+      guest_count: booking.guest_count,
+      special_requirements: booking.special_requirements
+    },
+    financials: {
+      total_amount: booking.booking_amount,
+      advance_amount: booking.advance_amount,
+      balance_amount: (booking.booking_amount || 0) - (booking.advance_amount || 0)
+    },
+    menu_selection: menuLink ? {
+      link_id: menuLink.id,
+      max_food_items: menuLink.max_food_items,
+      max_bev_items: menuLink.max_bev_items,
+      selected_food: menuLink.selected_food || [],
+      selected_beverages: menuLink.selected_beverages || [],
+      selection_complete: (menuLink.selected_food?.length > 0 || menuLink.selected_beverages?.length > 0)
+    } : null,
+    metadata: {
+      confirmed: booking.confirmed,
+      created_at: booking.created_at,
+      last_updated: new Date().toISOString()
+    }
+  };
+}
+
+// Update booking_json in Supabase
+async function updateBookingJSON(bookingId) {
+  try {
+    // Fetch latest booking data
+    const { data: booking, error: bookingError } = await supabase
+      .from('bookings')
+      .select()
+      .eq('id', bookingId)
+      .single();
+    if (bookingError) throw bookingError;
+
+    // Fetch associated menu link
+    const { data: menuLinks, error: linkError } = await supabase
+      .from('menu_links')
+      .select()
+      .eq('booking_id', bookingId);
+    if (linkError) throw linkError;
+
+    const menuLink = menuLinks?.[0] || null;
+    const bookingJSON = buildBookingJSON(booking, menuLink);
+
+    // Update the booking_json column
+    const { error: updateError } = await supabase
+      .from('bookings')
+      .update({ booking_json: bookingJSON })
+      .eq('id', bookingId);
+    if (updateError) throw updateError;
+
+    console.log('Booking JSON updated for booking:', bookingId);
+    return bookingJSON;
+  } catch (err) {
+    console.error('Failed to update booking JSON:', err);
+    return null;
+  }
+}
+
 // ===== Login / Logout =====
 async function handleAdminLogin(event) {
   event.preventDefault();
@@ -439,6 +512,9 @@ async function confirmBooking(queryId) {
     const menuLinkUrl = `${window.location.origin}?menu=${linkData[0].id}`;
     showToast('Booking confirmed & menu link generated!', 'success');
     
+    // Update the booking_json column
+    await updateBookingJSON(queryId);
+    
     // Copy link to clipboard
     try {
       await navigator.clipboard.writeText(menuLinkUrl);
@@ -489,6 +565,9 @@ async function saveBookingEdit(bookingId) {
       .eq('id', bookingId);
     
     if (error) throw error;
+    
+    // Update the booking_json column
+    await updateBookingJSON(bookingId);
     
     showToast('Booking updated successfully', 'success');
     loadBookings();

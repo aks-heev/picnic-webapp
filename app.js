@@ -279,6 +279,11 @@ async function handleSubmitSelection() {
     
     if (error) throw error
     
+    // Update booking_json if this menu link has a booking_id
+    if (menuLinkData.booking_id) {
+      await updateBookingJSONForCustomer(menuLinkData.booking_id)
+    }
+    
     showToast('Selection submitted successfully!', 'success')
     showPage('selection-success-page')
     
@@ -287,6 +292,74 @@ async function handleSubmitSelection() {
   } catch (err) {
     console.error(err)
     showToast('Error saving selection. Please try again.', 'error')
+  }
+}
+
+// Update booking_json when customer submits menu selection
+async function updateBookingJSONForCustomer(bookingId) {
+  try {
+    // Fetch booking
+    const { data: booking, error: bookingError } = await supabase
+      .from('bookings')
+      .select()
+      .eq('id', bookingId)
+      .single()
+    if (bookingError) throw bookingError
+
+    // Fetch menu link
+    const { data: menuLinks, error: linkError } = await supabase
+      .from('menu_links')
+      .select()
+      .eq('booking_id', bookingId)
+    if (linkError) throw linkError
+
+    const menuLink = menuLinks?.[0] || null
+    
+    // Build JSON
+    const bookingJSON = {
+      booking_id: booking.id,
+      customer: {
+        full_name: booking.full_name,
+        mobile_number: booking.mobile_number,
+        email_address: booking.email_address
+      },
+      event: {
+        date: booking.preferred_date,
+        time: booking.event_time,
+        location: booking.location,
+        guest_count: booking.guest_count,
+        special_requirements: booking.special_requirements
+      },
+      financials: {
+        total_amount: booking.booking_amount,
+        advance_amount: booking.advance_amount,
+        balance_amount: (booking.booking_amount || 0) - (booking.advance_amount || 0)
+      },
+      menu_selection: menuLink ? {
+        link_id: menuLink.id,
+        max_food_items: menuLink.max_food_items,
+        max_bev_items: menuLink.max_bev_items,
+        selected_food: menuLink.selected_food || [],
+        selected_beverages: menuLink.selected_beverages || [],
+        selection_complete: true
+      } : null,
+      metadata: {
+        confirmed: booking.confirmed,
+        created_at: booking.created_at,
+        last_updated: new Date().toISOString()
+      }
+    }
+
+    // Update booking
+    const { error: updateError } = await supabase
+      .from('bookings')
+      .update({ booking_json: bookingJSON })
+      .eq('id', bookingId)
+    if (updateError) throw updateError
+
+    console.log('Booking JSON updated after menu selection')
+  } catch (err) {
+    console.error('Failed to update booking JSON:', err)
   }
 }
 
