@@ -26,8 +26,33 @@ function showToast(message, type = 'success') {
 // ===== State =====
 let isAdminLoggedIn = false;
 
+// Track selected add-ons per query (key: queryId, value: array of {name, price})
+const selectedAddons = {};
+
+// Available add-ons list (update this with your actual add-ons)
+const addonsList = [
+  "Extra Decor Setup",
+  "Photography (1 hour)",
+  "Photography (2 hours)",
+  "Balloon Decoration",
+  "Flower Arrangement",
+  "Custom Cake",
+  "Live Music",
+  "Extra Seating",
+  "Projector Setup",
+  "Fairy Lights",
+  "Smoke Machine",
+  "Party Props",
+  "Custom Banner",
+  "Extra Food Platter",
+  "Extra Beverage Package"
+];
+
 // Helper function to build complete booking JSON
 function buildBookingJSON(booking, menuLink = null) {
+  const addons = booking.addons || [];
+  const addonsTotal = addons.reduce((sum, a) => sum + (a.price || 0), 0);
+  
   return {
     booking_id: booking.id,
     customer: {
@@ -45,8 +70,10 @@ function buildBookingJSON(booking, menuLink = null) {
     financials: {
       total_amount: booking.booking_amount,
       advance_amount: booking.advance_amount,
-      balance_amount: (booking.booking_amount || 0) - (booking.advance_amount || 0)
+      balance_amount: (booking.booking_amount || 0) - (booking.advance_amount || 0),
+      addons_total: addonsTotal
     },
+    addons: addons,
     menu_selection: menuLink ? {
       link_id: menuLink.id,
       max_food_items: menuLink.max_food_items,
@@ -244,7 +271,36 @@ function renderQueries(queries) {
               <input id="bev-limit-${q.id}" type="number" class="form-control" placeholder="e.g. 3" min="1" max="24" required>
             </div>
           </div>
-          <button class="btn btn--primary" onclick="confirmBooking(${q.id})">
+          
+          <!-- Add-ons Section -->
+          <div class="addons-section" style="margin-top:16px; padding:12px; background:var(--color-surface); border-radius:8px;">
+            <div class="addons-header" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+              <label class="form-label" style="margin:0;">🎁 Add-ons</label>
+              <button type="button" class="btn btn--sm btn--outline" onclick="showAddonSelector(${q.id})" style="padding:4px 12px;">
+                ➕ Add
+              </button>
+            </div>
+            <div id="selected-addons-${q.id}" class="selected-addons-list">
+              <!-- Selected add-ons will appear here -->
+            </div>
+            <div id="addon-selector-${q.id}" class="addon-selector hidden" style="margin-top:12px; padding:12px; background:var(--color-background); border-radius:8px; border:1px solid var(--color-border);">
+              <div class="form-group" style="margin-bottom:8px;">
+                <select id="addon-select-${q.id}" class="form-control">
+                  <option value="">-- Select Add-on --</option>
+                  ${addonsList.map(addon => `<option value="${addon}">${addon}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:8px;">
+                <input type="number" id="addon-price-${q.id}" class="form-control" placeholder="Price (₹)" min="0" step="50">
+              </div>
+              <div style="display:flex; gap:8px;">
+                <button type="button" class="btn btn--sm btn--primary" onclick="addAddon(${q.id})">Add</button>
+                <button type="button" class="btn btn--sm btn--outline" onclick="hideAddonSelector(${q.id})">Cancel</button>
+              </div>
+            </div>
+          </div>
+          
+          <button class="btn btn--primary" onclick="confirmBooking(${q.id})" style="margin-top:16px;">
             Confirm Booking & Generate Menu Link
           </button>
         </div>
@@ -297,6 +353,20 @@ function renderBookings(bookings, menuLinksByBooking = {}) {
           <p><strong>💵 Advance:</strong> ₹${booking.advance_amount || 0}</p>
         </div>
         ${booking.special_requirements ? `<p style="margin-top:8px;"><strong>📝 Special:</strong> ${booking.special_requirements}</p>` : ''}
+        
+        ${booking.addons && booking.addons.length > 0 ? `
+          <div class="booking-addons-display" style="margin-top:12px; padding:12px; background:var(--color-surface); border-radius:8px;">
+            <h5 style="margin-bottom:8px; color:var(--color-primary);">🎁 Add-ons</h5>
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">
+              ${booking.addons.map(addon => `
+                <span style="display:inline-flex; align-items:center; gap:6px; padding:6px 12px; background:var(--color-background); border-radius:20px; font-size:0.875rem; border:1px solid var(--color-border);">
+                  ${addon.name} <strong style="color:var(--color-primary);">₹${addon.price}</strong>
+                </span>
+              `).join('')}
+            </div>
+            <p style="margin-top:8px; text-align:right; font-weight:600;">Add-ons Total: ₹${booking.addons.reduce((sum, a) => sum + (a.price || 0), 0)}</p>
+          </div>
+        ` : ''}
       </div>
 
       <div class="booking-details-edit hidden" id="booking-edit-${booking.id}">
@@ -450,6 +520,91 @@ function renderMenuLinks(links) {
   `).join('');
 }
 
+// ===== Add-ons Functions =====
+function showAddonSelector(queryId) {
+  document.getElementById(`addon-selector-${queryId}`)?.classList.remove('hidden');
+}
+
+function hideAddonSelector(queryId) {
+  document.getElementById(`addon-selector-${queryId}`)?.classList.add('hidden');
+  document.getElementById(`addon-select-${queryId}`).value = '';
+  document.getElementById(`addon-price-${queryId}`).value = '';
+}
+
+function addAddon(queryId) {
+  const selectEl = document.getElementById(`addon-select-${queryId}`);
+  const priceEl = document.getElementById(`addon-price-${queryId}`);
+  
+  const addonName = selectEl?.value;
+  const addonPrice = parseFloat(priceEl?.value) || 0;
+  
+  if (!addonName) {
+    showToast('Please select an add-on', 'error');
+    return;
+  }
+  if (addonPrice <= 0) {
+    showToast('Please enter a valid price', 'error');
+    return;
+  }
+  
+  // Initialize array if needed
+  if (!selectedAddons[queryId]) {
+    selectedAddons[queryId] = [];
+  }
+  
+  // Check if already added
+  if (selectedAddons[queryId].some(a => a.name === addonName)) {
+    showToast('This add-on is already added', 'error');
+    return;
+  }
+  
+  // Add to list
+  selectedAddons[queryId].push({ name: addonName, price: addonPrice });
+  
+  // Render updated list
+  renderSelectedAddons(queryId);
+  
+  // Hide selector and reset
+  hideAddonSelector(queryId);
+  showToast('Add-on added', 'success');
+}
+
+function removeAddon(queryId, addonName) {
+  if (!selectedAddons[queryId]) return;
+  
+  selectedAddons[queryId] = selectedAddons[queryId].filter(a => a.name !== addonName);
+  renderSelectedAddons(queryId);
+}
+
+function renderSelectedAddons(queryId) {
+  const container = document.getElementById(`selected-addons-${queryId}`);
+  if (!container) return;
+  
+  const addons = selectedAddons[queryId] || [];
+  
+  if (addons.length === 0) {
+    container.innerHTML = '<p style="color:var(--color-text-muted); font-size:0.875rem;">No add-ons selected</p>';
+    return;
+  }
+  
+  const total = addons.reduce((sum, a) => sum + a.price, 0);
+  
+  container.innerHTML = `
+    <div class="addons-list" style="display:flex; flex-direction:column; gap:8px;">
+      ${addons.map(addon => `
+        <div class="addon-item" style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:var(--color-background); border-radius:6px; border:1px solid var(--color-border);">
+          <span style="flex:1;">${addon.name}</span>
+          <span style="font-weight:600; color:var(--color-primary); margin-right:12px;">₹${addon.price}</span>
+          <button type="button" onclick="removeAddon(${queryId}, '${addon.name}')" style="background:none; border:none; color:var(--color-error); cursor:pointer; font-size:1.2rem; padding:0 4px;">✕</button>
+        </div>
+      `).join('')}
+      <div style="text-align:right; font-weight:600; padding-top:8px; border-top:1px solid var(--color-border);">
+        Add-ons Total: ₹${total}
+      </div>
+    </div>
+  `;
+}
+
 // ===== Actions =====
 async function confirmBooking(queryId) {
   const timeInput = document.getElementById(`time-${queryId}`);
@@ -486,6 +641,9 @@ async function confirmBooking(queryId) {
   }
 
   try {
+    // Get selected add-ons for this booking
+    const addons = selectedAddons[queryId] || [];
+    
     // Update booking
     const { error: bookingError } = await supabase
       .from('bookings')
@@ -493,10 +651,14 @@ async function confirmBooking(queryId) {
         confirmed: true,
         event_time: eventTime,
         booking_amount: bookingAmount,
-        advance_amount: advanceAmount
+        advance_amount: advanceAmount,
+        addons: addons
       })
       .eq('id', queryId);
     if (bookingError) throw bookingError;
+    
+    // Clear selected addons for this query
+    delete selectedAddons[queryId];
 
     // Create menu link for this booking
     const { data: linkData, error: linkError } = await supabase
@@ -640,3 +802,7 @@ window.confirmBooking = confirmBooking;
 window.copyToClipboard = copyToClipboard;
 window.toggleEditBooking = toggleEditBooking;
 window.saveBookingEdit = saveBookingEdit;
+window.showAddonSelector = showAddonSelector;
+window.hideAddonSelector = hideAddonSelector;
+window.addAddon = addAddon;
+window.removeAddon = removeAddon;
