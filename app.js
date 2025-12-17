@@ -141,6 +141,32 @@ async function checkMenuLink() {
     }
     
     menuLinkData = data
+    
+    // Pre-populate existing selections if any (for editing)
+    if (data.selected_food && data.selected_food.length > 0) {
+      data.selected_food.forEach(item => {
+        // Parse "item x quantity" format
+        const match = item.match(/^(.+)\s+x(\d+)$/)
+        if (match) {
+          selectedFood.set(match[1], parseInt(match[2], 10))
+        } else {
+          selectedFood.set(item, 1)
+        }
+      })
+    }
+    
+    if (data.selected_beverages && data.selected_beverages.length > 0) {
+      data.selected_beverages.forEach(item => {
+        // Parse "item x quantity" format
+        const match = item.match(/^(.+)\s+x(\d+)$/)
+        if (match) {
+          selectedBev.set(match[1], parseInt(match[2], 10))
+        } else {
+          selectedBev.set(item, 1)
+        }
+      })
+    }
+    
     return true
   } catch (err) {
     console.error(err)

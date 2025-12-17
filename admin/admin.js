@@ -467,7 +467,10 @@ function renderBookings(bookings, menuLinksByBooking = {}) {
 
       ${hasSelections ? `
         <div class="selected-items-section">
-          <h5>🍽️ Selected Food Items (${menuLink.selected_food?.length || 0})</h5>
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+            <h5 style="margin:0;">🍽️ Selected Food Items (${menuLink.selected_food?.length || 0})</h5>
+            <button class="btn btn--sm btn--outline" onclick="editMenuSelection('${menuLink.id}')">✏️ Edit Menu</button>
+          </div>
           <div class="selected-items-list">
             ${menuLink.selected_food?.map(item => `<span class="selected-item-tag">${item}</span>`).join('') || '<em>None selected</em>'}
           </div>
@@ -485,6 +488,7 @@ function renderBookings(bookings, menuLinksByBooking = {}) {
               <div class="link-copy-row">
                 <input type="text" class="form-control" value="${window.location.origin}?menu=${menuLink.id}" readonly>
                 <button class="btn btn--sm btn--primary" onclick="copyToClipboard('${window.location.origin}?menu=${menuLink.id}')">Copy</button>
+                <button class="btn btn--sm btn--outline" onclick="editMenuSelection('${menuLink.id}')">Edit</button>
               </div>
             </div>
           ` : `
@@ -898,6 +902,12 @@ async function confirmBooking(queryId) {
   }
 }
 
+// Open menu selection page to edit food/bev selections
+function editMenuSelection(menuLinkId) {
+  const menuUrl = `${window.location.origin}?menu=${menuLinkId}`;
+  window.open(menuUrl, '_blank');
+}
+
 // Toggle edit mode for booking
 async function toggleEditBooking(bookingId) {
   const viewSection = document.getElementById(`booking-view-${bookingId}`);
@@ -1031,6 +1041,7 @@ window.confirmBooking = confirmBooking;
 window.copyToClipboard = copyToClipboard;
 window.toggleEditBooking = toggleEditBooking;
 window.saveBookingEdit = saveBookingEdit;
+window.editMenuSelection = editMenuSelection;
 window.showAddonSelector = showAddonSelector;
 window.hideAddonSelector = hideAddonSelector;
 window.addAddon = addAddon;
