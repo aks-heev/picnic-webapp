@@ -420,7 +420,36 @@ function renderBookings(bookings, menuLinksByBooking = {}) {
           <label class="form-label">Special Requirements</label>
           <textarea class="form-control" id="edit-special-${booking.id}" rows="2">${booking.special_requirements || ''}</textarea>
         </div>
-        <div class="edit-actions">
+        
+        <!-- Add-ons Section for Bookings -->
+        <div class="addons-section" style="margin-top:16px; padding:12px; background:var(--color-surface); border-radius:8px;">
+          <div class="addons-header" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+            <label class="form-label" style="margin:0;">🎁 Add-ons</label>
+            <button type="button" class="btn btn--sm btn--outline" onclick="showBookingAddonSelector(${booking.id})" style="padding:4px 12px;">
+              ➕ Add
+            </button>
+          </div>
+          <div id="booking-addons-${booking.id}" class="selected-addons-list">
+            <!-- Selected add-ons will appear here -->
+          </div>
+          <div id="booking-addon-selector-${booking.id}" class="addon-selector hidden" style="margin-top:12px; padding:12px; background:var(--color-background); border-radius:8px; border:1px solid var(--color-border);">
+            <div class="form-group" style="margin-bottom:8px;">
+              <select id="booking-addon-select-${booking.id}" class="form-control">
+                <option value="">-- Select Add-on --</option>
+                ${addonsList.map(addon => `<option value="${addon}">${addon}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:8px;">
+              <input type="number" id="booking-addon-price-${booking.id}" class="form-control" placeholder="Price (₹)" min="0" step="50">
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button type="button" class="btn btn--sm btn--primary" onclick="addBookingAddon(${booking.id})">Add</button>
+              <button type="button" class="btn btn--sm btn--outline" onclick="hideBookingAddonSelector(${booking.id})">Cancel</button>
+            </div>
+          </div>
+        </div>
+        
+        <div class="edit-actions" style="margin-top:16px;">
           <button class="btn btn--primary btn--sm" onclick="saveBookingEdit(${booking.id})">💾 Save Changes</button>
           <button class="btn btn--outline btn--sm" onclick="toggleEditBooking(${booking.id})">Cancel</button>
         </div>
@@ -605,6 +634,98 @@ function renderSelectedAddons(queryId) {
   `;
 }
 
+// ===== Booking Add-ons Functions (for confirmed bookings) =====
+// Track add-ons for bookings being edited (key: 'b-' + bookingId)
+const bookingAddons = {};
+
+function initBookingAddons(bookingId, existingAddons) {
+  bookingAddons[`b-${bookingId}`] = existingAddons ? [...existingAddons] : [];
+  renderBookingAddons(bookingId);
+}
+
+function showBookingAddonSelector(bookingId) {
+  document.getElementById(`booking-addon-selector-${bookingId}`)?.classList.remove('hidden');
+}
+
+function hideBookingAddonSelector(bookingId) {
+  document.getElementById(`booking-addon-selector-${bookingId}`)?.classList.add('hidden');
+  const selectEl = document.getElementById(`booking-addon-select-${bookingId}`);
+  const priceEl = document.getElementById(`booking-addon-price-${bookingId}`);
+  if (selectEl) selectEl.value = '';
+  if (priceEl) priceEl.value = '';
+}
+
+function addBookingAddon(bookingId) {
+  const selectEl = document.getElementById(`booking-addon-select-${bookingId}`);
+  const priceEl = document.getElementById(`booking-addon-price-${bookingId}`);
+  
+  const addonName = selectEl?.value;
+  const addonPrice = parseFloat(priceEl?.value) || 0;
+  
+  if (!addonName) {
+    showToast('Please select an add-on', 'error');
+    return;
+  }
+  if (addonPrice <= 0) {
+    showToast('Please enter a valid price', 'error');
+    return;
+  }
+  
+  const key = `b-${bookingId}`;
+  if (!bookingAddons[key]) {
+    bookingAddons[key] = [];
+  }
+  
+  // Check if already added
+  if (bookingAddons[key].some(a => a.name === addonName)) {
+    showToast('This add-on is already added', 'error');
+    return;
+  }
+  
+  bookingAddons[key].push({ name: addonName, price: addonPrice });
+  renderBookingAddons(bookingId);
+  hideBookingAddonSelector(bookingId);
+  showToast('Add-on added', 'success');
+}
+
+function removeBookingAddon(bookingId, addonName) {
+  const key = `b-${bookingId}`;
+  if (!bookingAddons[key]) return;
+  
+  bookingAddons[key] = bookingAddons[key].filter(a => a.name !== addonName);
+  renderBookingAddons(bookingId);
+}
+
+function renderBookingAddons(bookingId) {
+  const container = document.getElementById(`booking-addons-${bookingId}`);
+  if (!container) return;
+  
+  const key = `b-${bookingId}`;
+  const addons = bookingAddons[key] || [];
+  
+  if (addons.length === 0) {
+    container.innerHTML = '<p style="color:var(--color-text-muted); font-size:0.875rem;">No add-ons selected</p>';
+    return;
+  }
+  
+  const total = addons.reduce((sum, a) => sum + a.price, 0);
+  
+  container.innerHTML = `
+    <div class="addons-list" style="display:flex; flex-direction:column; gap:8px;">
+      ${addons.map(addon => `
+        <div class="addon-item" style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:var(--color-background); border-radius:6px; border:1px solid var(--color-border);">
+          <span style="flex:1;">${addon.name}</span>
+          <span style="font-weight:600; color:var(--color-primary); margin-right:12px;">₹${addon.price}</span>
+          <button type="button" onclick="removeBookingAddon(${bookingId}, '${addon.name}')" style="background:none; border:none; color:var(--color-error); cursor:pointer; font-size:1.2rem; padding:0 4px;">✕</button>
+        </div>
+      `).join('')}
+      <div style="text-align:right; font-weight:600; padding-top:8px; border-top:1px solid var(--color-border);">
+        Add-ons Total: ₹${total}
+      </div>
+    </div>
+  `;
+}
+
 // ===== Actions =====
 async function confirmBooking(queryId) {
   const timeInput = document.getElementById(`time-${queryId}`);
@@ -695,18 +816,42 @@ async function confirmBooking(queryId) {
 }
 
 // Toggle edit mode for booking
-function toggleEditBooking(bookingId) {
+async function toggleEditBooking(bookingId) {
   const viewSection = document.getElementById(`booking-view-${bookingId}`);
   const editSection = document.getElementById(`booking-edit-${bookingId}`);
   
   if (viewSection && editSection) {
+    const isEnteringEditMode = editSection.classList.contains('hidden');
+    
     viewSection.classList.toggle('hidden');
     editSection.classList.toggle('hidden');
+    
+    // Initialize addons when entering edit mode
+    if (isEnteringEditMode) {
+      // Fetch current booking data to get addons
+      try {
+        const { data: booking, error } = await supabase
+          .from('bookings')
+          .select('addons')
+          .eq('id', bookingId)
+          .single();
+        
+        if (!error && booking) {
+          initBookingAddons(bookingId, booking.addons);
+        }
+      } catch (err) {
+        console.error('Failed to load booking addons:', err);
+        initBookingAddons(bookingId, []);
+      }
+    }
   }
 }
 
 // Save booking edits
 async function saveBookingEdit(bookingId) {
+  // Get addons for this booking
+  const addons = bookingAddons[`b-${bookingId}`] || [];
+  
   const updates = {
     full_name: document.getElementById(`edit-name-${bookingId}`)?.value,
     mobile_number: document.getElementById(`edit-mobile-${bookingId}`)?.value,
@@ -717,7 +862,8 @@ async function saveBookingEdit(bookingId) {
     location: document.getElementById(`edit-location-${bookingId}`)?.value,
     booking_amount: parseFloat(document.getElementById(`edit-total-${bookingId}`)?.value) || 0,
     advance_amount: parseFloat(document.getElementById(`edit-advance-${bookingId}`)?.value) || 0,
-    special_requirements: document.getElementById(`edit-special-${bookingId}`)?.value
+    special_requirements: document.getElementById(`edit-special-${bookingId}`)?.value,
+    addons: addons
   };
 
   try {
@@ -806,3 +952,7 @@ window.showAddonSelector = showAddonSelector;
 window.hideAddonSelector = hideAddonSelector;
 window.addAddon = addAddon;
 window.removeAddon = removeAddon;
+window.showBookingAddonSelector = showBookingAddonSelector;
+window.hideBookingAddonSelector = hideBookingAddonSelector;
+window.addBookingAddon = addBookingAddon;
+window.removeBookingAddon = removeBookingAddon;
