@@ -600,6 +600,13 @@ function addAddon(queryId) {
   // Add to list
   selectedAddons[queryId].push({ name: addonName, price: addonPrice });
   
+  // Update total booking amount
+  const bookingAmountEl = document.getElementById(`booking-${queryId}`);
+  if (bookingAmountEl) {
+    const currentAmount = parseFloat(bookingAmountEl.value) || 0;
+    bookingAmountEl.value = currentAmount + addonPrice;
+  }
+  
   // Render updated list
   renderSelectedAddons(queryId);
   
@@ -611,7 +618,19 @@ function addAddon(queryId) {
 function removeAddon(queryId, addonName) {
   if (!selectedAddons[queryId]) return;
   
+  // Find addon to get its price before removing
+  const addonToRemove = selectedAddons[queryId].find(a => a.name === addonName);
+  const addonPrice = addonToRemove?.price || 0;
+  
   selectedAddons[queryId] = selectedAddons[queryId].filter(a => a.name !== addonName);
+  
+  // Update total booking amount
+  const bookingAmountEl = document.getElementById(`booking-${queryId}`);
+  if (bookingAmountEl && addonPrice > 0) {
+    const currentAmount = parseFloat(bookingAmountEl.value) || 0;
+    bookingAmountEl.value = Math.max(0, currentAmount - addonPrice);
+  }
+  
   renderSelectedAddons(queryId);
 }
 
@@ -727,6 +746,14 @@ function addBookingAddon(bookingId) {
   }
   
   bookingAddons[key].push({ name: addonName, price: addonPrice });
+  
+  // Update total booking amount
+  const totalAmountEl = document.getElementById(`edit-total-${bookingId}`);
+  if (totalAmountEl) {
+    const currentAmount = parseFloat(totalAmountEl.value) || 0;
+    totalAmountEl.value = currentAmount + addonPrice;
+  }
+  
   renderBookingAddons(bookingId);
   hideBookingAddonSelector(bookingId);
   showToast('Add-on added', 'success');
@@ -736,7 +763,19 @@ function removeBookingAddon(bookingId, addonName) {
   const key = `b-${bookingId}`;
   if (!bookingAddons[key]) return;
   
+  // Find addon to get its price before removing
+  const addonToRemove = bookingAddons[key].find(a => a.name === addonName);
+  const addonPrice = addonToRemove?.price || 0;
+  
   bookingAddons[key] = bookingAddons[key].filter(a => a.name !== addonName);
+  
+  // Update total booking amount
+  const totalAmountEl = document.getElementById(`edit-total-${bookingId}`);
+  if (totalAmountEl && addonPrice > 0) {
+    const currentAmount = parseFloat(totalAmountEl.value) || 0;
+    totalAmountEl.value = Math.max(0, currentAmount - addonPrice);
+  }
+  
   renderBookingAddons(bookingId);
 }
 
