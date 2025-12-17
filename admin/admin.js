@@ -29,24 +29,33 @@ let isAdminLoggedIn = false;
 // Track selected add-ons per query (key: queryId, value: array of {name, price})
 const selectedAddons = {};
 
-// Available add-ons list (update this with your actual add-ons)
-const addonsList = [
-  "Extra Decor Setup",
-  "Photography (1 hour)",
-  "Photography (2 hours)",
-  "Balloon Decoration",
-  "Flower Arrangement",
-  "Custom Cake",
-  "Live Music",
-  "Extra Seating",
-  "Projector Setup",
-  "Fairy Lights",
-  "Smoke Machine",
-  "Party Props",
-  "Custom Banner",
-  "Extra Food Platter",
-  "Extra Beverage Package"
-];
+// Add-ons from database (loaded dynamically)
+let addonsMaster = [];
+
+// Load add-ons from addon_master table
+async function loadAddonsMaster() {
+  try {
+    const { data, error } = await supabase
+      .from('addon_master')
+      .select('id, name, price, description')
+      .eq('is_active', true)
+      .order('price', { ascending: true });
+    
+    if (error) throw error;
+    addonsMaster = data || [];
+    console.log('Loaded add-ons:', addonsMaster.length);
+  } catch (err) {
+    console.error('Failed to load add-ons:', err);
+    addonsMaster = [];
+  }
+}
+
+// Generate addon options HTML
+function getAddonOptionsHTML() {
+  return addonsMaster.map(addon => 
+    `<option value="${addon.name}" data-price="${addon.price}">${addon.name} - ₹${addon.price}${addon.description ? ` (${addon.description})` : ''}</option>`
+  ).join('');
+}
 
 // Helper function to build complete booking JSON
 function buildBookingJSON(booking, menuLink = null) {
@@ -137,6 +146,7 @@ async function handleAdminLogin(event) {
     showToast('Admin logged in', 'success');
     document.getElementById('admin-login').classList.add('hidden');
     document.getElementById('admin-dashboard').classList.remove('hidden');
+    await loadAddonsMaster();
     loadQueries();
     loadBookings();
     loadMenuLinks();
@@ -285,9 +295,9 @@ function renderQueries(queries) {
             </div>
             <div id="addon-selector-${q.id}" class="addon-selector hidden" style="margin-top:12px; padding:12px; background:var(--color-background); border-radius:8px; border:1px solid var(--color-border);">
               <div class="form-group" style="margin-bottom:8px;">
-                <select id="addon-select-${q.id}" class="form-control">
+                <select id="addon-select-${q.id}" class="form-control" onchange="autoFillAddonPrice(${q.id})">
                   <option value="">-- Select Add-on --</option>
-                  ${addonsList.map(addon => `<option value="${addon}">${addon}</option>`).join('')}
+                  ${getAddonOptionsHTML()}
                 </select>
               </div>
               <div class="form-group" style="margin-bottom:8px;">
@@ -434,9 +444,9 @@ function renderBookings(bookings, menuLinksByBooking = {}) {
           </div>
           <div id="booking-addon-selector-${booking.id}" class="addon-selector hidden" style="margin-top:12px; padding:12px; background:var(--color-background); border-radius:8px; border:1px solid var(--color-border);">
             <div class="form-group" style="margin-bottom:8px;">
-              <select id="booking-addon-select-${booking.id}" class="form-control">
+              <select id="booking-addon-select-${booking.id}" class="form-control" onchange="autoFillBookingAddonPrice(${booking.id})">
                 <option value="">-- Select Add-on --</option>
-                ${addonsList.map(addon => `<option value="${addon}">${addon}</option>`).join('')}
+                ${getAddonOptionsHTML()}
               </select>
             </div>
             <div class="form-group" style="margin-bottom:8px;">
@@ -603,6 +613,40 @@ function removeAddon(queryId, addonName) {
   
   selectedAddons[queryId] = selectedAddons[queryId].filter(a => a.name !== addonName);
   renderSelectedAddons(queryId);
+}
+
+// Auto-fill price when addon is selected (for queries)
+function autoFillAddonPrice(queryId) {
+  const selectEl = document.getElementById(`addon-select-${queryId}`);
+  const priceEl = document.getElementById(`addon-price-${queryId}`);
+  
+  if (!selectEl || !priceEl) return;
+  
+  const selectedOption = selectEl.options[selectEl.selectedIndex];
+  const price = selectedOption?.dataset?.price;
+  
+  if (price) {
+    priceEl.value = price;
+  } else {
+    priceEl.value = '';
+  }
+}
+
+// Auto-fill price when addon is selected (for bookings)
+function autoFillBookingAddonPrice(bookingId) {
+  const selectEl = document.getElementById(`booking-addon-select-${bookingId}`);
+  const priceEl = document.getElementById(`booking-addon-price-${bookingId}`);
+  
+  if (!selectEl || !priceEl) return;
+  
+  const selectedOption = selectEl.options[selectEl.selectedIndex];
+  const price = selectedOption?.dataset?.price;
+  
+  if (price) {
+    priceEl.value = price;
+  } else {
+    priceEl.value = '';
+  }
 }
 
 function renderSelectedAddons(queryId) {
@@ -952,6 +996,8 @@ window.showAddonSelector = showAddonSelector;
 window.hideAddonSelector = hideAddonSelector;
 window.addAddon = addAddon;
 window.removeAddon = removeAddon;
+window.autoFillAddonPrice = autoFillAddonPrice;
+window.autoFillBookingAddonPrice = autoFillBookingAddonPrice;
 window.showBookingAddonSelector = showBookingAddonSelector;
 window.hideBookingAddonSelector = hideBookingAddonSelector;
 window.addBookingAddon = addBookingAddon;
