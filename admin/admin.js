@@ -324,6 +324,24 @@ function renderQueries(queries) {
             </div>
           </div>
           
+          <!-- Board Section -->
+          <div class="board-section" style="margin-top:16px; padding:12px; background:var(--color-surface); border-radius:8px;">
+            <div class="form-row-grid">
+              <div class="form-group">
+                <label class="form-label" for="board-type-${q.id}">🪧 Board Type</label>
+                <select id="board-type-${q.id}" class="form-control" onchange="toggleBoardMessage(${q.id})">
+                  <option value="">None</option>
+                  <option value="black">Black Board</option>
+                  <option value="white">White Board</option>
+                </select>
+              </div>
+              <div class="form-group hidden" id="board-message-group-${q.id}">
+                <label class="form-label" for="board-message-${q.id}">📝 Board Message</label>
+                <input id="board-message-${q.id}" type="text" class="form-control" placeholder="Enter message for the board">
+              </div>
+            </div>
+          </div>
+          
           <button class="btn btn--primary" onclick="confirmBooking(${q.id})" style="margin-top:16px;">
             Confirm Booking & Generate Menu Link
           </button>
@@ -852,12 +870,16 @@ async function confirmBooking(queryId) {
   const advanceInput = document.getElementById(`advance-${queryId}`);
   const foodLimitInput = document.getElementById(`food-limit-${queryId}`);
   const bevLimitInput = document.getElementById(`bev-limit-${queryId}`);
+  const boardTypeInput = document.getElementById(`board-type-${queryId}`);
+  const boardMessageInput = document.getElementById(`board-message-${queryId}`);
 
   const eventTime = timeInput?.value;
   const bookingAmount = parseFloat(bookingInput?.value);
   const advanceAmount = parseFloat(advanceInput?.value) || 0;
   const foodLimit = parseInt(foodLimitInput?.value, 10);
   const bevLimit = parseInt(bevLimitInput?.value, 10);
+  const boardType = boardTypeInput?.value || null;
+  const boardMessage = boardType ? boardMessageInput?.value?.trim() || null : null;
 
   if (!eventTime) {
     showToast('Please enter event time', 'error');
@@ -892,7 +914,8 @@ async function confirmBooking(queryId) {
         event_time: eventTime,
         booking_amount: bookingAmount,
         advance_amount: advanceAmount,
-        addons: addons
+        addons: addons,
+        board_message: boardMessage ? `${boardType}:${boardMessage}` : null
       })
       .eq('id', queryId);
     if (bookingError) throw bookingError;
@@ -1069,6 +1092,20 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('generate-menu-link')?.addEventListener('click', generateMenuLink);
 });
 
+// Toggle board message field visibility
+function toggleBoardMessage(queryId) {
+  const boardType = document.getElementById(`board-type-${queryId}`)?.value;
+  const messageGroup = document.getElementById(`board-message-group-${queryId}`);
+  if (messageGroup) {
+    if (boardType) {
+      messageGroup.classList.remove('hidden');
+    } else {
+      messageGroup.classList.add('hidden');
+      document.getElementById(`board-message-${queryId}`).value = '';
+    }
+  }
+}
+
 // Expose functions globally
 window.confirmBooking = confirmBooking;
 window.copyToClipboard = copyToClipboard;
@@ -1085,3 +1122,4 @@ window.showBookingAddonSelector = showBookingAddonSelector;
 window.hideBookingAddonSelector = hideBookingAddonSelector;
 window.addBookingAddon = addBookingAddon;
 window.removeBookingAddon = removeBookingAddon;
+window.toggleBoardMessage = toggleBoardMessage;
