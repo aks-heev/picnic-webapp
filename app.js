@@ -40,6 +40,54 @@ const bevList = [
   "Mineral Water","Soda","Mixers"
 ]
 
+// Add-ons from database
+let addonsMasterList = []
+
+// Load add-ons from addon_master table
+async function loadAddons() {
+  try {
+    const { data, error } = await supabase
+      .from('addon_master')
+      .select('id, name, price, description')
+      .eq('is_active', true)
+      .order('price', { ascending: true })
+    
+    if (error) throw error
+    addonsMasterList = data || []
+    renderAddonsCheckboxes()
+  } catch (err) {
+    console.error('Failed to load add-ons:', err)
+    addonsMasterList = []
+  }
+}
+
+// Render add-ons as checkboxes in booking form
+function renderAddonsCheckboxes() {
+  const container = document.getElementById('addons-list')
+  if (!container || addonsMasterList.length === 0) return
+  
+  container.innerHTML = addonsMasterList.map(addon => `
+    <label class="addon-checkbox-item">
+      <input type="checkbox" name="addon" value="${addon.id}" data-name="${addon.name}" data-price="${addon.price}">
+      <span class="addon-checkbox-content">
+        <span class="addon-name">${addon.name}</span>
+        <span class="addon-price">₹${addon.price}</span>
+        ${addon.description ? `<span class="addon-desc">${addon.description}</span>` : ''}
+      </span>
+    </label>
+  `).join('')
+}
+
+// Get selected add-ons from checkboxes
+function getSelectedAddons() {
+  const checkboxes = document.querySelectorAll('#addons-list input[type="checkbox"]:checked')
+  return Array.from(checkboxes).map(cb => ({
+    id: parseInt(cb.value, 10),
+    name: cb.dataset.name,
+    price: parseInt(cb.dataset.price, 10)
+  }))
+}
+
 // Toast helper
 function showToast(msg, type='success') {
   const c = document.getElementById('toast-container')
@@ -96,6 +144,10 @@ function handleMenuSelectionTabs() {
 async function handleBookingSubmit(e) {
   e.preventDefault()
   const f = e.target
+  
+  // Get selected add-ons
+  const selectedAddons = getSelectedAddons()
+  
   const lead = {
     full_name: f['full-name'].value.trim(),
     mobile_number: f['mobile-number'].value.trim(),
@@ -103,6 +155,9 @@ async function handleBookingSubmit(e) {
     location: f['location'].value,
     guest_count: parseInt(f['guest-count'].value,10),
     preferred_date: f['preferred-date'].value,
+    event_time: f['preferred-time'].value,  // Customer's preferred time
+    occasion: f['occasion'].value,
+    addons: selectedAddons,  // Customer's requested add-ons
     special_requirements: f['special-requirements'].value.trim(),
     confirmed: false,
     advance_amount: 0,
@@ -418,6 +473,9 @@ window.addEventListener('DOMContentLoaded', async ()=>{
 
   renderMenuItems()
   handleMenuSelectionTabs()
+  
+  // Load add-ons for booking form
+  await loadAddons()
 
   // Booking modal & form
   document.getElementById('booking-open')?.addEventListener('click', ()=>showModal('booking-modal'))

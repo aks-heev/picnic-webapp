@@ -8,7 +8,7 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.error('Supabase environment variables missing!');
 }
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
+ 
 // ===== Toast Helper =====
 function showToast(message, type = 'success') {
   const container = document.getElementById('toast-container');
@@ -248,7 +248,21 @@ function renderQueries(queries) {
           <div class="lead-detail"><strong>Location:</strong><span>${q.location}</span></div>
           <div class="lead-detail"><strong>Guests:</strong><span>${q.guest_count}</span></div>
           <div class="lead-detail"><strong>Preferred Date:</strong><span>${q.preferred_date}</span></div>
+          <div class="lead-detail"><strong>Preferred Time:</strong><span>${q.event_time || 'Not specified'}</span></div>
+          <div class="lead-detail"><strong>Occasion:</strong><span>${q.occasion || 'Not specified'}</span></div>
         </div>
+        ${q.addons && q.addons.length > 0 ? `
+          <div style="margin-top:12px;">
+            <strong>🎁 Requested Add-ons:</strong>
+            <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;">
+              ${q.addons.map(addon => `
+                <span style="padding:4px 10px; background:var(--color-surface); border:1px solid var(--color-border); border-radius:16px; font-size:0.8125rem;">
+                  ${addon.name} - ₹${addon.price}
+                </span>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
         ${q.special_requirements ? `
           <div style="margin-top:12px;">
             <strong>Special:</strong>
@@ -260,7 +274,7 @@ function renderQueries(queries) {
           <div class="form-row-grid">
             <div class="form-group">
               <label class="form-label" for="time-${q.id}">Event Time</label>
-              <input id="time-${q.id}" type="time" class="form-control" required>
+              <input id="time-${q.id}" type="time" class="form-control" value="${q.event_time || ''}" required>
             </div>
             <div class="form-group">
               <label class="form-label" for="booking-${q.id}">Total Amount (₹)</label>
@@ -357,6 +371,7 @@ function renderBookings(bookings, menuLinksByBooking = {}) {
           <p><strong>🕐 Time:</strong> ${booking.event_time || 'N/A'}</p>
           <p><strong>👥 Guests:</strong> ${booking.guest_count || 'N/A'}</p>
           <p><strong>📍 Location:</strong> ${booking.location || 'N/A'}</p>
+          <p><strong>🎉 Occasion:</strong> ${booking.occasion || 'N/A'}</p>
           <p><strong>📱 Mobile:</strong> ${booking.mobile_number || 'N/A'}</p>
           <p><strong>📧 Email:</strong> ${booking.email_address || 'N/A'}</p>
           <p><strong>💰 Total:</strong> ₹${booking.booking_amount || 0}</p>
@@ -417,6 +432,23 @@ function renderBookings(bookings, menuLinksByBooking = {}) {
               <option value="custom" ${booking.location === 'custom' ? 'selected' : ''}>Custom Location</option>
             </select>
           </div>
+          <div class="form-group">
+            <label class="form-label">Occasion</label>
+            <select class="form-control" id="edit-occasion-${booking.id}">
+              <option value="">-- Select --</option>
+              <option value="Birthday" ${booking.occasion === 'Birthday' ? 'selected' : ''}>Birthday</option>
+              <option value="Anniversary" ${booking.occasion === 'Anniversary' ? 'selected' : ''}>Anniversary</option>
+              <option value="Proposal" ${booking.occasion === 'Proposal' ? 'selected' : ''}>Proposal</option>
+              <option value="Date Night" ${booking.occasion === 'Date Night' ? 'selected' : ''}>Date Night</option>
+              <option value="Celebration" ${booking.occasion === 'Celebration' ? 'selected' : ''}>Celebration</option>
+              <option value="Family Gathering" ${booking.occasion === 'Family Gathering' ? 'selected' : ''}>Family Gathering</option>
+              <option value="Friends Hangout" ${booking.occasion === 'Friends Hangout' ? 'selected' : ''}>Friends Hangout</option>
+              <option value="Corporate Event" ${booking.occasion === 'Corporate Event' ? 'selected' : ''}>Corporate Event</option>
+              <option value="Other" ${booking.occasion === 'Other' ? 'selected' : ''}>Other</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row-grid">
           <div class="form-group">
             <label class="form-label">Total Amount (₹)</label>
             <input type="number" class="form-control" id="edit-total-${booking.id}" value="${booking.booking_amount || ''}" min="0">
@@ -953,6 +985,7 @@ async function saveBookingEdit(bookingId) {
     event_time: document.getElementById(`edit-time-${bookingId}`)?.value,
     guest_count: parseInt(document.getElementById(`edit-guests-${bookingId}`)?.value, 10) || null,
     location: document.getElementById(`edit-location-${bookingId}`)?.value,
+    occasion: document.getElementById(`edit-occasion-${bookingId}`)?.value,
     booking_amount: parseFloat(document.getElementById(`edit-total-${bookingId}`)?.value) || 0,
     advance_amount: parseFloat(document.getElementById(`edit-advance-${bookingId}`)?.value) || 0,
     special_requirements: document.getElementById(`edit-special-${bookingId}`)?.value,

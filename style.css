@@ -533,6 +533,68 @@ select.form-control {
   margin-bottom: var(--space-16);
 }
 
+/* Add-ons Checkbox List (Booking Form) */
+.addons-checkbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.addon-checkbox-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.addon-checkbox-item:hover {
+  border-color: var(--color-primary);
+  background: rgba(var(--color-teal-500-rgb), 0.05);
+}
+
+.addon-checkbox-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.addon-checkbox-item input[type="checkbox"]:checked + .addon-checkbox-content {
+  color: var(--color-primary);
+}
+
+.addon-checkbox-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.addon-name {
+  font-weight: 500;
+  font-size: 0.9375rem;
+}
+
+.addon-price {
+  font-weight: 600;
+  color: var(--color-primary);
+  font-size: 0.875rem;
+}
+
+.addon-desc {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
 /* Card component */
 .card {
   background-color: var(--color-surface);
