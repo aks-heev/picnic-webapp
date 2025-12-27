@@ -379,6 +379,7 @@ function renderBookings(bookings, menuLinksByBooking = {}) {
           <span class="booking-status ${hasSelections ? 'status-complete' : hasMenuLink ? 'status-pending' : 'status-new'}">
             ${hasSelections ? '✓ Menu Selected' : hasMenuLink ? '⏳ Awaiting Selection' : 'New'}
           </span>
+          <button class="btn btn--sm btn--outline" onclick="generateTicket(${booking.id}, ${JSON.stringify(booking).replace(/"/g, '&quot;')}, ${menuLink ? JSON.stringify(menuLink).replace(/"/g, '&quot;') : 'null'})">🎫 Ticket</button>
           <button class="btn btn--sm btn--outline edit-booking-btn" onclick="toggleEditBooking(${booking.id})">✏️ Edit</button>
         </div>
       </div>
@@ -1092,6 +1093,80 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('generate-menu-link')?.addEventListener('click', generateMenuLink);
 });
 
+// Generate booking ticket and copy to clipboard
+function generateTicket(bookingId, booking, menuLink) {
+  // Format date nicely
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    const date = new Date(dateStr);
+    const day = date.getDate();
+    const suffix = (day === 1 || day === 21 || day === 31) ? 'st' : 
+                   (day === 2 || day === 22) ? 'nd' : 
+                   (day === 3 || day === 23) ? 'rd' : 'th';
+    const month = date.toLocaleString('en-US', { month: 'long' });
+    const year = date.getFullYear();
+    return `${day}${suffix} ${month} ${year}`;
+  };
+
+  // Format time (assuming HH:MM format, add 2.5 hours for end time)
+  const formatTime = (timeStr) => {
+    if (!timeStr) return 'N/A';
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const startDate = new Date();
+    startDate.setHours(hours, minutes);
+    
+    const endDate = new Date(startDate);
+    endDate.setHours(endDate.getHours() + 2, endDate.getMinutes() + 30);
+    
+    const formatTimeStr = (d) => {
+      let h = d.getHours();
+      const m = d.getMinutes();
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      return `${h}:${m.toString().padStart(2, '0')} ${ampm}`;
+    };
+    
+    return `${formatTimeStr(startDate)} to ${formatTimeStr(endDate)}`;
+  };
+
+  // Extract board type and message
+  let boardLine = '';
+  let boardType = '';
+  if (booking.board_message) {
+    const colonIndex = booking.board_message.indexOf(':');
+    if (colonIndex > -1) {
+      boardType = booking.board_message.substring(0, colonIndex); // 'black' or 'white'
+      boardLine = booking.board_message.substring(colonIndex + 1); // message after colon
+    }
+  }
+
+  // Get food and bev counts from menu link
+  const foodCount = menuLink?.max_food_items || 'N/A';
+  const bevCount = menuLink?.max_bev_items || 'N/A';
+
+  // Format board type for display (capitalize first letter)
+  const boardLabel = boardType ? `${boardType.charAt(0).toUpperCase() + boardType.slice(1)} Board` : 'Board';
+
+  const ticket = `BOOKING CONFIRMED
+Name - ${booking.full_name || 'N/A'}
+Contact - ${booking.mobile_number || 'N/A'}
+Date - ${formatDate(booking.preferred_date)}
+Time - ${formatTime(booking.event_time)}
+People - ${booking.guest_count || 'N/A'}${boardLine ? `\n${boardLabel} - ${boardLine}` : ''}
+Drinks - ${bevCount}
+Food - ${foodCount}
+
+Amount - ${booking.booking_amount || 0}
+Advance - ${booking.advance_amount || 0}
+.
+The Picnic Story 
+Contact - 9266964666 | 9773703982`;
+
+  navigator.clipboard.writeText(ticket)
+    .then(() => showToast('Ticket copied to clipboard!', 'success'))
+    .catch(() => showToast('Failed to copy ticket', 'error'));
+}
+
 // Toggle board message field visibility
 function toggleBoardMessage(queryId) {
   const boardType = document.getElementById(`board-type-${queryId}`)?.value;
@@ -1123,3 +1198,4 @@ window.hideBookingAddonSelector = hideBookingAddonSelector;
 window.addBookingAddon = addBookingAddon;
 window.removeBookingAddon = removeBookingAddon;
 window.toggleBoardMessage = toggleBoardMessage;
+window.generateTicket = generateTicket;
