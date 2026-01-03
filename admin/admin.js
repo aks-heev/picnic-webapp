@@ -29,6 +29,9 @@ let isAdminLoggedIn = false;
 // Track selected add-ons per query (key: queryId, value: array of {name, price})
 const selectedAddons = {};
 
+// Track add-ons for new booking modal
+let newBookingAddons = [];
+
 // Add-ons from database (loaded dynamically)
 let addonsMaster = [];
 
@@ -1186,12 +1189,21 @@ function toggleBoardMessage(queryId) {
 // ===== Add Booking Modal Functions =====
 function openAddBookingModal() {
   document.getElementById('add-booking-modal')?.classList.remove('hidden');
+  // Populate addon selector
+  const addonSelect = document.getElementById('new-booking-addon-select');
+  if (addonSelect) {
+    addonSelect.innerHTML = '<option value="">-- Select Add-on --</option>' + getAddonOptionsHTML();
+  }
 }
 
 function closeAddBookingModal() {
   document.getElementById('add-booking-modal')?.classList.add('hidden');
   document.getElementById('add-booking-form')?.reset();
   document.getElementById('new-board-message-group')?.classList.add('hidden');
+  document.getElementById('new-booking-addon-selector')?.classList.add('hidden');
+  // Clear add-ons
+  newBookingAddons = [];
+  renderNewBookingAddons();
 }
 
 function toggleNewBookingBoardMessage() {
@@ -1205,6 +1217,73 @@ function toggleNewBookingBoardMessage() {
       document.getElementById('new-board-message').value = '';
     }
   }
+}
+
+// New Booking Add-ons Functions
+function showNewBookingAddonSelector() {
+  document.getElementById('new-booking-addon-selector')?.classList.remove('hidden');
+}
+
+function hideNewBookingAddonSelector() {
+  document.getElementById('new-booking-addon-selector')?.classList.add('hidden');
+  document.getElementById('new-booking-addon-select').value = '';
+  document.getElementById('new-booking-addon-price').value = '';
+}
+
+function autoFillNewBookingAddonPrice() {
+  const select = document.getElementById('new-booking-addon-select');
+  const priceInput = document.getElementById('new-booking-addon-price');
+  const selectedOption = select?.options[select.selectedIndex];
+  if (selectedOption && selectedOption.dataset.price) {
+    priceInput.value = selectedOption.dataset.price;
+  }
+}
+
+function addNewBookingAddon() {
+  const select = document.getElementById('new-booking-addon-select');
+  const priceInput = document.getElementById('new-booking-addon-price');
+  const name = select?.options[select.selectedIndex]?.text;
+  const price = parseInt(priceInput?.value, 10);
+
+  if (!name || name === '-- Select Add-on --' || !price) {
+    showToast('Please select an add-on and enter price', 'error');
+    return;
+  }
+
+  // Check if already added
+  if (newBookingAddons.some(a => a.name === name)) {
+    showToast('Add-on already added', 'error');
+    return;
+  }
+
+  newBookingAddons.push({ name, price });
+  renderNewBookingAddons();
+  hideNewBookingAddonSelector();
+}
+
+function removeNewBookingAddon(index) {
+  newBookingAddons.splice(index, 1);
+  renderNewBookingAddons();
+}
+
+function renderNewBookingAddons() {
+  const container = document.getElementById('new-booking-selected-addons');
+  if (!container) return;
+
+  if (newBookingAddons.length === 0) {
+    container.innerHTML = '<p style="color:var(--color-text-secondary); font-size:0.875rem;">No add-ons selected</p>';
+    return;
+  }
+
+  container.innerHTML = newBookingAddons.map((addon, idx) => `
+    <div class="addon-tag" style="display:inline-flex; align-items:center; gap:8px; padding:6px 12px; background:var(--color-background); border-radius:20px; margin:4px; border:1px solid var(--color-border);">
+      <span>${addon.name}</span>
+      <strong style="color:var(--color-primary);">₹${addon.price}</strong>
+      <button type="button" onclick="removeNewBookingAddon(${idx})" style="background:none; border:none; color:var(--color-error); cursor:pointer; padding:0; font-size:1.1rem;">×</button>
+    </div>
+  `).join('') + `
+    <p style="margin-top:8px; font-weight:600; color:var(--color-primary);">Total: ₹${newBookingAddons.reduce((sum, a) => sum + a.price, 0)}</p>
+  `;
 }
 
 async function handleAddBooking(e) {
@@ -1249,6 +1328,7 @@ async function handleAddBooking(e) {
         advance_amount: advanceAmount,
         board_message: boardMessage ? `${boardType}:${boardMessage}` : null,
         special_requirements: specialReq,
+        addons: newBookingAddons,
         confirmed: true,
         created_at: new Date().toISOString()
       }])
@@ -1318,3 +1398,8 @@ window.toggleBoardMessage = toggleBoardMessage;
 window.generateTicket = generateTicket;
 window.closeAddBookingModal = closeAddBookingModal;
 window.toggleNewBookingBoardMessage = toggleNewBookingBoardMessage;
+window.showNewBookingAddonSelector = showNewBookingAddonSelector;
+window.hideNewBookingAddonSelector = hideNewBookingAddonSelector;
+window.autoFillNewBookingAddonPrice = autoFillNewBookingAddonPrice;
+window.addNewBookingAddon = addNewBookingAddon;
+window.removeNewBookingAddon = removeNewBookingAddon;
