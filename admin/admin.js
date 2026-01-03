@@ -1069,6 +1069,8 @@ function copyToClipboard(text) {
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('admin-login-form')?.addEventListener('submit', handleAdminLogin);
   document.getElementById('admin-logout')?.addEventListener('click', handleAdminLogout);
+  document.getElementById('add-booking-btn')?.addEventListener('click', openAddBookingModal);
+  document.getElementById('add-booking-form')?.addEventListener('submit', handleAddBooking);
 
   // Delegated event listener for menu link generation in bookings tab
   document.getElementById('bookings-container')?.addEventListener('submit', handleMenuLinkGeneration);
@@ -1181,6 +1183,121 @@ function toggleBoardMessage(queryId) {
   }
 }
 
+// ===== Add Booking Modal Functions =====
+function openAddBookingModal() {
+  document.getElementById('add-booking-modal')?.classList.remove('hidden');
+}
+
+function closeAddBookingModal() {
+  document.getElementById('add-booking-modal')?.classList.add('hidden');
+  document.getElementById('add-booking-form')?.reset();
+  document.getElementById('new-board-message-group')?.classList.add('hidden');
+}
+
+function toggleNewBookingBoardMessage() {
+  const boardType = document.getElementById('new-board-type')?.value;
+  const messageGroup = document.getElementById('new-board-message-group');
+  if (messageGroup) {
+    if (boardType) {
+      messageGroup.classList.remove('hidden');
+    } else {
+      messageGroup.classList.add('hidden');
+      document.getElementById('new-board-message').value = '';
+    }
+  }
+}
+
+async function handleAddBooking(e) {
+  e.preventDefault();
+  
+  const fullName = document.getElementById('new-full-name')?.value.trim();
+  const mobile = document.getElementById('new-mobile')?.value.trim();
+  const email = document.getElementById('new-email')?.value.trim();
+  const location = document.getElementById('new-location')?.value;
+  const eventDate = document.getElementById('new-date')?.value;
+  const eventTime = document.getElementById('new-time')?.value;
+  const guestCount = parseInt(document.getElementById('new-guests')?.value, 10);
+  const occasion = document.getElementById('new-occasion')?.value;
+  const bookingAmount = parseFloat(document.getElementById('new-amount')?.value) || 0;
+  const advanceAmount = parseFloat(document.getElementById('new-advance')?.value) || 0;
+  const foodLimit = parseInt(document.getElementById('new-food-limit')?.value, 10);
+  const bevLimit = parseInt(document.getElementById('new-bev-limit')?.value, 10);
+  const boardType = document.getElementById('new-board-type')?.value;
+  const boardMessage = boardType ? document.getElementById('new-board-message')?.value.trim() : null;
+  const specialReq = document.getElementById('new-special')?.value.trim();
+
+  // Validation
+  if (!fullName || !mobile || !location || !eventDate || !eventTime || !guestCount || !bookingAmount || !foodLimit || !bevLimit) {
+    showToast('Please fill in all required fields', 'error');
+    return;
+  }
+
+  try {
+    // Create booking
+    const { data: bookingData, error: bookingError } = await supabase
+      .from('bookings')
+      .insert([{
+        full_name: fullName,
+        mobile_number: mobile,
+        email_address: email,
+        location: location,
+        preferred_date: eventDate,
+        event_time: eventTime,
+        guest_count: guestCount,
+        occasion: occasion,
+        booking_amount: bookingAmount,
+        advance_amount: advanceAmount,
+        board_message: boardMessage ? `${boardType}:${boardMessage}` : null,
+        special_requirements: specialReq,
+        confirmed: true,
+        created_at: new Date().toISOString()
+      }])
+      .select();
+
+    if (bookingError) throw bookingError;
+
+    const bookingId = bookingData?.[0]?.id;
+    if (!bookingId) throw new Error('No booking ID returned');
+
+    // Create menu link
+    const { data: linkData, error: linkError } = await supabase
+      .from('menu_links')
+      .insert([{
+        max_food_items: foodLimit,
+        max_bev_items: bevLimit,
+        booking_id: bookingId
+      }])
+      .select();
+
+    if (linkError) throw linkError;
+
+    const menuLinkUrl = `${window.location.origin}?menu=${linkData[0].id}`;
+    
+    // Update booking_json
+    await updateBookingJSON(bookingId);
+
+    showToast('Booking created successfully!', 'success');
+    closeAddBookingModal();
+
+    // Copy menu link to clipboard
+    try {
+      await navigator.clipboard.writeText(menuLinkUrl);
+      showToast('Menu link copied to clipboard!', 'success');
+    } catch (e) {
+      console.log('Could not copy to clipboard');
+    }
+
+    // Reload data
+    loadQueries();
+    loadBookings();
+    loadMenuLinks();
+
+  } catch (err) {
+    console.error('Failed to create booking:', err);
+    showToast('Failed to create booking', 'error');
+  }
+}
+
 // Expose functions globally
 window.confirmBooking = confirmBooking;
 window.copyToClipboard = copyToClipboard;
@@ -1199,3 +1316,5 @@ window.addBookingAddon = addBookingAddon;
 window.removeBookingAddon = removeBookingAddon;
 window.toggleBoardMessage = toggleBoardMessage;
 window.generateTicket = generateTicket;
+window.closeAddBookingModal = closeAddBookingModal;
+window.toggleNewBookingBoardMessage = toggleNewBookingBoardMessage;

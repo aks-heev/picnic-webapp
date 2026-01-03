@@ -10,6 +10,117 @@
     <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>
 
+    <!-- Add Booking Modal -->
+    <div id="add-booking-modal" class="modal hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>Add New Booking</h3>
+                <button class="modal-close" onclick="closeAddBookingModal()">&times;</button>
+            </div>
+            <form id="add-booking-form" novalidate>
+                <div class="form-row-grid">
+                    <div class="form-group">
+                        <label class="form-label" for="new-full-name">Full Name *</label>
+                        <input type="text" id="new-full-name" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="new-mobile">Mobile Number *</label>
+                        <input type="tel" id="new-mobile" class="form-control" required>
+                    </div>
+                </div>
+                <div class="form-row-grid">
+                    <div class="form-group">
+                        <label class="form-label" for="new-email">Email Address</label>
+                        <input type="email" id="new-email" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="new-location">Location *</label>
+                        <select id="new-location" class="form-control" required>
+                            <option value="">Select Location</option>
+                            <option value="jaipur-city">Jaipur City</option>
+                            <option value="jaipur-outskirts">Jaipur Outskirts</option>
+                            <option value="amber-fort">Near Amber Fort</option>
+                            <option value="jal-mahal">Near Jal Mahal</option>
+                            <option value="nahargarh">Nahargarh Area</option>
+                            <option value="custom">Custom Location</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row-grid">
+                    <div class="form-group">
+                        <label class="form-label" for="new-date">Event Date *</label>
+                        <input type="date" id="new-date" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="new-time">Event Time *</label>
+                        <input type="time" id="new-time" class="form-control" required>
+                    </div>
+                </div>
+                <div class="form-row-grid">
+                    <div class="form-group">
+                        <label class="form-label" for="new-guests">Guest Count *</label>
+                        <input type="number" id="new-guests" class="form-control" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="new-occasion">Occasion</label>
+                        <select id="new-occasion" class="form-control">
+                            <option value="">Select Occasion</option>
+                            <option value="Birthday">Birthday</option>
+                            <option value="Anniversary">Anniversary</option>
+                            <option value="Proposal">Proposal</option>
+                            <option value="Date Night">Date Night</option>
+                            <option value="Celebration">Celebration</option>
+                            <option value="Corporate">Corporate Event</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row-grid">
+                    <div class="form-group">
+                        <label class="form-label" for="new-amount">Booking Amount (₹) *</label>
+                        <input type="number" id="new-amount" class="form-control" min="0" step="50" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="new-advance">Advance Amount (₹)</label>
+                        <input type="number" id="new-advance" class="form-control" min="0" step="50" value="0">
+                    </div>
+                </div>
+                <div class="form-row-grid">
+                    <div class="form-group">
+                        <label class="form-label" for="new-food-limit">Food Items Limit *</label>
+                        <input type="number" id="new-food-limit" class="form-control" min="1" max="74" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="new-bev-limit">Beverages Limit *</label>
+                        <input type="number" id="new-bev-limit" class="form-control" min="1" max="24" required>
+                    </div>
+                </div>
+                <div class="form-row-grid">
+                    <div class="form-group">
+                        <label class="form-label" for="new-board-type">Board Type</label>
+                        <select id="new-board-type" class="form-control" onchange="toggleNewBookingBoardMessage()">
+                            <option value="">None</option>
+                            <option value="black">Black Board</option>
+                            <option value="white">White Board</option>
+                        </select>
+                    </div>
+                    <div class="form-group hidden" id="new-board-message-group">
+                        <label class="form-label" for="new-board-message">Board Message</label>
+                        <input type="text" id="new-board-message" class="form-control" placeholder="Enter message for the board">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="new-special">Special Requirements</label>
+                    <textarea id="new-special" class="form-control" rows="2"></textarea>
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 16px;">
+                    <button type="submit" class="btn btn--primary">Create Booking & Generate Menu Link</button>
+                    <button type="button" class="btn btn--outline" onclick="closeAddBookingModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Admin Page -->
     <section class="container" style="padding-top: var(--space-32);">
         <!-- Admin login -->
@@ -42,6 +153,7 @@
                     <p>The Picnic Story Management System</p>
                 </div>
                 <div class="header-actions">
+                    <button id="add-booking-btn" class="btn btn--primary">+ Add Booking</button>
                     <button id="admin-logout" class="btn btn--secondary">Logout</button>
                 </div>
             </div>
