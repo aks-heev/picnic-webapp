@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - The Picnic Story</title>
+    <link rel="stylesheet" href="../style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.25rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: var(--boho-white);
+            border-radius: var(--radius-lg);
+            padding: 1.25rem;
+            border: 1px solid var(--color-border);
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .stat-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-card-title {
+            font-size: 0.8125rem;
+            color: var(--color-text-secondary);
+            font-weight: 500;
+        }
+        
+        .stat-card-icon {
+            font-size: 1.25rem;
+        }
+        
+        .stat-card-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--color-text);
+            margin-bottom: 0.125rem;
+        }
+        
+        .stat-card-subtitle {
+            font-size: 0.75rem;
+            color: var(--color-text-secondary);
+        }
+        
+        .stat-card--primary { border-left: 4px solid var(--boho-accent-pink); }
+        .stat-card--success { border-left: 4px solid var(--color-success); }
+        .stat-card--warning { border-left: 4px solid var(--color-warning); }
+        .stat-card--info { border-left: 4px solid var(--boho-accent-teal); }
+        
+        .chart-container {
+            background: var(--boho-white);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            border: 1px solid var(--color-border);
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 1.5rem;
+        }
+        
+        .chart-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+        
+        .chart-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--color-text);
+            margin: 0;
+        }
+        
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .chart-canvas-wrapper {
+            position: relative;
+            height: 280px;
+        }
+        
+        .upcoming-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .upcoming-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem;
+            background: var(--color-surface);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--color-border);
+        }
+        
+        .upcoming-item-info h4 {
+            margin: 0 0 0.25rem 0;
+            font-size: 0.9375rem;
+            color: var(--color-text);
+        }
+        
+        .upcoming-item-info p {
+            margin: 0;
+            font-size: 0.8125rem;
+            color: var(--color-text-secondary);
+        }
+        
+        .upcoming-item-date {
+            text-align: right;
+        }
+        
+        .upcoming-item-date .date {
+            font-weight: 600;
+            color: var(--boho-accent-pink);
+            font-size: 0.9375rem;
+        }
+        
+        .upcoming-item-date .time {
+            font-size: 0.8125rem;
+            color: var(--color-text-secondary);
+        }
+        
+        .lists-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        .filter-bar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background: var(--boho-white);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--color-border);
+        }
+        
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .filter-group label {
+            font-size: 0.875rem;
+            color: var(--color-text-secondary);
+            white-space: nowrap;
+        }
+        
+        .filter-group input, .filter-group select {
+            padding: 0.5rem 0.75rem;
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            font-size: 0.875rem;
+        }
+        
+        .filter-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-left: auto;
+        }
+        
+        .auto-refresh-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.8125rem;
+            color: var(--color-text-secondary);
+        }
+        
+        .auto-refresh-indicator .dot {
+            width: 8px;
+            height: 8px;
+            background: var(--color-success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255,255,255,0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .loading-overlay.hidden {
+            display: none;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--color-border);
+            border-top-color: var(--boho-accent-pink);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 2rem;
+            color: var(--color-text-secondary);
+        }
+        
+        @media (max-width: 768px) {
+            .charts-grid, .lists-grid {
+                grid-template-columns: 1fr;
+            }
+            .chart-canvas-wrapper {
+                height: 220px;
+            }
+            .filter-bar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .filter-actions {
+                margin-left: 0;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+    
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- Dashboard Page -->
+    <section class="container" style="padding-top: var(--space-32); padding-bottom: var(--space-32);">
+        <!-- Login -->
+        <div id="dashboard-login" class="login-card">
+            <h2>Dashboard Login</h2>
+            <form id="dashboard-login-form" novalidate>
+                <div class="form-group">
+                    <label for="dash-email" class="form-label">Email</label>
+                    <input id="dash-email" type="email" class="form-control" required placeholder="admin@picnic.com" />
+                </div>
+                <div class="form-group">
+                    <label for="dash-password" class="form-label">Password</label>
+                    <input id="dash-password" type="password" class="form-control" required />
+                </div>
+                <button type="submit" class="btn btn--primary btn--full-width">Login</button>
+            </form>
+        </div>
+
+        <!-- Dashboard Content -->
+        <div id="dashboard-content" class="admin-section hidden">
+            <div class="dashboard-header">
+                <div>
+                    <h2>📊 Analytics Dashboard</h2>
+                    <p>The Picnic Story - Business Overview</p>
+                </div>
+                <div class="header-actions">
+                    <a href="/admin/" class="btn btn--outline">🔧 Admin Panel</a>
+                    <button id="dashboard-logout" class="btn btn--secondary">Logout</button>
+                </div>
+            </div>
+
+            <!-- Filter Bar -->
+            <div class="filter-bar">
+                <div class="filter-group">
+                    <label for="filter-preset">Period:</label>
+                    <select id="filter-preset" class="form-control">
+                        <option value="all">All Time</option>
+                        <option value="today">Today</option>
+                        <option value="week">This Week</option>
+                        <option value="month" selected>This Month</option>
+                        <option value="quarter">This Quarter</option>
+                        <option value="year">This Year</option>
+                        <option value="custom">Custom Range</option>
+                    </select>
+                </div>
+                <div class="filter-group" id="custom-date-range" style="display: none;">
+                    <label for="filter-from">From:</label>
+                    <input type="date" id="filter-from" class="form-control">
+                    <label for="filter-to">To:</label>
+                    <input type="date" id="filter-to" class="form-control">
+                </div>
+                <div class="filter-actions">
+                    <button id="apply-filter" class="btn btn--primary btn--sm">Apply</button>
+                    <button id="refresh-btn" class="btn btn--outline btn--sm">🔄 Refresh</button>
+                </div>
+                <div class="auto-refresh-indicator">
+                    <span class="dot"></span>
+                    <span>Auto-refresh: <span id="countdown">60</span>s</span>
+                </div>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="dashboard-grid" id="stats-grid">
+                <div class="stat-card stat-card--primary">
+                    <div class="stat-card-header">
+                        <span class="stat-card-title">Total Bookings</span>
+                        <span class="stat-card-icon">📅</span>
+                    </div>
+                    <div class="stat-card-value" id="stat-total-bookings">0</div>
+                    <div class="stat-card-subtitle">Confirmed bookings</div>
+                </div>
+                
+                <div class="stat-card stat-card--success">
+                    <div class="stat-card-header">
+                        <span class="stat-card-title">Total Revenue</span>
+                        <span class="stat-card-icon">💰</span>
+                    </div>
+                    <div class="stat-card-value" id="stat-total-revenue">₹0</div>
+                    <div class="stat-card-subtitle">Booking amounts</div>
+                </div>
+                
+                <div class="stat-card stat-card--info">
+                    <div class="stat-card-header">
+                        <span class="stat-card-title">Advance Collected</span>
+                        <span class="stat-card-icon">💵</span>
+                    </div>
+                    <div class="stat-card-value" id="stat-advance">₹0</div>
+                    <div class="stat-card-subtitle">Received</div>
+                </div>
+                
+                <div class="stat-card stat-card--warning">
+                    <div class="stat-card-header">
+                        <span class="stat-card-title">Pending Balance</span>
+                        <span class="stat-card-icon">⏳</span>
+                    </div>
+                    <div class="stat-card-value" id="stat-pending">₹0</div>
+                    <div class="stat-card-subtitle">Yet to collect</div>
+                </div>
+                
+                <div class="stat-card stat-card--primary">
+                    <div class="stat-card-header">
+                        <span class="stat-card-title">Pending Queries</span>
+                        <span class="stat-card-icon">❓</span>
+                    </div>
+                    <div class="stat-card-value" id="stat-queries">0</div>
+                    <div class="stat-card-subtitle">Awaiting confirmation</div>
+                </div>
+                
+                <div class="stat-card stat-card--success">
+                    <div class="stat-card-header">
+                        <span class="stat-card-title">Avg Booking</span>
+                        <span class="stat-card-icon">📈</span>
+                    </div>
+                    <div class="stat-card-value" id="stat-avg-booking">₹0</div>
+                    <div class="stat-card-subtitle">Per booking</div>
+                </div>
+                
+                <div class="stat-card stat-card--info">
+                    <div class="stat-card-header">
+                        <span class="stat-card-title">Total Guests</span>
+                        <span class="stat-card-icon">👥</span>
+                    </div>
+                    <div class="stat-card-value" id="stat-total-guests">0</div>
+                    <div class="stat-card-subtitle">People served</div>
+                </div>
+                
+                <div class="stat-card stat-card--warning">
+                    <div class="stat-card-header">
+                        <span class="stat-card-title">Avg Guests</span>
+                        <span class="stat-card-icon">👤</span>
+                    </div>
+                    <div class="stat-card-value" id="stat-avg-guests">0</div>
+                    <div class="stat-card-subtitle">Per booking</div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="charts-grid">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3 class="chart-title">📊 Bookings by Month</h3>
+                    </div>
+                    <div class="chart-canvas-wrapper">
+                        <canvas id="bookings-chart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3 class="chart-title">💵 Revenue by Month</h3>
+                    </div>
+                    <div class="chart-canvas-wrapper">
+                        <canvas id="revenue-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3 class="chart-title">📍 Bookings by Location</h3>
+                    </div>
+                    <div class="chart-canvas-wrapper">
+                        <canvas id="location-chart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3 class="chart-title">🎉 Bookings by Occasion</h3>
+                    </div>
+                    <div class="chart-canvas-wrapper">
+                        <canvas id="occasion-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lists -->
+            <div class="lists-grid">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3 class="chart-title">📅 Upcoming Bookings</h3>
+                    </div>
+                    <div class="upcoming-list" id="upcoming-list">
+                        <div class="empty-state">Loading...</div>
+                    </div>
+                </div>
+                
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3 class="chart-title">🆕 Recent Queries</h3>
+                    </div>
+                    <div class="upcoming-list" id="recent-queries">
+                        <div class="empty-state">Loading...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <p style="text-align: center; color: var(--color-text-secondary); margin-top: 2rem;">
+                Last updated: <span id="last-updated">-</span>
+            </p>
+        </div>
+    </section>
+
+    <script type="module" src="dashboard.js"></script>
+</body>
+</html>
