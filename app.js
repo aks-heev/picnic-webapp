@@ -68,7 +68,7 @@ function renderAddonsCheckboxes() {
   
   container.innerHTML = addonsMasterList.map(addon => `
     <label class="addon-checkbox-item">
-      <input type="checkbox" name="addon" value="${addon.id}" data-name="${addon.name}" data-price="${addon.price}">
+      <input type="checkbox" name="addon" value="${addon.id}" data-name="${addon.name}" data-price="${addon.price}" onchange="updateAddonsSummary()">
       <span class="addon-checkbox-content">
         <span class="addon-name">${addon.name}</span>
         <span class="addon-price">₹${addon.price}</span>
@@ -77,6 +77,71 @@ function renderAddonsCheckboxes() {
     </label>
   `).join('')
 }
+
+// Toggle addons dropdown
+function toggleAddonsDropdown() {
+  const content = document.getElementById('addons-dropdown-content')
+  const trigger = document.querySelector('.addons-dropdown-trigger')
+  if (content && trigger) {
+    content.classList.toggle('hidden')
+    trigger.classList.toggle('open')
+  }
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+  const dropdown = document.querySelector('.addons-dropdown')
+  if (dropdown && !dropdown.contains(e.target)) {
+    const content = document.getElementById('addons-dropdown-content')
+    const trigger = document.querySelector('.addons-dropdown-trigger')
+    if (content && trigger) {
+      content.classList.add('hidden')
+      trigger.classList.remove('open')
+    }
+  }
+})
+
+// Update addons summary display
+function updateAddonsSummary() {
+  const checkboxes = document.querySelectorAll('#addons-list input[type="checkbox"]')
+  const summary = document.getElementById('selected-addons-summary')
+  const trigger = document.querySelector('.addons-dropdown-trigger')
+  const triggerText = trigger?.querySelector('.addons-dropdown-text')
+  
+  const selected = Array.from(checkboxes).filter(cb => cb.checked)
+  
+  if (selected.length === 0) {
+    summary.innerHTML = ''
+    if (triggerText) triggerText.textContent = 'Select extras for your picnic'
+    trigger?.classList.remove('has-selection')
+  } else {
+    // Update trigger text
+    if (triggerText) triggerText.textContent = `${selected.length} add-on${selected.length > 1 ? 's' : ''} selected`
+    trigger?.classList.add('has-selection')
+    
+    // Update summary tags
+    summary.innerHTML = selected.map(cb => `
+      <span class="selected-addon-tag">
+        ${cb.dataset.name} - ₹${cb.dataset.price}
+        <button type="button" class="remove-addon" onclick="removeAddonSelection('${cb.value}')">&times;</button>
+      </span>
+    `).join('')
+  }
+}
+
+// Remove addon from selection
+function removeAddonSelection(addonId) {
+  const checkbox = document.querySelector(`#addons-list input[value="${addonId}"]`)
+  if (checkbox) {
+    checkbox.checked = false
+    updateAddonsSummary()
+  }
+}
+
+// Expose functions globally
+window.toggleAddonsDropdown = toggleAddonsDropdown
+window.updateAddonsSummary = updateAddonsSummary
+window.removeAddonSelection = removeAddonSelection
 
 // Get selected add-ons from checkboxes
 function getSelectedAddons() {

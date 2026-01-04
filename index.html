@@ -83,7 +83,7 @@
           <div class="datetime-picker-section">
             <div class="datetime-field">
               <label class="form-label" for="preferred-date">📅 Select Date</label>
-              <input id="preferred-date" name="preferred-date" type="date" class="form-control datetime-input" required readonly onclick="this.showPicker()" />
+              <input id="preferred-date" name="preferred-date" type="date" class="form-control datetime-input" required />
             </div>
             <div class="datetime-field">
               <label class="form-label" for="preferred-time">🕐 Select Time</label>
@@ -141,13 +141,21 @@
             <option value="Yellow">Yellow</option>
           </select>
           
-          <!-- Add-ons Section -->
+          <!-- Add-ons Dropdown Section -->
           <div class="form-addons-section" style="margin-top:16px;">
             <label class="form-label">Add-ons (Optional)</label>
-            <p style="font-size:0.875rem; color:var(--color-text-muted); margin-bottom:12px;">Select any extras you'd like for your picnic</p>
-            <div id="addons-list" class="addons-checkbox-list">
-              <!-- Add-ons will be loaded here -->
+            <div class="addons-dropdown">
+              <button type="button" class="addons-dropdown-trigger form-control" onclick="toggleAddonsDropdown()">
+                <span class="addons-dropdown-text">Select extras for your picnic</span>
+                <span class="addons-dropdown-arrow">▼</span>
+              </button>
+              <div id="addons-dropdown-content" class="addons-dropdown-content hidden">
+                <div id="addons-list" class="addons-checkbox-list">
+                  <!-- Add-ons will be loaded here -->
+                </div>
+              </div>
             </div>
+            <div id="selected-addons-summary" class="selected-addons-summary"></div>
           </div>
           
           <label class="form-label" for="special-requirements" style="margin-top:16px;">Special Requirements</label>
