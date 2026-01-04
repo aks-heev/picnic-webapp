@@ -77,6 +77,8 @@ function buildBookingJSON(booking, menuLink = null) {
       time: booking.event_time,
       location: booking.location,
       guest_count: booking.guest_count,
+      occasion: booking.occasion,
+      theme: booking.theme,
       special_requirements: booking.special_requirements
     },
     financials: {
@@ -253,6 +255,7 @@ function renderQueries(queries) {
           <div class="lead-detail"><strong>Preferred Date:</strong><span>${q.preferred_date}</span></div>
           <div class="lead-detail"><strong>Preferred Time:</strong><span>${q.event_time || 'Not specified'}</span></div>
           <div class="lead-detail"><strong>Occasion:</strong><span>${q.occasion || 'Not specified'}</span></div>
+          <div class="lead-detail"><strong>Theme:</strong><span>${q.theme || 'Not specified'}</span></div>
         </div>
         ${q.addons && q.addons.length > 0 ? `
           <div style="margin-top:12px;">
@@ -394,6 +397,7 @@ function renderBookings(bookings, menuLinksByBooking = {}) {
           <p><strong>👥 Guests:</strong> ${booking.guest_count || 'N/A'}</p>
           <p><strong>📍 Location:</strong> ${booking.location || 'N/A'}</p>
           <p><strong>🎉 Occasion:</strong> ${booking.occasion || 'N/A'}</p>
+          <p><strong>🎨 Theme:</strong> ${booking.theme || 'N/A'}</p>
           <p><strong>📱 Mobile:</strong> ${booking.mobile_number || 'N/A'}</p>
           <p><strong>📧 Email:</strong> ${booking.email_address || 'N/A'}</p>
           <p><strong>💰 Total:</strong> ₹${booking.booking_amount || 0}</p>
@@ -467,6 +471,15 @@ function renderBookings(bookings, menuLinksByBooking = {}) {
               <option value="Friends Hangout" ${booking.occasion === 'Friends Hangout' ? 'selected' : ''}>Friends Hangout</option>
               <option value="Corporate Event" ${booking.occasion === 'Corporate Event' ? 'selected' : ''}>Corporate Event</option>
               <option value="Other" ${booking.occasion === 'Other' ? 'selected' : ''}>Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Theme</label>
+            <select class="form-control" id="edit-theme-${booking.id}">
+              <option value="">-- Select --</option>
+              <option value="Pink" ${booking.theme === 'Pink' ? 'selected' : ''}>Pink</option>
+              <option value="Green" ${booking.theme === 'Green' ? 'selected' : ''}>Green</option>
+              <option value="Yellow" ${booking.theme === 'Yellow' ? 'selected' : ''}>Yellow</option>
             </select>
           </div>
         </div>
@@ -1013,6 +1026,7 @@ async function saveBookingEdit(bookingId) {
     guest_count: parseInt(document.getElementById(`edit-guests-${bookingId}`)?.value, 10) || null,
     location: document.getElementById(`edit-location-${bookingId}`)?.value,
     occasion: document.getElementById(`edit-occasion-${bookingId}`)?.value,
+    theme: document.getElementById(`edit-theme-${bookingId}`)?.value,
     booking_amount: parseFloat(document.getElementById(`edit-total-${bookingId}`)?.value) || 0,
     advance_amount: parseFloat(document.getElementById(`edit-advance-${bookingId}`)?.value) || 0,
     special_requirements: document.getElementById(`edit-special-${bookingId}`)?.value,
@@ -1157,7 +1171,7 @@ Name - ${booking.full_name || 'N/A'}
 Contact - ${booking.mobile_number || 'N/A'}
 Date - ${formatDate(booking.preferred_date)}
 Time - ${formatTime(booking.event_time)}
-People - ${booking.guest_count || 'N/A'}${boardLine ? `\n${boardLabel} - ${boardLine}` : ''}
+People - ${booking.guest_count || 'N/A'}${booking.theme ? `\nTheme - ${booking.theme}` : ''}${boardLine ? `\n${boardLabel} - ${boardLine}` : ''}
 Drinks - ${bevCount}
 Food - ${foodCount}
 
@@ -1297,6 +1311,7 @@ async function handleAddBooking(e) {
   const eventTime = document.getElementById('new-time')?.value;
   const guestCount = parseInt(document.getElementById('new-guests')?.value, 10);
   const occasion = document.getElementById('new-occasion')?.value;
+  const theme = document.getElementById('new-theme')?.value;
   const bookingAmount = parseFloat(document.getElementById('new-amount')?.value) || 0;
   const advanceAmount = parseFloat(document.getElementById('new-advance')?.value) || 0;
   const foodLimit = parseInt(document.getElementById('new-food-limit')?.value, 10);
@@ -1324,6 +1339,7 @@ async function handleAddBooking(e) {
         event_time: eventTime,
         guest_count: guestCount,
         occasion: occasion,
+        theme: theme,
         booking_amount: bookingAmount,
         advance_amount: advanceAmount,
         board_message: boardMessage ? `${boardType}:${boardMessage}` : null,

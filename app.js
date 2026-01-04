@@ -157,6 +157,7 @@ async function handleBookingSubmit(e) {
     preferred_date: f['preferred-date'].value,
     event_time: f['preferred-time'].value,  // Customer's preferred time
     occasion: f['occasion'].value,
+    theme: f['theme'].value,
     addons: selectedAddons,  // Customer's requested add-ons
     special_requirements: f['special-requirements'].value.trim(),
     confirmed: false,
