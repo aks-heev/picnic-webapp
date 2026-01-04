@@ -60,6 +60,61 @@ function getAddonOptionsHTML() {
   ).join('');
 }
 
+// Generate time slot options HTML (30 min intervals from 9 AM to 10 PM)
+function getTimeSlotOptionsHTML(selectedValue = '') {
+  const slots = [];
+  for (let hour = 9; hour <= 22; hour++) {
+    for (let min = 0; min < 60; min += 30) {
+      if (hour === 22 && min > 0) break; // Stop at 10:00 PM
+      const time24 = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+      const hour12 = hour > 12 ? hour - 12 : (hour === 0 ? 12 : hour);
+      const ampm = hour >= 12 ? 'PM' : 'AM';
+      const time12 = `${hour12}:${min.toString().padStart(2, '0')} ${ampm}`;
+      const selected = selectedValue === time24 ? 'selected' : '';
+      slots.push(`<option value="${time24}" ${selected}>${time12}</option>`);
+    }
+  }
+  return slots.join('');
+}
+
+// Calculate default end time (2.5 hours after start)
+function getDefaultEndTime(startTime) {
+  if (!startTime) return '';
+  const [hours, minutes] = startTime.split(':').map(Number);
+  let endHours = hours + 2;
+  let endMinutes = minutes + 30;
+  if (endMinutes >= 60) {
+    endHours += 1;
+    endMinutes -= 60;
+  }
+  // Cap at 11:30 PM
+  if (endHours > 23 || (endHours === 23 && endMinutes > 30)) {
+    endHours = 23;
+    endMinutes = 30;
+  }
+  return `${endHours.toString().padStart(2, '0')}:${endMinutes.toString().padStart(2, '0')}`;
+}
+
+// Add one hour to a time string (HH:MM format)
+function addOneHourToTime(timeStr) {
+  if (!timeStr) return '';
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  let newHours = hours + 1;
+  // Cap at 11:30 PM
+  if (newHours > 23) newHours = 23;
+  return `${newHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+}
+
+// Subtract one hour from a time string (HH:MM format)
+function subtractOneHourFromTime(timeStr) {
+  if (!timeStr) return '';
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  let newHours = hours - 1;
+  // Don't go below 9 AM
+  if (newHours < 9) newHours = 9;
+  return `${newHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+}
+
 // Helper function to build complete booking JSON
 function buildBookingJSON(booking, menuLink = null) {
   const addons = booking.addons || [];
@@ -74,7 +129,8 @@ function buildBookingJSON(booking, menuLink = null) {
     },
     event: {
       date: booking.preferred_date,
-      time: booking.event_time,
+      start_time: booking.event_time,
+      end_time: booking.event_end_time,
       location: booking.location,
       guest_count: booking.guest_count,
       occasion: booking.occasion,
@@ -279,9 +335,22 @@ function renderQueries(queries) {
           <h5 style="margin-bottom:12px; color:var(--color-primary);">Confirm Booking Details</h5>
           <div class="form-row-grid">
             <div class="form-group">
-              <label class="form-label" for="time-${q.id}">Event Time</label>
-              <input id="time-${q.id}" type="time" class="form-control" value="${q.event_time || ''}" required>
+              <label class="form-label" for="time-${q.id}">Start Time</label>
+              <select id="time-${q.id}" class="form-control" required onchange="updateEndTimeOnStartChange(${q.id})">
+                <option value="">-- Select --</option>
+                ${getTimeSlotOptionsHTML(q.event_time)}
+              </select>
             </div>
+            <div class="form-group">
+              <label class="form-label" for="end-time-${q.id}">End Time</label>
+              <select id="end-time-${q.id}" class="form-control" required>
+                <option value="">-- Select --</option>
+                ${getTimeSlotOptionsHTML(getDefaultEndTime(q.event_time))}
+                <option value="23:30">11:30 PM</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row-grid">
             <div class="form-group">
               <label class="form-label" for="booking-${q.id}">Total Amount (₹)</label>
               <input id="booking-${q.id}" type="number" class="form-control" placeholder="Total amount" min="0" step="50" required>
@@ -393,7 +462,8 @@ function renderBookings(bookings, menuLinksByBooking = {}) {
       <div class="booking-details-view" id="booking-view-${booking.id}">
         <div class="booking-details-grid">
           <p><strong>📅 Date:</strong> ${booking.preferred_date || 'N/A'}</p>
-          <p><strong>🕐 Time:</strong> ${booking.event_time || 'N/A'}</p>
+          <p><strong>🕐 Start:</strong> ${booking.event_time || 'N/A'}</p>
+          <p><strong>🕛 End:</strong> ${booking.event_end_time || 'N/A'}</p>
           <p><strong>👥 Guests:</strong> ${booking.guest_count || 'N/A'}</p>
           <p><strong>📍 Location:</strong> ${booking.location || 'N/A'}</p>
           <p><strong>🎉 Occasion:</strong> ${booking.occasion || 'N/A'}</p>
@@ -441,8 +511,19 @@ function renderBookings(bookings, menuLinksByBooking = {}) {
             <input type="date" class="form-control" id="edit-date-${booking.id}" value="${booking.preferred_date || ''}">
           </div>
           <div class="form-group">
-            <label class="form-label">Event Time</label>
-            <input type="time" class="form-control" id="edit-time-${booking.id}" value="${booking.event_time || ''}">
+            <label class="form-label">Start Time</label>
+            <select class="form-control" id="edit-time-${booking.id}">
+              <option value="">-- Select --</option>
+              ${getTimeSlotOptionsHTML(booking.event_time)}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">End Time</label>
+            <select class="form-control" id="edit-end-time-${booking.id}">
+              <option value="">-- Select --</option>
+              ${getTimeSlotOptionsHTML(booking.event_end_time)}
+              <option value="23:30" ${booking.event_end_time === '23:30' ? 'selected' : ''}>11:30 PM</option>
+            </select>
           </div>
           <div class="form-group">
             <label class="form-label">Guest Count</label>
@@ -678,6 +759,16 @@ function addAddon(queryId) {
     bookingAmountEl.value = currentAmount + addonPrice;
   }
   
+  // If addon is "Extra Hour", add 1 hour to end time
+  if (addonName.toLowerCase().includes('extra hour')) {
+    const endTimeSelect = document.getElementById(`end-time-${queryId}`);
+    if (endTimeSelect && endTimeSelect.value) {
+      const newEndTime = addOneHourToTime(endTimeSelect.value);
+      endTimeSelect.value = newEndTime;
+      showToast('End time updated for extra hour', 'info');
+    }
+  }
+  
   // Render updated list
   renderSelectedAddons(queryId);
   
@@ -700,6 +791,16 @@ function removeAddon(queryId, addonName) {
   if (bookingAmountEl && addonPrice > 0) {
     const currentAmount = parseFloat(bookingAmountEl.value) || 0;
     bookingAmountEl.value = Math.max(0, currentAmount - addonPrice);
+  }
+  
+  // If addon is "Extra Hour", subtract 1 hour from end time
+  if (addonName.toLowerCase().includes('extra hour')) {
+    const endTimeSelect = document.getElementById(`end-time-${queryId}`);
+    if (endTimeSelect && endTimeSelect.value) {
+      const newEndTime = subtractOneHourFromTime(endTimeSelect.value);
+      endTimeSelect.value = newEndTime;
+      showToast('End time updated (extra hour removed)', 'info');
+    }
   }
   
   renderSelectedAddons(queryId);
@@ -883,6 +984,7 @@ function renderBookingAddons(bookingId) {
 // ===== Actions =====
 async function confirmBooking(queryId) {
   const timeInput = document.getElementById(`time-${queryId}`);
+  const endTimeInput = document.getElementById(`end-time-${queryId}`);
   const bookingInput = document.getElementById(`booking-${queryId}`);
   const advanceInput = document.getElementById(`advance-${queryId}`);
   const foodLimitInput = document.getElementById(`food-limit-${queryId}`);
@@ -891,6 +993,7 @@ async function confirmBooking(queryId) {
   const boardMessageInput = document.getElementById(`board-message-${queryId}`);
 
   const eventTime = timeInput?.value;
+  const eventEndTime = endTimeInput?.value;
   const bookingAmount = parseFloat(bookingInput?.value);
   const advanceAmount = parseFloat(advanceInput?.value) || 0;
   const foodLimit = parseInt(foodLimitInput?.value, 10);
@@ -899,7 +1002,11 @@ async function confirmBooking(queryId) {
   const boardMessage = boardType ? boardMessageInput?.value?.trim() || null : null;
 
   if (!eventTime) {
-    showToast('Please enter event time', 'error');
+    showToast('Please select start time', 'error');
+    return;
+  }
+  if (!eventEndTime) {
+    showToast('Please select end time', 'error');
     return;
   }
   if (!bookingAmount || bookingAmount <= 0) {
@@ -929,6 +1036,7 @@ async function confirmBooking(queryId) {
       .update({
         confirmed: true,
         event_time: eventTime,
+        event_end_time: eventEndTime,
         booking_amount: bookingAmount,
         advance_amount: advanceAmount,
         addons: addons,
@@ -1023,6 +1131,7 @@ async function saveBookingEdit(bookingId) {
     email_address: document.getElementById(`edit-email-${bookingId}`)?.value,
     preferred_date: document.getElementById(`edit-date-${bookingId}`)?.value,
     event_time: document.getElementById(`edit-time-${bookingId}`)?.value,
+    event_end_time: document.getElementById(`edit-end-time-${bookingId}`)?.value,
     guest_count: parseInt(document.getElementById(`edit-guests-${bookingId}`)?.value, 10) || null,
     location: document.getElementById(`edit-location-${bookingId}`)?.value,
     occasion: document.getElementById(`edit-occasion-${bookingId}`)?.value,
@@ -1127,25 +1236,21 @@ function generateTicket(bookingId, booking, menuLink) {
     return `${day}${suffix} ${month} ${year}`;
   };
 
-  // Format time (assuming HH:MM format, add 2.5 hours for end time)
-  const formatTime = (timeStr) => {
+  // Format time from 24h to 12h
+  const formatTime12h = (timeStr) => {
     if (!timeStr) return 'N/A';
     const [hours, minutes] = timeStr.split(':').map(Number);
-    const startDate = new Date();
-    startDate.setHours(hours, minutes);
-    
-    const endDate = new Date(startDate);
-    endDate.setHours(endDate.getHours() + 2, endDate.getMinutes() + 30);
-    
-    const formatTimeStr = (d) => {
-      let h = d.getHours();
-      const m = d.getMinutes();
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      h = h % 12 || 12;
-      return `${h}:${m.toString().padStart(2, '0')} ${ampm}`;
-    };
-    
-    return `${formatTimeStr(startDate)} to ${formatTimeStr(endDate)}`;
+    const h = hours % 12 || 12;
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    return `${h}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+  };
+
+  // Format time range using start and end time
+  const getTimeRange = () => {
+    const startFormatted = formatTime12h(booking.event_time);
+    const endFormatted = formatTime12h(booking.event_end_time);
+    if (startFormatted === 'N/A' && endFormatted === 'N/A') return 'N/A';
+    return `${startFormatted} to ${endFormatted}`;
   };
 
   // Extract board type and message
@@ -1170,7 +1275,7 @@ function generateTicket(bookingId, booking, menuLink) {
 Name - ${booking.full_name || 'N/A'}
 Contact - ${booking.mobile_number || 'N/A'}
 Date - ${formatDate(booking.preferred_date)}
-Time - ${formatTime(booking.event_time)}
+Time - ${getTimeRange()}
 People - ${booking.guest_count || 'N/A'}${booking.theme ? `\nTheme - ${booking.theme}` : ''}${boardLine ? `\n${boardLabel} - ${boardLine}` : ''}
 Drinks - ${bevCount}
 Food - ${foodCount}
@@ -1271,12 +1376,35 @@ function addNewBookingAddon() {
   }
 
   newBookingAddons.push({ name, price });
+  
+  // If addon is "Extra Hour", add 1 hour to end time
+  if (name.toLowerCase().includes('extra hour')) {
+    const endTimeSelect = document.getElementById('new-end-time');
+    if (endTimeSelect && endTimeSelect.value) {
+      const newEndTime = addOneHourToTime(endTimeSelect.value);
+      endTimeSelect.value = newEndTime;
+      showToast('End time updated for extra hour', 'info');
+    }
+  }
+  
   renderNewBookingAddons();
   hideNewBookingAddonSelector();
 }
 
 function removeNewBookingAddon(index) {
+  const removedAddon = newBookingAddons[index];
   newBookingAddons.splice(index, 1);
+  
+  // If addon is "Extra Hour", subtract 1 hour from end time
+  if (removedAddon && removedAddon.name.toLowerCase().includes('extra hour')) {
+    const endTimeSelect = document.getElementById('new-end-time');
+    if (endTimeSelect && endTimeSelect.value) {
+      const newEndTime = subtractOneHourFromTime(endTimeSelect.value);
+      endTimeSelect.value = newEndTime;
+      showToast('End time updated (extra hour removed)', 'info');
+    }
+  }
+  
   renderNewBookingAddons();
 }
 
@@ -1309,6 +1437,7 @@ async function handleAddBooking(e) {
   const location = document.getElementById('new-location')?.value;
   const eventDate = document.getElementById('new-date')?.value;
   const eventTime = document.getElementById('new-time')?.value;
+  const eventEndTime = document.getElementById('new-end-time')?.value;
   const guestCount = parseInt(document.getElementById('new-guests')?.value, 10);
   const occasion = document.getElementById('new-occasion')?.value;
   const theme = document.getElementById('new-theme')?.value;
@@ -1321,7 +1450,7 @@ async function handleAddBooking(e) {
   const specialReq = document.getElementById('new-special')?.value.trim();
 
   // Validation
-  if (!fullName || !mobile || !location || !eventDate || !eventTime || !guestCount || !bookingAmount || !foodLimit || !bevLimit) {
+  if (!fullName || !mobile || !location || !eventDate || !eventTime || !eventEndTime || !guestCount || !bookingAmount || !foodLimit || !bevLimit) {
     showToast('Please fill in all required fields', 'error');
     return;
   }
@@ -1337,6 +1466,7 @@ async function handleAddBooking(e) {
         location: location,
         preferred_date: eventDate,
         event_time: eventTime,
+        event_end_time: eventEndTime,
         guest_count: guestCount,
         occasion: occasion,
         theme: theme,
@@ -1419,3 +1549,25 @@ window.hideNewBookingAddonSelector = hideNewBookingAddonSelector;
 window.autoFillNewBookingAddonPrice = autoFillNewBookingAddonPrice;
 window.addNewBookingAddon = addNewBookingAddon;
 window.removeNewBookingAddon = removeNewBookingAddon;
+window.updateEndTimeOnStartChange = updateEndTimeOnStartChange;
+window.updateNewEndTime = updateNewEndTime;
+
+// Update end time in confirm booking form when start time changes
+function updateEndTimeOnStartChange(queryId) {
+  const startTime = document.getElementById(`time-${queryId}`)?.value;
+  const endTimeSelect = document.getElementById(`end-time-${queryId}`);
+  if (startTime && endTimeSelect) {
+    const defaultEnd = getDefaultEndTime(startTime);
+    endTimeSelect.value = defaultEnd;
+  }
+}
+
+// Update end time in Add Booking modal when start time changes
+function updateNewEndTime() {
+  const startTime = document.getElementById('new-time')?.value;
+  const endTimeSelect = document.getElementById('new-end-time');
+  if (startTime && endTimeSelect) {
+    const defaultEnd = getDefaultEndTime(startTime);
+    endTimeSelect.value = defaultEnd;
+  }
+}
