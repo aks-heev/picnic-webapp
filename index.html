@@ -80,14 +80,15 @@
           <label class="form-label" for="guest-count">Guests</label>
           <input id="guest-count" name="guest-count" type="number" min="1" class="form-control" required />
           
-          <label class="form-label">Event Date & Time</label>
-          <div class="datetime-picker-group" style="display:flex; gap:12px;">
-            <div style="flex:1;">
-              <input id="preferred-date" name="preferred-date" type="date" class="form-control" required />
+          <div class="datetime-picker-section">
+            <div class="datetime-field">
+              <label class="form-label" for="preferred-date">📅 Select Date</label>
+              <input id="preferred-date" name="preferred-date" type="date" class="form-control datetime-input" required readonly onclick="this.showPicker()" />
             </div>
-            <div style="flex:1;">
+            <div class="datetime-field">
+              <label class="form-label" for="preferred-time">🕐 Select Time</label>
               <select id="preferred-time" name="preferred-time" class="form-control" required>
-                <option value="">-- Select Time --</option>
+                <option value="">Choose a time slot</option>
                 <option value="09:00">9:00 AM</option>
                 <option value="09:30">9:30 AM</option>
                 <option value="10:00">10:00 AM</option>

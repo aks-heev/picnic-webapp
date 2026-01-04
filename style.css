@@ -489,32 +489,93 @@ textarea.form-control {
   font-size: var(--font-size-base);
 }
 
+/* Unified Dropdown Styles - All Selects */
 select.form-control {
-  padding: var(--space-8) var(--space-12);
+  padding: 12px 16px;
+  padding-right: 44px;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--color-text);
+  background-color: var(--color-surface);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-base);
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
-  background-image: var(--select-caret-light);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23666666' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right var(--space-12) center;
+  background-position: right 14px center;
   background-size: 16px;
-  padding-right: var(--space-32);
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-/* Add a dark mode specific caret */
+select.form-control:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+select.form-control:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(199, 144, 129, 0.15);
+  outline: none;
+}
+
+/* Dark mode dropdown arrow */
 @media (prefers-color-scheme: dark) {
   select.form-control {
-    background-image: var(--select-caret-dark);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23cccccc' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   }
 }
 
 /* Also handle data-color-scheme */
 [data-color-scheme="dark"] select.form-control {
-  background-image: var(--select-caret-dark);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23cccccc' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
 }
 
 [data-color-scheme="light"] select.form-control {
-  background-image: var(--select-caret-light);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23666666' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+}
+
+/* Disabled select state */
+select.form-control:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: var(--color-background);
+}
+
+/* Unified Date Input Styles */
+input[type="date"].form-control {
+  padding: 12px 16px;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  border: 2px solid var(--color-border);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+input[type="date"].form-control:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+input[type="date"].form-control:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(199, 144, 129, 0.15);
+  outline: none;
+}
+
+input[type="date"].form-control::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+  padding: 4px;
+  border-radius: 4px;
+  transition: opacity 0.2s;
+}
+
+input[type="date"].form-control:hover::-webkit-calendar-picker-indicator {
+  opacity: 1;
 }
 
 .form-control:focus {
@@ -531,6 +592,77 @@ select.form-control {
 
 .form-group {
   margin-bottom: var(--space-16);
+}
+
+/* DateTime Picker Section (Booking Form) */
+.datetime-picker-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 16px;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+}
+
+.datetime-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.datetime-field .form-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 8px;
+}
+
+/* Date input specific styles */
+.datetime-input {
+  padding: 12px 16px;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-base);
+  background-color: var(--color-surface);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.datetime-input:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.datetime-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(199, 144, 129, 0.15);
+  outline: none;
+}
+
+.datetime-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.datetime-input:hover::-webkit-calendar-picker-indicator {
+  opacity: 1;
+}
+
+.datetime-input:hover::-webkit-calendar-picker-indicator {
+  opacity: 1;
+}
+
+/* Responsive: Stack on mobile */
+@media (max-width: 480px) {
+  .datetime-picker-section {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
 }
 
 /* Add-ons Checkbox List (Booking Form) */

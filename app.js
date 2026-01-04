@@ -477,6 +477,13 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   
   // Load add-ons for booking form
   await loadAddons()
+  
+  // Set minimum date for booking to today
+  const dateInput = document.getElementById('preferred-date')
+  if (dateInput) {
+    const today = new Date().toISOString().split('T')[0]
+    dateInput.min = today
+  }
 
   // Booking modal & form
   document.getElementById('booking-open')?.addEventListener('click', ()=>showModal('booking-modal'))
