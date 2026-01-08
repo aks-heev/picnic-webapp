@@ -3,46 +3,271 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>The Picnic Story</title>
+  <title>The Picnic Story - Premium Boho Picnic Experiences</title>
   <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
   <div id="toast-container"></div>
 
   <!-- Navigation -->
-  <nav class="navbar">
-    <div class="container">
-      <div class="nav-brand"><h2>The Picnic Story</h2></div>
-      <div class="nav-links">
+  <nav class="navbar" id="navbar">
+    <div class="container nav-container">
+      <div class="nav-brand">
+        <span class="brand-icon">🧺</span>
+        <h2>The Picnic Story</h2>
+      </div>
+      
+      <!-- Mobile Menu Toggle -->
+      <button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Toggle menu">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+      
+      <div class="nav-links" id="nav-links">
         <a href="#" class="nav-link active" data-route="home-page">Home</a>
         <a href="#" class="nav-link" data-route="menu-page">Menu</a>
-        <a href="/admin" class="nav-link" style="font-size:12px; opacity:0.7;">Admin</a>
+        <a href="#gallery-section" class="nav-link">Gallery</a>
+        <a href="#" class="nav-link cta-link" id="nav-book-btn">Book Now</a>
       </div>
+      
+      <!-- Mobile Menu Overlay -->
+      <div class="mobile-menu-overlay" id="mobile-menu-overlay"></div>
     </div>
   </nav>
 
   <!-- Home Page -->
   <div id="home-page" class="page active">
-    <section class="hero">
-      <div class="hero-background"></div>
-      <div class="hero-content">
-        <h1 class="hero-title">Premium Boho-Chic Experiences</h1>
-        <p class="hero-tagline">Beautifully curated picnic arrangements with boho-chic decor and ambient lighting.</p>
-        <p class="hero-description">Perfect for romantic dates, small celebrations, and meaningful moments with your loved ones.</p>
-        <button id="booking-open" class="btn btn--primary">Book Your Picnic</button>
+    <!-- Hero Section -->
+    <section class="hero-section">
+      <!-- Decorative Elements -->
+      <div class="hero-decorations">
+        <div class="deco-leaf deco-leaf-1">🌿</div>
+        <div class="deco-leaf deco-leaf-2">🍃</div>
+        <div class="deco-flower deco-flower-1">✿</div>
+        <div class="deco-flower deco-flower-2">❀</div>
+        <div class="deco-sparkle deco-sparkle-1">✨</div>
+        <div class="deco-sparkle deco-sparkle-2">✨</div>
+      </div>
+      
+      <div class="hero-background-gradient"></div>
+      <div class="hero-pattern-overlay"></div>
+      
+      <div class="hero-container">
+        <div class="hero-content-wrapper">
+          <span class="hero-badge">✨ Jaipur's Premium Picnic Experience</span>
+          <h1 class="hero-title">
+            <span class="title-line">Create Magical</span>
+            <span class="title-line title-accent">Moments</span>
+            <span class="title-line">Under the Sky</span>
+          </h1>
+          <p class="hero-tagline">
+            Beautifully curated boho-chic picnic setups with ambient lighting, 
+            luxurious décor, and gourmet delights for your special occasions.
+          </p>
+          
+          <div class="hero-features">
+            <div class="hero-feature">
+              <span class="feature-icon">🎨</span>
+              <span class="feature-text">Themed Setups</span>
+            </div>
+            <div class="hero-feature">
+              <span class="feature-icon">🍽️</span>
+              <span class="feature-text">Gourmet Menu</span>
+            </div>
+            <div class="hero-feature">
+              <span class="feature-icon">📸</span>
+              <span class="feature-text">Insta-worthy</span>
+            </div>
+          </div>
+          
+          <div class="hero-cta-group">
+            <button id="booking-open" class="btn btn--primary btn--lg hero-cta">
+              <span>Book Your Experience</span>
+              <svg class="btn-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
+            </button>
+            <a href="#" class="btn btn--outline btn--lg" data-route="menu-page">View Menu</a>
+          </div>
+          
+          <div class="hero-trust">
+            <div class="trust-avatars">
+              <span class="avatar">👩</span>
+              <span class="avatar">👨</span>
+              <span class="avatar">👩‍🦰</span>
+              <span class="avatar">🧑</span>
+            </div>
+            <p class="trust-text"><strong>500+</strong> Happy Customers</p>
+          </div>
+        </div>
+        
+        <div class="hero-image-wrapper">
+          <div class="hero-image-frame">
+            <div class="hero-image-placeholder">
+              <span class="placeholder-emoji">🧺</span>
+              <span class="placeholder-text">Boho Picnic Setup</span>
+            </div>
+          </div>
+          <div class="hero-float-card float-card-1">
+            <span class="float-icon">💐</span>
+            <span class="float-text">Fresh Flowers</span>
+          </div>
+          <div class="hero-float-card float-card-2">
+            <span class="float-icon">🕯️</span>
+            <span class="float-text">Ambient Lighting</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Scroll Indicator -->
+      <div class="scroll-indicator">
+        <span class="scroll-text">Scroll to explore</span>
+        <div class="scroll-arrow">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M5 12l7 7 7-7"/>
+          </svg>
+        </div>
       </div>
     </section>
-    <section class="contact-info container">
-      <h2 class="section-title">Get in Touch</h2>
-      <p>Thank you for your interest! We'll contact you within 24 hours to discuss your picnic requirements.</p>
-      <p>Call us directly: 📞 +91 99999-99999</p>
+
+    <!-- Features Section -->
+    <section class="features-section">
+      <div class="container">
+        <h2 class="section-title-fancy">
+          <span class="title-decoration">✿</span>
+          Why Choose Us
+          <span class="title-decoration">✿</span>
+        </h2>
+        <div class="features-grid">
+          <div class="feature-card">
+            <div class="feature-card-icon">🎪</div>
+            <h3>Complete Setup</h3>
+            <p>We handle everything - from décor to cleanup. Just show up and enjoy!</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-card-icon">🌸</div>
+            <h3>Themed Décor</h3>
+            <p>Choose from Pink, Green, or Yellow boho themes with fresh flowers.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-card-icon">🍰</div>
+            <h3>Gourmet Food</h3>
+            <p>Delicious menu with variety of cuisines and refreshing beverages.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-card-icon">📍</div>
+            <h3>Your Location</h3>
+            <p>We set up at your preferred location - gardens, rooftops, or venues.</p>
+          </div>
+        </div>
+      </div>
     </section>
+
+    <!-- Occasions Section -->
+    <section class="occasions-section">
+      <div class="container">
+        <h2 class="section-title-fancy">
+          <span class="title-decoration">❀</span>
+          Perfect For Every Occasion
+          <span class="title-decoration">❀</span>
+        </h2>
+        <div class="occasions-grid">
+          <div class="occasion-card">
+            <span class="occasion-emoji">💑</span>
+            <h4>Date Night</h4>
+          </div>
+          <div class="occasion-card">
+            <span class="occasion-emoji">🎂</span>
+            <h4>Birthdays</h4>
+          </div>
+          <div class="occasion-card">
+            <span class="occasion-emoji">💍</span>
+            <h4>Proposals</h4>
+          </div>
+          <div class="occasion-card">
+            <span class="occasion-emoji">💕</span>
+            <h4>Anniversaries</h4>
+          </div>
+          <div class="occasion-card">
+            <span class="occasion-emoji">👨‍👩‍👧</span>
+            <h4>Family Time</h4>
+          </div>
+          <div class="occasion-card">
+            <span class="occasion-emoji">🎉</span>
+            <h4>Celebrations</h4>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section class="contact-section" id="gallery-section">
+      <div class="container">
+        <div class="contact-card">
+          <div class="contact-content">
+            <h2 class="section-title-fancy">
+              <span class="title-decoration">🌿</span>
+              Ready to Create Memories?
+              <span class="title-decoration">🌿</span>
+            </h2>
+            <p>Book your magical picnic experience today. We'll contact you within 24 hours!</p>
+            <div class="contact-methods">
+              <a href="tel:+919266964666" class="contact-method">
+                <span class="contact-icon">📞</span>
+                <span>+91 92669 64666</span>
+              </a>
+              <a href="https://wa.me/919266964666" class="contact-method whatsapp">
+                <span class="contact-icon">💬</span>
+                <span>WhatsApp Us</span>
+              </a>
+            </div>
+            <button class="btn btn--primary btn--lg" id="contact-book-btn">
+              Book Your Picnic Now
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="site-footer">
+      <div class="container">
+        <div class="footer-content">
+          <div class="footer-brand">
+            <span class="brand-icon">🧺</span>
+            <h3>The Picnic Story</h3>
+            <p>Creating magical moments under the sky</p>
+          </div>
+          <div class="footer-links">
+            <a href="#">Home</a>
+            <a href="#" data-route="menu-page">Menu</a>
+            <a href="#">Instagram</a>
+          </div>
+          <div class="footer-social">
+            <a href="#" class="social-link">📷</a>
+            <a href="#" class="social-link">📘</a>
+            <a href="#" class="social-link">💬</a>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <p>© 2026 The Picnic Story. Made with 💕 in Jaipur</p>
+        </div>
+      </div>
+    </footer>
   </div>
 
   <!-- Menu Page -->
   <div id="menu-page" class="page">
-    <section class="services container">
-      <h2 class="section-title">Our Menu</h2>
+    <section class="services container" style="padding-top: 100px;">
+      <h2 class="section-title-fancy">
+        <span class="title-decoration">🍽️</span>
+        Our Menu
+        <span class="title-decoration">🍽️</span>
+      </h2>
       <div class="modern-menu-tabs" style="margin-bottom:24px;">
         <button class="modern-tab-btn active" data-tab="food-items">Food Items</button>
         <button class="modern-tab-btn" data-tab="bev-items">Beverages</button>
@@ -56,111 +281,235 @@
     </section>
   </div>
 
-  <!-- Booking Modal -->
+  <!-- Booking Modal - Multi-Step Wizard -->
   <div id="booking-modal" class="modal hidden">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>Enquire for Your Picnic</h2>
+    <div class="modal-content wizard-modal">
+      <div class="modal-header wizard-header">
+        <div class="wizard-title-section">
+          <h2>Book Your Picnic</h2>
+          <p class="wizard-subtitle">Let's create something magical ✨</p>
+        </div>
         <button class="modal-close">&times;</button>
       </div>
-      <div class="modal-body">
+      
+      <!-- Progress Steps -->
+      <div class="wizard-progress">
+        <div class="progress-step active" data-step="1">
+          <div class="step-number">1</div>
+          <span class="step-label">Your Info</span>
+        </div>
+        <div class="progress-line"></div>
+        <div class="progress-step" data-step="2">
+          <div class="step-number">2</div>
+          <span class="step-label">Event Details</span>
+        </div>
+        <div class="progress-line"></div>
+        <div class="progress-step" data-step="3">
+          <div class="step-number">3</div>
+          <span class="step-label">Customize</span>
+        </div>
+      </div>
+      
+      <div class="modal-body wizard-body">
         <form id="booking-form" novalidate>
-          <label class="form-label" for="full-name">Full Name</label>
-          <input id="full-name" name="full-name" type="text" class="form-control" required />
-          <label class="form-label" for="mobile-number">Mobile Number</label>
-          <input id="mobile-number" name="mobile-number" type="tel" class="form-control" required />
-          <label class="form-label" for="email-address">Email Address</label>
-          <input id="email-address" name="email-address" type="email" class="form-control" required />
-          <label class="form-label" for="location">Location</label>
-          <select id="location" name="location" class="form-control" required>
-            <option value="jaipur">Jaipur</option>
-            <option value="gurugram">Gurugram</option>
-            <option value="custom">Custom Location</option>
-          </select>
-          <label class="form-label" for="guest-count">Guests</label>
-          <input id="guest-count" name="guest-count" type="number" min="1" class="form-control" required />
-          
-          <div class="datetime-picker-section">
-            <div class="datetime-field">
-              <label class="form-label" for="preferred-date">📅 Select Date</label>
-              <input id="preferred-date" name="preferred-date" type="date" class="form-control datetime-input" required />
+          <!-- Step 1: Personal Info -->
+          <div class="wizard-step active" data-step="1">
+            <div class="step-header">
+              <span class="step-icon">👤</span>
+              <h3>Tell us about yourself</h3>
             </div>
-            <div class="datetime-field">
-              <label class="form-label" for="preferred-time">🕐 Select Time</label>
-              <select id="preferred-time" name="preferred-time" class="form-control" required>
-                <option value="">Choose a time slot</option>
-                <option value="09:00">9:00 AM</option>
-                <option value="09:30">9:30 AM</option>
-                <option value="10:00">10:00 AM</option>
-                <option value="10:30">10:30 AM</option>
-                <option value="11:00">11:00 AM</option>
-                <option value="11:30">11:30 AM</option>
-                <option value="12:00">12:00 PM</option>
-                <option value="12:30">12:30 PM</option>
-                <option value="13:00">1:00 PM</option>
-                <option value="13:30">1:30 PM</option>
-                <option value="14:00">2:00 PM</option>
-                <option value="14:30">2:30 PM</option>
-                <option value="15:00">3:00 PM</option>
-                <option value="15:30">3:30 PM</option>
-                <option value="16:00">4:00 PM</option>
-                <option value="16:30">4:30 PM</option>
-                <option value="17:00">5:00 PM</option>
-                <option value="17:30">5:30 PM</option>
-                <option value="18:00">6:00 PM</option>
-                <option value="18:30">6:30 PM</option>
-                <option value="19:00">7:00 PM</option>
-                <option value="19:30">7:30 PM</option>
-                <option value="20:00">8:00 PM</option>
-                <option value="20:30">8:30 PM</option>
-                <option value="21:00">9:00 PM</option>
-                <option value="21:30">9:30 PM</option>
-                <option value="22:00">10:00 PM</option>
+            
+            <div class="form-group">
+              <label class="form-label" for="full-name">
+                <span class="label-icon">✏️</span> Full Name
+              </label>
+              <input id="full-name" name="full-name" type="text" class="form-control" placeholder="Enter your name" required />
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="mobile-number">
+                  <span class="label-icon">📱</span> Mobile Number
+                </label>
+                <input id="mobile-number" name="mobile-number" type="tel" class="form-control" placeholder="10-digit mobile" required />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="email-address">
+                  <span class="label-icon">📧</span> Email Address
+                </label>
+                <input id="email-address" name="email-address" type="email" class="form-control" placeholder="your@email.com" />
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label" for="location">
+                <span class="label-icon">📍</span> Location
+              </label>
+              <select id="location" name="location" class="form-control" required>
+                <option value="">Select your city</option>
+                <option value="jaipur">Jaipur</option>
+                <option value="gurugram">Gurugram</option>
+                <option value="custom">Custom Location</option>
               </select>
             </div>
           </div>
           
-          <label class="form-label" for="occasion">Occasion</label>
-          <select id="occasion" name="occasion" class="form-control" required>
-            <option value="">-- Select Occasion --</option>
-            <option value="Birthday">Birthday</option>
-            <option value="Anniversary">Anniversary</option>
-            <option value="Proposal">Proposal</option>
-            <option value="Date Night">Date Night</option>
-            <option value="Celebration">Celebration</option>
-            <option value="Family Gathering">Family Gathering</option>
-            <option value="Friends Hangout">Friends Hangout</option>
-            <option value="Corporate Event">Corporate Event</option>
-            <option value="Other">Other</option>
-          </select>
-          <label class="form-label" for="theme">Theme</label>
-          <select id="theme" name="theme" class="form-control">
-            <option value="">-- Select Theme --</option>
-            <option value="Pink">Pink</option>
-            <option value="Green">Green</option>
-            <option value="Yellow">Yellow</option>
-          </select>
-          
-          <!-- Add-ons Dropdown Section -->
-          <div class="form-addons-section" style="margin-top:16px;">
-            <label class="form-label">Add-ons (Optional)</label>
-            <div class="addons-dropdown">
-              <button type="button" class="addons-dropdown-trigger form-control" onclick="toggleAddonsDropdown()">
-                <span class="addons-dropdown-text">Select extras for your picnic</span>
-                <span class="addons-dropdown-arrow">▼</span>
-              </button>
-              <div id="addons-dropdown-content" class="addons-dropdown-content hidden">
-                <div id="addons-list" class="addons-checkbox-list">
-                  <!-- Add-ons will be loaded here -->
-                </div>
+          <!-- Step 2: Event Details -->
+          <div class="wizard-step" data-step="2">
+            <div class="step-header">
+              <span class="step-icon">📅</span>
+              <h3>Event Details</h3>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="preferred-date">
+                  <span class="label-icon">📅</span> Preferred Date
+                </label>
+                <input id="preferred-date" name="preferred-date" type="date" class="form-control" required />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="preferred-time">
+                  <span class="label-icon">🕐</span> Preferred Time
+                </label>
+                <select id="preferred-time" name="preferred-time" class="form-control" required>
+                  <option value="">Choose a time slot</option>
+                  <option value="09:00">9:00 AM</option>
+                  <option value="09:30">9:30 AM</option>
+                  <option value="10:00">10:00 AM</option>
+                  <option value="10:30">10:30 AM</option>
+                  <option value="11:00">11:00 AM</option>
+                  <option value="11:30">11:30 AM</option>
+                  <option value="12:00">12:00 PM</option>
+                  <option value="12:30">12:30 PM</option>
+                  <option value="13:00">1:00 PM</option>
+                  <option value="13:30">1:30 PM</option>
+                  <option value="14:00">2:00 PM</option>
+                  <option value="14:30">2:30 PM</option>
+                  <option value="15:00">3:00 PM</option>
+                  <option value="15:30">3:30 PM</option>
+                  <option value="16:00">4:00 PM</option>
+                  <option value="16:30">4:30 PM</option>
+                  <option value="17:00">5:00 PM</option>
+                  <option value="17:30">5:30 PM</option>
+                  <option value="18:00">6:00 PM</option>
+                  <option value="18:30">6:30 PM</option>
+                  <option value="19:00">7:00 PM</option>
+                  <option value="19:30">7:30 PM</option>
+                  <option value="20:00">8:00 PM</option>
+                  <option value="20:30">8:30 PM</option>
+                  <option value="21:00">9:00 PM</option>
+                  <option value="21:30">9:30 PM</option>
+                  <option value="22:00">10:00 PM</option>
+                </select>
               </div>
             </div>
-            <div id="selected-addons-summary" class="selected-addons-summary"></div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="guest-count">
+                  <span class="label-icon">👥</span> Number of Guests
+                </label>
+                <input id="guest-count" name="guest-count" type="number" min="1" max="20" class="form-control" placeholder="2" required />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="occasion">
+                  <span class="label-icon">🎉</span> Occasion
+                </label>
+                <select id="occasion" name="occasion" class="form-control" required>
+                  <option value="">Select Occasion</option>
+                  <option value="Birthday">🎂 Birthday</option>
+                  <option value="Anniversary">💕 Anniversary</option>
+                  <option value="Proposal">💍 Proposal</option>
+                  <option value="Date Night">💑 Date Night</option>
+                  <option value="Celebration">🎉 Celebration</option>
+                  <option value="Family Gathering">👨‍👩‍👧 Family Gathering</option>
+                  <option value="Friends Hangout">👯 Friends Hangout</option>
+                  <option value="Corporate Event">💼 Corporate Event</option>
+                  <option value="Other">✨ Other</option>
+                </select>
+              </div>
+            </div>
           </div>
           
-          <label class="form-label" for="special-requirements" style="margin-top:16px;">Special Requirements</label>
-          <textarea id="special-requirements" name="special-requirements" class="form-control"></textarea>
-          <button type="submit" class="btn btn--primary btn--full-width">Submit Enquiry</button>
+          <!-- Step 3: Customization -->
+          <div class="wizard-step" data-step="3">
+            <div class="step-header">
+              <span class="step-icon">🎨</span>
+              <h3>Customize Your Experience</h3>
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label">
+                <span class="label-icon">🎨</span> Choose Your Theme
+              </label>
+              <div class="theme-selector">
+                <label class="theme-option">
+                  <input type="radio" name="theme" value="Pink" />
+                  <span class="theme-card theme-pink">
+                    <span class="theme-color"></span>
+                    <span class="theme-name">Pink</span>
+                    <span class="theme-desc">Romantic & Dreamy</span>
+                  </span>
+                </label>
+                <label class="theme-option">
+                  <input type="radio" name="theme" value="Green" />
+                  <span class="theme-card theme-green">
+                    <span class="theme-color"></span>
+                    <span class="theme-name">Green</span>
+                    <span class="theme-desc">Natural & Fresh</span>
+                  </span>
+                </label>
+                <label class="theme-option">
+                  <input type="radio" name="theme" value="Yellow" />
+                  <span class="theme-card theme-yellow">
+                    <span class="theme-color"></span>
+                    <span class="theme-name">Yellow</span>
+                    <span class="theme-desc">Bright & Cheerful</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+            
+            <!-- Add-ons Section -->
+            <div class="form-group">
+              <label class="form-label">
+                <span class="label-icon">🎁</span> Add-ons (Optional)
+              </label>
+              <div class="addons-dropdown">
+                <button type="button" class="addons-dropdown-trigger form-control" onclick="toggleAddonsDropdown()">
+                  <span class="addons-dropdown-text">Select extras for your picnic</span>
+                  <span class="addons-dropdown-arrow">▼</span>
+                </button>
+                <div id="addons-dropdown-content" class="addons-dropdown-content hidden">
+                  <div id="addons-list" class="addons-checkbox-list">
+                    <!-- Add-ons will be loaded here -->
+                  </div>
+                </div>
+              </div>
+              <div id="selected-addons-summary" class="selected-addons-summary"></div>
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label" for="special-requirements">
+                <span class="label-icon">💬</span> Special Requirements
+              </label>
+              <textarea id="special-requirements" name="special-requirements" class="form-control" placeholder="Any special requests? Let us know..." rows="3"></textarea>
+            </div>
+          </div>
+          
+          <!-- Wizard Navigation -->
+          <div class="wizard-nav">
+            <button type="button" class="btn btn--outline wizard-prev" id="wizard-prev" style="display:none;">
+              ← Back
+            </button>
+            <button type="button" class="btn btn--primary wizard-next" id="wizard-next">
+              Next Step →
+            </button>
+            <button type="submit" class="btn btn--primary btn--lg wizard-submit" id="wizard-submit" style="display:none;">
+              ✨ Submit Enquiry
+            </button>
+          </div>
         </form>
       </div>
     </div>
@@ -168,19 +517,26 @@
 
   <!-- Query Success Page -->
   <div id="query-success-page" class="page">
-    <div class="confirmation-ticket">
-      <div class="ticket-header"><h1>Thank You!</h1></div>
-      <div class="ticket-content">
-        <p>Your enquiry has been submitted successfully. We will contact you soon to finalize your booking!</p>
+    <div class="success-container">
+      <div class="success-animation">
+        <span class="success-emoji">🎉</span>
       </div>
+      <h1 class="success-title">Thank You!</h1>
+      <p class="success-message">Your enquiry has been submitted successfully.</p>
+      <p class="success-submessage">We'll contact you within 24 hours to finalize your magical picnic experience!</p>
+      <button class="btn btn--primary" onclick="location.reload()">Back to Home</button>
     </div>
   </div>
 
   <!-- Menu Selection Page (for customers with menu link) -->
   <div id="menu-selection-page" class="page">
-    <section class="services container">
+    <section class="services container" style="padding-top: 100px;">
       <div class="page-header">
-        <h1>Select Your Menu Items</h1>
+        <h1 class="section-title-fancy">
+          <span class="title-decoration">🍽️</span>
+          Select Your Menu Items
+          <span class="title-decoration">🍽️</span>
+        </h1>
         <p id="selection-limits">Loading...</p>
       </div>
       
@@ -203,19 +559,20 @@
       </div>
 
       <div class="form-actions" style="margin-top:32px; justify-content:center;">
-        <button id="submit-selection" class="btn btn--primary btn--lg">Submit My Selection</button>
+        <button id="submit-selection" class="btn btn--primary btn--lg">Submit My Selection ✨</button>
       </div>
     </section>
   </div>
 
   <!-- Selection Success Page -->
   <div id="selection-success-page" class="page">
-    <div class="confirmation-ticket">
-      <div class="ticket-header"><h1>Selection Submitted!</h1></div>
-      <div class="ticket-content">
-        <p>Thank you! Your menu selection has been submitted successfully.</p>
-        <p>We'll prepare these items for your picnic experience.</p>
+    <div class="success-container">
+      <div class="success-animation">
+        <span class="success-emoji">✅</span>
       </div>
+      <h1 class="success-title">Selection Submitted!</h1>
+      <p class="success-message">Thank you! Your menu selection has been saved.</p>
+      <p class="success-submessage">We'll prepare these delicious items for your picnic experience!</p>
     </div>
   </div>
 

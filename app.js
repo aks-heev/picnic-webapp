@@ -177,12 +177,15 @@ function showPage(id) {
   document.getElementById(id)?.classList.add('active')
   document.querySelectorAll('.nav-link').forEach(l=>l.classList.remove('active'))
   document.querySelector(`[data-route="${id}"]`)?.classList.add('active')
+  // Scroll to top when changing pages
+  window.scrollTo(0, 0)
 }
 
 // Render menu cards
 function renderMenuItems() {
   const fc = document.querySelector('#food-items .modern-menu-grid')
   const bc = document.querySelector('#bev-items .modern-menu-grid')
+  if (!fc || !bc) return
   const card = name => `
     <div class="modern-menu-card">
       <h4 class="menu-card-title">${name}</h4>
@@ -203,43 +206,6 @@ function handleMenuSelectionTabs() {
       document.getElementById(tab).style.display='block'
     })
   })
-}
-
-// Booking submit
-async function handleBookingSubmit(e) {
-  e.preventDefault()
-  const f = e.target
-  
-  // Get selected add-ons
-  const selectedAddons = getSelectedAddons()
-  
-  const lead = {
-    full_name: f['full-name'].value.trim(),
-    mobile_number: f['mobile-number'].value.trim(),
-    email_address: f['email-address'].value.trim(),
-    location: f['location'].value,
-    guest_count: parseInt(f['guest-count'].value,10),
-    preferred_date: f['preferred-date'].value,
-    event_time: f['preferred-time'].value,  // Customer's preferred time
-    occasion: f['occasion'].value,
-    theme: f['theme'].value,
-    addons: selectedAddons,  // Customer's requested add-ons
-    special_requirements: f['special-requirements'].value.trim(),
-    confirmed: false,
-    advance_amount: 0,
-    created_at: new Date().toISOString()
-  }
-  try {
-    const { error } = await supabase.from('bookings').insert([lead])
-    if (error) throw error
-    showToast('Enquiry submitted! We will contact you soon.', 'success')
-    hideModal('booking-modal')
-    f.reset()
-    showPage('query-success-page')
-  } catch (err) {
-    console.error(err)
-    showToast('Error submitting enquiry. Please try again.', 'error')
-  }
 }
 
 // Check for menu link parameter
@@ -510,8 +476,215 @@ async function updateBookingJSONForCustomer(bookingId) {
   }
 }
 
+// ===== MOBILE MENU FUNCTIONALITY =====
+function initMobileMenu() {
+  const toggle = document.getElementById('mobile-menu-toggle')
+  const navLinks = document.getElementById('nav-links')
+  const overlay = document.getElementById('mobile-menu-overlay')
+  
+  if (!toggle || !navLinks) return
+  
+  toggle.addEventListener('click', () => {
+    toggle.classList.toggle('open')
+    navLinks.classList.toggle('open')
+    overlay?.classList.toggle('active')
+    document.body.style.overflow = navLinks.classList.contains('open') ? 'hidden' : ''
+  })
+  
+  overlay?.addEventListener('click', () => {
+    toggle.classList.remove('open')
+    navLinks.classList.remove('open')
+    overlay.classList.remove('active')
+    document.body.style.overflow = ''
+  })
+  
+  // Close mobile menu when clicking a nav link
+  navLinks.querySelectorAll('.nav-link').forEach(link => {
+    link.addEventListener('click', () => {
+      toggle.classList.remove('open')
+      navLinks.classList.remove('open')
+      overlay?.classList.remove('active')
+      document.body.style.overflow = ''
+    })
+  })
+}
+
+// ===== NAVBAR SCROLL EFFECT =====
+function initNavbarScroll() {
+  const navbar = document.getElementById('navbar')
+  if (!navbar) return
+  
+  window.addEventListener('scroll', () => {
+    if (window.scrollY > 50) {
+      navbar.classList.add('scrolled')
+    } else {
+      navbar.classList.remove('scrolled')
+    }
+  })
+}
+
+// ===== WIZARD FUNCTIONALITY =====
+let currentWizardStep = 1
+const totalWizardSteps = 3
+
+function initWizard() {
+  const prevBtn = document.getElementById('wizard-prev')
+  const nextBtn = document.getElementById('wizard-next')
+  const submitBtn = document.getElementById('wizard-submit')
+  
+  prevBtn?.addEventListener('click', () => goToWizardStep(currentWizardStep - 1))
+  nextBtn?.addEventListener('click', () => {
+    if (validateCurrentStep()) {
+      goToWizardStep(currentWizardStep + 1)
+    }
+  })
+  
+  // Reset wizard when modal opens
+  document.getElementById('booking-open')?.addEventListener('click', () => {
+    resetWizard()
+    showModal('booking-modal')
+  })
+  
+  // Also hook other booking buttons
+  document.getElementById('nav-book-btn')?.addEventListener('click', (e) => {
+    e.preventDefault()
+    resetWizard()
+    showModal('booking-modal')
+  })
+  
+  document.getElementById('contact-book-btn')?.addEventListener('click', () => {
+    resetWizard()
+    showModal('booking-modal')
+  })
+}
+
+function resetWizard() {
+  currentWizardStep = 1
+  updateWizardUI()
+  
+  // Reset form if exists
+  const form = document.getElementById('booking-form')
+  if (form) form.reset()
+  
+  // Reset add-ons
+  const checkboxes = document.querySelectorAll('#addons-list input[type="checkbox"]')
+  checkboxes.forEach(cb => cb.checked = false)
+  updateAddonsSummary()
+}
+
+function goToWizardStep(step) {
+  if (step < 1 || step > totalWizardSteps) return
+  currentWizardStep = step
+  updateWizardUI()
+}
+
+function updateWizardUI() {
+  // Update step content
+  document.querySelectorAll('.wizard-step').forEach(el => {
+    el.classList.remove('active')
+  })
+  document.querySelector(`.wizard-step[data-step="${currentWizardStep}"]`)?.classList.add('active')
+  
+  // Update progress indicators
+  document.querySelectorAll('.progress-step').forEach(el => {
+    const stepNum = parseInt(el.dataset.step, 10)
+    el.classList.remove('active', 'completed')
+    if (stepNum === currentWizardStep) {
+      el.classList.add('active')
+    } else if (stepNum < currentWizardStep) {
+      el.classList.add('completed')
+    }
+  })
+  
+  // Update buttons
+  const prevBtn = document.getElementById('wizard-prev')
+  const nextBtn = document.getElementById('wizard-next')
+  const submitBtn = document.getElementById('wizard-submit')
+  
+  if (prevBtn) prevBtn.style.display = currentWizardStep > 1 ? 'block' : 'none'
+  if (nextBtn) nextBtn.style.display = currentWizardStep < totalWizardSteps ? 'block' : 'none'
+  if (submitBtn) submitBtn.style.display = currentWizardStep === totalWizardSteps ? 'block' : 'none'
+}
+
+function validateCurrentStep() {
+  const currentStepEl = document.querySelector(`.wizard-step[data-step="${currentWizardStep}"]`)
+  if (!currentStepEl) return true
+  
+  const requiredFields = currentStepEl.querySelectorAll('[required]')
+  let isValid = true
+  
+  requiredFields.forEach(field => {
+    if (!field.value.trim()) {
+      field.classList.add('error')
+      isValid = false
+      
+      // Remove error class after user starts typing
+      field.addEventListener('input', () => field.classList.remove('error'), { once: true })
+    } else {
+      field.classList.remove('error')
+    }
+  })
+  
+  if (!isValid) {
+    showToast('Please fill in all required fields', 'error')
+  }
+  
+  return isValid
+}
+
+// ===== UPDATED BOOKING SUBMIT FOR WIZARD =====
+async function handleBookingSubmit(e) {
+  e.preventDefault()
+  const f = e.target
+  
+  // Get selected add-ons
+  const selectedAddons = getSelectedAddons()
+  
+  // Get theme from radio buttons
+  const selectedTheme = f.querySelector('input[name="theme"]:checked')?.value || ''
+  
+  const lead = {
+    full_name: f['full-name'].value.trim(),
+    mobile_number: f['mobile-number'].value.trim(),
+    email_address: f['email-address'].value.trim() || null,
+    location: f['location'].value,
+    guest_count: parseInt(f['guest-count'].value, 10),
+    preferred_date: f['preferred-date'].value,
+    event_time: f['preferred-time'].value,
+    occasion: f['occasion'].value,
+    theme: selectedTheme,
+    addons: selectedAddons,
+    special_requirements: f['special-requirements'].value.trim(),
+    confirmed: false,
+    advance_amount: 0,
+    created_at: new Date().toISOString()
+  }
+  
+  try {
+    const { error } = await supabase.from('bookings').insert([lead])
+    if (error) throw error
+    showToast('Enquiry submitted! We will contact you soon.', 'success')
+    hideModal('booking-modal')
+    f.reset()
+    resetWizard()
+    showPage('query-success-page')
+  } catch (err) {
+    console.error(err)
+    showToast('Error submitting enquiry. Please try again.', 'error')
+  }
+}
+
 // Init
 window.addEventListener('DOMContentLoaded', async ()=>{
+  // Initialize mobile menu
+  initMobileMenu()
+  
+  // Initialize navbar scroll effect
+  initNavbarScroll()
+  
+  // Initialize wizard
+  initWizard()
+  
   // Check if this is a menu selection link
   const isMenuLink = await checkMenuLink()
   
@@ -530,10 +703,13 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   }
   
   // Normal site navigation
-  document.querySelectorAll('.nav-link').forEach(link=>{
+  document.querySelectorAll('.nav-link[data-route]').forEach(link=>{
     link.addEventListener('click', ev=>{
       ev.preventDefault()
-      showPage(link.dataset.route==='home-page'?'home-page':'menu-page')
+      const route = link.dataset.route
+      if (route) {
+        showPage(route)
+      }
     })
   })
 
@@ -550,8 +726,16 @@ window.addEventListener('DOMContentLoaded', async ()=>{
     dateInput.min = today
   }
 
-  // Booking modal & form
-  document.getElementById('booking-open')?.addEventListener('click', ()=>showModal('booking-modal'))
+  // Booking modal close button
   document.querySelector('.modal-close')?.addEventListener('click', ()=>hideModal('booking-modal'))
+  
+  // Click outside modal to close
+  document.getElementById('booking-modal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'booking-modal') {
+      hideModal('booking-modal')
+    }
+  })
+  
+  // Form submit handler
   document.getElementById('booking-form')?.addEventListener('submit', handleBookingSubmit)
 })
