@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0"/>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#e91e63">
+  <title>Share Your Experience - The Picnic Story</title>
+  <link rel="stylesheet" href="../style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="toast-container"></div>
+
+  <!-- Review Submission Page -->
+  <div class="review-page">
+    <!-- Header -->
+    <header class="review-header">
+      <div class="container">
+        <div class="review-brand">
+          <span class="brand-icon">🧺</span>
+          <h1>The Picnic Story</h1>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="review-main">
+      <div class="container">
+        <!-- Review Form Section -->
+        <div id="review-form-section" class="review-form-section">
+          <div class="review-intro">
+            <span class="intro-emoji">💕</span>
+            <h2>We'd Love Your Feedback!</h2>
+            <p>Thank you for choosing The Picnic Story for your special moment. Your review helps others discover our magical picnic experiences!</p>
+          </div>
+
+          <form id="review-form" class="review-form" novalidate>
+            <!-- Name -->
+            <div class="form-group">
+              <label class="form-label" for="reviewer-name">
+                <span class="label-icon">👤</span> Your Name
+              </label>
+              <input 
+                type="text" 
+                id="reviewer-name" 
+                name="reviewer-name" 
+                class="form-control" 
+                placeholder="Enter your name"
+                required
+              />
+            </div>
+
+            <!-- Star Rating -->
+            <div class="form-group">
+              <label class="form-label">
+                <span class="label-icon">⭐</span> Your Rating
+              </label>
+              <div class="star-rating-input" id="star-rating">
+                <button type="button" class="star-btn" data-rating="1" aria-label="1 star">
+                  <span class="star-icon">☆</span>
+                </button>
+                <button type="button" class="star-btn" data-rating="2" aria-label="2 stars">
+                  <span class="star-icon">☆</span>
+                </button>
+                <button type="button" class="star-btn" data-rating="3" aria-label="3 stars">
+                  <span class="star-icon">☆</span>
+                </button>
+                <button type="button" class="star-btn" data-rating="4" aria-label="4 stars">
+                  <span class="star-icon">☆</span>
+                </button>
+                <button type="button" class="star-btn" data-rating="5" aria-label="5 stars">
+                  <span class="star-icon">☆</span>
+                </button>
+              </div>
+              <input type="hidden" id="rating-value" name="rating" value="0" required />
+              <p class="rating-text" id="rating-text">Click to rate</p>
+            </div>
+
+            <!-- Review Text -->
+            <div class="form-group">
+              <label class="form-label" for="review-text">
+                <span class="label-icon">💬</span> Your Review
+              </label>
+              <textarea 
+                id="review-text" 
+                name="review-text" 
+                class="form-control" 
+                rows="4"
+                placeholder="Tell us about your picnic experience... What did you love? What made it special?"
+                required
+              ></textarea>
+            </div>
+
+            <!-- Occasion (optional) -->
+            <div class="form-group">
+              <label class="form-label" for="review-occasion">
+                <span class="label-icon">🎉</span> Occasion (Optional)
+              </label>
+              <select id="review-occasion" name="occasion" class="form-control">
+                <option value="">Select your occasion</option>
+                <option value="Birthday">🎂 Birthday</option>
+                <option value="Anniversary">💕 Anniversary</option>
+                <option value="Proposal">💍 Proposal</option>
+                <option value="Date Night">💑 Date Night</option>
+                <option value="Celebration">🎉 Celebration</option>
+                <option value="Family Gathering">👨‍👩‍👧 Family Gathering</option>
+                <option value="Friends Hangout">👯 Friends Hangout</option>
+                <option value="Other">✨ Other</option>
+              </select>
+            </div>
+
+            <!-- Submit -->
+            <button type="submit" class="btn btn--primary btn--lg btn--full-width" id="submit-review-btn">
+              <span class="btn-text">Submit Review</span>
+              <span class="btn-loading hidden">Submitting...</span>
+            </button>
+          </form>
+        </div>
+
+        <!-- Success Section (hidden by default) -->
+        <div id="review-success-section" class="review-success-section hidden">
+          <div class="success-animation">
+            <span class="success-emoji">🎉</span>
+          </div>
+          <h2>Thank You!</h2>
+          <p class="success-message">Your review has been submitted successfully!</p>
+          <p class="success-submessage">We truly appreciate you taking the time to share your experience. Your feedback means the world to us! 💕</p>
+          <a href="/" class="btn btn--primary btn--lg">Visit Our Website</a>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="review-footer">
+      <div class="container">
+        <p>© 2026 The Picnic Story • Made with 💕 in Jaipur</p>
+      </div>
+    </footer>
+  </div>
+
+  <script type="module" src="review.js"></script>
+</body>
+</html>

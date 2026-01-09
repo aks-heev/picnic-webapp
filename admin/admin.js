@@ -211,6 +211,7 @@ async function handleAdminLogin(event) {
     loadQueries();
     loadBookings();
     loadMenuLinks();
+    loadReviews('pending');
   } else {
     showToast('Invalid credentials', 'error');
   }
@@ -1219,6 +1220,14 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   document.getElementById('generate-menu-link')?.addEventListener('click', generateMenuLink);
+  
+  // Reviews tab event listeners
+  document.getElementById('reviews-status-filter')?.addEventListener('change', (e) => {
+    loadReviews(e.target.value);
+  });
+  document.getElementById('refresh-reviews')?.addEventListener('click', () => {
+    loadReviews(document.getElementById('reviews-status-filter')?.value || 'pending');
+  });
 });
 
 // Generate booking ticket and copy to clipboard
@@ -1571,3 +1580,221 @@ function updateNewEndTime() {
     endTimeSelect.value = defaultEnd;
   }
 }
+
+// ===== REVIEWS MANAGEMENT =====
+async function loadReviews(statusFilter = 'pending') {
+  if (!isAdminLoggedIn) return;
+  
+  const container = document.getElementById('reviews-container');
+  if (!container) return;
+  
+  try {
+    let query = supabase
+      .from('reviews')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    // Apply filter
+    if (statusFilter === 'pending') {
+      query = query.is('is_approved', null);
+    } else if (statusFilter === 'approved') {
+      query = query.eq('is_approved', true);
+    } else if (statusFilter === 'rejected') {
+      query = query.eq('is_approved', false);
+    }
+    // 'all' doesn't add any filter
+    
+    const { data: reviews, error } = await query;
+    
+    if (error) throw error;
+    
+    renderReviews(reviews, statusFilter);
+    loadReviewsStats();
+    
+  } catch (err) {
+    console.error('Failed to load reviews:', err);
+    container.innerHTML = '<div class="empty-state"><h4>Failed to load reviews</h4></div>';
+  }
+}
+
+function renderReviews(reviews, statusFilter) {
+  const container = document.getElementById('reviews-container');
+  if (!container) return;
+  
+  if (!reviews || reviews.length === 0) {
+    const statusText = statusFilter === 'pending' ? 'pending' : 
+                       statusFilter === 'approved' ? 'approved' : 
+                       statusFilter === 'rejected' ? 'rejected' : '';
+    container.innerHTML = `
+      <div class="empty-state">
+        <h4>No ${statusText} reviews</h4>
+        <p>When customers submit reviews, they will appear here for moderation.</p>
+      </div>
+    `;
+    return;
+  }
+  
+  container.innerHTML = reviews.map(review => {
+    const date = new Date(review.created_at).toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    
+    const stars = '★'.repeat(review.rating) + '☆'.repeat(5 - review.rating);
+    
+    const statusBadge = review.is_approved === true 
+      ? '<span class="status-badge approved">✓ Approved</span>'
+      : review.is_approved === false 
+        ? '<span class="status-badge rejected">✕ Rejected</span>'
+        : '<span class="status-badge pending">⏳ Pending</span>';
+    
+    return `
+      <div class="review-admin-card" data-review-id="${review.id}">
+        <div class="review-admin-header">
+          <div class="review-admin-info">
+            <h4>${escapeHtml(review.customer_name)}</h4>
+            <span class="review-stars-display">${stars}</span>
+            ${review.occasion ? `<span class="review-occasion-tag">${escapeHtml(review.occasion)}</span>` : ''}
+          </div>
+          <div class="review-admin-meta">
+            ${statusBadge}
+            <span class="review-date">${date}</span>
+          </div>
+        </div>
+        <div class="review-admin-content">
+          <p>"${escapeHtml(review.review_text)}"</p>
+        </div>
+        <div class="review-admin-actions">
+          ${review.is_approved !== true ? `
+            <button class="btn btn--sm btn--primary" onclick="approveReview(${review.id})">✓ Approve</button>
+          ` : ''}
+          ${review.is_approved !== false ? `
+            <button class="btn btn--sm btn--outline" onclick="rejectReview(${review.id})">✕ Reject</button>
+          ` : ''}
+          <button class="btn btn--sm btn--secondary" onclick="deleteReview(${review.id})">🗑️ Delete</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function approveReview(reviewId) {
+  try {
+    const { error } = await supabase
+      .from('reviews')
+      .update({ is_approved: true })
+      .eq('id', reviewId);
+    
+    if (error) throw error;
+    
+    showToast('Review approved! It will now appear on the website.', 'success');
+    loadReviews(document.getElementById('reviews-status-filter')?.value || 'pending');
+  } catch (err) {
+    console.error('Failed to approve review:', err);
+    showToast('Failed to approve review', 'error');
+  }
+}
+
+async function rejectReview(reviewId) {
+  try {
+    const { error } = await supabase
+      .from('reviews')
+      .update({ is_approved: false })
+      .eq('id', reviewId);
+    
+    if (error) throw error;
+    
+    showToast('Review rejected', 'success');
+    loadReviews(document.getElementById('reviews-status-filter')?.value || 'pending');
+  } catch (err) {
+    console.error('Failed to reject review:', err);
+    showToast('Failed to reject review', 'error');
+  }
+}
+
+async function deleteReview(reviewId) {
+  if (!confirm('Are you sure you want to delete this review? This cannot be undone.')) {
+    return;
+  }
+  
+  try {
+    const { error } = await supabase
+      .from('reviews')
+      .delete()
+      .eq('id', reviewId);
+    
+    if (error) throw error;
+    
+    showToast('Review deleted', 'success');
+    loadReviews(document.getElementById('reviews-status-filter')?.value || 'pending');
+  } catch (err) {
+    console.error('Failed to delete review:', err);
+    showToast('Failed to delete review', 'error');
+  }
+}
+
+async function loadReviewsStats() {
+  const container = document.getElementById('reviews-stats-content');
+  if (!container) return;
+  
+  try {
+    // Get all reviews for stats
+    const { data: allReviews, error } = await supabase
+      .from('reviews')
+      .select('rating, is_approved');
+    
+    if (error) throw error;
+    
+    const total = allReviews?.length || 0;
+    const approved = allReviews?.filter(r => r.is_approved === true).length || 0;
+    const pending = allReviews?.filter(r => r.is_approved === null).length || 0;
+    const rejected = allReviews?.filter(r => r.is_approved === false).length || 0;
+    
+    // Calculate average rating of approved reviews
+    const approvedReviews = allReviews?.filter(r => r.is_approved === true) || [];
+    const avgRating = approvedReviews.length > 0 
+      ? (approvedReviews.reduce((sum, r) => sum + r.rating, 0) / approvedReviews.length).toFixed(1)
+      : '0';
+    
+    container.innerHTML = `
+      <div class="stat-card">
+        <span class="stat-value">${total}</span>
+        <span class="stat-label">Total</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value" style="color:var(--color-success);">${approved}</span>
+        <span class="stat-label">Approved</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value" style="color:var(--color-warning);">${pending}</span>
+        <span class="stat-label">Pending</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value" style="color:var(--color-error);">${rejected}</span>
+        <span class="stat-label">Rejected</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value">⭐ ${avgRating}</span>
+        <span class="stat-label">Avg Rating</span>
+      </div>
+    `;
+  } catch (err) {
+    console.error('Failed to load review stats:', err);
+    container.innerHTML = '<p>Unable to load stats</p>';
+  }
+}
+
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Expose review functions globally
+window.approveReview = approveReview;
+window.rejectReview = rejectReview;
+window.deleteReview = deleteReview;

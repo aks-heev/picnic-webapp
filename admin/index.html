@@ -268,6 +268,7 @@
                 <button class="tab-btn active" data-tab="queries" role="tab" aria-selected="true">Queries</button>
                 <button class="tab-btn" data-tab="bookings" role="tab" aria-selected="false">Bookings</button>
                 <button class="tab-btn" data-tab="menu-link" role="tab" aria-selected="false">Menu Link Generator</button>
+                <button class="tab-btn" data-tab="reviews" role="tab" aria-selected="false">Reviews</button>
             </div>
 
             <!-- Queries Tab -->
@@ -335,6 +336,35 @@
 
                 <div id="menu-links-list" class="menu-links-list">
                     <!-- Menu links will be populated here by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Reviews Tab -->
+            <div id="reviews-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="tab-header">
+                    <h3>Customer Reviews</h3>
+                    <p>Moderate customer reviews before they appear on the website</p>
+                </div>
+                
+                <div class="reviews-filter-bar" style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+                    <select id="reviews-status-filter" class="form-control" style="max-width:180px;">
+                        <option value="pending">Pending Approval</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="all">All Reviews</option>
+                    </select>
+                    <button id="refresh-reviews" class="btn btn--outline btn--sm">↻ Refresh</button>
+                </div>
+                
+                <div id="reviews-container" class="data-container">
+                    <!-- Reviews will be populated here by JavaScript -->
+                </div>
+                
+                <div class="reviews-stats" style="margin-top:24px; padding:16px; background:var(--color-surface); border-radius:12px;">
+                    <h4 style="margin:0 0 12px 0; color:var(--color-heading);">📊 Review Statistics</h4>
+                    <div id="reviews-stats-content" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:12px;">
+                        <!-- Stats will be populated by JavaScript -->
+                    </div>
                 </div>
             </div>
         </div>

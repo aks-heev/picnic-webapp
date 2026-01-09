@@ -476,6 +476,107 @@ async function updateBookingJSONForCustomer(bookingId) {
   }
 }
 
+// ===== CUSTOMER REVIEWS FUNCTIONALITY =====
+async function loadApprovedReviews() {
+  const container = document.getElementById('reviews-container')
+  if (!container) return
+  
+  try {
+    const { data: reviews, error } = await supabase
+      .from('reviews')
+      .select('*')
+      .eq('is_approved', true)
+      .order('created_at', { ascending: false })
+      .limit(6)
+    
+    if (error) throw error
+    
+    if (!reviews || reviews.length === 0) {
+      container.innerHTML = `
+        <div class="reviews-empty">
+          <span class="empty-emoji">💭</span>
+          <p>No reviews yet. Be the first to share your experience!</p>
+        </div>
+      `
+      return
+    }
+    
+    // Render review cards
+    container.innerHTML = reviews.map(review => renderReviewCard(review)).join('')
+    
+    // Add summary if we have reviews
+    if (reviews.length > 0) {
+      const avgRating = calculateAverageRating(reviews)
+      const summaryHTML = `
+        <div class="reviews-summary">
+          <div class="summary-rating">
+            <span class="summary-stars">${renderStars(avgRating)}</span>
+            <span class="summary-score">${avgRating.toFixed(1)}</span>
+          </div>
+          <p class="summary-count">Based on ${reviews.length} review${reviews.length > 1 ? 's' : ''}</p>
+        </div>
+      `
+      container.insertAdjacentHTML('afterend', summaryHTML)
+    }
+    
+  } catch (err) {
+    console.error('Failed to load reviews:', err)
+    container.innerHTML = `
+      <div class="reviews-empty">
+        <span class="empty-emoji">💭</span>
+        <p>Reviews coming soon!</p>
+      </div>
+    `
+  }
+}
+
+function renderReviewCard(review) {
+  const stars = renderStars(review.rating)
+  const date = new Date(review.created_at).toLocaleDateString('en-IN', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  })
+  
+  // Get first letter of name for avatar
+  const initial = review.customer_name.charAt(0).toUpperCase()
+  
+  return `
+    <div class="review-card">
+      <div class="review-card-header">
+        <div class="review-avatar">${initial}</div>
+        <div class="review-author-info">
+          <h4 class="review-author-name">${escapeHtml(review.customer_name)}</h4>
+          ${review.occasion ? `<span class="review-occasion">${escapeHtml(review.occasion)}</span>` : ''}
+        </div>
+        <div class="review-stars">${stars}</div>
+      </div>
+      <p class="review-text">${escapeHtml(review.review_text)}</p>
+      <span class="review-date">${date}</span>
+    </div>
+  `
+}
+
+function renderStars(rating) {
+  const fullStars = Math.floor(rating)
+  const halfStar = rating % 1 >= 0.5 ? 1 : 0
+  const emptyStars = 5 - fullStars - halfStar
+  
+  return '★'.repeat(fullStars) + (halfStar ? '½' : '') + '☆'.repeat(emptyStars)
+}
+
+function calculateAverageRating(reviews) {
+  if (!reviews || reviews.length === 0) return 0
+  const sum = reviews.reduce((acc, r) => acc + r.rating, 0)
+  return sum / reviews.length
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div')
+  div.textContent = text
+  return div.innerHTML
+}
+
 // ===== MOBILE MENU FUNCTIONALITY =====
 function initMobileMenu() {
   const toggle = document.getElementById('mobile-menu-toggle')
@@ -718,6 +819,9 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   
   // Load add-ons for booking form
   await loadAddons()
+  
+  // Load approved reviews for home page
+  await loadApprovedReviews()
   
   // Set minimum date for booking to today
   const dateInput = document.getElementById('preferred-date')
