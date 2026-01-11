@@ -5672,3 +5672,140 @@ body {
     text-align: center;
   }
 }
+
+
+/* =====================================================
+   GALLERY SECTION STYLES
+   ===================================================== */
+
+.gallery-section {
+  padding: 80px 0;
+  background: linear-gradient(180deg, #fffbfd 0%, #fff5f8 100%);
+}
+
+.gallery-subtitle {
+  text-align: center;
+  color: #718096;
+  font-size: 1.1rem;
+  margin-top: -20px;
+  margin-bottom: 40px;
+}
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: 250px;
+  gap: 16px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.gallery-item {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(233, 30, 99, 0.1);
+  transition: all 0.4s ease;
+  cursor: pointer;
+}
+
+.gallery-item-large {
+  grid-column: span 2;
+  grid-row: span 1;
+}
+
+.gallery-item:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 12px 40px rgba(233, 30, 99, 0.2);
+  z-index: 10;
+}
+
+.gallery-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.6s ease;
+}
+
+.gallery-item:hover img {
+  transform: scale(1.08);
+}
+
+/* Gallery Item Overlay */
+.gallery-item::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(233, 30, 99, 0.3) 0%, transparent 50%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.gallery-item:hover::after {
+  opacity: 1;
+}
+
+/* Hero Image Styles */
+.hero-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 20px;
+}
+
+/* Gallery Mobile Responsive */
+@media (max-width: 1024px) {
+  .gallery-grid {
+    grid-template-columns: repeat(3, 1fr);
+    grid-auto-rows: 220px;
+  }
+  
+  .gallery-item-large {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 768px) {
+  .gallery-section {
+    padding: 60px 16px;
+  }
+  
+  .gallery-subtitle {
+    font-size: 1rem;
+    margin-bottom: 32px;
+  }
+  
+  .gallery-grid {
+    grid-template-columns: repeat(2, 1fr);
+    grid-auto-rows: 180px;
+    gap: 12px;
+  }
+  
+  .gallery-item-large {
+    grid-column: span 2;
+  }
+  
+  .gallery-item {
+    border-radius: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .gallery-section {
+    padding: 50px 12px;
+  }
+  
+  .gallery-grid {
+    grid-template-columns: repeat(2, 1fr);
+    grid-auto-rows: 150px;
+    gap: 8px;
+  }
+  
+  .gallery-item-large {
+    grid-column: span 1;
+  }
+  
+  .gallery-item {
+    border-radius: 10px;
+  }
+}
