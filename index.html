@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The Picnic Story - Premium Picnic Experiences</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Be+Vietnam+Pro:wght@300;400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
     <!-- Toast Container -->
@@ -27,59 +30,106 @@
 
     <!-- Home Page -->
     <div id="home-page" class="page active">
-        <!-- Hero Section -->
+        <!-- Hero Section — Split Screen -->
         <section class="hero">
-            <div class="hero-background"></div>
             <div class="container">
-                <div class="hero-content">
-                    <h1 class="hero-title">Create Magical Picnic Memories</h1>
-                    <p class="hero-tagline">Premium Boho-Chic Experiences</p>
-                    <p class="hero-description">Beautifully curated picnic arrangements with boho-chic decor, comfortable seating, and ambient lighting.</p>
-                    <button id="book-picnic-btn" class="btn btn--primary btn--lg">Book Your Picnic</button>
+                <div class="hero-split">
+                    <!-- Left: Text content -->
+                    <div class="hero-text">
+                        <p class="hero-eyebrow">Jaipur &middot; Rajasthan</p>
+                        <h1 class="hero-title">Every moment<br>deserves a<br><em>beautiful setting</em></h1>
+                        <p class="hero-description">Boho-chic picnic arrangements with curated decor, ambient lighting, and gourmet food &mdash; across Jaipur's most stunning locations. From fairy lights to live musicians, every detail is yours to shape.</p>
+                        <div class="hero-actions">
+                            <button id="book-picnic-btn" class="btn btn--primary btn--lg">Book Your Picnic</button>
+                            <button class="btn btn--ghost btn--lg" onclick="document.getElementById('venues-section').scrollIntoView({behavior:'smooth'})">Browse Venues</button>
+                        </div>
+                        <div class="hero-stats">
+                            <div class="hero-stat">
+                                <span class="hero-stat-num">200+</span>
+                                <span class="hero-stat-label">Happy couples</span>
+                            </div>
+                            <div class="hero-stat-divider"></div>
+                            <div class="hero-stat">
+                                <span class="hero-stat-num">12</span>
+                                <span class="hero-stat-label">Curated venues</span>
+                            </div>
+                            <div class="hero-stat-divider"></div>
+                            <div class="hero-stat">
+                                <span class="hero-stat-num">4.9</span>
+                                <span class="hero-stat-label">Avg. rating</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Right: Decorative visual -->
+                    <div class="hero-visual">
+                        <div class="hero-visual-frame">
+                            <div class="hero-visual-ring hero-visual-ring--1"></div>
+                            <div class="hero-visual-ring hero-visual-ring--2"></div>
+                            <div class="hero-visual-inner">
+                                <div class="hero-visual-tag">Boho-Chic Setup</div>
+                                <p class="hero-visual-label">Your perfect<br>outdoor escape</p>
+                            </div>
+                        </div>
+                        <div class="hero-visual-badge">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                            Premium Experience
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
 
-        <!-- Services Section -->
+        <!-- Services Section — Editorial Asymmetric Grid -->
         <section class="services">
             <div class="container">
-                <h2 class="section-title">Our Services</h2>
+                <div class="services-intro">
+                    <p class="section-label">What we offer</p>
+                    <h2 class="section-heading">Experiences crafted<br>for every occasion</h2>
+                </div>
                 <div class="services-grid">
-                    <div class="service-card">
-                        <span class="service-icon">💕</span>
+                    <!-- Featured card — spans both rows -->
+                    <div class="service-card service-card--featured">
+                        <div class="service-icon-wrap" aria-hidden="true">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                        </div>
                         <h3>Romantic Picnics</h3>
-                        <p>Perfect for romantic dates, small celebrations, and meaningful moments with your loved ones.</p>
+                        <p>Perfect for dates, proposals, and anniversaries — every detail thoughtfully arranged for the couple who deserves an unforgettable experience.</p>
+                        <button class="service-link" onclick="document.getElementById('book-picnic-btn').click()">
+                            Plan your date
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                        </button>
                     </div>
+                    <!-- Regular cards — stacked right -->
                     <div class="service-card">
-                        <span class="service-icon">🏢</span>
+                        <div class="service-icon-wrap" aria-hidden="true">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
+                        </div>
                         <h3>Corporate Events</h3>
-                        <p>Corporate events, birthdays, anniversaries, and any celebration deserving of a magical outdoor experience.</p>
+                        <p>Team outings, client entertainment, and offsite meetings — elevated with premium outdoor setup and gourmet catering.</p>
                     </div>
                     <div class="service-card">
-                        <span class="service-icon">🎉</span>
+                        <div class="service-icon-wrap" aria-hidden="true">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+                        </div>
                         <h3>Special Occasions</h3>
-                        <p>Make your special moments unforgettable with our premium picnic setups and gourmet food options.</p>
+                        <p>Birthdays, baby showers, and milestones — crafted into unforgettable outdoor celebrations with curated decor.</p>
                     </div>
                 </div>
             </div>
         </section>
 
-        <!-- Gallery Section -->
-        <section class="gallery">
+        <!-- Venues Section -->
+        <section class="venues-section" id="venues-section">
             <div class="container">
-                <h2 class="section-title">Picture Perfect Moments</h2>
-                <div class="gallery-grid">
-                    <div class="gallery-item">
-                        <div class="gallery-placeholder">Beautiful Boho Setup</div>
-                    </div>
-                    <div class="gallery-item">
-                        <div class="gallery-placeholder">Romantic Ambiance</div>
-                    </div>
-                    <div class="gallery-item">
-                        <div class="gallery-placeholder">Gourmet Food</div>
-                    </div>
-                    <div class="gallery-item">
-                        <div class="gallery-placeholder">Family Fun</div>
+                <div class="venues-section-header">
+                    <h2 class="venues-section-title">Choose Your Venue</h2>
+                    <p class="venues-section-subtitle">Curated spaces across Jaipur — from intimate gardens to rooftop terraces</p>
+                </div>
+                <div id="venues-grid" class="venues-grid">
+                    <div class="venues-loading">
+                        <span class="venues-loading-dot"></span>
+                        <span class="venues-loading-dot"></span>
+                        <span class="venues-loading-dot"></span>
                     </div>
                 </div>
             </div>
@@ -148,29 +198,15 @@
 
     <!-- Query Success Page -->
     <div id="query-success-page" class="page">
-        <div class="container" style="padding: var(--space-32) 0;">
-            <div class="success-container">
-                <div class="success-icon">🎉</div>
-                <h2 style="color: var(--color-primary); margin-bottom: var(--space-16);">Query Submitted Successfully!</h2>
-                <p style="font-size: var(--font-size-xl); margin-bottom: var(--space-24); color: var(--color-text-secondary);">
-                    Thank you for your interest! We'll contact you within 24 hours to discuss your picnic requirements.
-                </p>
-                <div class="contact-highlight">
-                    <h3 style="margin-bottom: var(--space-16);">Want to fast-track your booking?</h3>
-                    <p style="margin-bottom: var(--space-16);">Call us directly:</p>
-                    <a href="tel:+919999999999" class="contact-number">
-                        📞 +91 99999-99999
-                    </a>
-                </div>
-                <div class="action-buttons">
-                    <button class="btn btn--primary btn--lg" onclick="showPage('menu-preview-page')">
-                        View Menu Preview
-                    </button>
-                    <button class="btn btn--outline btn--lg" onclick="showPage('home-page')">
-                        Back to Home
-                    </button>
-                </div>
-            </div>
+        <div id="booking-success-content">
+            <!-- Populated by renderSuccessPage() -->
+        </div>
+    </div>
+
+    <!-- Venue Detail Page (dynamically populated) -->
+    <div id="venue-detail-page" class="page">
+        <div id="venue-detail-content">
+            <!-- Populated by renderVenueDetail() -->
         </div>
     </div>
 
@@ -181,8 +217,13 @@
             <h2>Admin Login</h2>
             <form id="admin-login-form" novalidate>
                 <div class="form-group">
+                    <label for="admin-email" class="form-label">Email</label>
+                    <input id="admin-email" type="email" class="form-control" required autocomplete="username" />
+                    <div id="admin-email-error" class="form-error" aria-live="polite"></div>
+                </div>
+                <div class="form-group">
                     <label for="admin-password" class="form-label">Password</label>
-                    <input id="admin-password" type="password" class="form-control" required />
+                    <input id="admin-password" type="password" class="form-control" required autocomplete="current-password" />
                     <div id="admin-password-error" class="form-error" aria-live="polite"></div>
                 </div>
                 <button type="submit" class="btn btn--primary">Login</button>
@@ -308,22 +349,28 @@
                         <input type="email" id="email-address" name="email-address" class="form-control" required placeholder="your.email@example.com">
                     </div>
                     
-                    <div class="form-group">
-                        <label for="location" class="form-label">Preferred Location *</label>
-                        <select id="location" name="location" class="form-control" required>
-                            <option value="">Select a location</option>
-                            <option value="jaipur-city">Jaipur City</option>
-                            <option value="jaipur-outskirts">Jaipur Outskirts</option>
-                            <option value="amber-fort">Near Amber Fort</option>
-                            <option value="jal-mahal">Near Jal Mahal</option>
-                            <option value="nahargarh">Nahargarh Area</option>
-                            <option value="custom">Custom Location (Please specify in requirements)</option>
-                        </select>
+                    <!-- Shown when a venue is pre-selected from the gallery -->
+                    <div class="form-group" id="venue-display-group" style="display:none">
+                        <label class="form-label">Selected Venue</label>
+                        <div id="venue-selected-display" class="venue-selected-display"></div>
+                    </div>
+
+                    <!-- Shown for custom bookings or when no venue is pre-selected -->
+                    <div class="form-group" id="venue-address-group">
+                        <label for="venue-address" class="form-label" id="venue-address-label">Venue / Location *</label>
+                        <textarea id="venue-address" name="venue-address" class="form-control" rows="2" placeholder="Describe your venue or preferred location in Jaipur..."></textarea>
+                    </div>
+
+                    <!-- Shown only for partner Airbnb bookings -->
+                    <div class="form-group" id="airbnb-ref-group" style="display:none">
+                        <label for="airbnb-ref" class="form-label">Airbnb Confirmation Number <span class="label-optional">(optional)</span></label>
+                        <input type="text" id="airbnb-ref" name="airbnb-ref" class="form-control" placeholder="e.g. HMABCD123">
+                        <p class="form-hint">Your Airbnb booking reference helps us coordinate with the host.</p>
                     </div>
                     
                     <div class="form-group">
                         <label for="guest-count" class="form-label">Number of Guests *</label>
-                        <input type="number" id="guest-count" name="guest-count" class="form-control" min="1" max="20" required placeholder="How many guests?">
+                        <input type="number" id="guest-count" name="guest-count" class="form-control" min="1" max="50" required placeholder="How many guests?">
                     </div>
                     
                     <div class="form-group">
@@ -335,10 +382,23 @@
                         <label for="special-requirements" class="form-label">Special Requirements</label>
                         <textarea id="special-requirements" name="special-requirements" class="form-control" rows="3" placeholder="Any special requests, dietary restrictions, decorations, or other preferences..."></textarea>
                     </div>
-                    
+
+                    <!-- Extras add-ons — injected dynamically based on venue type -->
+                    <div id="booking-addons-section" class="booking-addons-section" style="display:none">
+                        <div class="bk-addons-header">
+                            <span class="bk-addons-title">Complete your setup</span>
+                            <span class="bk-addons-subtitle">Optional extras to add to your picnic</span>
+                        </div>
+                        <div id="booking-addons-list" class="bk-addons-list"></div>
+                        <div class="bk-addons-total" id="bk-total-row" style="display:none">
+                            <span class="bk-total-label">Your picnic, estimated</span>
+                            <span class="bk-total-amount" id="bk-total-amount">₹0</span>
+                        </div>
+                    </div>
+
                     <div class="form-actions">
                         <button type="button" id="cancel-booking" class="btn btn--outline">Cancel</button>
-                        <button type="submit" class="btn btn--primary">Submit Query</button>
+                        <button type="submit" id="booking-submit-btn" class="btn btn--primary">Pay Advance</button>
                     </div>
                 </form>
             </div>

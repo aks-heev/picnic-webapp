@@ -6,8 +6,6 @@ export default defineConfig({
   build: {
     outDir: 'dist',
   },
-  define: {
-    'process.env.SUPABASE_URL': JSON.stringify(process.env.SUPABASE_URL),
-    'process.env.SUPABASE_ANON_KEY': JSON.stringify(process.env.SUPABASE_ANON_KEY),
-  },
+  // VITE_ prefixed vars in .env.local are automatically available
+  // in client code via import.meta.env — no manual define block needed.
 })
