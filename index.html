@@ -3,6 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy"
+      content="default-src 'self';
+               script-src 'self' 'unsafe-inline';
+               connect-src https://*.supabase.co https://fonts.googleapis.com;
+               style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com;
+               font-src https://fonts.gstatic.com;
+               img-src 'self' data: https:;">
     <title>The Picnic Story - Premium Picnic Experiences</title>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -24,6 +31,7 @@
                 <a href="#" class="nav-link active" data-route="home">Home</a>
                 <a href="#" class="nav-link" data-route="menu-preview">Menu Preview</a>
                 <a href="#" class="nav-link" data-route="admin">Admin</a>
+                <button class="nav-mybookings-btn" onclick="showMyBookingsPage()">My Booking</button>
             </div>
         </div>
     </nav>
@@ -203,6 +211,11 @@
         </div>
     </div>
 
+    <!-- My Bookings Page -->
+    <div id="my-bookings-page" class="page">
+        <div id="my-bookings-content"></div>
+    </div>
+
     <!-- Venue Detail Page (dynamically populated) -->
     <div id="venue-detail-page" class="page">
         <div id="venue-detail-content">
@@ -245,7 +258,10 @@
             <div class="dashboard-tabs" role="tablist">
                 <button class="tab-btn active" data-tab="queries" role="tab" aria-selected="true">Queries</button>
                 <button class="tab-btn" data-tab="bookings" role="tab" aria-selected="false">Bookings</button>
+                <button class="tab-btn" data-tab="venues" role="tab" aria-selected="false">Venues</button>
+                <button class="tab-btn" data-tab="availability" role="tab" aria-selected="false">Availability</button>
                 <button class="tab-btn" data-tab="menu-link" role="tab" aria-selected="false">Menu Link Generator</button>
+                <button class="tab-btn" data-tab="add-ons" role="tab" aria-selected="false">Add-ons</button>
             </div>
 
             <!-- Queries Tab -->
@@ -282,6 +298,164 @@
                 </div>
             </div>
 
+            <!-- Venues Tab -->
+            <div id="venues-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="tab-header">
+                    <h3>Venue Manager</h3>
+                    <p>Add, edit, or deactivate venues without SQL</p>
+                    <button id="add-venue-btn" class="btn btn--primary">+ Add Venue</button>
+                </div>
+                <div id="venues-list-container" class="data-container">
+                    <!-- Venue list rendered by JS -->
+                </div>
+                <!-- Venue form panel (hidden by default) -->
+                <div id="venue-form-panel" class="venue-form-panel hidden">
+                    <div class="vfp-header">
+                        <h4 id="vfp-title">Add Venue</h4>
+                        <button id="vfp-close" class="vfp-close-btn">&times;</button>
+                    </div>
+                    <form id="venue-admin-form" class="venue-admin-form">
+                        <input type="hidden" id="vf-id" />
+
+                        <div class="vf-row">
+                            <div class="vf-field">
+                                <label class="vf-label">Venue Name *</label>
+                                <input type="text" id="vf-name" class="vf-input" required placeholder="e.g. Haveli 14 — Heritage Stay" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Type *</label>
+                                <select id="vf-type" class="vf-input">
+                                    <option value="cafe">Cafe / Garden Space</option>
+                                    <option value="self_managed">Self-Managed BnB</option>
+                                    <option value="partner_bnb">Partner BnB (Airbnb-linked)</option>
+                                    <option value="custom">Custom</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="vf-field">
+                            <label class="vf-label">Description *</label>
+                            <textarea id="vf-description" class="vf-input vf-textarea" rows="4" required placeholder="Venue description shown to customers..."></textarea>
+                        </div>
+
+                        <div class="vf-row">
+                            <div class="vf-field">
+                                <label class="vf-label">Area</label>
+                                <input type="text" id="vf-area" class="vf-input" placeholder="e.g. Old City, C-Scheme" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">City</label>
+                                <input type="text" id="vf-city" class="vf-input" value="Jaipur" />
+                            </div>
+                        </div>
+
+                        <div class="vf-row">
+                            <div class="vf-field">
+                                <label class="vf-label">Min Guests</label>
+                                <input type="number" id="vf-cap-min" class="vf-input" min="1" value="2" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Max Guests</label>
+                                <input type="number" id="vf-cap-max" class="vf-input" min="1" value="10" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Base Price (₹)</label>
+                                <input type="number" id="vf-base-price" class="vf-input" min="0" step="100" value="0" />
+                            </div>
+                        </div>
+
+                        <!-- External URL (partner_bnb only) -->
+                        <div class="vf-field vf-partner-only" style="display:none">
+                            <label class="vf-label">Airbnb URL</label>
+                            <input type="url" id="vf-external-url" class="vf-input" placeholder="https://airbnb.com/rooms/..." />
+                        </div>
+
+                        <!-- Images -->
+                        <div class="vf-field">
+                            <label class="vf-label">Images</label>
+                            <div id="vf-images-list" class="vf-images-list"></div>
+                            <button type="button" id="vf-add-image" class="vf-add-btn">+ Add Image</button>
+                        </div>
+
+                        <!-- Pricing Tiers -->
+                        <div class="vf-section">
+                            <div class="vf-section-title">Pricing Tiers</div>
+                            <div id="vf-tiers-list" class="vf-tiers-list"></div>
+                            <button type="button" id="vf-add-tier" class="vf-add-btn">+ Add Tier</button>
+                            <div class="vf-row" style="margin-top:10px">
+                                <div class="vf-field">
+                                    <label class="vf-label">Overage per person (₹)</label>
+                                    <input type="number" id="vf-overage" class="vf-input" min="0" step="100" value="2000" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- BnB metadata (self_managed only) -->
+                        <div id="vf-bnb-section" class="vf-section vf-bnb-only" style="display:none">
+                            <div class="vf-section-title">Property Details</div>
+                            <div class="vf-row">
+                                <div class="vf-field">
+                                    <label class="vf-label">Rooms</label>
+                                    <input type="number" id="vf-rooms" class="vf-input" min="1" value="2" />
+                                </div>
+                                <div class="vf-field">
+                                    <label class="vf-label">Bathrooms</label>
+                                    <input type="number" id="vf-bathrooms" class="vf-input" min="1" value="2" />
+                                </div>
+                                <div class="vf-field">
+                                    <label class="vf-label">Stay Price / Night (₹)</label>
+                                    <input type="number" id="vf-stay-price" class="vf-input" min="0" step="500" value="0" />
+                                </div>
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Amenities <span class="vf-hint">(comma-separated)</span></label>
+                                <input type="text" id="vf-amenities" class="vf-input" placeholder="Private pool, WiFi, AC rooms" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Highlights <span class="vf-hint">(comma-separated)</span></label>
+                                <input type="text" id="vf-highlights" class="vf-input" placeholder="Fort views, Walking distance to Hawa Mahal" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Ideal For <span class="vf-hint">(comma-separated)</span></label>
+                                <input type="text" id="vf-ideal-for" class="vf-input" placeholder="Couples, Families, Honeymoon" />
+                            </div>
+                        </div>
+
+                        <div class="vf-row vf-actions">
+                            <label class="vf-toggle-label">
+                                <input type="checkbox" id="vf-active" checked />
+                                Active (visible to customers)
+                            </label>
+                            <button type="submit" class="btn btn--primary">Save Venue</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Availability Tab -->
+            <div id="availability-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="avail-toolbar">
+                    <select id="avail-venue-select" class="avail-venue-select">
+                        <option value="">Select a venue…</option>
+                    </select>
+                    <div class="avail-month-nav">
+                        <button id="avail-prev-month" class="avail-nav-btn" aria-label="Previous month">&#8592;</button>
+                        <span id="avail-month-label" class="avail-month-label"></span>
+                        <button id="avail-next-month" class="avail-nav-btn" aria-label="Next month">&#8594;</button>
+                    </div>
+                </div>
+                <div id="avail-stats-row" class="avail-stats-row" hidden></div>
+                <div class="avail-legend">
+                    <span class="avail-legend-item"><span class="avail-legend-pip avail-pip--booked"></span>Booked</span>
+                    <span class="avail-legend-item"><span class="avail-legend-pip avail-pip--blocked"></span>Blocked</span>
+                    <span class="avail-legend-item"><span class="avail-legend-pip avail-pip--available"></span>Available</span>
+                    <span class="avail-legend-item avail-legend-hint">Click available dates to block · Click blocked to unblock</span>
+                </div>
+                <div id="avail-calendar-grid" class="avail-calendar-grid">
+                    <p class="avail-placeholder">Select a venue to view its calendar.</p>
+                </div>
+            </div>
+
             <!-- Menu Link Generator Tab -->
             <div id="menu-link-tab" class="tab-content" role="tabpanel" hidden>
                 <div class="tab-header">
@@ -313,6 +487,17 @@
 
                 <div id="menu-links-list" class="menu-links-list">
                     <!-- Menu links will be populated here by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Add-ons Tab -->
+            <div id="add-ons-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="tab-header">
+                    <h3>Add-ons</h3>
+                    <button class="btn btn--primary" onclick="openAddOnForm()">+ New Add-on</button>
+                </div>
+                <div id="addons-manager-container">
+                    <!-- Populated by JS -->
                 </div>
             </div>
         </div>
@@ -392,13 +577,13 @@
                         <div id="booking-addons-list" class="bk-addons-list"></div>
                         <div class="bk-addons-total" id="bk-total-row" style="display:none">
                             <span class="bk-total-label">Your picnic, estimated</span>
-                            <span class="bk-total-amount" id="bk-total-amount">₹0</span>
+                            <span class="bk-total-amount" id="bk-total-amount">&#8377;0</span>
                         </div>
                     </div>
 
                     <div class="form-actions">
                         <button type="button" id="cancel-booking" class="btn btn--outline">Cancel</button>
-                        <button type="submit" id="booking-submit-btn" class="btn btn--primary">Pay Advance</button>
+                        <button type="submit" id="booking-submit-btn" class="btn btn--primary">Continue →</button>
                     </div>
                 </form>
             </div>

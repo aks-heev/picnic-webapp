@@ -14,6 +14,9 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
+// Admin identity — loaded from env so it never touches the client bundle as a literal
+const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL
+
 // Menu Data with detailed Indian menu items
 const foodList = [
   "Plain Omelette","Cheese Burst Omelette","Chicken Omelette","Bread Omelette",
@@ -55,7 +58,19 @@ const appState = {
   currentVenue: null,        // set when customer picks a venue before booking
   currentVenueAddOns: [],    // add-ons loaded for the current venue
   venues: [],                // cached venue list
-  selectedDate: null,        // date picked on the availability calendar
+  selectedDate: null,        // cafe: selected date
+  selectedTimeSlot: null,    // cafe: selected time slot
+  checkinDate: null,         // bnb: check-in date
+  checkoutDate: null,        // bnb: checkout date
+  adults: 2,                 // guest selector: adult count
+  children: 0,               // guest selector: child count (under 10, 0.5× rate)
+  bookingStep: 'calendar',   // 'calendar' | 'guests'
+  intentFromModal: false,    // true when intent screen was triggered from the booking modal
+}
+
+// Helper: format a Date object as a local YYYY-MM-DD string (avoids UTC offset shift from toISOString)
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 // Helper: escape HTML entities to prevent XSS when injecting into innerHTML
@@ -80,6 +95,16 @@ function formatVenueType(type) {
   return labels[type] || type
 }
 
+// Helper: relative time string ("2h ago", "just now", etc.)
+function formatTimeAgo(date) {
+  const secs = Math.floor((Date.now() - date) / 1000)
+  if (secs < 60)  return 'just now'
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`
+  if (secs < 604800) return `${Math.floor(secs / 86400)}d ago`
+  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+}
+
 // Helper: get CSS class for venue type badge
 function venueTypeBadgeClass(type) {
   const classes = {
@@ -91,20 +116,17 @@ function venueTypeBadgeClass(type) {
   return classes[type] || ''
 }
 
-// Fetch add-ons available for a given venue type (experience + extra categories)
+// Fetch add-ons available for a given venue type, filtered server-side by available_for
 async function loadVenueAddOns(venueType) {
   try {
     const { data, error } = await supabase
       .from('add_ons')
       .select('*')
       .eq('is_active', true)
+      .contains('available_for', [venueType])
       .order('sort_order')
     if (error) throw error
-    // Include add-ons where venueType is in available_for OR requires_confirmation_for
-    return (data || []).filter(a =>
-      a.available_for?.includes(venueType) ||
-      a.requires_confirmation_for?.includes(venueType)
-    )
+    return data || []
   } catch (err) {
     console.error('Failed to load add-ons:', err)
     return []
@@ -115,6 +137,29 @@ async function loadVenueAddOns(venueType) {
 function formatPrice(amount) {
   if (amount == null) return null
   return '₹' + Number(amount).toLocaleString('en-IN')
+}
+
+// Billing guest count — children (under 10) count at 0.5×
+function calcBillingGuests(adults, children) {
+  return adults + Math.ceil((children || 0) * 0.5)
+}
+
+// Tiered price for a venue given billing guest count.
+// Tiers are stored in venue.metadata.tiers as [{up_to, price}, ...] sorted ascending.
+// Guests beyond the last tier: lastTier.price + overage_per_person × (guests − lastTier.up_to)
+// Falls back to venue.base_price if no tiers defined.
+function getVenuePrice(venue, billingGuests) {
+  const m = venue?.metadata
+  if (!m || !Array.isArray(m.tiers) || m.tiers.length === 0) {
+    return venue?.base_price ?? 0
+  }
+  const tiers = m.tiers
+  const match = tiers.find(t => billingGuests <= t.up_to)
+  if (match) return match.price
+  // Beyond last tier — overage
+  const last = tiers[tiers.length - 1]
+  const overage = billingGuests - last.up_to
+  return last.price + overage * (Number(m.overage_per_person) || 0)
 }
 
 // Helper: show toast notification
@@ -345,25 +390,31 @@ async function showVenuePage(venueId, pushState = true) {
     return
   }
 
+  document.title = `${venue.name} — The Picnic Story`
   if (pushState) {
-    history.pushState({ venueId }, `${venue.name} — The Picnic Story`, `/?venue=${venueId}`)
-    document.title = `${venue.name} — The Picnic Story`
+    history.pushState({ venueId }, document.title, `/?venue=${venueId}`)
   }
 
-  // Reset calendar state when navigating to a new venue
-  appState.selectedDate = null
+  // Reset all calendar + guest state when navigating to a new venue
+  appState.selectedDate     = null
+  appState.selectedTimeSlot = null
+  appState.checkinDate      = null
+  appState.checkoutDate     = null
+  appState.adults           = 2
+  appState.children         = 0
+  appState.bookingStep      = 'calendar'
 
-  const [addOns, bookedDates] = await Promise.all([
+  const needsCalendar = venue.type !== 'partner_bnb'
+  const [addOns, bookedData] = await Promise.all([
     loadVenueAddOns(venue.type),
-    venue.type !== 'partner_bnb' ? fetchBookedDates(venue.id) : Promise.resolve(new Set()),
+    needsCalendar ? fetchBookedData(venue.id, venue.type) : Promise.resolve(null),
   ])
   appState.currentVenueAddOns = addOns
   renderVenueDetail(venue, addOns)
   showPage('venue-detail-page')
 
-  // Init availability calendar for self-managed venues
-  if (venue.type !== 'partner_bnb') {
-    renderAvailabilityCalendar('avail-calendar-widget', bookedDates)
+  if (needsCalendar && bookedData) {
+    renderAvailabilityCalendar('avail-calendar-widget', bookedData)
   }
 }
 
@@ -404,7 +455,7 @@ function renderVenueDetail(venue, addOns = []) {
 
   const ctaBlock = venue.type === 'partner_bnb'
     ? `<div class="vd-cta-stack">
-         <a href="${escapeHtml(venue.external_url || '#')}" target="_blank" rel="noopener noreferrer"
+         <a href="${venue.external_url?.startsWith('https://') ? escapeHtml(venue.external_url) : '#'}" target="_blank" rel="noopener noreferrer"
             class="btn btn--venue-primary" ${!venue.external_url ? 'aria-disabled="true"' : ''}>
            Book on Airbnb
            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg>
@@ -427,7 +478,7 @@ function renderVenueDetail(venue, addOns = []) {
       <div class="vd-hero" style="${heroBg}">
         <div class="vd-hero-gradient"></div>
         <div class="vd-hero-top">
-          <button class="vd-back-btn" onclick="navigateHome()" aria-label="Back to venues">
+          <button class="vd-back-btn" id="vd-hero-back" onclick="navigateHome()" aria-label="Back to venues">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
             Venues
           </button>
@@ -445,7 +496,7 @@ function renderVenueDetail(venue, addOns = []) {
       ${galleryStrip}
 
       <!-- Body -->
-      <div class="vd-body container">
+      <div class="vd-body container" id="vd-body">
         <div class="vd-layout">
 
           <!-- Main content -->
@@ -486,6 +537,58 @@ function renderVenueDetail(venue, addOns = []) {
             </div>
             <hr class="vd-divider">` : ''}
 
+            ${(function() {
+              if (venue.type !== 'self_managed' || !venue.metadata) return ''
+              const m = venue.metadata
+              const amenities = Array.isArray(m.amenities) ? m.amenities : []
+              const highlights = Array.isArray(m.highlights) ? m.highlights : []
+              const idealFor   = Array.isArray(m.ideal_for)  ? m.ideal_for  : []
+              return `
+            <div class="vd-section vd-section--property">
+              <h2 class="vd-section-title">The Property</h2>
+              <div class="vd-property-stats">
+                ${m.rooms ? `<div class="vd-property-stat">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg>
+                  <div class="vd-property-stat-text">
+                    <span class="vd-property-stat-value">${m.rooms}</span>
+                    <span class="vd-property-stat-label">${m.rooms === 1 ? 'Room' : 'Rooms'}</span>
+                  </div>
+                </div>` : ''}
+                ${m.bathrooms ? `<div class="vd-property-stat">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6 6.5 3.5a1.5 1.5 0 0 0-1-.5C4.683 3 4 3.683 4 4.5V17a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><line x1="10" y1="5" x2="8" y2="7"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+                  <div class="vd-property-stat-text">
+                    <span class="vd-property-stat-value">${m.bathrooms}</span>
+                    <span class="vd-property-stat-label">${m.bathrooms === 1 ? 'Bathroom' : 'Bathrooms'}</span>
+                  </div>
+                </div>` : ''}
+                ${m.stay_price_per_night ? `<div class="vd-property-stat">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                  <div class="vd-property-stat-text">
+                    <span class="vd-property-stat-value">₹${Number(m.stay_price_per_night).toLocaleString('en-IN')}</span>
+                    <span class="vd-property-stat-label">per night</span>
+                  </div>
+                </div>` : ''}
+              </div>
+              ${highlights.length ? `
+              <div class="vd-property-highlights">
+                ${highlights.map(h => `<div class="vd-property-highlight">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                  <span>${escapeHtml(h)}</span>
+                </div>`).join('')}
+              </div>` : ''}
+              ${amenities.length ? `
+              <div class="vd-property-amenities">
+                ${amenities.map(a => `<span class="vd-amenity-pill">${escapeHtml(a)}</span>`).join('')}
+              </div>` : ''}
+              ${idealFor.length ? `
+              <div class="vd-property-ideal">
+                <span class="vd-property-ideal-label">Ideal for</span>
+                ${idealFor.map(t => `<span class="vd-ideal-tag">${escapeHtml(t)}</span>`).join('')}
+              </div>` : ''}
+            </div>
+            <hr class="vd-divider">`
+            })()}
+
             <!-- What's included -->
             <div class="vd-section">
               <h2 class="vd-section-title">What's included</h2>
@@ -518,32 +621,43 @@ function renderVenueDetail(venue, addOns = []) {
             </div>
 
             ${(function() {
-              const experiences = addOns.filter(a => a.category === 'experience')
-              if (!experiences.length) return ''
+              if (!addOns.length) return ''
+              const CATEGORY_LABELS = {
+                photography:   '📷 Photography',
+                decor:         '🌸 Decor',
+                food:          '🍰 Food',
+                entertainment: '🎉 Entertainment',
+                extension:     '⏱ Extension',
+              }
+              const CATEGORY_ORDER = ['photography', 'decor', 'food', 'entertainment', 'extension']
+              const grouped = CATEGORY_ORDER.reduce((acc, cat) => {
+                const items = addOns.filter(a => a.category === cat)
+                if (items.length) acc.push({ cat, items })
+                return acc
+              }, [])
+              if (!grouped.length) return ''
               return `
             <hr class="vd-divider">
             <div class="vd-section">
               <h2 class="vd-section-title">Make it yours</h2>
-              <p class="vd-addons-tagline">Every picnic can be elevated. These experiences are available to add at this venue.</p>
-              <div class="vd-addons-scroll">
-                ${experiences.map(a => {
-                  const needsConfirm = a.requires_confirmation_for?.includes(venue.type)
-                  return `
-                <div class="vd-addon-card">
-                  <div class="vd-addon-img">
-                    <div class="vd-addon-img-placeholder" aria-hidden="true"></div>
-                  </div>
-                  <div class="vd-addon-body">
-                    <div class="vd-addon-name">${escapeHtml(a.name)}</div>
-                    ${a.description ? `<div class="vd-addon-desc">${escapeHtml(a.description)}</div>` : ''}
-                    <div class="vd-addon-footer">
-                      <span class="vd-addon-price">+₹${Number(a.price).toLocaleString('en-IN')}</span>
-                      ${needsConfirm ? `<span class="vd-addon-confirm-tag">On request</span>` : ''}
+              <p class="vd-addons-tagline">Every picnic can be elevated. Choose from our add-ons to make your experience unique.</p>
+              ${grouped.map(({ cat, items }) => `
+              <div class="vd-addons-category">
+                <h3 class="vd-addons-cat-label">${CATEGORY_LABELS[cat]}</h3>
+                <div class="vd-addons-scroll">
+                  ${items.map(a => `
+                  <div class="vd-addon-card">
+                    <div class="vd-addon-body">
+                      <div class="vd-addon-name">${escapeHtml(a.name)}</div>
+                      ${a.description ? `<div class="vd-addon-desc">${escapeHtml(a.description)}</div>` : ''}
+                      <div class="vd-addon-footer">
+                        <span class="vd-addon-price">+₹${Number(a.price).toLocaleString('en-IN')}</span>
+                        ${a.requires_confirmation ? `<span class="vd-addon-confirm-tag">On request</span>` : ''}
+                      </div>
                     </div>
-                  </div>
-                </div>`
-                }).join('')}
-              </div>
+                  </div>`).join('')}
+                </div>
+              </div>`).join('')}
             </div>`
             })()}
 
@@ -554,12 +668,12 @@ function renderVenueDetail(venue, addOns = []) {
             <div class="vd-booking-card">
               ${venue.base_price ? `
               <div class="vd-price-row">
-                <span class="vd-price-amount">${escapeHtml(formatPrice(venue.base_price))}</span>
-                <span class="vd-price-label">starting price</span>
+                <span class="vd-price-amount" id="sidebar-price-amount">${escapeHtml(formatPrice(venue.base_price))}</span>
+                <span class="vd-price-label" id="sidebar-price-label">starting price</span>
               </div>` : `
               <div class="vd-price-row">
-                <span class="vd-price-amount">Custom</span>
-                <span class="vd-price-label">pricing on request</span>
+                <span class="vd-price-amount" id="sidebar-price-amount">Custom</span>
+                <span class="vd-price-label" id="sidebar-price-label">pricing on request</span>
               </div>`}
               <p class="vd-price-note">Final price confirmed after we review your requirements.</p>
               <div class="vd-card-divider"></div>
@@ -584,6 +698,9 @@ function renderVenueDetail(venue, addOns = []) {
         </div><!-- /vd-layout -->
       </div><!-- /vd-body -->
 
+      <!-- Inline booking view (shown when user clicks Book Now) -->
+      <div id="vd-booking-view" style="display:none"></div>
+
       <!-- Mobile-only sticky booking bar -->
       <div class="vd-mobile-book-bar">
         ${venue.type === 'partner_bnb'
@@ -591,7 +708,7 @@ function renderVenueDetail(venue, addOns = []) {
                <span class="vd-mobile-book-amount">${venue.base_price ? escapeHtml(formatPrice(venue.base_price)) : 'Custom'}</span>
                <span class="vd-mobile-book-label">${venue.base_price ? 'starting price' : 'price on request'}</span>
              </div>
-             <a href="${escapeHtml(venue.external_url || '#')}" target="_blank" rel="noopener noreferrer" class="btn btn--venue-primary">Book on Airbnb</a>`
+             <a href="${venue.external_url?.startsWith('https://') ? escapeHtml(venue.external_url) : '#'}" target="_blank" rel="noopener noreferrer" class="btn btn--venue-primary">Book on Airbnb</a>`
           : `<div class="vd-mobile-book-price">
                <span class="vd-mobile-book-amount" id="mobile-bar-date-text">Pick a date ↑</span>
                <span class="vd-mobile-book-label">${venue.base_price ? escapeHtml(formatPrice(venue.base_price)) : 'Custom pricing'}</span>
@@ -609,10 +726,14 @@ function renderVenueDetail(venue, addOns = []) {
 function openBookingForVenue(venue) {
   appState.currentVenue = venue
   resetBookingModalForVenue(venue)
-  // Pre-fill date from calendar selection if available
-  if (appState.selectedDate) {
-    const dateInput = document.getElementById('preferred-date')
-    if (dateInput) dateInput.value = appState.selectedDate
+  // Pre-fill dates from calendar selection
+  const dateInput = document.getElementById('preferred-date')
+  if (dateInput) {
+    if (venue.type === 'self_managed' && appState.checkinDate) {
+      dateInput.value = appState.checkinDate
+    } else if (appState.selectedDate) {
+      dateInput.value = appState.selectedDate
+    }
   }
   updateAdvanceButton()
   showModal('booking-modal')
@@ -626,6 +747,25 @@ function resetBookingModalForVenue(venue) {
   const venueDisplay       = document.getElementById('venue-selected-display')
   const venueAddressField  = document.getElementById('venue-address')
   const venueAddressLabel  = document.getElementById('venue-address-label')
+  const dateGroup          = document.getElementById('preferred-date-group')
+  const bnbDatesGroup      = document.getElementById('bnb-dates-group')
+  const bnbDatesDisplay    = document.getElementById('bnb-dates-display')
+  const dateInput          = document.getElementById('preferred-date')
+
+  // BnB: hide date picker, show stay summary instead
+  const isBnB = venue?.type === 'self_managed' || venue?.type === 'partner_bnb'
+  if (dateGroup)     dateGroup.style.display     = isBnB ? 'none' : ''
+  if (bnbDatesGroup) bnbDatesGroup.style.display  = isBnB ? ''     : 'none'
+  if (dateInput)     dateInput.required           = !isBnB
+
+  if (isBnB && bnbDatesDisplay && appState.checkinDate && appState.checkoutDate) {
+    const nights = calcNights(appState.checkinDate, appState.checkoutDate)
+    bnbDatesDisplay.innerHTML = `
+      <span class="bnb-date-chip">🛬 Check-in &nbsp;<strong>${formatSelectedDate(appState.checkinDate)}</strong></span>
+      <span class="bnb-date-chip">🛫 Checkout &nbsp;<strong>${formatSelectedDate(appState.checkoutDate)}</strong></span>
+      <span class="bnb-nights-chip">${nights} night${nights > 1 ? 's' : ''}</span>
+    `
+  }
 
   if (!venue) {
     // No venue — free-text address, no Airbnb ref
@@ -693,6 +833,7 @@ function injectBookingAddOns(extraAddOns, basePrice) {
       <label class="bk-addon-toggle">
         <input type="checkbox" class="bk-addon-checkbox"
                data-addon-id="${a.id}"
+               data-addon-name="${escapeHtml(a.name)}"
                data-addon-price="${a.price}"
                data-addon-confirm="${needsConfirm}"
                onchange="updateAddOnTotal()">
@@ -732,92 +873,142 @@ function updateAddOnTotal() {
 // AVAILABILITY CALENDAR
 // ----------------------------------------------------------------
 
-// Fetch all booked dates (confirmed + pending) for a venue
-async function fetchBookedDates(venueId) {
+const CAFE_SLOTS = [
+  { key: 'morning',   label: 'Morning',   time: '9 AM – 12 PM',  icon: '🌅' },
+  { key: 'afternoon', label: 'Afternoon', time: '1 PM – 4 PM',   icon: '☀️' },
+  { key: 'evening',   label: 'Evening',   time: '5 PM – 8 PM',   icon: '🌙' },
+]
+
+// Fetch booked data — type-aware (cafe returns slotMap, BnB returns blocked date set)
+async function fetchBookedData(venueId, venueType) {
   try {
-    const { data, error } = await supabase
-      .from('bookings')
-      .select('preferred_date')
-      .eq('venue_id', venueId)
-    if (error) throw error
-    return new Set((data || []).map(b => b.preferred_date))
+    if (venueType === 'cafe') {
+      // Café: slot-level bookings from SECURITY DEFINER RPC (no anon RLS issue)
+      //       + admin-blocked full days from venue_availability
+      const [slotsResult, adminResult] = await Promise.all([
+        supabase.rpc('get_cafe_booked_slots', { p_venue_id: venueId }),
+        supabase.from('venue_availability').select('date').eq('venue_id', venueId).eq('source', 'admin'),
+      ])
+      if (slotsResult.error) throw slotsResult.error
+
+      const slotMap = new Map()
+      // Confirmed slot bookings
+      for (const b of slotsResult.data || []) {
+        const d = typeof b.preferred_date === 'string' ? b.preferred_date : localDateStr(new Date(b.preferred_date))
+        if (!slotMap.has(d)) slotMap.set(d, new Set())
+        if (b.time_slot) slotMap.get(d).add(b.time_slot)
+      }
+      // Admin-blocked days → mark all slots as taken so the date shows fully booked
+      for (const r of adminResult.data || []) {
+        slotMap.set(r.date, new Set(CAFE_SLOTS.map(s => s.key)))
+      }
+
+      return { venueType: 'cafe', slotMap }
+    } else {
+      // BnB: single query on venue_availability — both admin blocks and confirmed bookings live here
+      const { data, error } = await supabase
+        .from('venue_availability')
+        .select('date')
+        .eq('venue_id', venueId)
+      if (error) throw error
+
+      const blockedDates = new Set((data || []).map(r => r.date))
+      return { venueType: 'self_managed', blockedDates }
+    }
   } catch (err) {
-    console.error('Failed to fetch booked dates:', err)
-    return new Set()
+    console.error('Failed to fetch booked data:', err)
+    return { venueType, slotMap: new Map(), blockedDates: new Set() }
   }
 }
 
-// Format a YYYY-MM-DD date string as "12 Jun"
 function formatSelectedDate(dateStr) {
   const d = new Date(dateStr + 'T00:00:00')
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 }
 
-// Build the inner grid HTML for a calendar month
-function buildCalendarHTML(year, month, bookedDates) {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+function calcNights(checkin, checkout) {
+  return Math.round((new Date(checkout + 'T00:00:00') - new Date(checkin + 'T00:00:00')) / 86400000)
+}
 
-  const DOW = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
-  const firstDow   = new Date(year, month, 1).getDay()
-  const totalDays  = new Date(year, month + 1, 0).getDate()
+// Build calendar grid HTML — handles both cafe and BnB modes
+function buildCalendarHTML(year, month, bookedData) {
+  const today     = new Date(); today.setHours(0, 0, 0, 0)
+  const isCafe    = bookedData.venueType === 'cafe'
+  const DOW       = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+  const firstDow  = new Date(year, month, 1).getDay()
+  const totalDays = new Date(year, month + 1, 0).getDate()
 
   let html = DOW.map(d => `<span class="avail-cal-dow">${d}</span>`).join('')
-
-  for (let i = 0; i < firstDow; i++) {
-    html += `<span class="avail-cal-empty"></span>`
-  }
+  for (let i = 0; i < firstDow; i++) html += `<span class="avail-cal-empty"></span>`
 
   for (let d = 1; d <= totalDays; d++) {
-    const date = new Date(year, month, d)
-    date.setHours(0, 0, 0, 0)
-    const dateStr  = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    const isPast   = date < today
-    const isBooked = bookedDates.has(dateStr)
-    const isToday  = date.getTime() === today.getTime()
-    const isSelected = appState.selectedDate === dateStr
-    const isDisabled = isPast || isBooked
+    const date    = new Date(year, month, d); date.setHours(0, 0, 0, 0)
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    const isPast  = date < today
+    const isToday = date.getTime() === today.getTime()
+
+    let isFullyBooked = false
+    if (isCafe) {
+      const booked = bookedData.slotMap?.get(dateStr)
+      isFullyBooked = booked ? booked.size >= CAFE_SLOTS.length : false
+    } else {
+      isFullyBooked = bookedData.blockedDates?.has(dateStr) ?? false
+    }
+
+    const isDisabled = isPast || isFullyBooked
+    const isSelected  = isCafe && appState.selectedDate === dateStr
+    const isCheckin   = !isCafe && appState.checkinDate === dateStr
+    const isCheckout  = !isCafe && appState.checkoutDate === dateStr
+    const isInRange   = !isCafe && appState.checkinDate && appState.checkoutDate &&
+      dateStr > appState.checkinDate && dateStr < appState.checkoutDate
 
     const cls = [
       'avail-cal-day',
-      isPast      ? 'avail-cal-day--past'     : '',
-      isBooked    ? 'avail-cal-day--booked'   : '',
-      isToday     ? 'avail-cal-day--today'    : '',
-      isSelected  ? 'avail-cal-day--selected' : '',
-      !isDisabled ? 'avail-cal-day--available': '',
+      isPast        ? 'avail-cal-day--past'     : '',
+      isFullyBooked ? 'avail-cal-day--booked'   : '',
+      isToday       ? 'avail-cal-day--today'    : '',
+      isSelected    ? 'avail-cal-day--selected' : '',
+      isCheckin     ? 'avail-cal-day--checkin'  : '',
+      isCheckout    ? 'avail-cal-day--checkout' : '',
+      isInRange     ? 'avail-cal-day--in-range' : '',
+      !isDisabled   ? 'avail-cal-day--available': '',
     ].filter(Boolean).join(' ')
 
+    // Use data-attributes + delegated listener — never interpolate dateStr into onclick
+    const action = isCafe ? 'select-cafe-date' : 'select-bnb-date'
     if (isDisabled) {
-      html += `<span class="${cls}" aria-disabled="true" title="${isBooked ? 'Already booked' : ''}">${d}</span>`
+      const innerContent = (isFullyBooked && !isCafe)
+        ? `${d}<span class="avail-cal-day-booked-dot" aria-hidden="true"></span>`
+        : `${d}`
+      html += `<span class="${cls}" aria-disabled="true" title="${isFullyBooked ? 'Booked' : ''}">${innerContent}</span>`
     } else {
-      html += `<button class="${cls}" data-date="${dateStr}"
-                       onclick="selectCalendarDate('${dateStr}')"
-                       aria-label="${dateStr}">${d}</button>`
+      html += `<button class="${cls}" data-date="${dateStr}" data-action="${action}" aria-label="${dateStr}">${d}</button>`
     }
   }
-
   return html
 }
 
-// Render the interactive availability calendar into a container
-function renderAvailabilityCalendar(containerId, bookedDates) {
+// Render the availability calendar widget
+function renderAvailabilityCalendar(containerId, bookedData) {
   const container = document.getElementById(containerId)
   if (!container) return
 
-  const MONTHS = ['January','February','March','April','May','June',
-                  'July','August','September','October','November','December']
-  const now    = new Date()
-  let year     = now.getFullYear()
-  let month    = now.getMonth()
+  // Store bookedData so slot picker can reference it
+  container._bookedData = bookedData
+
+  const MONTHS  = ['January','February','March','April','May','June',
+                   'July','August','September','October','November','December']
+  const isCafe  = bookedData.venueType === 'cafe'
+  const now     = new Date()
+  let year      = now.getFullYear()
+  let month     = now.getMonth()
 
   function draw() {
     const isMinMonth = year === now.getFullYear() && month <= now.getMonth()
-
     container.innerHTML = `
       <div class="avail-calendar">
         <div class="avail-cal-header">
-          <button class="avail-cal-nav" id="avail-cal-prev" aria-label="Previous month"
-                  ${isMinMonth ? 'disabled' : ''}>
+          <button class="avail-cal-nav" id="avail-cal-prev" aria-label="Previous month" ${isMinMonth ? 'disabled' : ''}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
           </button>
           <span class="avail-cal-month-label">${MONTHS[month]} ${year}</span>
@@ -825,97 +1016,903 @@ function renderAvailabilityCalendar(containerId, bookedDates) {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           </button>
         </div>
-        <div class="avail-cal-grid">
-          ${buildCalendarHTML(year, month, bookedDates)}
+        <p class="avail-cal-hint">${isCafe ? 'Select a date, then pick a time slot' : 'Click check-in date, then checkout date'}</p>
+        <div class="avail-cal-grid" id="avail-cal-grid">
+          ${buildCalendarHTML(year, month, bookedData)}
         </div>
         <div class="avail-cal-legend">
-          <span class="avail-cal-legend-item">
-            <span class="avail-cal-swatch avail-cal-swatch--booked"></span>Booked
-          </span>
-          <span class="avail-cal-legend-item">
-            <span class="avail-cal-swatch avail-cal-swatch--available"></span>Available
-          </span>
+          <span class="avail-cal-legend-item"><span class="avail-cal-swatch avail-cal-swatch--booked"></span>${isCafe ? 'All slots taken' : 'Booked'}</span>
+          <span class="avail-cal-legend-item"><span class="avail-cal-swatch avail-cal-swatch--available"></span>Available</span>
+          ${!isCafe ? '<span class="avail-cal-legend-item"><span class="avail-cal-swatch avail-cal-swatch--checkin"></span>Your stay</span>' : ''}
         </div>
+        <div id="avail-slot-picker"></div>
       </div>
     `
-
     document.getElementById('avail-cal-prev')?.addEventListener('click', () => {
       if (isMinMonth) return
-      month--
-      if (month < 0) { month = 11; year-- }
-      draw()
+      month--; if (month < 0) { month = 11; year-- }; draw()
     })
     document.getElementById('avail-cal-next')?.addEventListener('click', () => {
-      month++
-      if (month > 11) { month = 0; year++ }
-      draw()
+      month++; if (month > 11) { month = 0; year++ }; draw()
     })
+
+    // Delegated click handler for calendar days — avoids dateStr in onclick strings
+    document.getElementById('avail-cal-grid')?.addEventListener('click', e => {
+      const btn = e.target.closest('[data-action]')
+      if (!btn || btn.disabled) return
+      const dateStr = btn.dataset.date
+      if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return  // validate format
+      if (btn.dataset.action === 'select-cafe-date') selectCalendarDate(dateStr)
+      if (btn.dataset.action === 'select-bnb-date')  selectBnbDate(dateStr)
+    })
+
+    if (!isCafe) attachBnbHover()
   }
 
+  container._calDraw = draw
   draw()
 }
 
-// Handle date selection from the calendar
-function selectCalendarDate(dateStr) {
-  appState.selectedDate = dateStr
-
-  // Pre-fill date in booking modal
-  const dateInput = document.getElementById('preferred-date')
-  if (dateInput) dateInput.value = dateStr
-
-  // Update selected highlight without full re-render
-  document.querySelectorAll('.avail-cal-day--selected').forEach(el => {
-    el.classList.remove('avail-cal-day--selected')
+// BnB: hover to preview range before second click
+function attachBnbHover() {
+  const grid = document.getElementById('avail-cal-grid')
+  if (!grid) return
+  grid.addEventListener('mouseover', (e) => {
+    const btn = e.target.closest('.avail-cal-day--available')
+    if (!btn || !appState.checkinDate || appState.checkoutDate) return
+    const hoverDate = btn.dataset.date
+    if (!hoverDate || hoverDate <= appState.checkinDate) return
+    grid.querySelectorAll('.avail-cal-day[data-date]').forEach(el => {
+      const d = el.dataset.date
+      el.classList.toggle('avail-cal-day--hover-range', d > appState.checkinDate && d < hoverDate)
+    })
   })
-  document.querySelectorAll(`.avail-cal-day[data-date="${dateStr}"]`).forEach(el => {
-    el.classList.add('avail-cal-day--selected')
+  grid.addEventListener('mouseleave', () => {
+    grid.querySelectorAll('.avail-cal-day--hover-range').forEach(el => el.classList.remove('avail-cal-day--hover-range'))
   })
-
-  const formatted = formatSelectedDate(dateStr)
-
-  // Unlock + update sidebar book button
-  const sidebarBtn = document.getElementById('sidebar-book-btn')
-  if (sidebarBtn) {
-    sidebarBtn.disabled = false
-    sidebarBtn.textContent = `Book — ${formatted}`
-  }
-
-  // Update mobile bar
-  const mobileDateText = document.getElementById('mobile-bar-date-text')
-  if (mobileDateText) mobileDateText.textContent = formatted
-  const mobileBookBtn = document.getElementById('mobile-bar-book-btn')
-  if (mobileBookBtn) mobileBookBtn.disabled = false
-
-  updateAdvanceButton()
 }
 
-// Update the advance payment button label with the current total
-function updateAdvanceButton() {
-  const btn = document.getElementById('booking-submit-btn')
-  if (!btn) return
-
-  const venue     = appState.currentVenue
-  const basePrice = venue?.base_price ? Number(venue.base_price) : 0
-
-  if (!basePrice) {
-    btn.textContent = 'Pay Advance'
+// BnB: first click = checkin, second click = checkout
+function selectBnbDate(dateStr) {
+  if (!appState.checkinDate || appState.checkoutDate) {
+    appState.checkinDate  = dateStr
+    appState.checkoutDate = null
+    updateBnbCalendarHighlight()
+    updateBnbBarState()
+    return
+  }
+  if (dateStr <= appState.checkinDate) {
+    appState.checkinDate  = dateStr
+    appState.checkoutDate = null
+    updateBnbCalendarHighlight()
+    updateBnbBarState()
     return
   }
 
-  const addonSum = Array.from(document.querySelectorAll('.bk-addon-checkbox:checked'))
+  // Check that no date in the selected range (checkin inclusive → checkout exclusive) is blocked/booked
+  const calWidget  = document.getElementById('avail-calendar-widget')
+  const bookedData = calWidget?._bookedData
+  if (bookedData?.blockedDates) {
+    const start = new Date(appState.checkinDate + 'T00:00:00')
+    const end   = new Date(dateStr + 'T00:00:00')
+    for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
+      if (bookedData.blockedDates.has(localDateStr(d))) {
+        showToast('Your selected range includes a booked or blocked date. Please pick different dates.', 'error')
+        // Reset to re-pick checkin
+        appState.checkinDate  = null
+        appState.checkoutDate = null
+        updateBnbCalendarHighlight()
+        updateBnbBarState()
+        return
+      }
+    }
+  }
+
+  appState.checkoutDate = dateStr
+  updateBnbCalendarHighlight()
+  const checkinInput = document.getElementById('preferred-date')
+  if (checkinInput) checkinInput.value = appState.checkinDate
+  updateBnbBarState()
+  updateAdvanceButton()
+}
+
+// Update range classes on calendar grid without full re-render
+function updateBnbCalendarHighlight() {
+  const grid = document.getElementById('avail-cal-grid')
+  if (!grid) return
+  grid.querySelectorAll('.avail-cal-day[data-date]').forEach(el => {
+    const d = el.dataset.date
+    el.classList.remove('avail-cal-day--checkin', 'avail-cal-day--checkout', 'avail-cal-day--in-range')
+    if (d === appState.checkinDate)  el.classList.add('avail-cal-day--checkin')
+    if (d === appState.checkoutDate) el.classList.add('avail-cal-day--checkout')
+    if (appState.checkinDate && appState.checkoutDate && d > appState.checkinDate && d < appState.checkoutDate)
+      el.classList.add('avail-cal-day--in-range')
+  })
+}
+
+// Update sidebar + mobile bar for BnB
+function updateBnbBarState() {
+  const sidebarBtn     = document.getElementById('sidebar-book-btn')
+  const mobileDateText = document.getElementById('mobile-bar-date-text')
+  const mobileBookBtn  = document.getElementById('mobile-bar-book-btn')
+
+  if (!appState.checkinDate) {
+    if (sidebarBtn)     { sidebarBtn.disabled = true; sidebarBtn.textContent = 'Select check-in date' }
+    if (mobileDateText) mobileDateText.textContent = 'Pick dates ↑'
+    if (mobileBookBtn)  mobileBookBtn.disabled = true
+    return
+  }
+  if (!appState.checkoutDate) {
+    if (sidebarBtn)     { sidebarBtn.disabled = true; sidebarBtn.textContent = 'Now pick checkout date →' }
+    if (mobileDateText) mobileDateText.textContent = `Check-in ${formatSelectedDate(appState.checkinDate)} · pick checkout ↑`
+    if (mobileBookBtn)  mobileBookBtn.disabled = true
+    return
+  }
+  const nights = calcNights(appState.checkinDate, appState.checkoutDate)
+  const label  = `${formatSelectedDate(appState.checkinDate)} → ${formatSelectedDate(appState.checkoutDate)} · ${nights} night${nights > 1 ? 's' : ''}`
+  if (sidebarBtn)     { sidebarBtn.disabled = false; sidebarBtn.textContent = 'Select guests →' }
+  if (mobileDateText) mobileDateText.textContent = label
+  if (mobileBookBtn)  { mobileBookBtn.disabled = false; mobileBookBtn.textContent = 'Select guests →' }
+}
+
+// Cafe: date click → show slot picker below calendar
+function selectCalendarDate(dateStr) {
+  appState.selectedDate     = dateStr
+  appState.selectedTimeSlot = null
+
+  document.querySelectorAll('.avail-cal-day--selected').forEach(el => el.classList.remove('avail-cal-day--selected'))
+  document.querySelectorAll(`.avail-cal-day[data-date="${dateStr}"]`).forEach(el => el.classList.add('avail-cal-day--selected'))
+
+  const dateInput = document.getElementById('preferred-date')
+  if (dateInput) dateInput.value = dateStr
+
+  renderSlotPicker(dateStr)
+  updateCafeBarState()
+}
+
+// Render time slot buttons below the calendar
+function renderSlotPicker(dateStr) {
+  const container = document.getElementById('avail-slot-picker')
+  if (!container) return
+  const calWidget  = document.getElementById('avail-calendar-widget')
+  const bookedData = calWidget?._bookedData || { slotMap: new Map() }
+  const bookedForDate = bookedData.slotMap?.get(dateStr) || new Set()
+  const formatted  = formatSelectedDate(dateStr)
+
+  container.innerHTML = `
+    <div class="avail-slot-picker">
+      <p class="avail-slot-label">Pick a time slot for <strong>${formatted}</strong></p>
+      <div class="avail-slot-grid">
+        ${CAFE_SLOTS.map(slot => {
+          const isBooked   = bookedForDate.has(slot.key)
+          const isSelected = appState.selectedTimeSlot === slot.key
+          return `<button class="avail-slot-btn ${isBooked ? 'avail-slot-btn--booked' : ''} ${isSelected ? 'avail-slot-btn--selected' : ''}"
+                          onclick="selectTimeSlot('${slot.key}')" ${isBooked ? 'disabled' : ''}>
+                    <span class="slot-icon">${slot.icon}</span>
+                    <span class="slot-name">${slot.label}</span>
+                    <span class="slot-time">${slot.time}</span>
+                  </button>`
+        }).join('')}
+      </div>
+    </div>
+  `
+}
+
+// Cafe: time slot selected
+function selectTimeSlot(slotKey) {
+  appState.selectedTimeSlot = slotKey
+  document.querySelectorAll('.avail-slot-btn').forEach(btn => btn.classList.remove('avail-slot-btn--selected'))
+  document.querySelectorAll(`.avail-slot-btn[onclick="selectTimeSlot('${slotKey}')"]`).forEach(btn => btn.classList.add('avail-slot-btn--selected'))
+  updateCafeBarState()
+  updateAdvanceButton()
+}
+
+// Cafe: update sidebar + mobile bar
+function updateCafeBarState() {
+  const sidebarBtn     = document.getElementById('sidebar-book-btn')
+  const mobileDateText = document.getElementById('mobile-bar-date-text')
+  const mobileBookBtn  = document.getElementById('mobile-bar-book-btn')
+  const slot           = CAFE_SLOTS.find(s => s.key === appState.selectedTimeSlot)
+
+  if (!appState.selectedDate) {
+    if (sidebarBtn)     { sidebarBtn.disabled = true;  sidebarBtn.textContent = 'Select a date to book' }
+    if (mobileDateText) mobileDateText.textContent = 'Pick a date ↑'
+    if (mobileBookBtn)  mobileBookBtn.disabled = true
+    return
+  }
+  if (!appState.selectedTimeSlot) {
+    if (sidebarBtn)     { sidebarBtn.disabled = true; sidebarBtn.textContent = 'Pick a time slot ↑' }
+    if (mobileDateText) mobileDateText.textContent = `${formatSelectedDate(appState.selectedDate)} · pick a slot ↑`
+    if (mobileBookBtn)  mobileBookBtn.disabled = true
+    return
+  }
+  const label = `${formatSelectedDate(appState.selectedDate)} · ${slot?.label}`
+  if (sidebarBtn)     { sidebarBtn.disabled = false; sidebarBtn.textContent = 'Select guests →' }
+  if (mobileDateText) mobileDateText.textContent = label
+  if (mobileBookBtn)  { mobileBookBtn.disabled = false; mobileBookBtn.textContent = 'Select guests →' }
+}
+
+// Update the advance payment button with live pricing
+function updateAdvanceButton() {
+  const btn   = document.getElementById('booking-submit-btn')
+  const venue = appState.currentVenue
+  if (!btn || !venue) return
+
+  const addonSum      = Array.from(document.querySelectorAll('.bk-addon-checkbox:checked'))
+    .reduce((sum, cb) => sum + Number(cb.dataset.addonPrice), 0)
+  const billingGuests = calcBillingGuests(appState.adults, appState.children)
+  const picnicPrice   = getVenuePrice(venue, billingGuests)
+
+  if (venue.type === 'self_managed' && appState.checkinDate && appState.checkoutDate) {
+    const nights    = calcNights(appState.checkinDate, appState.checkoutDate)
+    const stayTotal = nights * (Number(venue.metadata?.stay_price_per_night) || 0)
+    const total     = stayTotal + picnicPrice + addonSum
+    btn.textContent = total > 0
+      ? `Pay Advance — ₹${total.toLocaleString('en-IN')} · ${nights} night${nights > 1 ? 's' : ''}`
+      : 'Pay Advance'
+    return
+  }
+
+  if (!picnicPrice && !addonSum) { btn.textContent = 'Pay Advance'; return }
+  btn.textContent = `Pay Advance — ₹${(picnicPrice + addonSum).toLocaleString('en-IN')}`
+}
+
+// ----------------------------------------------------------------
+// GUEST SELECTOR
+// ----------------------------------------------------------------
+
+// Show the guest count selector inside #avail-calendar-widget (replaces calendar)
+function showGuestSelector(venue) {
+  appState.bookingStep  = 'guests'
+  appState.currentVenue = venue          // needed by updateGuestCount + showCalendarStep
+  const widget = document.getElementById('avail-calendar-widget')
+  if (!widget) return
+
+  // Date summary for the back button label
+  let dateSummary = ''
+  if (venue.type === 'self_managed' && appState.checkinDate && appState.checkoutDate) {
+    const nights = calcNights(appState.checkinDate, appState.checkoutDate)
+    dateSummary = `${formatSelectedDate(appState.checkinDate)} – ${formatSelectedDate(appState.checkoutDate)} · ${nights} night${nights !== 1 ? 's' : ''}`
+  } else if (appState.selectedDate && appState.selectedTimeSlot) {
+    const slot = CAFE_SLOTS.find(s => s.key === appState.selectedTimeSlot)
+    dateSummary = `${formatSelectedDate(appState.selectedDate)} · ${slot?.label || ''}`
+  }
+
+  const totalGuests = appState.adults + appState.children
+  const maxGuests   = venue.capacity_max || 20
+
+  widget.innerHTML = `
+    <div class="vd-guest-selector">
+      <button class="vd-guest-back" onclick="showCalendarStep()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+        ${dateSummary || 'Change date'}
+      </button>
+      <div class="vd-guest-rows">
+        <div class="vd-guest-row">
+          <div class="vd-guest-label">
+            <span class="vd-guest-type">Adults</span>
+          </div>
+          <div class="vd-guest-counter">
+            <button class="vd-guest-btn" onclick="updateGuestCount('adults',-1)" ${appState.adults <= 1 ? 'disabled' : ''} aria-label="Remove adult">−</button>
+            <span class="vd-guest-count" id="adults-count">${appState.adults}</span>
+            <button class="vd-guest-btn" onclick="updateGuestCount('adults',1)" ${totalGuests >= maxGuests ? 'disabled' : ''} aria-label="Add adult">+</button>
+          </div>
+        </div>
+        <div class="vd-guest-row">
+          <div class="vd-guest-label">
+            <span class="vd-guest-type">Children</span>
+            <span class="vd-guest-sublabel">Under 10 · half rate</span>
+          </div>
+          <div class="vd-guest-counter">
+            <button class="vd-guest-btn" onclick="updateGuestCount('children',-1)" ${appState.children <= 0 ? 'disabled' : ''} aria-label="Remove child">−</button>
+            <span class="vd-guest-count" id="children-count">${appState.children}</span>
+            <button class="vd-guest-btn" onclick="updateGuestCount('children',1)" ${totalGuests >= maxGuests ? 'disabled' : ''} aria-label="Add child">+</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `
+
+  const sidebarBtn = document.getElementById('sidebar-book-btn')
+  const mobileBtn  = document.getElementById('mobile-bar-book-btn')
+  if (sidebarBtn) { sidebarBtn.disabled = false; sidebarBtn.textContent = 'Book Now' }
+  if (mobileBtn)  { mobileBtn.disabled  = false; mobileBtn.textContent  = 'Book Now' }
+
+  updateGuestPrice(venue)
+}
+
+// Restore the availability calendar (undo showGuestSelector)
+function showCalendarStep() {
+  appState.bookingStep = 'calendar'
+  const venue  = appState.currentVenue
+  const widget = document.getElementById('avail-calendar-widget')
+  if (!widget || !venue) return
+
+  // _calDraw is stored by renderAvailabilityCalendar — just call it
+  if (typeof widget._calDraw === 'function') {
+    widget._calDraw()
+    if (venue.type === 'self_managed') {
+      attachBnbHover()
+      updateBnbCalendarHighlight()
+    }
+    // Re-render slot picker if a cafe date was already selected
+    if (venue.type === 'cafe' && appState.selectedDate) {
+      renderSlotPicker(appState.selectedDate)
+    }
+  }
+
+  if (venue.type === 'self_managed') updateBnbBarState()
+  else updateCafeBarState()
+
+  updateGuestPrice(venue)
+}
+
+// Update sidebar price display based on current adults/children
+function updateGuestPrice(venue) {
+  const priceEl = document.getElementById('sidebar-price-amount')
+  const labelEl = document.getElementById('sidebar-price-label')
+  if (!priceEl || !venue) return
+
+  const billingGuests = calcBillingGuests(appState.adults, appState.children)
+  const picnicPrice   = getVenuePrice(venue, billingGuests)
+
+  const guestLine = `${appState.adults} adult${appState.adults !== 1 ? 's' : ''}` +
+    (appState.children ? ` · ${appState.children} child${appState.children !== 1 ? 'ren' : ''}` : '')
+
+  if (venue.type === 'self_managed' && appState.checkinDate && appState.checkoutDate) {
+    const nights    = calcNights(appState.checkinDate, appState.checkoutDate)
+    const stayTotal = nights * (Number(venue.metadata?.stay_price_per_night) || 0)
+    priceEl.textContent = formatPrice(stayTotal + picnicPrice) || 'Custom'
+    if (labelEl) labelEl.textContent = `${nights} night${nights !== 1 ? 's' : ''} · ${guestLine}`
+    return
+  }
+
+  priceEl.textContent = formatPrice(picnicPrice) || 'Custom'
+  if (labelEl) labelEl.textContent = guestLine
+}
+
+// Increment/decrement adult or child count and refresh price
+function updateGuestCount(type, delta) {
+  const venue = appState.currentVenue
+  if (!venue) return
+
+  if (type === 'adults')   appState.adults   = Math.max(1, appState.adults + delta)
+  if (type === 'children') appState.children = Math.max(0, appState.children + delta)
+
+  // Update count display in-place
+  const countEl = document.getElementById(`${type}-count`)
+  if (countEl) countEl.textContent = appState[type]
+
+  // Refresh ± button disabled states
+  const totalGuests = appState.adults + appState.children
+  const maxGuests   = venue.capacity_max || 20
+  const adultRow    = document.getElementById('adults-count')?.closest('.vd-guest-row')
+  const childRow    = document.getElementById('children-count')?.closest('.vd-guest-row')
+
+  if (adultRow) {
+    adultRow.querySelector('.vd-guest-btn:first-child').disabled = appState.adults <= 1
+    adultRow.querySelector('.vd-guest-btn:last-child').disabled  = totalGuests >= maxGuests
+  }
+  if (childRow) {
+    childRow.querySelector('.vd-guest-btn:first-child').disabled = appState.children <= 0
+    childRow.querySelector('.vd-guest-btn:last-child').disabled  = totalGuests >= maxGuests
+  }
+
+  updateGuestPrice(venue)
+  updateAdvanceButton()
+}
+
+// ----------------------------------------------------------------
+// BOOKING VIEW (inline — replaces vd-body, no modal)
+// ----------------------------------------------------------------
+
+function showBookingForm(venue) {
+  appState.bookingStep  = 'booking'
+  appState.currentVenue = venue
+  const body      = document.getElementById('vd-body')
+  const bookView  = document.getElementById('vd-booking-view')
+  const mobileBar = document.querySelector('.vd-mobile-book-bar')
+  const backBtn   = document.getElementById('vd-hero-back')
+  if (!body || !bookView) return
+
+  const addOns        = appState.currentVenueAddOns
+  const billingGuests = calcBillingGuests(appState.adults, appState.children)
+  const picnicPrice   = getVenuePrice(venue, billingGuests)
+
+  // Date chips
+  let dateChips = ''
+  if (venue.type === 'self_managed' && appState.checkinDate && appState.checkoutDate) {
+    const nights = calcNights(appState.checkinDate, appState.checkoutDate)
+    dateChips = `
+      <span class="vd-bv-chip">🛬 Check-in &nbsp;<strong>${formatSelectedDate(appState.checkinDate)}</strong></span>
+      <span class="vd-bv-chip">🛫 Checkout &nbsp;<strong>${formatSelectedDate(appState.checkoutDate)}</strong></span>
+      <span class="vd-bv-chip">🌙 ${nights} night${nights !== 1 ? 's' : ''}</span>`
+  } else if (appState.selectedDate && appState.selectedTimeSlot) {
+    const slot = CAFE_SLOTS.find(s => s.key === appState.selectedTimeSlot)
+    dateChips = `
+      <span class="vd-bv-chip">📅 <strong>${formatSelectedDate(appState.selectedDate)}</strong></span>
+      <span class="vd-bv-chip">${slot?.icon || ''} ${slot?.label || ''} · ${slot?.time || ''}</span>`
+  }
+  const guestLabel = `${appState.adults} adult${appState.adults !== 1 ? 's' : ''}${appState.children ? ` · ${appState.children} child${appState.children !== 1 ? 'ren' : ''}` : ''}`
+  const guestChips = `<span class="vd-bv-chip">👤 ${guestLabel}</span>`
+
+  // Price breakdown rows
+  let priceRows = ''
+  let baseTotal = picnicPrice
+  if (venue.type === 'self_managed' && appState.checkinDate && appState.checkoutDate) {
+    const nights    = calcNights(appState.checkinDate, appState.checkoutDate)
+    const stayTotal = nights * (Number(venue.metadata?.stay_price_per_night) || 0)
+    baseTotal += stayTotal
+    priceRows += `<div class="vd-bv-price-row"><span>Stay · ${nights} night${nights !== 1 ? 's' : ''}</span><span>₹${stayTotal.toLocaleString('en-IN')}</span></div>`
+  }
+  priceRows += `<div class="vd-bv-price-row"><span>Picnic · ${guestLabel}</span><span>₹${picnicPrice.toLocaleString('en-IN')}</span></div>`
+  priceRows += `<div id="bv-addon-price-rows"></div>`
+
+  // Add-ons checklist
+  const addOnsHtml = addOns.length ? `
+    <div class="vd-bf-section">
+      <h3 class="vd-bf-section-title">Add to your experience</h3>
+      <div class="vd-bf-addons">
+        ${addOns.map(a => `
+        <label class="vd-bf-addon-row">
+          <div class="vd-bf-addon-info">
+            <span class="vd-bf-addon-name">${escapeHtml(a.name)}</span>
+            ${a.description ? `<span class="vd-bf-addon-desc">${escapeHtml(a.description)}</span>` : ''}
+          </div>
+          <div class="vd-bf-addon-right">
+            <span class="vd-bf-addon-price">+₹${Number(a.price).toLocaleString('en-IN')}</span>
+            <input type="checkbox" class="bv-addon-check"
+                   data-addon-id="${a.id}"
+                   data-addon-name="${escapeHtml(a.name)}"
+                   data-addon-price="${a.price}"
+                   data-addon-confirm="${a.requires_confirmation || false}"
+                   onchange="updateBookingSummaryPrice()">
+          </div>
+        </label>`).join('')}
+      </div>
+    </div>` : ''
+
+  bookView.innerHTML = `
+    <div class="vd-bv-wrap container">
+      <div class="vd-bv-layout">
+
+        <!-- Left: booking summary -->
+        <div class="vd-bv-summary">
+          <div class="vd-bv-venue-row">
+            <span class="vd-bv-venue-name">${escapeHtml(venue.name)}</span>
+            <span class="venue-type-badge ${venueTypeBadgeClass(venue.type)}">${escapeHtml(formatVenueType(venue.type))}</span>
+          </div>
+          <div class="vd-bv-chips">${dateChips}${guestChips}</div>
+          <div class="vd-bv-price-table">
+            ${priceRows}
+            <div class="vd-bv-price-divider"></div>
+            <div class="vd-bv-price-row vd-bv-price-row--total">
+              <span>Advance payment</span>
+              <span id="bv-total-price">₹${baseTotal.toLocaleString('en-IN')}</span>
+            </div>
+          </div>
+          <p class="vd-bv-note">Free cancellation up to 48h before. Final total confirmed after we review your requirements.</p>
+        </div>
+
+        <!-- Right: add-ons + contact form -->
+        <div class="vd-bv-form-col">
+          ${addOnsHtml}
+          <div class="vd-bf-section">
+            <h3 class="vd-bf-section-title">Your details</h3>
+            <form id="inline-booking-form" class="vd-bf-form" onsubmit="handleInlineBookingSubmit(event)">
+              <div class="vd-bf-field">
+                <label class="vd-bf-label">Full name *</label>
+                <input class="vd-bf-input" type="text" name="full-name" placeholder="Your name" required>
+              </div>
+              <div class="vd-bf-row">
+                <div class="vd-bf-field">
+                  <label class="vd-bf-label">Email *</label>
+                  <input class="vd-bf-input" type="email" name="email-address" placeholder="your@email.com" required>
+                </div>
+                <div class="vd-bf-field">
+                  <label class="vd-bf-label">Phone *</label>
+                  <input class="vd-bf-input" type="tel" name="mobile-number" placeholder="+91 98765 43210" required>
+                </div>
+              </div>
+              <div class="vd-bf-field">
+                <label class="vd-bf-label">Special requests</label>
+                <textarea class="vd-bf-input vd-bf-textarea" name="special-requirements" placeholder="Occasion, allergies, anything we should know…" rows="3"></textarea>
+              </div>
+              <button type="submit" class="btn btn--venue-primary vd-bf-submit" id="inline-submit-btn">
+                Continue →
+              </button>
+            </form>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  `
+
+  body.style.display = 'none'
+  if (mobileBar) mobileBar.style.display = 'none'
+  bookView.style.display = 'block'
+  bookView.scrollIntoView({ behavior: 'smooth', block: 'start' })
+
+  if (backBtn) {
+    backBtn.setAttribute('onclick', 'showVenueBodyStep()')
+    backBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg> Back to venue`
+  }
+}
+
+// Restore venue body — undo showBookingForm
+function showVenueBodyStep() {
+  appState.bookingStep = 'guests'
+  const body      = document.getElementById('vd-body')
+  const bookView  = document.getElementById('vd-booking-view')
+  const mobileBar = document.querySelector('.vd-mobile-book-bar')
+  const backBtn   = document.getElementById('vd-hero-back')
+
+  if (body)      { body.style.display = '' }
+  if (bookView)  { bookView.style.display = 'none' }
+  if (mobileBar) { mobileBar.style.display = '' }
+
+  if (backBtn) {
+    backBtn.setAttribute('onclick', 'navigateHome()')
+    backBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg> Venues`
+  }
+}
+
+// Recompute price total when add-ons are toggled in the booking view
+function updateBookingSummaryPrice() {
+  const venue = appState.currentVenue
+  if (!venue) return
+
+  const billingGuests = calcBillingGuests(appState.adults, appState.children)
+  const picnicPrice   = getVenuePrice(venue, billingGuests)
+  const addonSum      = Array.from(document.querySelectorAll('.bv-addon-check:checked'))
     .reduce((sum, cb) => sum + Number(cb.dataset.addonPrice), 0)
 
-  btn.textContent = `Pay Advance — ₹${(basePrice + addonSum).toLocaleString('en-IN')}`
+  let total = picnicPrice
+  if (venue.type === 'self_managed' && appState.checkinDate && appState.checkoutDate) {
+    total += calcNights(appState.checkinDate, appState.checkoutDate) * (Number(venue.metadata?.stay_price_per_night) || 0)
+  }
+  total += addonSum
+
+  const totalEl   = document.getElementById('bv-total-price')
+  const submitBtn = document.getElementById('inline-submit-btn')
+  if (totalEl)   totalEl.textContent   = `₹${total.toLocaleString('en-IN')}`
+  if (submitBtn) submitBtn.textContent = `Continue →`
+
+  // Update add-on rows in the price breakdown
+  const addonRowsEl = document.getElementById('bv-addon-price-rows')
+  if (addonRowsEl) {
+    addonRowsEl.innerHTML = Array.from(document.querySelectorAll('.bv-addon-check:checked')).map(cb => {
+      const name  = cb.closest('.vd-bf-addon-row')?.querySelector('.vd-bf-addon-name')?.textContent || 'Add-on'
+      return `<div class="vd-bv-price-row"><span>${escapeHtml(name)}</span><span>+₹${Number(cb.dataset.addonPrice).toLocaleString('en-IN')}</span></div>`
+    }).join('')
+  }
+}
+
+// Build the booking summary card shown on the intent screen
+function buildIntentSummaryHTML() {
+  const lead  = appState.pendingLead
+  const venue = appState.currentVenue
+  const addOns = appState.pendingAddOns || []
+  if (!lead) return ''
+
+  // Date / slot chips
+  const chips = []
+  if (lead.preferred_date) {
+    const dateLabel = new Date(lead.preferred_date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })
+    if (lead.checkout_date) {
+      const checkoutLabel = new Date(lead.checkout_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+      chips.push(`<span class="vd-bv-chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>${dateLabel} → ${checkoutLabel}</span>`)
+    } else {
+      chips.push(`<span class="vd-bv-chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>${dateLabel}</span>`)
+    }
+  }
+  if (lead.time_slot) {
+    const slotInfo = CAFE_SLOTS.find(s => s.key === lead.time_slot)
+    chips.push(`<span class="vd-bv-chip">${slotInfo ? slotInfo.icon : '⏰'} ${slotInfo ? slotInfo.label + ' · ' + slotInfo.time : lead.time_slot}</span>`)
+  }
+  if (lead.guest_count) {
+    chips.push(`<span class="vd-bv-chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>${lead.guest_count} guest${lead.guest_count !== 1 ? 's' : ''}</span>`)
+  }
+
+  // Price rows — only if there's a price to show
+  let priceSection = ''
+  if (lead.advance_amount > 0 && venue) {
+    const billingGuests = calcBillingGuests(appState.adults, appState.children)
+    const picnicPrice   = getVenuePrice(venue, billingGuests)
+    let rows = ''
+    if (venue.type === 'self_managed' && lead.checkout_date) {
+      const nights    = calcNights(lead.preferred_date, lead.checkout_date)
+      const stayPrice = nights * (Number(venue.metadata?.stay_price_per_night) || 0)
+      rows += `<div class="vd-bv-price-row"><span>Stay · ${nights} night${nights !== 1 ? 's' : ''}</span><span>₹${stayPrice.toLocaleString('en-IN')}</span></div>`
+    }
+    if (picnicPrice) {
+      const guestLabel = `${billingGuests} guest${billingGuests !== 1 ? 's' : ''}`
+      rows += `<div class="vd-bv-price-row"><span>Picnic · ${guestLabel}</span><span>₹${picnicPrice.toLocaleString('en-IN')}</span></div>`
+    }
+    for (const ao of addOns) {
+      const name = appState.currentVenueAddOns?.find(a => a.id === ao.addon_id)?.name || 'Add-on'
+      rows += `<div class="vd-bv-price-row"><span>${escapeHtml(name)}</span><span>+₹${Number(ao.price_at_booking).toLocaleString('en-IN')}</span></div>`
+    }
+    priceSection = `
+      <div class="vd-bv-price-table">
+        ${rows}
+        <div class="vd-bv-price-divider"></div>
+        <div class="vd-bv-price-row vd-bv-price-row--total">
+          <span>Advance</span>
+          <span>₹${lead.advance_amount.toLocaleString('en-IN')}</span>
+        </div>
+      </div>`
+  }
+
+  const venueBlock = venue
+    ? `<div class="vd-bv-venue-row">
+         <span class="vd-bv-venue-name">${escapeHtml(venue.name)}</span>
+         <span class="venue-type-badge ${venueTypeBadgeClass(venue.type)}">${escapeHtml(formatVenueType(venue.type))}</span>
+       </div>`
+    : lead.venue_address
+      ? `<div class="vd-bv-venue-row"><span class="vd-bv-venue-name">📍 ${escapeHtml(lead.venue_address)}</span></div>`
+      : ''
+
+  return `
+    <div class="vd-intent-summary">
+      ${venueBlock}
+      <div class="vd-bv-chips">${chips.join('')}</div>
+      ${priceSection}
+    </div>`
+}
+
+// Step 1: collect form data → show intent screen (no DB write yet)
+// Shared intent screen HTML builder — used by both inline and modal booking paths
+function buildIntentScreenHTML(lead, { containerClass = 'vd-intent-wrap container' } = {}) {
+  const totalFmt = lead.advance_amount.toLocaleString('en-IN')
+  return `
+    <div class="${containerClass}">
+      <div class="vd-intent-card">
+        <div class="vd-intent-body">
+          <div class="vd-intent-icon">🧺</div>
+          <h2 class="vd-intent-heading">You're almost in!</h2>
+          <p class="vd-intent-sub">How would you like to proceed?</p>
+
+          ${buildIntentSummaryHTML()}
+
+          <div class="vd-intent-options">
+            <button class="vd-intent-btn vd-intent-btn--lock" onclick="submitBookingIntent(true)">
+              <span class="vd-intent-btn-icon">🔒</span>
+              <span class="vd-intent-btn-text">
+                <span class="vd-intent-btn-title">${lead.advance_amount > 0 ? `Lock my date — ₹${totalFmt}` : 'Lock my date'}</span>
+                <span class="vd-intent-btn-desc">Pay the advance now and your spot is secured</span>
+              </span>
+            </button>
+            <div class="vd-intent-divider">or</div>
+            <button class="vd-intent-btn vd-intent-btn--query" onclick="submitBookingIntent(false)">
+              <span class="vd-intent-btn-icon">📞</span>
+              <span class="vd-intent-btn-text">
+                <span class="vd-intent-btn-title">Just checking — call me</span>
+                <span class="vd-intent-btn-desc">Drop a query and we'll reach out to confirm</span>
+              </span>
+            </button>
+          </div>
+
+          <p class="vd-intent-note">We'll hold the date for 24 hours while you decide.</p>
+        </div>
+      </div>
+    </div>`
+}
+
+function handleInlineBookingSubmit(event) {
+  event.preventDefault()
+  const form  = event.target
+  const venue = appState.currentVenue
+  if (!venue) return
+
+  // Guard: café must have a time slot selected
+  if (venue.type === 'cafe' && !appState.selectedTimeSlot) {
+    showToast('Please select a time slot to continue', 'error')
+    return
+  }
+  // Guard: BnB must have both check-in and checkout
+  if (venue.type === 'self_managed' && (!appState.checkinDate || !appState.checkoutDate)) {
+    showToast('Please select your check-in and checkout dates', 'error')
+    return
+  }
+
+  const billingGuests = calcBillingGuests(appState.adults, appState.children)
+  const picnicPrice   = getVenuePrice(venue, billingGuests)
+  const addonSum      = Array.from(document.querySelectorAll('.bv-addon-check:checked'))
+    .reduce((s, cb) => s + Number(cb.dataset.addonPrice), 0)
+
+  // Build the pending lead (no confirmed flag yet)
+  const lead = {
+    full_name:            form['full-name'].value.trim(),
+    mobile_number:        form['mobile-number'].value.trim(),
+    email_address:        form['email-address'].value.trim(),
+    guest_count:          appState.adults + appState.children,
+    preferred_date:       appState.selectedDate || appState.checkinDate || '',
+    special_requirements: form['special-requirements'].value.trim(),
+    advance_amount:       0,
+    created_at:           new Date().toISOString(),
+  }
+  if (venue.type !== 'custom') lead.venue_id = venue.id
+  if (venue.type === 'cafe' && appState.selectedTimeSlot) {
+    lead.time_slot      = appState.selectedTimeSlot
+    lead.advance_amount = picnicPrice + addonSum
+  }
+  if (venue.type === 'self_managed' && appState.checkinDate && appState.checkoutDate) {
+    lead.checkout_date  = appState.checkoutDate
+    lead.preferred_date = appState.checkinDate
+    const nights        = calcNights(appState.checkinDate, appState.checkoutDate)
+    lead.advance_amount = nights * (Number(venue.metadata?.stay_price_per_night) || 0) + picnicPrice + addonSum
+  }
+
+  // Snapshot selected add-ons (checkboxes disappear when we replace the view)
+  const pendingAddOns = Array.from(document.querySelectorAll('.bv-addon-check:checked'))
+    .map(cb => ({
+      addon_id:              parseInt(cb.dataset.addonId, 10),
+      name:                  cb.dataset.addonName || '',
+      price_at_booking:      parseInt(cb.dataset.addonPrice, 10),
+      requires_confirmation: cb.dataset.addonConfirm === 'true',
+    }))
+
+  // Store for the intent step
+  appState.pendingLead   = lead
+  appState.pendingAddOns = pendingAddOns
+
+  // Replace booking form with intent screen
+  const bookView = document.getElementById('vd-booking-view')
+  if (!bookView) return
+
+  bookView.innerHTML = buildIntentScreenHTML(lead, { containerClass: 'vd-intent-wrap container' })
+}
+
+// Step 2: user picks their intent → insert booking (always unconfirmed)
+// SECURITY: confirmed is never trusted from the client. Admin confirms manually
+// after verifying payment. customer_intent records what the customer wanted.
+async function submitBookingIntent(wantsToLock) {
+  const lead  = appState.pendingLead
+  const venue = appState.currentVenue
+  if (!lead) return
+
+  // Guard: advance_amount must not be negative (0 is valid for query bookings)
+  if ((lead.advance_amount ?? 0) < 0) {
+    showToast('Invalid booking amount', 'error')
+    return
+  }
+
+  // Disable both buttons
+  document.querySelectorAll('.vd-intent-btn').forEach(b => { b.disabled = true })
+  const activeBtn = wantsToLock
+    ? document.querySelector('.vd-intent-btn--lock')
+    : document.querySelector('.vd-intent-btn--query')
+  if (activeBtn) activeBtn.querySelector('.vd-intent-btn-title').textContent = 'Submitting…'
+
+  // confirmed:true = customer locked (payment done), confirmed:false = query only
+  // customer_intent mirrors this for audit purposes
+  const insertData = {
+    ...lead,
+    confirmed:       wantsToLock,
+    customer_intent: wantsToLock ? 'lock' : 'query',
+  }
+  const addOnsToInsert = appState.pendingAddOns || []
+
+  try {
+    // Server-side validation: re-fetch venue_availability right before insert
+    // to catch stale client state (e.g. admin blocked dates after customer opened page).
+    if (venue?.id && lead.preferred_date) {
+      const { data: vaData } = await supabase
+        .from('venue_availability')
+        .select('date')
+        .eq('venue_id', venue.id)
+      const blockedDates = new Set((vaData || []).map(r => r.date))
+
+      if (venue.type === 'self_managed' && lead.checkout_date) {
+        const start = new Date(lead.preferred_date + 'T00:00:00')
+        const end   = new Date(lead.checkout_date   + 'T00:00:00')
+        for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
+          if (blockedDates.has(localDateStr(d))) {
+            throw new Error('One or more dates in your selection are no longer available. Please pick different dates.')
+          }
+        }
+      } else if (venue.type === 'cafe' && blockedDates.has(lead.preferred_date)) {
+        throw new Error('This date is no longer available. Please pick a different date.')
+      }
+    }
+
+    // Use SECURITY DEFINER RPC so confirmed:true can be set regardless of caller's role
+    const { data: rpcRows, error } = await supabase.rpc('submit_booking_intent', {
+      p_full_name:            lead.full_name,
+      p_mobile_number:        lead.mobile_number,
+      p_email_address:        lead.email_address,
+      p_guest_count:          lead.guest_count,
+      p_preferred_date:       lead.preferred_date,
+      p_special_requirements: lead.special_requirements || '',
+      p_advance_amount:       lead.advance_amount,
+      p_confirmed:            wantsToLock,
+      p_customer_intent:      wantsToLock ? 'lock' : 'query',
+      p_venue_id:             lead.venue_id             ?? null,
+      p_venue_address:        lead.venue_address        ?? null,
+      p_checkout_date:        lead.checkout_date        ?? null,
+      p_time_slot:            lead.time_slot            ?? null,
+      p_external_booking_ref: lead.external_booking_ref ?? null,
+    })
+    if (error) throw error
+
+    const bookingRow = rpcRows?.[0] ?? {
+      id:             null,
+      preferred_date: lead.preferred_date,
+      guest_count:    lead.guest_count,
+    }
+
+    // Persist add-on line items — requires booking ID which anon can't read back.
+    // Add-ons are stored asynchronously; a server-side function or admin reconciliation
+    // can link them by email + date if booking_id is needed later.
+    // Now we have the booking ID from the RPC — link add-ons correctly
+    if (addOnsToInsert.length > 0) {
+      const { error: addOnErr } = await supabase.from('booking_add_ons').insert(
+        addOnsToInsert.map(a => ({
+          booking_id:            bookingRow.id ?? null,
+          addon_id:              a.addon_id,
+          name:                  a.name,
+          price_at_booking:      a.price_at_booking,
+          requires_confirmation: a.requires_confirmation,
+        }))
+      )
+      if (addOnErr) console.error('Failed to save add-ons:', addOnErr)
+    }
+
+    const fromModal = appState.intentFromModal
+
+    appState.currentBooking      = null
+    appState.currentVenue        = null
+    appState.currentVenueAddOns  = []
+    appState.pendingLead         = null
+    appState.pendingAddOns       = null
+    appState.intentFromModal     = false
+
+    const venueName = venue?.name || null
+
+    if (fromModal) {
+      hideModal('booking-modal')
+      // Reset form and modal for next use
+      const bookingForm = document.getElementById('booking-form')
+      if (bookingForm) bookingForm.reset()
+      resetBookingModalForVenue(null)
+    } else {
+      const bv = document.getElementById('vd-booking-view')
+      if (bv) bv.style.display = 'none'
+    }
+
+    // Pass wantsToLock for display purposes only — not stored as confirmed
+    renderSuccessPage({ booking: bookingRow, venueName, confirmed: wantsToLock })
+    showPage('query-success-page')
+
+  } catch (err) {
+    console.error(err)
+    showToast(err.message || 'Error submitting. Please try again.', 'error')
+    document.querySelectorAll('.vd-intent-btn').forEach(b => { b.disabled = false })
+    if (activeBtn) activeBtn.querySelector('.vd-intent-btn-title').textContent =
+      wantsToLock ? `Lock my date — ₹${lead.advance_amount.toLocaleString('en-IN')}` : 'Just checking — call me'
+  }
 }
 
 // ----------------------------------------------------------------
 // BOOKING FORM
 // ----------------------------------------------------------------
 
-async function handleBookingSubmit(event) {
+function handleBookingSubmit(event) {
   event.preventDefault()
-  const form = event.target
+  const form  = event.target
   const venue = appState.currentVenue
+
+  // Guards — same rules as the inline path
+  if (venue?.type === 'cafe' && !appState.selectedTimeSlot) {
+    showToast('Please select a time slot to continue', 'error')
+    return
+  }
+  if (venue?.type === 'self_managed' && (!appState.checkinDate || !appState.checkoutDate)) {
+    showToast('Please select your check-in and checkout dates', 'error')
+    return
+  }
 
   // Core fields (always present)
   const lead = {
@@ -925,9 +1922,8 @@ async function handleBookingSubmit(event) {
     guest_count:          parseInt(form['guest-count'].value, 10),
     preferred_date:       form['preferred-date'].value,
     special_requirements: form['special-requirements'].value.trim(),
-    confirmed:     false,
-    advance_amount: 0,
-    created_at:    new Date().toISOString(),
+    advance_amount:       0,
+    created_at:           new Date().toISOString(),
   }
 
   // Venue fields — depends on which flow the customer came from
@@ -947,6 +1943,25 @@ async function handleBookingSubmit(event) {
       const ref = form['airbnb-ref'].value.trim()
       if (ref) lead.external_booking_ref = ref
     }
+    // Cafe: attach time slot + set advance amount
+    if (venue.type === 'cafe' && appState.selectedTimeSlot) {
+      lead.time_slot = appState.selectedTimeSlot
+      const cafeAddonSum = Array.from(document.querySelectorAll('.bk-addon-checkbox:checked'))
+        .reduce((s, cb) => s + Number(cb.dataset.addonPrice), 0)
+      const cafeBilling  = calcBillingGuests(appState.adults, appState.children)
+      lead.advance_amount = getVenuePrice(venue, cafeBilling) + cafeAddonSum
+    }
+    // BnB: attach checkout date and recalculate advance
+    if (venue.type === 'self_managed' && appState.checkoutDate) {
+      lead.checkout_date  = appState.checkoutDate
+      lead.preferred_date = appState.checkinDate || lead.preferred_date
+      const nights        = calcNights(lead.preferred_date, appState.checkoutDate)
+      const stayTotal     = nights * (Number(venue.metadata?.stay_price_per_night) || 0)
+      const addonSum      = Array.from(document.querySelectorAll('.bk-addon-checkbox:checked'))
+        .reduce((s, cb) => s + Number(cb.dataset.addonPrice), 0)
+      const billingGuests = calcBillingGuests(appState.adults, appState.children)
+      lead.advance_amount = stayTotal + getVenuePrice(venue, billingGuests) + addonSum
+    }
   } else {
     // No venue selected — treat as custom (free-text address)
     const addr = form['venue-address'].value.trim()
@@ -957,51 +1972,32 @@ async function handleBookingSubmit(event) {
     lead.venue_address = addr
   }
 
-  const submitBtn = form.querySelector('[type="submit"]')
-  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Submitting…' }
+  // Snapshot selected add-ons before the modal content changes
+  const pendingAddOns = Array.from(document.querySelectorAll('.bk-addon-checkbox:checked'))
+    .map(cb => ({
+      addon_id:              parseInt(cb.dataset.addonId, 10),
+      name:                  cb.dataset.addonName || '',
+      price_at_booking:      parseInt(cb.dataset.addonPrice, 10),
+      requires_confirmation: cb.dataset.addonConfirm === 'true',
+    }))
 
-  try {
-    const { data, error } = await supabase.from('bookings').insert([lead]).select()
-    if (error) throw error
+  // Store for the intent step
+  appState.pendingLead    = lead
+  appState.pendingAddOns  = pendingAddOns
+  appState.intentFromModal = true   // so submitBookingIntent knows to close the modal
 
-    // Save selected add-ons (if any) to booking_addons
-    const selectedAddOns = Array.from(document.querySelectorAll('.bk-addon-checkbox:checked'))
-      .map(cb => ({
-        booking_id:           data[0].id,
-        addon_id:             parseInt(cb.dataset.addonId, 10),
-        price_at_booking:     parseInt(cb.dataset.addonPrice, 10),
-        requires_confirmation: cb.dataset.addonConfirm === 'true',
-      }))
-    if (selectedAddOns.length > 0) {
-      const { error: addonError } = await supabase.from('booking_addons').insert(selectedAddOns)
-      if (addonError) console.error('Failed to save add-ons:', addonError)
-    }
+  // Replace modal body with intent screen
+  const modalBody = document.querySelector('#booking-modal .modal-body')
+  if (!modalBody) return
 
-    // Capture venue name before clearing state
-    const venueName = appState.currentVenue?.name || null
-
-    appState.currentBooking      = data[0]
-    appState.currentVenue        = null
-    appState.currentVenueAddOns  = []
-    hideModal('booking-modal')
-    form.reset()
-    resetBookingModalForVenue(null)
-    renderSuccessPage({ booking: data[0], venueName })
-    showPage('query-success-page')
-
-  } catch (error) {
-    console.error(error)
-    showToast('Error submitting query. Please try again.', 'error')
-  } finally {
-    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Query' }
-  }
+  modalBody.innerHTML = buildIntentScreenHTML(lead, { containerClass: 'vd-intent-wrap' })
 }
 
 // ----------------------------------------------------------------
 // BOOKING SUCCESS PAGE
 // ----------------------------------------------------------------
 
-function renderSuccessPage({ booking, venueName }) {
+function renderSuccessPage({ booking, venueName, confirmed = false }) {
   const container = document.getElementById('booking-success-content')
   if (!container) return
 
@@ -1048,12 +2044,14 @@ function renderSuccessPage({ booking, venueName }) {
         </div>
 
         <!-- Heading -->
-        <h1 class="bsc-heading">Your picnic is being arranged!</h1>
-        <p class="bsc-sub">We've received your request and will confirm within 24 hours.</p>
+        <h1 class="bsc-heading">${confirmed ? 'Your date is locked in! 🎉' : 'Your picnic is being arranged!'}</h1>
+        <p class="bsc-sub">${confirmed
+          ? 'Advance received — your spot is secured. We\'ll be in touch shortly.'
+          : 'We\'ve received your query and will reach out within 24 hours to confirm.'}</p>
 
         <!-- Booking summary card -->
         <div class="bsc-card">
-          <div class="bsc-card-label">Booking Request #${booking?.id || '—'}</div>
+          <div class="bsc-card-label">${confirmed ? 'Booking Confirmed' : 'Query'}${booking?.id ? ` #${booking.id}` : ''}</div>
           <div class="bsc-card-details">
             ${venueName ? `
             <div class="bsc-detail">
@@ -1077,25 +2075,26 @@ function renderSuccessPage({ booking, venueName }) {
         <div class="bsc-steps">
           <p class="bsc-steps-label">What happens next</p>
           <div class="bsc-step-list">
+            ${confirmed ? `
             <div class="bsc-step bsc-step--done">
               <div class="bsc-step-dot"></div>
               <div class="bsc-step-text">
-                <span class="bsc-step-title">Request received</span>
-                <span class="bsc-step-desc">We have your booking details</span>
+                <span class="bsc-step-title">Advance paid</span>
+                <span class="bsc-step-desc">Your date is secured and setup is locked in</span>
+              </div>
+            </div>
+            <div class="bsc-step bsc-step--done">
+              <div class="bsc-step-dot"></div>
+              <div class="bsc-step-text">
+                <span class="bsc-step-title">Booking received</span>
+                <span class="bsc-step-desc">We have your details and preferences</span>
               </div>
             </div>
             <div class="bsc-step">
               <div class="bsc-step-dot"></div>
               <div class="bsc-step-text">
-                <span class="bsc-step-title">We'll confirm within 24h</span>
-                <span class="bsc-step-desc">Our team will call or WhatsApp you</span>
-              </div>
-            </div>
-            <div class="bsc-step">
-              <div class="bsc-step-dot"></div>
-              <div class="bsc-step-text">
-                <span class="bsc-step-title">Pay the advance</span>
-                <span class="bsc-step-desc">Secures your date and locks in the setup</span>
+                <span class="bsc-step-title">We'll be in touch shortly</span>
+                <span class="bsc-step-desc">Our team will WhatsApp to share setup details</span>
               </div>
             </div>
             <div class="bsc-step">
@@ -1105,6 +2104,36 @@ function renderSuccessPage({ booking, venueName }) {
                 <span class="bsc-step-desc">We handle everything, you just show up</span>
               </div>
             </div>
+            ` : `
+            <div class="bsc-step bsc-step--done">
+              <div class="bsc-step-dot"></div>
+              <div class="bsc-step-text">
+                <span class="bsc-step-title">Query received</span>
+                <span class="bsc-step-desc">We have your details and preferences</span>
+              </div>
+            </div>
+            <div class="bsc-step">
+              <div class="bsc-step-dot"></div>
+              <div class="bsc-step-text">
+                <span class="bsc-step-title">We'll call within 24h</span>
+                <span class="bsc-step-desc">Our team will reach out to confirm availability</span>
+              </div>
+            </div>
+            <div class="bsc-step">
+              <div class="bsc-step-dot"></div>
+              <div class="bsc-step-text">
+                <span class="bsc-step-title">Pay advance to lock your date</span>
+                <span class="bsc-step-desc">Once confirmed, secure your spot with a payment</span>
+              </div>
+            </div>
+            <div class="bsc-step">
+              <div class="bsc-step-dot"></div>
+              <div class="bsc-step-text">
+                <span class="bsc-step-title">Enjoy your picnic</span>
+                <span class="bsc-step-desc">We handle everything, you just show up</span>
+              </div>
+            </div>
+            `}
           </div>
         </div>
 
@@ -1117,6 +2146,10 @@ function renderSuccessPage({ booking, venueName }) {
             Back to Venues
           </button>
         </div>
+        <p class="bsc-mybookings-link">
+          Want to check on this booking later?
+          <button class="bsc-link-btn" onclick="showMyBookingsPage()">Find my booking →</button>
+        </p>
 
         <!-- Contact nudge -->
         <p class="bsc-contact-nudge">
@@ -1127,6 +2160,224 @@ function renderSuccessPage({ booking, venueName }) {
       </div><!-- /bsc-body -->
     </div><!-- /bsc-page -->
   `
+}
+
+// ================================================================
+//  MY BOOKINGS — magic link customer flow
+// ================================================================
+
+function showMyBookingsPage() {
+  showPage('my-bookings-page')
+  renderMyBookingsShell()
+}
+
+function renderMyBookingsShell() {
+  const el = document.getElementById('my-bookings-content')
+  if (!el) return
+  el.innerHTML = `
+    <div class="mbk-page">
+      <button class="mbk-back" onclick="navigateHome()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Back
+      </button>
+      <div class="mbk-body">
+        <div class="mbk-icon">📬</div>
+        <h2 class="mbk-heading">Find your booking</h2>
+        <p class="mbk-sub">Enter the email you used when booking. We'll send you a one-time code to view your bookings.</p>
+        <form class="mbk-form" id="mbk-email-form">
+          <input type="email" id="mbk-email" class="form-control mbk-input"
+                 placeholder="your@email.com" required autocomplete="email" />
+          <button type="submit" class="btn btn--primary mbk-btn" id="mbk-send-btn">
+            Send code
+          </button>
+        </form>
+        <p class="mbk-hint">No account needed — just your email.</p>
+      </div>
+    </div>
+  `
+  document.getElementById('mbk-email-form')
+    ?.addEventListener('submit', sendOtp)
+}
+
+async function sendOtp(e) {
+  e.preventDefault()
+  const email     = document.getElementById('mbk-email').value.trim()
+  const submitBtn = document.getElementById('mbk-send-btn')
+  submitBtn.disabled    = true
+  submitBtn.textContent = 'Sending…'
+
+  try {
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false }
+    })
+    if (error) throw error
+    renderOtpInput(email)
+  } catch (err) {
+    showToast(err.message || 'Failed to send code', 'error')
+    submitBtn.disabled    = false
+    submitBtn.textContent = 'Send code'
+  }
+}
+
+function renderOtpInput(email) {
+  const el = document.getElementById('my-bookings-content')
+  if (!el) return
+  el.innerHTML = `
+    <div class="mbk-page">
+      <button class="mbk-back" onclick="showMyBookingsPage()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Back
+      </button>
+      <div class="mbk-body">
+        <div class="mbk-icon">✉️</div>
+        <h2 class="mbk-heading">Enter the code</h2>
+        <p class="mbk-sub">We sent a 6-digit code to <strong>${escapeHtml(email)}</strong>.<br>Enter it below — it expires in 10 minutes.</p>
+        <form class="mbk-form" id="mbk-otp-form">
+          <input type="text" id="mbk-otp" class="form-control mbk-input mbk-otp-input"
+                 placeholder="000000" maxlength="6" inputmode="numeric"
+                 pattern="[0-9]{6}" autocomplete="one-time-code" required />
+          <button type="submit" class="btn btn--primary mbk-btn" id="mbk-verify-btn">
+            View my bookings
+          </button>
+        </form>
+        <p class="mbk-hint">Didn't get it? Check your spam, or <button class="mbk-resend-btn" onclick="sendOtpResend('${escapeHtml(email)}')">resend the code</button>.</p>
+      </div>
+    </div>
+  `
+  document.getElementById('mbk-otp-form')
+    ?.addEventListener('submit', (e) => verifyOtp(e, email))
+
+  // Auto-format: digits only
+  document.getElementById('mbk-otp')?.addEventListener('input', (e) => {
+    e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6)
+  })
+}
+
+async function verifyOtp(e, email) {
+  e.preventDefault()
+  const token     = document.getElementById('mbk-otp').value.trim()
+  const submitBtn = document.getElementById('mbk-verify-btn')
+  submitBtn.disabled    = true
+  submitBtn.textContent = 'Verifying…'
+
+  try {
+    const { data, error } = await supabase.auth.verifyOtp({ email, token, type: 'email' })
+    if (error) throw error
+    renderMyBookings(data.user.email)
+  } catch (err) {
+    showToast(err.message || 'Invalid or expired code', 'error')
+    submitBtn.disabled    = false
+    submitBtn.textContent = 'View my bookings'
+  }
+}
+
+async function sendOtpResend(email) {
+  try {
+    const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false } })
+    if (error) throw error
+    showToast('New code sent — check your inbox', 'success')
+  } catch (err) {
+    showToast(err.message || 'Failed to resend', 'error')
+  }
+}
+window.sendOtpResend = sendOtpResend
+
+// Venue manager — called from onclick in rendered HTML (ESM module needs explicit global export)
+window.openVenueForm     = openVenueForm
+window.toggleVenueActive = toggleVenueActive
+window.removeVfImage     = removeVfImage
+window.removeVfTier      = removeVfTier
+window.toggleBlockedDate = toggleBlockedDate
+
+async function renderMyBookings(email) {
+  const el = document.getElementById('my-bookings-content')
+  if (!el) return
+
+  el.innerHTML = `<div class="mbk-page"><div class="mbk-body"><p class="mbk-sub">Loading your bookings…</p></div></div>`
+
+  try {
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('*, venues(name, type, area)')
+      .eq('email_address', email)
+      .order('preferred_date', { ascending: false })
+
+    if (error) throw error
+
+    if (!data || data.length === 0) {
+      el.innerHTML = `
+        <div class="mbk-page">
+          <button class="mbk-back" onclick="navigateHome()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Back
+          </button>
+          <div class="mbk-body">
+            <div class="mbk-icon">🔍</div>
+            <h2 class="mbk-heading">No bookings found</h2>
+            <p class="mbk-sub">We couldn't find any bookings for <strong>${escapeHtml(email)}</strong>.</p>
+            <button class="btn btn--outline" onclick="showMyBookingsPage()">Try a different email</button>
+          </div>
+        </div>
+      `
+      return
+    }
+
+    const cards = data.map(b => {
+      const venue     = b.venues
+      const statusCls = b.confirmed ? 'mbk-status--confirmed' : 'mbk-status--pending'
+      const statusTxt = b.confirmed ? '✓ Confirmed' : '⏳ Pending confirmation'
+      const dateStr   = b.preferred_date
+        ? new Date(b.preferred_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+        : '—'
+      const checkoutStr = b.checkout_date
+        ? ' → ' + new Date(b.checkout_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })
+        : ''
+      const slot = b.time_slot ? ` · ${b.time_slot.charAt(0).toUpperCase() + b.time_slot.slice(1)}` : ''
+      return `
+        <div class="mbk-card">
+          <div class="mbk-card-top">
+            <div>
+              <p class="mbk-card-venue">${escapeHtml(venue?.name || 'Venue')}</p>
+              <p class="mbk-card-meta">${escapeHtml(venue?.area || '')}</p>
+            </div>
+            <span class="mbk-status ${statusCls}">${statusTxt}</span>
+          </div>
+          <div class="mbk-card-details">
+            <span>📅 ${dateStr}${checkoutStr}${slot}</span>
+            <span>👥 ${b.guest_count} guest${b.guest_count !== 1 ? 's' : ''}</span>
+            <span>💰 ₹${Number(b.advance_amount || 0).toLocaleString('en-IN')} advance paid</span>
+          </div>
+          ${b.special_requirements ? `<p class="mbk-card-note">"${escapeHtml(b.special_requirements)}"</p>` : ''}
+        </div>
+      `
+    }).join('')
+
+    el.innerHTML = `
+      <div class="mbk-page">
+        <button class="mbk-back" onclick="navigateHome()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Back
+        </button>
+        <div class="mbk-list-header">
+          <h2 class="mbk-heading">Your bookings</h2>
+          <p class="mbk-sub">${data.length} booking${data.length !== 1 ? 's' : ''} for ${escapeHtml(email)}</p>
+        </div>
+        <div class="mbk-cards">${cards}</div>
+        <div class="mbk-signout">
+          <button class="btn btn--ghost mbk-signout-btn" onclick="customerSignOut()">Sign out</button>
+        </div>
+      </div>
+    `
+  } catch (err) {
+    showToast('Failed to load bookings', 'error')
+    console.error(err)
+  }
+}
+
+async function customerSignOut() {
+  await supabase.auth.signOut()
+  navigateHome()
 }
 
 // Admin login — uses Supabase Auth; session is validated server-side
@@ -1158,19 +2409,25 @@ async function handleAdminLogout() {
   showToast('Logged out', 'success')
 }
 
-// Toggle admin UI based on auth state
+// Toggle admin UI based on auth state.
+// SECURITY: only set appState.session and show the dashboard if the session
+// belongs to the admin email. OTP-verified customers trigger the same
+// onAuthStateChange listener — this check keeps them out of the admin panel.
 function applyAuthState(session) {
-  appState.session = session
-  const adminLogin = document.getElementById('admin-login')
+  const adminLogin     = document.getElementById('admin-login')
   const adminDashboard = document.getElementById('admin-dashboard')
 
-  if (session) {
-    if (adminLogin) adminLogin.classList.add('hidden')
+  const isAdmin = !!(session && session.user?.email === ADMIN_EMAIL)
+
+  if (isAdmin) {
+    appState.session = session
+    if (adminLogin)     adminLogin.classList.add('hidden')
     if (adminDashboard) adminDashboard.classList.remove('hidden')
     loadQueries()
     loadMenuLinks()
   } else {
-    if (adminLogin) adminLogin.classList.remove('hidden')
+    appState.session = null   // never let a customer session bleed into admin state
+    if (adminLogin)     adminLogin.classList.remove('hidden')
     if (adminDashboard) adminDashboard.classList.add('hidden')
     const adminForm = document.getElementById('admin-login-form')
     if (adminForm) adminForm.reset()
@@ -1199,7 +2456,7 @@ async function generateMenuLink(foodCount, bevCount) {
     const linkInput = document.getElementById('generated-link-url')
     
     if (generatedLinkDiv && linkInput) {
-      const fullUrl = `${window.location.origin}?menu=${data[0].id}`
+      const fullUrl = `${window.location.origin}?menu=${data[0].token}`
       linkInput.value = fullUrl
       generatedLinkDiv.style.display = 'block'
     }
@@ -1246,15 +2503,20 @@ async function loadBookings() {
     
     if (bErr) throw bErr
 
-    // For each booking, fetch its orders
-    const bookingsWithOrders = await Promise.all(bookings.map(async booking => {
-      const { data: orders, error: oErr } = await supabase
-        .from('orders')
-        .select('id, selected_items, created_at')
-        .eq('booking_id', booking.id)
-      if (oErr) throw oErr
-      return { ...booking, orders }
-    }))
+    // Batch orders fetch — single query instead of N+1
+    const bookingIds = bookings.map(b => b.id)
+    const { data: allOrders, error: oErr } = await supabase
+      .from('orders')
+      .select('id, booking_id, selected_items, created_at')
+      .in('booking_id', bookingIds)
+    if (oErr) throw oErr
+
+    const ordersByBooking = (allOrders || []).reduce((acc, o) => {
+      ;(acc[o.booking_id] ||= []).push(o)
+      return acc
+    }, {})
+
+    const bookingsWithOrders = bookings.map(b => ({ ...b, orders: ordersByBooking[b.id] || [] }))
 
     renderBookings(bookingsWithOrders)
   } catch (error) {
@@ -1281,136 +2543,201 @@ async function loadMenuLinks() {
 function renderQueries(queries) {
   const container = document.getElementById('queries-container')
   if (!container) return
-  
+
   if (!queries || queries.length === 0) {
-    container.innerHTML = '<div class="empty-state"><h3>No queries yet</h3><p>New customer queries will appear here.</p></div>'
+    container.innerHTML = `
+      <div class="adm-empty">
+        <div class="adm-empty-icon">📭</div>
+        <h3>No queries yet</h3>
+        <p>New customer queries will appear here.</p>
+      </div>`
     return
   }
-  
+
   container.innerHTML = queries.map(query => {
-    // Build venue display line
-    let venueHtml = ''
+    // Venue chip
+    let venueChip = ''
     if (query.venues) {
-      venueHtml = `
-        <div class="query-detail">
-          <strong>Venue:</strong>
-          ${escapeHtml(query.venues.name)}
+      venueChip = `
+        <span class="adm-chip adm-chip--venue">
           <span class="admin-venue-badge ${venueTypeBadgeClass(query.venues.type)}">${escapeHtml(formatVenueType(query.venues.type))}</span>
-          ${query.venues.area ? `<span class="admin-venue-area">(${escapeHtml(query.venues.area)})</span>` : ''}
-        </div>`
+          ${escapeHtml(query.venues.name)}${query.venues.area ? ` · <span class="adm-chip-area">${escapeHtml(query.venues.area)}</span>` : ''}
+        </span>`
     } else if (query.venue_address) {
-      venueHtml = `<div class="query-detail"><strong>Venue (custom):</strong> ${escapeHtml(query.venue_address)}</div>`
+      venueChip = `<span class="adm-chip adm-chip--venue">📍 ${escapeHtml(query.venue_address)}</span>`
     }
 
-    const airbnbRefHtml = query.external_booking_ref
-      ? `<div class="query-detail"><strong>Airbnb Ref:</strong> <code>${escapeHtml(query.external_booking_ref)}</code></div>`
+    const airbnbHtml = query.external_booking_ref
+      ? `<div class="adm-airbnb-ref">🔗 Airbnb ref: <code>${escapeHtml(query.external_booking_ref)}</code></div>`
       : ''
 
+    const reqHtml = query.special_requirements
+      ? `<div class="adm-requirements">"${escapeHtml(query.special_requirements)}"</div>`
+      : ''
+
+    const timeAgo = formatTimeAgo(new Date(query.created_at))
+
     return `
-    <div class="query-item" data-id="${escapeHtml(query.id)}">
-      <div class="query-header">
-        <span class="query-name">${escapeHtml(query.full_name)}</span>
-        <span class="query-date">${new Date(query.created_at).toLocaleDateString()}</span>
-      </div>
-      <div class="query-details">
-        <div class="query-detail"><strong>Mobile:</strong> ${escapeHtml(query.mobile_number)}</div>
-        <div class="query-detail"><strong>Email:</strong> ${escapeHtml(query.email_address)}</div>
-        ${venueHtml}
-        ${airbnbRefHtml}
-        <div class="query-detail"><strong>Guests:</strong> ${escapeHtml(query.guest_count)}</div>
-        <div class="query-detail"><strong>Date:</strong> ${new Date(query.preferred_date).toLocaleDateString()}</div>
-        ${query.special_requirements ? `<div class="query-detail"><strong>Requirements:</strong> ${escapeHtml(query.special_requirements)}</div>` : ''}
-      </div>
-      <div class="query-actions">
-        <div class="advance-input-group">
-          <label for="advance-${escapeHtml(query.id)}">Advance Amount:</label>
-          <input type="number" id="advance-${escapeHtml(query.id)}" placeholder="Enter amount" min="0" step="0.01">
+    <div class="adm-card adm-card--query" data-id="${escapeHtml(query.id)}">
+      <div class="adm-card-header">
+        <div class="adm-card-header-left">
+          <span class="adm-status-dot adm-status-dot--new"></span>
+          <span class="adm-name">${escapeHtml(query.full_name)}</span>
+          <span class="adm-badge adm-badge--new">New</span>
         </div>
-        <button class="confirm-booking-btn" data-id="${escapeHtml(query.id)}">
+        <span class="adm-timestamp" title="${new Date(query.created_at).toLocaleString()}">${timeAgo}</span>
+      </div>
+
+      <div class="adm-chips">
+        ${venueChip}
+        <span class="adm-chip">📅 ${new Date(query.preferred_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+        ${query.time_slot ? (() => { const s = CAFE_SLOTS.find(sl => sl.key === query.time_slot); return `<span class="adm-chip">${s ? s.icon : '⏰'} ${s ? s.label + ' · ' + s.time : escapeHtml(query.time_slot)}</span>` })() : ''}
+        <span class="adm-chip">👥 ${escapeHtml(query.guest_count)} guest${query.guest_count !== 1 ? 's' : ''}</span>
+      </div>
+
+      <div class="adm-contact-row">
+        <a class="adm-contact-link" href="tel:${escapeHtml(query.mobile_number)}">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.5 19.79 19.79 0 01.21 .88 2 2 0 012.18 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.91 7.09a16 16 0 006 6l1.45-1.45a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 13.92z"/></svg>
+          ${escapeHtml(query.mobile_number)}
+        </a>
+        <a class="adm-contact-link" href="mailto:${escapeHtml(query.email_address)}">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          ${escapeHtml(query.email_address)}
+        </a>
+      </div>
+
+      ${reqHtml}
+      ${airbnbHtml}
+
+      <div class="adm-card-footer">
+        <div class="adm-advance-group">
+          <span class="adm-advance-label">₹ Advance</span>
+          <input class="adm-advance-input" type="number" id="advance-${escapeHtml(query.id)}" placeholder="0" min="0" step="1">
+        </div>
+        <button class="confirm-booking-btn adm-confirm-btn" data-id="${escapeHtml(query.id)}" data-venue-id="${escapeHtml(String(query.venue_id || ''))}" data-venue-type="${escapeHtml(query.venues?.type || '')}" data-preferred-date="${escapeHtml(query.preferred_date || '')}" data-checkout-date="${escapeHtml(query.checkout_date || '')}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           Confirm Booking
         </button>
       </div>
-    </div>
-  `
+    </div>`
   }).join('')
 }
 
-// Render bookings (confirmed bookings) 
+// Render bookings (confirmed bookings)
 function renderBookings(bookings) {
   const container = document.getElementById('bookings-container')
   if (!container) return
-  
+
   if (!bookings || bookings.length === 0) {
-    container.innerHTML = '<div class="empty-state"><h3>No confirmed bookings yet</h3><p>Confirmed bookings will appear here.</p></div>'
+    container.innerHTML = `
+      <div class="adm-empty">
+        <div class="adm-empty-icon">🗓️</div>
+        <h3>No confirmed bookings yet</h3>
+        <p>Bookings confirmed with advance payment will appear here.</p>
+      </div>`
     return
   }
-  
+
   container.innerHTML = bookings.map(booking => {
-    let venueHtml = ''
+    // Venue chip
+    let venueChip = ''
     if (booking.venues) {
-      venueHtml = `
-        <div class="booking-detail">
-          <strong>Venue:</strong>
-          ${escapeHtml(booking.venues.name)}
+      venueChip = `
+        <span class="adm-chip adm-chip--venue">
           <span class="admin-venue-badge ${venueTypeBadgeClass(booking.venues.type)}">${escapeHtml(formatVenueType(booking.venues.type))}</span>
-          ${booking.venues.area ? `<span class="admin-venue-area">(${escapeHtml(booking.venues.area)})</span>` : ''}
-        </div>`
+          ${escapeHtml(booking.venues.name)}${booking.venues.area ? ` · <span class="adm-chip-area">${escapeHtml(booking.venues.area)}</span>` : ''}
+        </span>`
     } else if (booking.venue_address) {
-      venueHtml = `<div class="booking-detail"><strong>Venue (custom):</strong> ${escapeHtml(booking.venue_address)}</div>`
+      venueChip = `<span class="adm-chip adm-chip--venue">📍 ${escapeHtml(booking.venue_address)}</span>`
     }
 
-    const airbnbRefHtml = booking.external_booking_ref
-      ? `<div class="booking-detail"><strong>Airbnb Ref:</strong> <code>${escapeHtml(booking.external_booking_ref)}</code></div>`
+    const airbnbHtml = booking.external_booking_ref
+      ? `<div class="adm-airbnb-ref">🔗 Airbnb ref: <code>${escapeHtml(booking.external_booking_ref)}</code></div>`
       : ''
 
+    const reqHtml = booking.special_requirements
+      ? `<div class="adm-requirements">"${escapeHtml(booking.special_requirements)}"</div>`
+      : ''
+
+    const ordersHtml = booking.orders?.length
+      ? `<div class="adm-orders-section">
+          <span class="adm-orders-label">Previous orders</span>
+          <div class="adm-orders-list">
+            ${booking.orders.map(o => `
+              <div class="adm-order-row">
+                <span class="adm-order-id">#${escapeHtml(o.id)}</span>
+                <span class="adm-order-items">${o.selected_items.map(i => `${escapeHtml(i.name)} ×${escapeHtml(i.quantity)}`).join(', ')}</span>
+              </div>`).join('')}
+          </div>
+        </div>`
+      : ''
+
+    const timeAgo = formatTimeAgo(new Date(booking.created_at))
+    const advanceFormatted = Number(booking.advance_amount || 0).toLocaleString('en-IN')
+
     return `
-    <div class="booking-item" data-id="${escapeHtml(booking.id)}">
-      <div class="booking-header">
-        <span class="booking-name">${escapeHtml(booking.full_name)}</span>
-        <span class="booking-date">${new Date(booking.created_at).toLocaleDateString()}</span>
-        <span class="advance-badge">₹${escapeHtml(booking.advance_amount || 0)} paid</span>
-      </div>
-      <div class="booking-details">
-        <div class="booking-detail"><strong>Mobile:</strong> ${escapeHtml(booking.mobile_number)}</div>
-        <div class="booking-detail"><strong>Email:</strong> ${escapeHtml(booking.email_address)}</div>
-        ${venueHtml}
-        ${airbnbRefHtml}
-        <div class="booking-detail"><strong>Guests:</strong> ${escapeHtml(booking.guest_count)}</div>
-        <div class="booking-detail"><strong>Date:</strong> ${new Date(booking.preferred_date).toLocaleDateString()}</div>
-        ${booking.special_requirements ? `<div class="booking-detail"><strong>Requirements:</strong> ${escapeHtml(booking.special_requirements)}</div>` : ''}
+    <div class="adm-card adm-card--booking" data-id="${escapeHtml(booking.id)}">
+      <div class="adm-card-header">
+        <div class="adm-card-header-left">
+          <span class="adm-status-dot adm-status-dot--confirmed"></span>
+          <span class="adm-name">${escapeHtml(booking.full_name)}</span>
+          <span class="adm-badge adm-badge--confirmed">Confirmed</span>
+        </div>
+        <div class="adm-card-header-right">
+          <span class="adm-amount-badge">₹${advanceFormatted} paid</span>
+          <span class="adm-timestamp" title="${new Date(booking.created_at).toLocaleString()}">${timeAgo}</span>
+        </div>
       </div>
 
-      <h5>Previous Orders:</h5>
-      <ul>
-        ${booking.orders.map(o =>
-          `<li>Order #${escapeHtml(o.id)} — ${o.selected_items.map(i => escapeHtml(i.name) + '×' + escapeHtml(i.quantity)).join(', ')}</li>`
-        ).join('')}
-      </ul>
+      <div class="adm-chips">
+        ${venueChip}
+        <span class="adm-chip">📅 ${new Date(booking.preferred_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+        ${booking.time_slot ? (() => { const s = CAFE_SLOTS.find(sl => sl.key === booking.time_slot); return `<span class="adm-chip">${s ? s.icon : '⏰'} ${s ? s.label + ' · ' + s.time : escapeHtml(booking.time_slot)}</span>` })() : ''}
+        <span class="adm-chip">👥 ${escapeHtml(booking.guest_count)} guest${booking.guest_count !== 1 ? 's' : ''}</span>
+      </div>
 
-      <div class="menu-generator">
-        <div class="menu-controls">
-          <div class="control-group">
-            <label for="food-count-${escapeHtml(booking.id)}">Food Items:</label>
-            <input type="number" id="food-count-${escapeHtml(booking.id)}" value="3" min="1" max="15">
-          </div>
-          <div class="control-group">
-            <label for="bev-count-${escapeHtml(booking.id)}">Beverages:</label>
-            <input type="number" id="bev-count-${escapeHtml(booking.id)}" value="2" min="1" max="10">
-          </div>
-          <button class="generate-menu-btn" data-booking-id="${escapeHtml(booking.id)}">
-            Generate Menu Link
+      <div class="adm-contact-row">
+        <a class="adm-contact-link" href="tel:${escapeHtml(booking.mobile_number)}">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.5 19.79 19.79 0 01.21 .88 2 2 0 012.18 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.91 7.09a16 16 0 006 6l1.45-1.45a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 13.92z"/></svg>
+          ${escapeHtml(booking.mobile_number)}
+        </a>
+        <a class="adm-contact-link" href="mailto:${escapeHtml(booking.email_address)}">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          ${escapeHtml(booking.email_address)}
+        </a>
+      </div>
+
+      ${reqHtml}
+      ${airbnbHtml}
+      ${ordersHtml}
+
+      <div class="adm-menu-section">
+        <div class="adm-menu-header">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          Menu Link
+        </div>
+        <div class="adm-menu-controls">
+          <label class="adm-menu-field">
+            <span>Food</span>
+            <input class="adm-menu-input" type="number" id="food-count-${escapeHtml(booking.id)}" value="3" min="1" max="15">
+          </label>
+          <label class="adm-menu-field">
+            <span>Drinks</span>
+            <input class="adm-menu-input" type="number" id="bev-count-${escapeHtml(booking.id)}" value="2" min="1" max="10">
+          </label>
+          <button class="generate-menu-btn adm-generate-btn" data-booking-id="${escapeHtml(booking.id)}">
+            Generate Link
           </button>
         </div>
-        <div class="generated-menu-link" id="generated-link-${escapeHtml(booking.id)}" style="display: none;">
-          <label>Generated Link:</label>
-          <div class="link-container">
-            <input type="text" id="menu-url-${escapeHtml(booking.id)}" readonly>
-            <button class="copy-menu-btn" data-booking-id="${escapeHtml(booking.id)}">Copy</button>
-          </div>
+        <div class="adm-generated-link" id="generated-link-${escapeHtml(booking.id)}" style="display:none">
+          <input class="adm-link-input" type="text" id="menu-url-${escapeHtml(booking.id)}" readonly>
+          <button class="copy-menu-btn adm-copy-btn" data-booking-id="${escapeHtml(booking.id)}">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            Copy
+          </button>
         </div>
       </div>
-    </div>
-  `
+    </div>`
   }).join('')
 }
 
@@ -1434,15 +2761,15 @@ function renderMenuLinks(links) {
         </div>
       </div>
       <div class="menu-link-actions">
-        <button class="btn btn--sm btn--outline" onclick="copyMenuLink('${link.id}')">Copy Link</button>
+        <button class="btn btn--sm btn--outline" onclick="copyMenuLink('${link.token}')">Copy Link</button>
       </div>
     </div>
   `).join('')
 }
 
 // Copy menu link
-function copyMenuLink(linkId) {
-  const url = `${window.location.origin}?menu=${linkId}`
+function copyMenuLink(linkToken) {
+  const url = `${window.location.origin}?menu=${linkToken}`
   navigator.clipboard.writeText(url).then(() => {
     showToast('Menu link copied to clipboard', 'success')
   }).catch(() => {
@@ -1451,38 +2778,61 @@ function copyMenuLink(linkId) {
 }
 
 // Confirm booking
-async function confirmBooking(queryId) {
+async function confirmBooking(queryId, venueId, venueType, preferredDate, checkoutDate) {
+  if (!appState.session) return showToast('Admin login required', 'error')
   const advanceInput = document.getElementById(`advance-${queryId}`)
   const advanceAmount = parseFloat(advanceInput.value) || 0
-  
+
   if (advanceAmount <= 0) {
     showToast('Please enter a valid advance amount', 'error')
     return
   }
-  
+
   try {
-    const { error } = await supabase
+    // 1. Confirm the booking
+    const { error: confErr } = await supabase
       .from('bookings')
-      .update({ 
-        confirmed: true, 
-        advance_amount: advanceAmount 
-      })
+      .update({ confirmed: true, advance_amount: advanceAmount })
       .eq('id', queryId)
-    
-    if (error) throw error
-    
-    showToast('Booking confirmed successfully!', 'success')
+    if (confErr) throw confErr
+
+    // 2. Block dates in venue_availability using data already in hand (no extra SELECT needed)
+    if (venueId && preferredDate) {
+      const rows = []
+
+      if (venueType === 'self_managed' || venueType === 'partner_bnb') {
+        const start = new Date(preferredDate + 'T00:00:00')
+        const end   = checkoutDate
+          ? new Date(checkoutDate + 'T00:00:00')
+          : new Date(start.getTime() + 86400000)
+        for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
+          rows.push({ venue_id: venueId, date: localDateStr(d), status: 'booked', source: 'booking', booking_id: parseInt(queryId, 10) })
+        }
+      }
+      // Café bookings are slot-level — tracked via get_cafe_booked_slots RPC,
+      // not as full-day blocks in venue_availability.
+
+      if (rows.length > 0) {
+        const { error: vaErr } = await supabase
+          .from('venue_availability')
+          .insert(rows)
+        if (vaErr) console.error('Failed to block dates in venue_availability:', vaErr)
+      }
+    }
+
+    showToast('Booking confirmed!', 'success')
     loadQueries()
     loadBookings()
-    
-  } catch (error) {
-    console.error(error)
+
+  } catch (err) {
+    console.error(err)
     showToast('Failed to confirm booking', 'error')
   }
 }
 
 // Generate menu link for booking
 async function generateBookingMenuLink(bookingId) {
+  if (!appState.session) return showToast('Admin login required', 'error')
   const foodCountInput = document.getElementById(`food-count-${bookingId}`)
   const bevCountInput = document.getElementById(`bev-count-${bookingId}`)
   
@@ -1509,7 +2859,7 @@ async function generateBookingMenuLink(bookingId) {
     const linkInput = document.getElementById(`menu-url-${bookingId}`)
     
     if (generatedLinkDiv && linkInput) {
-      const fullUrl = `${window.location.origin}?menu=${data[0].id}&booking=${bookingId}`
+      const fullUrl = `${window.location.origin}?menu=${data[0].token}&booking=${bookingId}`
       linkInput.value = fullUrl
       generatedLinkDiv.style.display = 'block'
     }
@@ -1565,6 +2915,788 @@ function switchTab(tabName) {
     loadBookings()
   } else if (tabName === 'menu-link') {
     loadMenuLinks()
+  } else if (tabName === 'venues') {
+    loadVenueManager()
+  } else if (tabName === 'availability') {
+    initAvailabilityTab()
+  } else if (tabName === 'add-ons') {
+    loadAddOnsManager()
+  }
+}
+
+// ================================================================
+// ADD-ONS MANAGER
+// ================================================================
+
+const ADDON_CATEGORIES = ['photography', 'decor', 'food', 'entertainment', 'extension']
+const ADDON_CATEGORY_LABELS = {
+  photography:   '📷 Photography',
+  decor:         '🌸 Decor',
+  food:          '🍰 Food',
+  entertainment: '🎉 Entertainment',
+  extension:     '⏱ Extension',
+}
+const ADDON_VENUE_TYPES = ['cafe', 'self_managed', 'partner_bnb']
+
+let addOnManagerState = {
+  addOns: [],
+  editingId: null,
+}
+
+async function loadAddOnsManager() {
+  if (!appState.session) return
+  const container = document.getElementById('addons-manager-container')
+  if (!container) return
+  container.innerHTML = '<p class="loading-text">Loading add-ons…</p>'
+  try {
+    const { data, error } = await supabase
+      .from('add_ons')
+      .select('*')
+      .order('sort_order')
+    if (error) throw error
+    addOnManagerState.addOns = data || []
+    renderAddOnsList()
+  } catch (err) {
+    console.error(err)
+    showToast('Failed to load add-ons', 'error')
+  }
+}
+
+function renderAddOnsList() {
+  const container = document.getElementById('addons-manager-container')
+  if (!container) return
+
+  if (!addOnManagerState.addOns.length) {
+    container.innerHTML = `
+      <div class="adm-empty">
+        <div class="adm-empty-icon">🧩</div>
+        <h3>No add-ons yet</h3>
+        <p>Click "+ New Add-on" to create the first one.</p>
+      </div>`
+    return
+  }
+
+  // Group by category
+  const grouped = ADDON_CATEGORIES.reduce((acc, cat) => {
+    acc[cat] = addOnManagerState.addOns.filter(a => a.category === cat)
+    return acc
+  }, {})
+
+  container.innerHTML = `
+    <div class="adm-addons-list">
+      ${ADDON_CATEGORIES.map(cat => {
+        const items = grouped[cat]
+        if (!items.length) return ''
+        return `
+        <div class="adm-addons-group">
+          <h4 class="adm-addons-group-title">${ADDON_CATEGORY_LABELS[cat]}</h4>
+          <table class="adm-addons-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Price</th>
+                <th>Confirm required</th>
+                <th>Available for</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${items.map(a => `
+              <tr class="${a.is_active ? '' : 'adm-addon-row--inactive'}">
+                <td data-label="Name">${escapeHtml(a.name)}</td>
+                <td data-label="Price">₹${Number(a.price).toLocaleString('en-IN')}</td>
+                <td data-label="Confirm">${a.requires_confirmation ? '✅ Yes' : '—'}</td>
+                <td data-label="For">${(a.available_for || []).join(', ')}</td>
+                <td data-label="Status">
+                  <span class="adm-chip ${a.is_active ? 'adm-chip--confirmed' : 'adm-chip--pending'}">
+                    ${a.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                </td>
+                <td class="adm-addons-actions">
+                  <button class="btn btn--outline btn--sm" onclick="openAddOnForm(${a.id})">Edit</button>
+                  <button class="btn btn--outline btn--sm" onclick="toggleAddOnActive(${a.id}, ${!a.is_active})">${a.is_active ? 'Deactivate' : 'Activate'}</button>
+                  <button class="btn btn--danger btn--sm" onclick="deleteAddOn(${a.id})">Delete</button>
+                </td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`
+      }).join('')}
+    </div>
+
+    <!-- Add-on form (inline, shown/hidden) -->
+    <div id="addon-form-wrap" class="adm-addon-form-wrap" style="display:none;">
+      <h4 id="addon-form-title">New Add-on</h4>
+      <form id="addon-form" class="adm-addon-form" onsubmit="saveAddOn(event)">
+        <input type="hidden" id="af-id">
+        <div class="adm-addon-form-row">
+          <label>Name
+            <input type="text" id="af-name" required maxlength="80">
+          </label>
+          <label>Category
+            <select id="af-category" required>
+              ${ADDON_CATEGORIES.map(c => `<option value="${c}">${ADDON_CATEGORY_LABELS[c]}</option>`).join('')}
+            </select>
+          </label>
+          <label>Price (₹)
+            <input type="number" id="af-price" min="0" step="1" required>
+          </label>
+          <label>Sort order
+            <input type="number" id="af-sort" value="0" min="0" step="10">
+          </label>
+        </div>
+        <div class="adm-addon-form-row">
+          <label style="flex:2">Description (optional)
+            <input type="text" id="af-description" maxlength="200">
+          </label>
+          <label>Requires confirmation
+            <select id="af-confirm">
+              <option value="false">No</option>
+              <option value="true">Yes</option>
+            </select>
+          </label>
+        </div>
+        <div class="adm-addon-form-row">
+          <fieldset class="adm-addon-venues">
+            <legend>Available for</legend>
+            ${ADDON_VENUE_TYPES.map(vt => `
+            <label class="adm-addon-venue-check">
+              <input type="checkbox" name="available_for" value="${vt}" checked>
+              ${escapeHtml(formatVenueType(vt))}
+            </label>`).join('')}
+          </fieldset>
+        </div>
+        <div class="adm-addon-form-actions">
+          <button type="submit" class="btn btn--primary">Save</button>
+          <button type="button" class="btn btn--outline" onclick="closeAddOnForm()">Cancel</button>
+        </div>
+      </form>
+    </div>`
+}
+
+function openAddOnForm(id = null) {
+  // Re-render list first to ensure form markup exists
+  if (!document.getElementById('addon-form-wrap')) renderAddOnsList()
+
+  const wrap = document.getElementById('addon-form-wrap')
+  if (!wrap) return
+  wrap.style.display = 'block'
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'start' })
+
+  document.getElementById('addon-form-title').textContent = id ? 'Edit Add-on' : 'New Add-on'
+  document.getElementById('af-id').value = id || ''
+
+  // Reset
+  document.getElementById('addon-form').reset()
+  document.querySelectorAll('[name="available_for"]').forEach(cb => { cb.checked = true })
+
+  if (id) {
+    const a = addOnManagerState.addOns.find(x => x.id === id)
+    if (!a) return
+    addOnManagerState.editingId = id
+    document.getElementById('af-name').value         = a.name
+    document.getElementById('af-category').value     = a.category
+    document.getElementById('af-price').value        = a.price
+    document.getElementById('af-sort').value         = a.sort_order
+    document.getElementById('af-description').value  = a.description || ''
+    document.getElementById('af-confirm').value      = String(a.requires_confirmation)
+    document.querySelectorAll('[name="available_for"]').forEach(cb => {
+      cb.checked = (a.available_for || []).includes(cb.value)
+    })
+  } else {
+    addOnManagerState.editingId = null
+  }
+}
+
+function closeAddOnForm() {
+  const wrap = document.getElementById('addon-form-wrap')
+  if (wrap) wrap.style.display = 'none'
+  addOnManagerState.editingId = null
+}
+
+async function saveAddOn(event) {
+  event.preventDefault()
+  if (!appState.session) return showToast('Admin login required', 'error')
+
+  const id       = document.getElementById('af-id').value
+  const available_for = Array.from(document.querySelectorAll('[name="available_for"]:checked')).map(cb => cb.value)
+
+  if (!available_for.length) {
+    showToast('Select at least one venue type', 'error')
+    return
+  }
+
+  const payload = {
+    name:                  document.getElementById('af-name').value.trim(),
+    category:              document.getElementById('af-category').value,
+    price:                 parseFloat(document.getElementById('af-price').value) || 0,
+    sort_order:            parseInt(document.getElementById('af-sort').value, 10) || 0,
+    description:           document.getElementById('af-description').value.trim() || null,
+    requires_confirmation: document.getElementById('af-confirm').value === 'true',
+    available_for,
+  }
+
+  try {
+    let error
+    if (id) {
+      ;({ error } = await supabase.from('add_ons').update(payload).eq('id', parseInt(id, 10)))
+    } else {
+      ;({ error } = await supabase.from('add_ons').insert([payload]))
+    }
+    if (error) throw error
+    showToast(id ? 'Add-on updated' : 'Add-on created', 'success')
+    closeAddOnForm()
+    loadAddOnsManager()
+  } catch (err) {
+    console.error(err)
+    showToast('Failed to save add-on: ' + err.message, 'error')
+  }
+}
+
+async function toggleAddOnActive(id, newState) {
+  if (!appState.session) return showToast('Admin login required', 'error')
+  try {
+    const { error } = await supabase.from('add_ons').update({ is_active: newState }).eq('id', id)
+    if (error) throw error
+    showToast(newState ? 'Add-on activated' : 'Add-on deactivated', 'success')
+    loadAddOnsManager()
+  } catch (err) {
+    console.error(err)
+    showToast('Failed to update add-on', 'error')
+  }
+}
+
+async function deleteAddOn(id) {
+  if (!appState.session) return showToast('Admin login required', 'error')
+  if (!confirm('Delete this add-on? Existing booking records will be preserved.')) return
+  try {
+    const { error } = await supabase.from('add_ons').delete().eq('id', id)
+    if (error) throw error
+    showToast('Add-on deleted', 'success')
+    loadAddOnsManager()
+  } catch (err) {
+    console.error(err)
+    showToast('Failed to delete add-on', 'error')
+  }
+}
+
+window.openAddOnForm    = openAddOnForm
+window.closeAddOnForm   = closeAddOnForm
+window.saveAddOn        = saveAddOn
+window.toggleAddOnActive = toggleAddOnActive
+window.deleteAddOn      = deleteAddOn
+
+// ================================================================
+// VENUE MANAGER
+// ================================================================
+
+let venueManagerState = {
+  venues: [],
+  editingId: null
+}
+
+async function loadVenueManager() {
+  if (!appState.session) return
+  const container = document.getElementById('venues-list-container')
+  if (!container) return
+  container.innerHTML = '<p class="loading-text">Loading venues…</p>'
+  try {
+    const { data, error } = await supabase
+      .from('venues')
+      .select('id, name, type, area, city, capacity_min, capacity_max, base_price, is_active, images, external_url, metadata')
+      .order('id')
+    if (error) throw error
+    venueManagerState.venues = data || []
+    renderVenueList()
+  } catch (err) {
+    console.error(err)
+    container.innerHTML = '<p class="error-text">Failed to load venues.</p>'
+  }
+}
+
+function renderVenueList() {
+  const container = document.getElementById('venues-list-container')
+  if (!container) return
+  const venues = venueManagerState.venues
+  if (!venues.length) {
+    container.innerHTML = '<p class="empty-text">No venues yet. Click "+ Add Venue" to create one.</p>'
+    return
+  }
+  container.innerHTML = `
+    <table class="admin-venue-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Area</th>
+          <th>Capacity</th>
+          <th>Base Price</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${venues.map(v => `
+          <tr class="${v.is_active ? '' : 'venue-row-inactive'}">
+            <td class="venue-row-name" data-label="Name">${escapeHtml(v.name)}</td>
+            <td data-label="Type"><span class="admin-venue-badge ${venueTypeBadgeClass(v.type)}">${escapeHtml(formatVenueType(v.type))}</span></td>
+            <td data-label="Area">${escapeHtml(v.area || '—')}</td>
+            <td data-label="Capacity">${v.capacity_min}–${v.capacity_max}</td>
+            <td data-label="Price">₹${Number(v.base_price).toLocaleString('en-IN')}</td>
+            <td data-label="Status"><span class="venue-status-pill ${v.is_active ? 'venue-status-active' : 'venue-status-inactive'}">${v.is_active ? 'Active' : 'Inactive'}</span></td>
+            <td class="venue-row-actions">
+              <button class="vf-action-btn" onclick="openVenueForm(${v.id})">Edit</button>
+              <button class="vf-action-btn vf-action-btn--${v.is_active ? 'deactivate' : 'activate'}" onclick="toggleVenueActive(${v.id}, ${!v.is_active})">${v.is_active ? 'Deactivate' : 'Activate'}</button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `
+}
+
+function openVenueForm(venueId) {
+  const panel = document.getElementById('venue-form-panel')
+  const title = document.getElementById('vfp-title')
+  if (!panel) return
+
+  if (venueId) {
+    const venue = venueManagerState.venues.find(v => v.id === venueId)
+    if (!venue) return
+    venueManagerState.editingId = venueId
+    title.textContent = 'Edit Venue'
+    populateVenueForm(venue)
+  } else {
+    venueManagerState.editingId = null
+    title.textContent = 'Add Venue'
+    clearVenueForm()
+  }
+
+  panel.classList.remove('hidden')
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function closeVenueForm() {
+  const panel = document.getElementById('venue-form-panel')
+  if (panel) panel.classList.add('hidden')
+  venueManagerState.editingId = null
+}
+
+function clearVenueForm() {
+  document.getElementById('vf-id').value = ''
+  document.getElementById('vf-name').value = ''
+  document.getElementById('vf-type').value = 'cafe'
+  document.getElementById('vf-description').value = ''
+  document.getElementById('vf-area').value = ''
+  document.getElementById('vf-city').value = 'Jaipur'
+  document.getElementById('vf-cap-min').value = 2
+  document.getElementById('vf-cap-max').value = 10
+  document.getElementById('vf-base-price').value = 0
+  document.getElementById('vf-external-url').value = ''
+  document.getElementById('vf-overage').value = 2000
+  document.getElementById('vf-rooms').value = 2
+  document.getElementById('vf-bathrooms').value = 2
+  document.getElementById('vf-stay-price').value = 0
+  document.getElementById('vf-amenities').value = ''
+  document.getElementById('vf-highlights').value = ''
+  document.getElementById('vf-ideal-for').value = ''
+  document.getElementById('vf-active').checked = true
+  renderVfImages([])
+  renderVfTiers([{ up_to: 2, price: 9900 }, { up_to: 4, price: 12900 }, { up_to: 6, price: 15900 }, { up_to: 8, price: 18900 }])
+  updateVfTypeVisibility('cafe')
+}
+
+function populateVenueForm(venue) {
+  document.getElementById('vf-id').value = venue.id
+  document.getElementById('vf-name').value = venue.name || ''
+  document.getElementById('vf-type').value = venue.type || 'cafe'
+  document.getElementById('vf-description').value = venue.description || ''
+  document.getElementById('vf-area').value = venue.area || ''
+  document.getElementById('vf-city').value = venue.city || 'Jaipur'
+  document.getElementById('vf-cap-min').value = venue.capacity_min || 2
+  document.getElementById('vf-cap-max').value = venue.capacity_max || 10
+  document.getElementById('vf-base-price').value = venue.base_price || 0
+  document.getElementById('vf-external-url').value = venue.external_url || ''
+  document.getElementById('vf-active').checked = venue.is_active !== false
+
+  const meta = venue.metadata || {}
+  renderVfImages(Array.isArray(venue.images) ? venue.images : (venue.images ? JSON.parse(venue.images) : []))
+  renderVfTiers(meta.tiers || [])
+  document.getElementById('vf-overage').value = meta.overage_per_person || 2000
+
+  // BnB fields
+  document.getElementById('vf-rooms').value = meta.rooms || 2
+  document.getElementById('vf-bathrooms').value = meta.bathrooms || 2
+  document.getElementById('vf-stay-price').value = meta.stay_price_per_night || 0
+  document.getElementById('vf-amenities').value = (meta.amenities || []).join(', ')
+  document.getElementById('vf-highlights').value = (meta.highlights || []).join(', ')
+  document.getElementById('vf-ideal-for').value = (meta.ideal_for || []).join(', ')
+
+  updateVfTypeVisibility(venue.type)
+}
+
+function updateVfTypeVisibility(type) {
+  const partnerOnly = document.querySelectorAll('.vf-partner-only')
+  const bnbSection = document.getElementById('vf-bnb-section')
+  partnerOnly.forEach(el => { el.style.display = type === 'partner_bnb' ? '' : 'none' })
+  if (bnbSection) bnbSection.style.display = type === 'self_managed' ? '' : 'none'
+}
+
+function renderVfImages(images) {
+  const list = document.getElementById('vf-images-list')
+  if (!list) return
+  list.innerHTML = images.map((img, i) => `
+    <div class="vf-image-row" data-index="${i}">
+      <input type="text" class="vf-input vf-img-url" placeholder="Image URL" value="${escapeHtml(img.url || '')}" />
+      <input type="text" class="vf-input vf-img-alt" placeholder="Alt text" value="${escapeHtml(img.alt || '')}" />
+      <button type="button" class="vf-remove-btn" onclick="removeVfImage(${i})">✕</button>
+    </div>
+  `).join('')
+}
+
+function addVfImage() {
+  const imgs = readVfImages()
+  imgs.push({ url: '', alt: '' })
+  renderVfImages(imgs)
+}
+
+function removeVfImage(index) {
+  const imgs = readVfImages()
+  imgs.splice(index, 1)
+  renderVfImages(imgs)
+}
+
+function readVfImages() {
+  const rows = document.querySelectorAll('#vf-images-list .vf-image-row')
+  return Array.from(rows).map(row => ({
+    url: row.querySelector('.vf-img-url').value.trim(),
+    alt: row.querySelector('.vf-img-alt').value.trim()
+  }))
+}
+
+function renderVfTiers(tiers) {
+  const list = document.getElementById('vf-tiers-list')
+  if (!list) return
+  list.innerHTML = tiers.map((tier, i) => `
+    <div class="vf-tier-row" data-index="${i}">
+      <span class="vf-tier-label">Up to</span>
+      <input type="number" class="vf-input vf-tier-upto" min="1" value="${tier.up_to}" placeholder="Guests" />
+      <span class="vf-tier-label">guests → ₹</span>
+      <input type="number" class="vf-input vf-tier-price" min="0" step="100" value="${tier.price}" placeholder="Price" />
+      <button type="button" class="vf-remove-btn" onclick="removeVfTier(${i})">✕</button>
+    </div>
+  `).join('')
+}
+
+function addVfTier() {
+  const tiers = readVfTiers()
+  tiers.push({ up_to: (tiers.length + 1) * 2, price: 0 })
+  renderVfTiers(tiers)
+}
+
+function removeVfTier(index) {
+  const tiers = readVfTiers()
+  tiers.splice(index, 1)
+  renderVfTiers(tiers)
+}
+
+function readVfTiers() {
+  const rows = document.querySelectorAll('#vf-tiers-list .vf-tier-row')
+  return Array.from(rows).map(row => ({
+    up_to: parseInt(row.querySelector('.vf-tier-upto').value, 10) || 0,
+    price: parseInt(row.querySelector('.vf-tier-price').value, 10) || 0
+  }))
+}
+
+async function handleVenueFormSubmit(event) {
+  event.preventDefault()
+  if (!appState.session) return showToast('Admin login required', 'error')
+  const id = document.getElementById('vf-id').value
+  const type = document.getElementById('vf-type').value
+
+  const images = readVfImages().filter(img => img.url)
+  const tiers = readVfTiers().sort((a, b) => a.up_to - b.up_to) // ensure ascending order for getVenuePrice()
+  const overage = parseInt(document.getElementById('vf-overage').value, 10) || 2000
+
+  let metadata = { tiers, overage_per_person: overage }
+
+  if (type === 'self_managed') {
+    const splitCsv = id => document.getElementById(id).value.split(',').map(s => s.trim()).filter(Boolean)
+    metadata = {
+      ...metadata,
+      rooms: parseInt(document.getElementById('vf-rooms').value, 10) || 2,
+      bathrooms: parseInt(document.getElementById('vf-bathrooms').value, 10) || 2,
+      stay_price_per_night: parseInt(document.getElementById('vf-stay-price').value, 10) || 0,
+      amenities: splitCsv('vf-amenities'),
+      highlights: splitCsv('vf-highlights'),
+      ideal_for: splitCsv('vf-ideal-for')
+    }
+  }
+
+  const payload = {
+    name: document.getElementById('vf-name').value.trim(),
+    type,
+    description: document.getElementById('vf-description').value.trim(),
+    area: document.getElementById('vf-area').value.trim(),
+    city: document.getElementById('vf-city').value.trim(),
+    capacity_min: parseInt(document.getElementById('vf-cap-min').value, 10),
+    capacity_max: parseInt(document.getElementById('vf-cap-max').value, 10),
+    base_price: parseFloat(document.getElementById('vf-base-price').value) || 0,
+    external_url: document.getElementById('vf-external-url').value.trim() || null,
+    is_active: document.getElementById('vf-active').checked,
+    images: images,
+    metadata
+  }
+
+  try {
+    let error
+    if (id) {
+      ;({ error } = await supabase.from('venues').update(payload).eq('id', parseInt(id, 10)))
+    } else {
+      ;({ error } = await supabase.from('venues').insert([payload]))
+    }
+    if (error) throw error
+    showToast(id ? 'Venue updated!' : 'Venue added!', 'success')
+    closeVenueForm()
+    loadVenueManager()
+  } catch (err) {
+    console.error(err)
+    showToast('Failed to save venue: ' + err.message, 'error')
+  }
+}
+
+async function toggleVenueActive(venueId, newState) {
+  if (!appState.session) return showToast('Admin login required', 'error')
+  try {
+    const { error } = await supabase.from('venues').update({ is_active: newState }).eq('id', venueId)
+    if (error) throw error
+    showToast(newState ? 'Venue activated' : 'Venue deactivated', 'success')
+    loadVenueManager()
+  } catch (err) {
+    console.error(err)
+    showToast('Failed to update venue', 'error')
+  }
+}
+
+// ================================================================
+// AVAILABILITY CALENDAR
+// ================================================================
+
+let availState = {
+  venueId: null,
+  year: new Date().getFullYear(),
+  month: new Date().getMonth(), // 0-indexed
+  // Flat array of { date: 'YYYY-MM-DD', status: 'booked'|'blocked' }
+  // sourced from venue_availability table — single source of truth
+  dates: [],
+}
+
+async function initAvailabilityTab() {
+  // Ensure venues are loaded before populating the select.
+  // loadVenueManager() requires the venues tab DOM, so fetch directly if not yet loaded.
+  if (!venueManagerState.venues.length) {
+    try {
+      const { data, error } = await supabase
+        .from('venues')
+        .select('id, name, type, is_active')
+        .order('id')
+      if (!error) venueManagerState.venues = data || []
+    } catch (e) { console.error(e) }
+  }
+  populateAvailVenueSelect()
+  renderAvailMonthLabel()
+}
+
+function populateAvailVenueSelect() {
+  const sel = document.getElementById('avail-venue-select')
+  if (!sel) return
+  const currentVal = sel.value
+  sel.innerHTML = '<option value="">Select a venue…</option>'
+  venueManagerState.venues.forEach(v => {
+    const opt = document.createElement('option')
+    opt.value = v.id
+    opt.textContent = `${v.name}${v.is_active ? '' : ' (inactive)'}`
+    sel.appendChild(opt)
+  })
+  if (currentVal) sel.value = currentVal
+}
+
+function renderAvailMonthLabel() {
+  const label = document.getElementById('avail-month-label')
+  if (!label) return
+  const d = new Date(availState.year, availState.month, 1)
+  label.textContent = d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+}
+
+async function loadAvailCalendar() {
+  const venueId = availState.venueId
+  if (!venueId) return
+
+  const { year, month } = availState
+  const firstDay = localDateStr(new Date(year, month, 1))
+  const lastDay  = localDateStr(new Date(year, month + 1, 0))
+
+  try {
+    // Single query — venue_availability is the source of truth for all blocking
+    const { data, error } = await supabase
+      .from('venue_availability')
+      .select('date, status')
+      .eq('venue_id', venueId)
+      .gte('date', firstDay)
+      .lte('date', lastDay)
+
+    if (error) throw error
+
+    availState.dates = (data || []).map(r => ({ date: r.date, status: r.status }))
+    renderAvailCalendarGrid()
+  } catch (err) {
+    console.error(err)
+    showToast('Failed to load availability data', 'error')
+  }
+}
+
+function renderAvailCalendarGrid() {
+  const grid = document.getElementById('avail-calendar-grid')
+  if (!grid) return
+
+  const { year, month, dates } = availState
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const firstDOW   = new Date(year, month, 1).getDay()
+
+  // Build lookup map: date string → highest-priority status
+  // 'booked' takes priority over 'blocked' if both somehow exist
+  const statusMap = new Map()
+  for (const { date, status } of dates) {
+    if (!statusMap.has(date) || status === 'booked') statusMap.set(date, status)
+  }
+
+  // Count stats for the summary row
+  let countBooked = 0, countBlocked = 0, countAvailable = 0
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    const isPast  = new Date(year, month, d) < today
+    if (isPast) continue
+    const st = statusMap.get(dateStr)
+    if (st === 'booked')       countBooked++
+    else if (st === 'blocked') countBlocked++
+    else                       countAvailable++
+  }
+
+  const statsRow = document.getElementById('avail-stats-row')
+  if (statsRow) {
+    statsRow.hidden = false
+    statsRow.innerHTML = `
+      <div class="avail-stat avail-stat--booked">
+        <span class="avail-stat-num">${countBooked}</span>
+        <span class="avail-stat-label">Booked</span>
+      </div>
+      <div class="avail-stat avail-stat--blocked">
+        <span class="avail-stat-num">${countBlocked}</span>
+        <span class="avail-stat-label">Blocked</span>
+      </div>
+      <div class="avail-stat avail-stat--available">
+        <span class="avail-stat-num">${countAvailable}</span>
+        <span class="avail-stat-label">Available</span>
+      </div>`
+  }
+
+  const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  let html = `<div class="avail-grid-inner">
+    ${DOW.map(d => `<div class="avail-day-header">${d}</div>`).join('')}`
+
+  for (let i = 0; i < firstDOW; i++) html += `<div class="avail-day avail-day--empty"></div>`
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    const isPast    = new Date(year, month, d) < today
+    const st        = statusMap.get(dateStr)
+    const isBooked  = st === 'booked'
+    const isBlocked = st === 'blocked'
+    const isToday   = new Date(year, month, d).toDateString() === today.toDateString()
+
+    let cls = 'avail-day'
+    let badge = ''
+    let onclick = ''
+    let title = ''
+
+    if (isPast) {
+      cls += ' avail-day--past'
+    } else if (isBooked) {
+      cls += ' avail-day--booked'
+      badge = '<span class="avail-day-badge">Booked</span>'
+      title = 'title="Customer booking"'
+    } else if (isBlocked) {
+      cls += ' avail-day--blocked'
+      badge = '<span class="avail-day-badge">Blocked</span>'
+      // data-action instead of onclick — delegated listener handles it
+      onclick = `data-action="unblock" data-date="${dateStr}"`
+      title = 'title="Click to unblock"'
+    } else {
+      cls += ' avail-day--available'
+      onclick = `data-action="block" data-date="${dateStr}"`
+      title = 'title="Click to block"'
+    }
+    if (isToday) cls += ' avail-day--today'
+
+    html += `
+      <div class="${cls}" ${onclick} ${title}>
+        <span class="avail-day-num">${d}</span>
+        ${badge}
+      </div>`
+  }
+
+  html += `</div>`
+  grid.innerHTML = html
+
+  // Delegated listener — replaces per-day onclick="toggleBlockedDate(...)" strings
+  grid.addEventListener('click', e => {
+    const day = e.target.closest('[data-action]')
+    if (!day) return
+    const dateStr = day.dataset.date
+    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return
+    if (day.dataset.action === 'block')   toggleBlockedDate(dateStr, true)
+    if (day.dataset.action === 'unblock') toggleBlockedDate(dateStr, false)
+  }, { once: true })  // once:true — grid is fully re-rendered on each call
+}
+
+async function toggleBlockedDate(dateStr, shouldBlock) {
+  if (!appState.session) return showToast('Admin login required', 'error')
+  const venueId = availState.venueId
+  if (!venueId) return
+
+  try {
+    if (shouldBlock) {
+      const { error } = await supabase
+        .from('venue_availability')
+        .insert([{ venue_id: venueId, date: dateStr, status: 'blocked', source: 'admin' }])
+      if (error && error.code !== '23505') throw error // ignore unique-constraint if already blocked
+    } else {
+      const { error } = await supabase
+        .from('venue_availability')
+        .delete()
+        .eq('venue_id', venueId)
+        .eq('date', dateStr)
+        .eq('source', 'admin')
+      if (error) throw error
+    }
+
+    // Update local state and re-render without a full reload
+    if (shouldBlock) {
+      // Remove any existing entry for this date (prevent duplicates), then add blocked
+      availState.dates = [...availState.dates.filter(r => r.date !== dateStr),
+                          { date: dateStr, status: 'blocked' }]
+    } else {
+      // Remove the blocked entry; leave any 'booked' entry intact
+      availState.dates = availState.dates.filter(r => !(r.date === dateStr && r.status === 'blocked'))
+    }
+    renderAvailCalendarGrid()
+    showToast(shouldBlock ? `${dateStr} blocked` : `${dateStr} unblocked`, 'success')
+  } catch (err) {
+    console.error(err)
+    showToast('Failed to update blocked dates', 'error')
   }
 }
 
@@ -1590,12 +3722,12 @@ function handleNavigation(route) {
 }
 
 // Menu selection functionality
-async function loadMenuSelection(menuId) {
+async function loadMenuSelection(menuToken) {
   try {
     const { data, error } = await supabase
       .from('menu_links')
       .select()
-      .eq('id', menuId)
+      .eq('token', menuToken)
       .single()
     
     if (error) throw error
@@ -1720,38 +3852,33 @@ function updateQuantity(itemName, category, change) {
   if (!appState.currentMenuLink) return
   
   const key = `${category}-${itemName}`
-  if (!appState.selectedItems[key]) {
-    appState.selectedItems[key] = { name: itemName, category, quantity: 0 }
+  let currentItem = appState.selectedItems[key]
+  
+  if (!currentItem) {
+    currentItem = { name: itemName, category, quantity: 0 }
+    appState.selectedItems[key] = currentItem
   }
   
-  const currentItem = appState.selectedItems[key]
-  const newQuantity = currentItem.quantity + change
-  
-  if (newQuantity < 0) return
-  if (newQuantity > 5) return // Max 5 per item
-  
-  // Check total limits
   const { totalFood, totalBev } = getCurrentTotals()
   const maxFood = appState.currentMenuLink.max_food_items
-  const maxBev = appState.currentMenuLink.max_bev_items
+  const maxBev  = appState.currentMenuLink.max_bev_items
   
-  if (change > 0) { // Adding item
-    if (category === 'food' && totalFood >= maxFood) {
-      showToast(`Maximum ${maxFood} food items allowed in total`, 'error')
-      return
-    }
-    if (category === 'bev' && totalBev >= maxBev) {
-      showToast(`Maximum ${maxBev} beverages allowed in total`, 'error')
-      return
-    }
+  let newQuantity = currentItem.quantity + change
+  
+  if (change > 0) {
+    const categoryTotal = category === 'food' ? totalFood : totalBev
+    const categoryMax   = category === 'food' ? maxFood  : maxBev
+    if (categoryTotal >= categoryMax) return
+    if (newQuantity > 5) return
   }
+  
+  if (newQuantity < 0) newQuantity = 0
   
   currentItem.quantity = newQuantity
   if (newQuantity === 0) {
     delete appState.selectedItems[key]
   }
   
-  // Update display
   const qtyDisplay = document.getElementById(`qty-${category}-${itemName.replace(/\s+/g, '-').toLowerCase()}`)
   if (qtyDisplay) {
     qtyDisplay.textContent = newQuantity
@@ -1765,101 +3892,114 @@ function updateQuantity(itemName, category, change) {
 // Get current totals
 function getCurrentTotals() {
   const selectedItems = Object.values(appState.selectedItems)
-  
   let totalFood = 0
-  let totalBev = 0
-  
+  let totalBev  = 0
   selectedItems.forEach(item => {
-    if (item.category === 'food') {
-      totalFood += item.quantity
-    } else {
-      totalBev += item.quantity
-    }
+    if (item.category === 'food') totalFood += item.quantity
+    else totalBev += item.quantity
   })
-  
   return { totalFood, totalBev }
 }
 
 // Update button states
 function updateButtonStates() {
   if (!appState.currentMenuLink) return
-  
   const { totalFood, totalBev } = getCurrentTotals()
   const maxFood = appState.currentMenuLink.max_food_items
-  const maxBev = appState.currentMenuLink.max_bev_items
-  
+  const maxBev  = appState.currentMenuLink.max_bev_items
   document.querySelectorAll('.quantity-btn').forEach(btn => {
     const itemName = btn.dataset.item
     const category = btn.dataset.category
-    const change = parseInt(btn.dataset.change, 10)
-    
-    const key = `${category}-${itemName}`
+    const change   = parseInt(btn.dataset.change, 10)
+    const key      = `${category}-${itemName}`
     const currentQuantity = appState.selectedItems[key]?.quantity || 0
-    
-    if (change > 0) { // Add button
+    if (change > 0) {
       const categoryTotal = category === 'food' ? totalFood : totalBev
-      const categoryMax = category === 'food' ? maxFood : maxBev
+      const categoryMax   = category === 'food' ? maxFood   : maxBev
       btn.disabled = (categoryTotal >= categoryMax) || (currentQuantity >= 5)
-    } else { // Minus button
+    } else {
       btn.disabled = currentQuantity <= 0
     }
   })
+  document.querySelectorAll('.modern-qty-btn').forEach(btn => {
+    const itemName = btn.dataset.item
+    const category = btn.dataset.category
+    const change   = parseInt(btn.dataset.change, 10)
+    const key      = `${category}-${itemName}`
+    const currentQuantity = appState.selectedItems[key]?.quantity || 0
+    if (change > 0) {
+      const categoryTotal = category === 'food' ? totalFood : totalBev
+      const categoryMax   = category === 'food' ? maxFood   : maxBev
+      btn.disabled = (categoryTotal >= categoryMax) || (currentQuantity >= 5)
+    } else {
+      btn.disabled = currentQuantity <= 0
+    }
+  })
+  const submitBtn = document.getElementById('submit-menu-selection')
+  if (submitBtn) {
+    const hasItems = Object.values(appState.selectedItems).some(item => item.quantity > 0)
+    submitBtn.disabled = !hasItems
+  }
 }
 
 // Update selection summary
 function updateSelectionSummary() {
-  const selectedItems = Object.values(appState.selectedItems).filter(item => item.quantity > 0)
-  
   const summaryContent = document.getElementById('selection-summary-content')
-  if (summaryContent) {
-    if (selectedItems.length === 0) {
-      summaryContent.innerHTML = '<p>No items selected yet.</p>'
-    } else {
-      summaryContent.innerHTML = selectedItems.map(item => `
-        <div class="selected-item">
-          <span class="selected-item-name">${item.name}</span>
-          <span class="selected-item-quantity">${item.quantity}x</span>
-        </div>
-      `).join('')
-    }
+  if (!summaryContent) return
+  const selectedItems = Object.values(appState.selectedItems).filter(item => item.quantity > 0)
+  if (selectedItems.length === 0) {
+    summaryContent.innerHTML = '<p class="empty-state">No items selected yet</p>'
+    return
   }
-  
-  const submitBtn = document.getElementById('submit-menu-selection')
-  if (submitBtn) {
-    submitBtn.disabled = selectedItems.length === 0
-  }
+  summaryContent.innerHTML = selectedItems.map(item => `
+    <div class="summary-item">
+      <span class="summary-item-name">${item.name}</span>
+      <span class="summary-item-qty">×${item.quantity}</span>
+    </div>
+  `).join('')
 }
 
 // Submit menu selection
 async function submitMenuSelection() {
+  if (!appState.currentMenuLink) return
   const selectedItems = Object.values(appState.selectedItems).filter(item => item.quantity > 0)
-  
+  if (selectedItems.length === 0) {
+    showToast('Please select at least one item', 'error')
+    return
+  }
+
+  // Server-side limit validation — client controls can be bypassed via DevTools
+  const foodCount = selectedItems.filter(i => i.category === 'food').reduce((s, i) => s + i.quantity, 0)
+  const bevCount  = selectedItems.filter(i => i.category === 'bev').reduce((s, i) => s + i.quantity, 0)
+  if (foodCount > appState.currentMenuLink.max_food_items) {
+    showToast(`Maximum ${appState.currentMenuLink.max_food_items} food items allowed`, 'error')
+    return
+  }
+  if (bevCount > appState.currentMenuLink.max_bev_items) {
+    showToast(`Maximum ${appState.currentMenuLink.max_bev_items} beverage items allowed`, 'error')
+    return
+  }
+
   try {
-    const order = {
+    const orderData = {
       menu_link_id: appState.currentMenuLink.id,
-      booking_id: appState.currentBooking?.id || null,
-      selected_items: selectedItems,
-      created_at: new Date().toISOString(),
+      booking_id:   appState.currentMenuLink.booking_id || null,
+      items:        selectedItems,
+      created_at:   new Date().toISOString()
     }
-    
-    const { data, error } = await supabase.from('orders').insert([order]).select()
+    const { error } = await supabase.from('menu_orders').insert([orderData])
     if (error) throw error
-    
-    appState.currentOrder = data[0]
     showToast('Menu selection submitted successfully!', 'success')
-    showOrderConfirmation(data[0])
-    
+    handleNavigation('home')
   } catch (error) {
     console.error(error)
-    showToast('Error submitting menu selection. Please try again.', 'error')
+    showToast('Failed to submit selection', 'error')
   }
 }
 
-// Show order confirmation
 function showOrderConfirmation(order) {
   const container = document.getElementById('menu-selection-page')
   if (!container) return
-  
   container.innerHTML = `
     <div class="confirmation-ticket">
       <div class="ticket-header">
@@ -1878,18 +4018,16 @@ function showOrderConfirmation(order) {
             `).join('')}
           </div>
         </div>
-        
-        <div style="margin-top: var(--space-32); padding: var(--space-24); background: rgba(16, 185, 129, 0.1); border-radius: var(--radius-lg);">
+        <div style="margin-top:32px;padding:24px;background:rgba(16,185,129,0.1);border-radius:12px;">
           <h3>Next Steps</h3>
-          <ul style="list-style: none; padding: 0; margin: var(--space-16) 0;">
-            <li style="padding: var(--space-8) 0; border-bottom: 1px solid rgba(16, 185, 129, 0.2);">✅ We will contact you within 24 hours to confirm your booking</li>
-            <li style="padding: var(--space-8) 0; border-bottom: 1px solid rgba(16, 185, 129, 0.2);">✅ Final menu confirmation and dietary adjustments can be made during the call</li>
-            <li style="padding: var(--space-8) 0; border-bottom: 1px solid rgba(16, 185, 129, 0.2);">✅ Payment details and picnic setup will be discussed</li>
-            <li style="padding: var(--space-8) 0;">✅ We'll send you the exact location and timing details</li>
+          <ul style="list-style:none;padding:0;margin:16px 0;">
+            <li style="padding:8px 0;border-bottom:1px solid rgba(16,185,129,0.2);">✅ We will contact you within 24 hours to confirm your booking</li>
+            <li style="padding:8px 0;border-bottom:1px solid rgba(16,185,129,0.2);">✅ Final menu confirmation and dietary adjustments can be made during the call</li>
+            <li style="padding:8px 0;border-bottom:1px solid rgba(16,185,129,0.2);">✅ Payment details and picnic setup will be discussed</li>
+            <li style="padding:8px 0;">✅ We'll send you the exact location and timing details</li>
           </ul>
         </div>
       </div>
-      
       <div class="confirmation-actions">
         <button class="btn btn--primary" onclick="handleNavigation('home')">Back to Home</button>
         <button class="btn btn--outline" onclick="window.print()">Print Confirmation</button>
@@ -1898,51 +4036,46 @@ function showOrderConfirmation(order) {
   `
 }
 
-// Load testimonials
 function loadTestimonials() {
   const testimonialsContainer = document.getElementById('testimonials-container')
   if (!testimonialsContainer) return
-  
   const testimonials = [
-    {
-      text: "The Picnic Story created the most magical evening for our anniversary. Every detail was perfect!",
-      author: "Priya & Rahul",
-      rating: "★★★★★"
-    },
-    {
-      text: "Professional service and stunning setup. Our corporate team loved the boho picnic experience.",
-      author: "Tech Solutions Inc.",
-      rating: "★★★★★"
-    },
-    {
-      text: "Absolutely beautiful picnic setup in Jaipur. The food was delicious and the ambiance was perfect for our date.",
-      author: "Sneha M.",
-      rating: "★★★★★"
-    }
+    { text: "The Picnic Story created the most magical evening for our anniversary. Every detail was perfect!", author: "Priya & Rahul", rating: "★★★★★" },
+    { text: "Professional service and stunning setup. Our corporate team loved the boho picnic experience.", author: "Tech Solutions Inc.", rating: "★★★★★" },
+    { text: "Absolutely beautiful picnic setup in Jaipur. The food was delicious and the ambiance was perfect for our date.", author: "Sneha M.", rating: "★★★★★" }
   ]
-  
-  testimonialsContainer.innerHTML = testimonials.map(testimonial => `
+  testimonialsContainer.innerHTML = testimonials.map(t => `
     <div class="testimonial-card">
-      <p class="testimonial-text">"${testimonial.text}"</p>
+      <p class="testimonial-text">"${t.text}"</p>
       <div class="testimonial-footer">
-        <span class="testimonial-author">— ${testimonial.author}</span>
-        <span class="testimonial-rating">${testimonial.rating}</span>
+        <span class="testimonial-author">— ${t.author}</span>
+        <span class="testimonial-rating">${t.rating}</span>
       </div>
     </div>
   `).join('')
 }
 
-// Make functions globally available
-window.showModal = showModal
-window.hideModal = hideModal
-window.showPage = showPage
-window.copyMenuLink = copyMenuLink
-window.handleNavigation = handleNavigation
-window.openBookingForVenue = openBookingForVenue
-window.showVenuePage = showVenuePage
-window.navigateHome = navigateHome
-window.updateAddOnTotal = updateAddOnTotal
-window.selectCalendarDate = selectCalendarDate
+// Global window exports (required for onclick handlers in templates/HTML)
+window.showModal            = showModal
+window.hideModal            = hideModal
+window.showPage             = showPage
+window.copyMenuLink         = copyMenuLink
+window.handleNavigation     = handleNavigation
+window.openBookingForVenue  = openBookingForVenue
+window.showVenuePage        = showVenuePage
+window.navigateHome         = navigateHome
+window.updateAddOnTotal     = updateAddOnTotal
+window.selectCalendarDate         = selectCalendarDate
+window.selectTimeSlot             = selectTimeSlot
+window.selectBnbDate              = selectBnbDate
+window.customerSignOut            = customerSignOut
+window.showVenueBodyStep          = showVenueBodyStep
+window.updateBookingSummaryPrice  = updateBookingSummaryPrice
+window.handleInlineBookingSubmit  = handleInlineBookingSubmit
+window.submitBookingIntent        = submitBookingIntent
+window.showMyBookingsPage   = showMyBookingsPage
+window.updateGuestCount     = updateGuestCount
+window.showCalendarStep     = showCalendarStep
 
 // Restore venue detail page on browser back/forward
 window.addEventListener('popstate', (event) => {
@@ -1953,38 +4086,33 @@ window.addEventListener('popstate', (event) => {
   }
 })
 
-// Initialize on page load
-window.addEventListener('DOMContentLoaded', () => {
-  // Initialize menu preview
+
+// ================================================================
+// INIT
+// ================================================================
+document.addEventListener('DOMContentLoaded', () => {
   initializeMenuPreview()
   handleMenuPreviewTabs()
 
-  // Check URL parameters
+  // URL parameter routing
   const urlParams = new URLSearchParams(window.location.search)
-  const menuId    = urlParams.get('menu')
+  const menuToken = urlParams.get('menu')
   const bookingId = urlParams.get('booking')
   const venueId   = urlParams.get('venue')
 
-  if (menuId) {
+  if (menuToken) {
     showPage('menu-selection-page')
-    loadMenuSelection(menuId)
-    if (bookingId) {
-      appState.currentBooking = { id: parseInt(bookingId, 10) }
-    }
+    loadMenuSelection(menuToken)
+    if (bookingId) appState.currentBooking = { id: parseInt(bookingId, 10) }
   } else if (venueId) {
     loadVenues().then(() => showVenuePage(parseInt(venueId, 10), false))
   }
 
-  // Event listeners
   const bookPicnicBtn = document.getElementById('book-picnic-btn')
-  if (bookPicnicBtn) {
-    bookPicnicBtn.addEventListener('click', () => showModal('booking-modal'))
-  }
+  if (bookPicnicBtn) bookPicnicBtn.addEventListener('click', () => showModal('booking-modal'))
 
   const closeBookingModalBtn = document.getElementById('close-booking-modal')
-  if (closeBookingModalBtn) {
-    closeBookingModalBtn.addEventListener('click', () => hideModal('booking-modal'))
-  }
+  if (closeBookingModalBtn) closeBookingModalBtn.addEventListener('click', () => hideModal('booking-modal'))
 
   const cancelBookingBtn = document.getElementById('cancel-booking')
   if (cancelBookingBtn) {
@@ -1998,9 +4126,7 @@ window.addEventListener('DOMContentLoaded', () => {
   if (adminLoginForm) adminLoginForm.addEventListener('submit', handleAdminLogin)
 
   const adminLogoutBtn = document.getElementById('admin-logout')
-  if (adminLogoutBtn) {
-    adminLogoutBtn.addEventListener('click', handleAdminLogout)
-  }
+  if (adminLogoutBtn) adminLogoutBtn.addEventListener('click', handleAdminLogout)
 
   const bookingModal = document.getElementById('booking-modal')
   if (bookingModal) {
@@ -2046,8 +4172,34 @@ window.addEventListener('DOMContentLoaded', () => {
 
   const preferredDateInput = document.getElementById('preferred-date')
   if (preferredDateInput) {
-    preferredDateInput.min = new Date().toISOString().split('T')[0]
+    preferredDateInput.min = localDateStr(new Date())
   }
+
+  // Venue Manager listeners
+  document.getElementById('add-venue-btn')?.addEventListener('click', () => openVenueForm(null))
+  document.getElementById('vfp-close')?.addEventListener('click', closeVenueForm)
+  document.getElementById('venue-admin-form')?.addEventListener('submit', handleVenueFormSubmit)
+  document.getElementById('vf-add-image')?.addEventListener('click', addVfImage)
+  document.getElementById('vf-add-tier')?.addEventListener('click', addVfTier)
+  document.getElementById('vf-type')?.addEventListener('change', (e) => updateVfTypeVisibility(e.target.value))
+
+  // Availability Calendar listeners
+  document.getElementById('avail-venue-select')?.addEventListener('change', (e) => {
+    availState.venueId = e.target.value ? parseInt(e.target.value, 10) : null
+    loadAvailCalendar()
+  })
+  document.getElementById('avail-prev-month')?.addEventListener('click', () => {
+    availState.month--
+    if (availState.month < 0) { availState.month = 11; availState.year-- }
+    renderAvailMonthLabel()
+    loadAvailCalendar()
+  })
+  document.getElementById('avail-next-month')?.addEventListener('click', () => {
+    availState.month++
+    if (availState.month > 11) { availState.month = 0; availState.year++ }
+    renderAvailMonthLabel()
+    loadAvailCalendar()
+  })
 
   loadTestimonials()
 
@@ -2063,7 +4215,17 @@ window.addEventListener('DOMContentLoaded', () => {
     if (bookVenueBtn && !bookVenueBtn.disabled) {
       const id    = parseInt(bookVenueBtn.dataset.bookVenueId, 10)
       const venue = appState.venues.find(v => v.id === id)
-      if (venue) openBookingForVenue(venue)
+      if (!venue) return
+      // partner_bnb "already booked" button → old modal (picnic-add flow)
+      if (venue.type === 'partner_bnb') {
+        openBookingForVenue(venue)
+      } else if (appState.bookingStep === 'guests') {
+        // Guest step complete → show inline contact form
+        showBookingForm(venue)
+      } else {
+        // Date selected → show guest selector in sidebar
+        showGuestSelector(venue)
+      }
       return
     }
 
@@ -2092,9 +4254,21 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     if (event.target.id === 'submit-menu-selection') { submitMenuSelection(); return }
-    if (event.target.classList.contains('confirm-booking-btn')) { confirmBooking(event.target.getAttribute('data-id')); return }
-    if (event.target.classList.contains('generate-menu-btn')) { generateBookingMenuLink(event.target.getAttribute('data-booking-id')); return }
-    if (event.target.classList.contains('copy-menu-btn')) { copyBookingMenuLink(event.target.getAttribute('data-booking-id')); return }
+    const confirmBtn = event.target.closest('.confirm-booking-btn')
+    if (confirmBtn) {
+      confirmBooking(
+        confirmBtn.getAttribute('data-id'),
+        confirmBtn.getAttribute('data-venue-id'),
+        confirmBtn.getAttribute('data-venue-type'),
+        confirmBtn.getAttribute('data-preferred-date'),
+        confirmBtn.getAttribute('data-checkout-date'),
+      )
+      return
+    }
+    const generateMenuBtn = event.target.closest('.generate-menu-btn')
+    if (generateMenuBtn) { generateBookingMenuLink(generateMenuBtn.getAttribute('data-booking-id')); return }
+    const copyMenuBtn = event.target.closest('.copy-menu-btn')
+    if (copyMenuBtn) { copyBookingMenuLink(copyMenuBtn.getAttribute('data-booking-id')); return }
   })
 
   supabase.auth.onAuthStateChange((_event, session) => {
