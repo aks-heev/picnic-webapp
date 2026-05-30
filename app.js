@@ -312,6 +312,46 @@ async function loadVenues() {
   }
 }
 
+window.filterVenuesByCity = function(city, btn) {
+  // Update active pill
+  document.querySelectorAll('.city-pill').forEach(p => p.classList.remove('active'))
+  btn.classList.add('active')
+  // Filter and re-render
+  const venues = city === 'all'
+    ? appState.venues
+    : appState.venues.filter(v => v.city === city)
+  renderVenueGallery(venues)
+}
+
+function renderAddonsStrip() {
+  const strip = document.getElementById('addons-strip')
+  if (!strip) return
+
+  // Category emoji placeholders + display names
+  const ADDON_MOOD = [
+    { emoji: '📷', label: 'Photography', desc: 'Capture every moment' },
+    { emoji: '🌸', label: 'Florals & Decor', desc: 'Blooms, drapes & fairy lights' },
+    { emoji: '🎂', label: 'Cake & Sweets', desc: 'Custom cakes to celebrate' },
+    { emoji: '💐', label: 'Bouquet', desc: 'A thoughtful finishing touch' },
+    { emoji: '🎨', label: 'Sip & Paint', desc: 'Guided painting with wine' },
+    { emoji: '🔥', label: 'Bonfire', desc: 'Warm evenings under the stars' },
+    { emoji: '✨', label: 'Cold Pyros', desc: 'A dramatic sparkle moment' },
+    { emoji: '🕯️', label: 'Extra Candles', desc: 'Candlelit atmosphere' },
+  ]
+
+  strip.innerHTML = ADDON_MOOD.map(item => `
+    <div class="addon-strip-card">
+      <div class="addon-strip-visual">
+        <span class="addon-strip-emoji">${item.emoji}</span>
+      </div>
+      <div class="addon-strip-info">
+        <span class="addon-strip-name">${item.label}</span>
+        <span class="addon-strip-desc">${item.desc}</span>
+      </div>
+    </div>
+  `).join('')
+}
+
 // Render venue cards into the gallery grid
 function renderVenueGallery(venues) {
   const grid = document.getElementById('venues-grid')
@@ -447,7 +487,9 @@ function renderVenueDetail(venue, addOns = []) {
   const galleryStrip = galleryImgs.length > 1
     ? `<div class="vd-gallery-strip">
         ${galleryImgs.map((img, i) => `
-          <button class="vd-gallery-thumb ${i === 0 ? 'vd-gallery-thumb--active' : ''}" aria-label="View photo ${i + 1}">
+          <button class="vd-gallery-thumb ${i === 0 ? 'vd-gallery-thumb--active' : ''}"
+                  data-img-url="${escapeHtml(img.url)}"
+                  aria-label="View photo ${i + 1}">
             <img src="${escapeHtml(img.url)}" alt="${escapeHtml(img.alt || venue.name)}" loading="lazy">
           </button>`).join('')}
        </div>`
@@ -639,8 +681,8 @@ function renderVenueDetail(venue, addOns = []) {
               return `
             <hr class="vd-divider">
             <div class="vd-section">
-              <h2 class="vd-section-title">Make it yours</h2>
-              <p class="vd-addons-tagline">Every picnic can be elevated. Choose from our add-ons to make your experience unique.</p>
+              <h2 class="vd-section-title">Elevate your experience</h2>
+              <p class="vd-addons-tagline">Optional add-ons to make your picnic exactly how you imagined it.</p>
               ${grouped.map(({ cat, items }) => `
               <div class="vd-addons-category">
                 <h3 class="vd-addons-cat-label">${CATEGORY_LABELS[cat]}</h3>
@@ -720,6 +762,18 @@ function renderVenueDetail(venue, addOns = []) {
 
     </div><!-- /vd-wrap -->
   `
+
+  // Wire gallery thumbnail clicks — swap hero background
+  container.querySelectorAll('.vd-gallery-thumb').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const url = btn.dataset.imgUrl
+      if (!url) return
+      const hero = container.querySelector('.vd-hero')
+      if (hero) hero.style.backgroundImage = `url('${url}')`
+      container.querySelectorAll('.vd-gallery-thumb').forEach(b => b.classList.remove('vd-gallery-thumb--active'))
+      btn.classList.add('vd-gallery-thumb--active')
+    })
+  })
 }
 
 // Open the booking modal pre-configured for a venue
@@ -1448,27 +1502,44 @@ function showBookingForm(venue) {
   priceRows += `<div class="vd-bv-price-row"><span>Picnic · ${guestLabel}</span><span>₹${picnicPrice.toLocaleString('en-IN')}</span></div>`
   priceRows += `<div id="bv-addon-price-rows"></div>`
 
-  // Add-ons checklist
-  const addOnsHtml = addOns.length ? `
+  // Add-ons — grouped by category, each in a collapsible accordion
+  const addonsByCategory = ADDON_CATEGORIES
+    .map(cat => ({ cat, label: ADDON_CATEGORY_LABELS[cat], items: addOns.filter(a => a.category === cat) }))
+    .filter(g => g.items.length)
+
+  const addOnsHtml = addonsByCategory.length ? `
     <div class="vd-bf-section">
       <h3 class="vd-bf-section-title">Add to your experience</h3>
-      <div class="vd-bf-addons">
-        ${addOns.map(a => `
-        <label class="vd-bf-addon-row">
-          <div class="vd-bf-addon-info">
-            <span class="vd-bf-addon-name">${escapeHtml(a.name)}</span>
-            ${a.description ? `<span class="vd-bf-addon-desc">${escapeHtml(a.description)}</span>` : ''}
+      <div class="vd-bf-addon-cats">
+        ${addonsByCategory.map(({ cat, label, items }) => `
+        <div class="vd-bf-cat" data-cat="${cat}">
+          <button type="button" class="vd-bf-cat-header" onclick="toggleAddonCat(this)" aria-expanded="false">
+            <span class="vd-bf-cat-label">${label}</span>
+            <span class="vd-bf-cat-meta">
+              <span class="vd-bf-cat-count hidden">${items.length}</span>
+              <span class="vd-bf-cat-selected"></span>
+              <span class="vd-bf-cat-chevron">›</span>
+            </span>
+          </button>
+          <div class="vd-bf-cat-body" hidden>
+            ${items.map(a => `
+            <label class="vd-bf-addon-row">
+              <div class="vd-bf-addon-info">
+                <span class="vd-bf-addon-name">${escapeHtml(a.name)}</span>
+                ${a.description ? `<span class="vd-bf-addon-desc">${escapeHtml(a.description)}</span>` : ''}
+              </div>
+              <div class="vd-bf-addon-right">
+                <span class="vd-bf-addon-price">+₹${Number(a.price).toLocaleString('en-IN')}</span>
+                <input type="checkbox" class="bv-addon-check"
+                       data-addon-id="${a.id}"
+                       data-addon-name="${escapeHtml(a.name)}"
+                       data-addon-price="${a.price}"
+                       data-addon-confirm="${a.requires_confirmation || false}"
+                       onchange="updateBookingSummaryPrice(); updateAddonCatBadge(this.closest('.vd-bf-cat'))">
+              </div>
+            </label>`).join('')}
           </div>
-          <div class="vd-bf-addon-right">
-            <span class="vd-bf-addon-price">+₹${Number(a.price).toLocaleString('en-IN')}</span>
-            <input type="checkbox" class="bv-addon-check"
-                   data-addon-id="${a.id}"
-                   data-addon-name="${escapeHtml(a.name)}"
-                   data-addon-price="${a.price}"
-                   data-addon-confirm="${a.requires_confirmation || false}"
-                   onchange="updateBookingSummaryPrice()">
-          </div>
-        </label>`).join('')}
+        </div>`).join('')}
       </div>
     </div>` : ''
 
@@ -1559,6 +1630,28 @@ function showVenueBodyStep() {
 }
 
 // Recompute price total when add-ons are toggled in the booking view
+window.toggleAddonCat = function(btn) {
+  const body = btn.nextElementSibling
+  const open = btn.getAttribute('aria-expanded') === 'true'
+  btn.setAttribute('aria-expanded', !open)
+  body.hidden = open
+}
+
+window.updateAddonCatBadge = function(catEl) {
+  if (!catEl) return
+  const checked = catEl.querySelectorAll('.bv-addon-check:checked')
+  const badge = catEl.querySelector('.vd-bf-cat-selected')
+  if (!badge) return
+  if (checked.length) {
+    const total = Array.from(checked).reduce((s, cb) => s + Number(cb.dataset.addonPrice), 0)
+    badge.textContent = `${checked.length} · +₹${total.toLocaleString('en-IN')}`
+    badge.classList.add('vd-bf-cat-selected--active')
+  } else {
+    badge.textContent = ''
+    badge.classList.remove('vd-bf-cat-selected--active')
+  }
+}
+
 function updateBookingSummaryPrice() {
   const venue = appState.currentVenue
   if (!venue) return
@@ -3067,12 +3160,53 @@ function renderAddOnsList() {
             </label>`).join('')}
           </fieldset>
         </div>
+        <div class="adm-addon-form-row">
+          <label style="flex:1">Photo
+            <div class="af-img-wrap">
+              <div id="af-img-preview" class="af-img-preview"></div>
+              <label class="vf-img-upload-btn" id="af-img-label">
+                ↑ Upload photo
+                <input type="file" id="af-img-file" accept="image/jpeg,image/png,image/webp"
+                       onchange="handleAfImageUpload(this)" style="display:none" />
+              </label>
+              <input type="hidden" id="af-image-url" />
+            </div>
+          </label>
+        </div>
         <div class="adm-addon-form-actions">
           <button type="submit" class="btn btn--primary">Save</button>
           <button type="button" class="btn btn--outline" onclick="closeAddOnForm()">Cancel</button>
         </div>
       </form>
     </div>`
+}
+
+window.handleAfImageUpload = async function(input) {
+  const file = input.files[0]
+  if (!file) return
+  if (!appState.session) return showToast('Admin login required', 'error')
+
+  const ext  = file.name.split('.').pop()
+  const path = `addon-${Date.now()}.${ext}`
+  const label = document.getElementById('af-img-label')
+  label.textContent = 'Uploading…'
+
+  try {
+    const { error: upErr } = await supabase.storage.from('addon-images').upload(path, file, { upsert: true })
+    if (upErr) throw upErr
+
+    const { data: { publicUrl } } = supabase.storage.from('addon-images').getPublicUrl(path)
+    document.getElementById('af-image-url').value = publicUrl
+
+    const preview = document.getElementById('af-img-preview')
+    preview.innerHTML = `<img src="${publicUrl}" alt="" class="vf-img-thumb" />`
+    label.textContent = '↺ Replace photo'
+    showToast('Photo uploaded', 'success')
+  } catch (err) {
+    console.error(err)
+    showToast('Upload failed: ' + err.message, 'error')
+    label.textContent = '↑ Upload photo'
+  }
 }
 
 function openAddOnForm(id = null) {
@@ -3104,8 +3238,24 @@ function openAddOnForm(id = null) {
     document.querySelectorAll('[name="available_for"]').forEach(cb => {
       cb.checked = (a.available_for || []).includes(cb.value)
     })
+    // Image
+    const imgUrl = a.image_url || ''
+    document.getElementById('af-image-url').value = imgUrl
+    const preview = document.getElementById('af-img-preview')
+    const label   = document.getElementById('af-img-label')
+    if (imgUrl) {
+      preview.innerHTML = `<img src="${imgUrl}" alt="" class="vf-img-thumb" />`
+      label.childNodes[0].textContent = '↺ Replace photo'
+    } else {
+      preview.innerHTML = ''
+      label.childNodes[0].textContent = '↑ Upload photo'
+    }
   } else {
     addOnManagerState.editingId = null
+    document.getElementById('af-image-url').value = ''
+    document.getElementById('af-img-preview').innerHTML = ''
+    const label = document.getElementById('af-img-label')
+    if (label) label.childNodes[0].textContent = '↑ Upload photo'
   }
 }
 
@@ -3134,6 +3284,7 @@ async function saveAddOn(event) {
     sort_order:            parseInt(document.getElementById('af-sort').value, 10) || 0,
     description:           document.getElementById('af-description').value.trim() || null,
     requires_confirmation: document.getElementById('af-confirm').value === 'true',
+    image_url:             document.getElementById('af-image-url').value.trim() || null,
     available_for,
   }
 
@@ -3204,7 +3355,7 @@ async function loadVenueManager() {
   try {
     const { data, error } = await supabase
       .from('venues')
-      .select('id, name, type, area, city, capacity_min, capacity_max, base_price, is_active, images, external_url, metadata')
+      .select('id, name, type, area, city, capacity_min, capacity_max, base_price, is_active, images, external_url, metadata, description')
       .order('id')
     if (error) throw error
     venueManagerState.venues = data || []
@@ -3348,11 +3499,53 @@ function renderVfImages(images) {
   if (!list) return
   list.innerHTML = images.map((img, i) => `
     <div class="vf-image-row" data-index="${i}">
-      <input type="text" class="vf-input vf-img-url" placeholder="Image URL" value="${escapeHtml(img.url || '')}" />
-      <input type="text" class="vf-input vf-img-alt" placeholder="Alt text" value="${escapeHtml(img.alt || '')}" />
+      <div class="vf-img-preview-wrap">
+        ${img.url
+          ? `<img class="vf-img-thumb" src="${escapeHtml(img.url)}" alt="${escapeHtml(img.alt || '')}" />`
+          : `<div class="vf-img-thumb-placeholder">🖼</div>`}
+      </div>
+      <div class="vf-img-fields">
+        <label class="vf-img-upload-btn">
+          ${img.url ? '↺ Replace photo' : '↑ Upload photo'}
+          <input type="file" class="vf-img-file" accept="image/jpeg,image/png,image/webp"
+                 onchange="handleVfImageUpload(this, ${i})" style="display:none" />
+        </label>
+        <input type="hidden" class="vf-img-url" value="${escapeHtml(img.url || '')}" />
+        <input type="text" class="vf-input vf-img-alt" placeholder="Alt text / caption" value="${escapeHtml(img.alt || '')}" />
+      </div>
       <button type="button" class="vf-remove-btn" onclick="removeVfImage(${i})">✕</button>
     </div>
   `).join('')
+}
+
+window.handleVfImageUpload = async function(input, index) {
+  const file = input.files[0]
+  if (!file) return
+  if (!appState.session) return showToast('Admin login required', 'error')
+
+  const ext  = file.name.split('.').pop()
+  const path = `venue-${Date.now()}-${index}.${ext}`
+
+  const row = input.closest('.vf-image-row')
+  const label = row.querySelector('.vf-img-upload-btn')
+  label.textContent = 'Uploading…'
+
+  try {
+    const { error: upErr } = await supabase.storage.from('venue-images').upload(path, file, { upsert: true })
+    if (upErr) throw upErr
+
+    const { data: { publicUrl } } = supabase.storage.from('venue-images').getPublicUrl(path)
+
+    row.querySelector('.vf-img-url').value = publicUrl
+    const wrap = row.querySelector('.vf-img-preview-wrap')
+    wrap.innerHTML = `<img class="vf-img-thumb" src="${publicUrl}" alt="" />`
+    label.textContent = '↺ Replace photo'
+    showToast('Photo uploaded', 'success')
+  } catch (err) {
+    console.error(err)
+    showToast('Upload failed: ' + err.message, 'error')
+    label.textContent = '↑ Upload photo'
+  }
 }
 
 function addVfImage() {
@@ -4093,6 +4286,7 @@ window.addEventListener('popstate', (event) => {
 document.addEventListener('DOMContentLoaded', () => {
   initializeMenuPreview()
   handleMenuPreviewTabs()
+  renderAddonsStrip()
 
   // URL parameter routing
   const urlParams = new URLSearchParams(window.location.search)

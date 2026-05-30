@@ -44,9 +44,9 @@
                 <div class="hero-split">
                     <!-- Left: Text content -->
                     <div class="hero-text">
-                        <p class="hero-eyebrow">Jaipur &middot; Rajasthan</p>
+                        <p class="hero-eyebrow">Jaipur &middot; Gurugram</p>
                         <h1 class="hero-title">Every moment<br>deserves a<br><em>beautiful setting</em></h1>
-                        <p class="hero-description">Boho-chic picnic arrangements with curated decor, ambient lighting, and gourmet food &mdash; across Jaipur's most stunning locations. From fairy lights to live musicians, every detail is yours to shape.</p>
+                        <p class="hero-description">Boho-chic picnic arrangements with curated decor, ambient lighting, and gourmet food &mdash; across Jaipur and Gurugram's most stunning locations. From fairy lights to live musicians, every detail is yours to shape.</p>
                         <div class="hero-actions">
                             <button id="book-picnic-btn" class="btn btn--primary btn--lg">Book Your Picnic</button>
                             <button class="btn btn--ghost btn--lg" onclick="document.getElementById('venues-section').scrollIntoView({behavior:'smooth'})">Browse Venues</button>
@@ -130,8 +130,15 @@
         <section class="venues-section" id="venues-section">
             <div class="container">
                 <div class="venues-section-header">
-                    <h2 class="venues-section-title">Choose Your Venue</h2>
-                    <p class="venues-section-subtitle">Curated spaces across Jaipur — from intimate gardens to rooftop terraces</p>
+                    <div class="venues-section-text">
+                        <h2 class="venues-section-title">Choose Your Venue</h2>
+                        <p class="venues-section-subtitle">Curated spaces across Jaipur and Gurugram — from intimate gardens to rooftop terraces</p>
+                    </div>
+                    <div class="city-filter" role="group" aria-label="Filter by city">
+                        <button class="city-pill active" data-city="all" onclick="filterVenuesByCity('all', this)">All</button>
+                        <button class="city-pill" data-city="Jaipur" onclick="filterVenuesByCity('Jaipur', this)">📍 Jaipur</button>
+                        <button class="city-pill" data-city="Gurugram" onclick="filterVenuesByCity('Gurugram', this)">📍 Gurugram</button>
+                    </div>
                 </div>
                 <div id="venues-grid" class="venues-grid">
                     <div class="venues-loading">
@@ -139,6 +146,19 @@
                         <span class="venues-loading-dot"></span>
                         <span class="venues-loading-dot"></span>
                     </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Add-ons Mood Strip -->
+        <section class="addons-strip-section">
+            <div class="container">
+                <div class="addons-strip-header">
+                    <p class="section-label">Make it yours</p>
+                    <h2 class="section-heading addons-strip-title">The details that make the memory</h2>
+                </div>
+                <div id="addons-strip" class="addons-strip-scroll">
+                    <!-- Populated by JS -->
                 </div>
             </div>
         </section>
