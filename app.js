@@ -4299,143 +4299,6 @@ window.updateGuestCount           = updateGuestCount
 window.showCalendarStep           = showCalendarStep
 window.filterVenuesByCity         = filterVenuesByCity
 
-// Restore venue detail page on browser back/forward
-window.addEventListener('popstate', (event) => {
-  if (event.state?.venueId) {
-    showVenuePage(event.state.venueId, false)
-  } else {
-    showPage('home-page')
-  }
-})
-
-// ── Page initialisation (runs once on module load) ────────────
-;(async function init() {
-  // Wire nav links
-  document.querySelectorAll('.nav-link[data-route]').forEach(link => {
-    link.addEventListener('click', e => {
-      e.preventDefault()
-      handleNavigation(link.dataset.route)
-    })
-  })
-
-  // URL parameter routing
-  const urlParams  = new URLSearchParams(window.location.search)
-  const menuToken  = urlParams.get('menu')
-  const bookingId  = urlParams.get('booking')
-  const venueId    = urlParams.get('venue')
-
-  if (menuToken) {
-    showPage('menu-selection-page')
-    loadMenuSelection(menuToken)
-    if (bookingId) appState.currentBooking = { id: parseInt(bookingId, 10) }
-  } else if (venueId) {
-    await loadVenues()
-    showVenuePage(parseInt(venueId, 10), false)
-  } else {
-    // Normal homepage boot
-    loadVenues()
-    loadTestimonials()
-    initializeMenuPreview()
-    handleMenuPreviewTabs()
-    renderAddonsStrip()
-    loadHeroImage()
-  }
-
-  // Admin auth state
-  const { data: { session } } = await supabase.auth.getSession()
-  applyAuthState(session)
-  supabase.auth.onAuthStateChange((_event, session) => applyAuthState(session))
-
-  // Admin login form
-  const adminLoginForm = document.getElementById('admin-login-form')
-  if (adminLoginForm) adminLoginForm.addEventListener('submit', handleAdminLogin)
-
-  const adminLogoutBtn = document.getElementById('admin-logout')
-  if (adminLogoutBtn) adminLogoutBtn.addEventListener('click', handleAdminLogout)
-
-  // Booking modal
-  const bookPicnicBtn = document.getElementById('book-picnic-btn')
-  if (bookPicnicBtn) bookPicnicBtn.addEventListener('click', () => showModal('booking-modal'))
-
-  const closeBookingModalBtn = document.getElementById('close-booking-modal')
-  if (closeBookingModalBtn) closeBookingModalBtn.addEventListener('click', () => hideModal('booking-modal'))
-
-  const cancelBookingBtn = document.getElementById('cancel-booking')
-  if (cancelBookingBtn) cancelBookingBtn.addEventListener('click', () => hideModal('booking-modal'))
-
-  const bookingForm = document.getElementById('booking-form')
-  if (bookingForm) bookingForm.addEventListener('submit', handleBookingFormSubmit)
-
-  // Admin dashboard tabs
-  document.querySelectorAll('.tab-btn[data-tab]').forEach(btn => {
-    btn.addEventListener('click', () => switchAdminTab(btn.dataset.tab))
-  })
-
-  // Venue form
-  document.getElementById('vf-add-image')?.addEventListener('click', addVfImage)
-  document.getElementById('vf-add-tier')?.addEventListener('click', addVfTier)
-  document.getElementById('vfp-close')?.addEventListener('click', closeVenueForm)
-  document.getElementById('venue-admin-form')?.addEventListener('submit', saveVenueForm)
-  document.getElementById('vf-type')?.addEventListener('change', e => updateVfTypeVisibility(e.target.value))
-
-  // Availability tab
-  document.getElementById('avail-venue-select')?.addEventListener('change', e => {
-    appState.availVenueId = parseInt(e.target.value, 10) || null
-    loadAvailCalendar()
-  })
-  document.getElementById('avail-prev-month')?.addEventListener('click', () => {
-    appState.availMonth = new Date(appState.availMonth.getFullYear(), appState.availMonth.getMonth() - 1, 1)
-    renderAvailMonthLabel()
-    renderAvailCalendarGrid()
-  })
-  document.getElementById('avail-next-month')?.addEventListener('click', () => {
-    appState.availMonth = new Date(appState.availMonth.getFullYear(), appState.availMonth.getMonth() + 1, 1)
-    renderAvailMonthLabel()
-    renderAvailCalendarGrid()
-  })
-
-  // Menu link generator
-  document.getElementById('generate-menu-link')?.addEventListener('click', () => {
-    const foodCount = parseInt(document.getElementById('food-count').value, 10)
-    const bevCount  = parseInt(document.getElementById('bev-count').value, 10)
-    generateMenuLink(foodCount, bevCount)
-  })
-  document.getElementById('copy-link')?.addEventListener('click', () => {
-    const url = document.getElementById('generated-link-url').value
-    if (url) copyMenuLink(url)
-  })
-
-  // Export queries
-  document.getElementById('export-queries')?.addEventListener('click', exportQueriesCSV)
-
-  // Search/filter for leads
-  document.getElementById('leads-search')?.addEventListener('input', filterLeads)
-  document.getElementById('location-filter')?.addEventListener('change', filterLeads)
-
-  // Venue search
-  document.getElementById('add-venue-btn')?.addEventListener('click', () => openVenueForm(null))
-})()
-          = showModal
-window.hideModal            = hideModal
-window.showPage             = showPage
-window.copyMenuLink         = copyMenuLink
-window.handleNavigation     = handleNavigation
-window.openBookingForVenue  = openBookingForVenue
-window.showVenuePage        = showVenuePage
-window.navigateHome         = navigateHome
-window.updateAddOnTotal     = updateAddOnTotal
-window.selectCalendarDate         = selectCalendarDate
-window.selectTimeSlot             = selectTimeSlot
-window.selectBnbDate              = selectBnbDate
-window.customerSignOut            = customerSignOut
-window.showVenueBodyStep          = showVenueBodyStep
-window.updateBookingSummaryPrice  = updateBookingSummaryPrice
-window.handleInlineBookingSubmit  = handleInlineBookingSubmit
-window.submitBookingIntent        = submitBookingIntent
-window.showMyBookingsPage   = showMyBookingsPage
-window.updateGuestCount     = updateGuestCount
-window.showCalendarStep     = showCalendarStep
-
 // ── Hero image: load from site_settings on startup ───────────
 async function loadHeroImage() {
   try {
@@ -4523,8 +4386,6 @@ window.handleHeroImageUpload = async function(input) {
     showToast('Upload failed: ' + err.message, 'error')
   }
 }
-
-window.handleHeroImageUpload = window.handleHeroImageUpload
 
 // Restore venue detail page on browser back/forward
 window.addEventListener('popstate', (event) => {
@@ -4731,4 +4592,5 @@ document.addEventListener('DOMContentLoaded', () => {
   })
 
   loadVenues()
+  loadHeroImage()
 })
