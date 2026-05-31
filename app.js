@@ -219,18 +219,6 @@ function showPage(pageId) {
   window.scrollTo(0, 0)
 }
 
-function updateNavbarState(pageId) {
-  const navbar = document.querySelector('.navbar')
-  if (!navbar) return
-  const isHome = !pageId || pageId === 'home-page'
-  if (isHome) {
-    // Transparent when at top of home, solid when scrolled
-    const scrolled = window.scrollY > 40
-    navbar.classList.toggle('navbar--solid', scrolled)
-  } else {
-    navbar.classList.add('navbar--solid')
-  }
-}
 
 // Initialize menu preview with tabs functionality
 function initializeMenuPreview() {
@@ -4280,131 +4268,262 @@ function loadTestimonials() {
   const testimonials = [
     { text: "The Picnic Story created the most magical evening for our anniversary. Every detail was perfect!", author: "Priya & Rahul", rating: "★★★★★" },
     { text: "Professional service and stunning setup. Our corporate team loved the boho picnic experience.", author: "Tech Solutions Inc.", rating: "★★★★★" },
-    { text: "Absolutely beautiful picnic setup in Jaipur. The food was delicious and the ambiance was perfect for our date.", author: "Sneha M.", rating: "★★★★★" }
+    
+    { text: "Absolutely beautiful picnic setup in Jaipur. The food was delicious and the decor was breathtaking!", author: "Anjali M.", rating: "★★★★★" },
   ]
+
   testimonialsContainer.innerHTML = testimonials.map(t => `
     <div class="testimonial-card">
+      <div class="testimonial-rating">${t.rating}</div>
       <p class="testimonial-text">"${t.text}"</p>
-      <div class="testimonial-footer">
-        <span class="testimonial-author">— ${t.author}</span>
-        <span class="testimonial-rating">${t.rating}</span>
-      </div>
+      <p class="testimonial-author">— ${t.author}</p>
     </div>
   `).join('')
 }
 
-// Global window exports (required for onclick handlers in templates/HTML)
-window.showModal                  = showModal
-window.hideModal                  = hideModal
-window.showPage                   = showPage
-window.copyMenuLink               = copyMenuLink
-window.handleNavigation           = handleNavigation
-window.openBookingForVenue        = openBookingForVenue
-window.showVenuePage              = showVenuePage
-window.navigateHome               = navigateHome
-window.updateAddOnTotal           = updateAddOnTotal
-window.selectCalendarDate         = selectCalendarDate
-window.selectTimeSlot             = selectTimeSlot
-window.selectBnbDate              = selectBnbDate
-window.customerSignOut            = customerSignOut
-window.showVenueBodyStep          = showVenueBodyStep
-window.updateBookingSummaryPrice  = updateBookingSummaryPrice
-window.handleInlineBookingSubmit  = handleInlineBookingSubmit
-window.submitBookingIntent        = submitBookingIntent
-window.showMyBookingsPage         = showMyBookingsPage
-window.updateGuestCount           = updateGuestCount
-window.showCalendarStep           = showCalendarStep
-window.filterVenuesByCity         = filterVenuesByCity
+// ── Navbar state: transparent over hero, solid elsewhere ─────
+function updateNavbarState(pageId) {
+  const navbar = document.querySelector('.navbar')
+  if (!navbar) return
+  const isHome = !pageId || pageId === 'home-page'
+  if (isHome) {
+    const scrolled = window.scrollY > 40
+    navbar.classList.toggle('navbar--solid', scrolled)
+  } else {
+    navbar.classList.add('navbar--solid')
+  }
+}
 
 // ── Hero image: load from site_settings on startup ───────────
 async function loadHeroImage() {
   try {
     const { data } = await supabase
       .from('site_settings')
-      .select('value')
-      .eq('key', 'hero_image_url')
-      .single()
-    const url = data?.value
-    if (url) {
-      const img = document.querySelector('.hero-bg-img')
-      if (img) img.src = url
+      .select('key, value')
+      .in('key', ['hero_image_url', 'hero_image_mobile_url', 'hero_image_mobile_position'])
+
+    const settings = Object.fromEntries((data || []).map(r => [r.key, r.value]))
+
+    const img        = document.getElementById('hero-bg-img')
+    const desktopUrl = settings.hero_image_url
+    const mobileUrl  = settings.hero_image_mobile_url
+    const mobilePos  = settings.hero_image_mobile_position || '65% 0%'
+    const isMobile   = window.innerWidth <= 768
+
+    if (img) {
+      if (isMobile && mobileUrl) {
+        img.src = mobileUrl
+      } else if (desktopUrl) {
+        img.src = desktopUrl
+      }
     }
+
+    applyMobilePosition(mobilePos)
   } catch (err) {
-    // silently ignore — placeholder image stays
+    // silently ignore
   }
 }
 
-// ── Hero image: admin tab upload ──────────────────────────────
+function applyMobilePosition(pos) {
+  let styleEl = document.getElementById('hero-mobile-pos-style')
+  if (!styleEl) {
+    styleEl = document.createElement('style')
+    styleEl.id = 'hero-mobile-pos-style'
+    document.head.appendChild(styleEl)
+  }
+  styleEl.textContent = `@media (max-width: 768px) { .hero-bg-img { object-position: ${pos} !important; } }`
+}
+
+// ── Hero image: admin tab ─────────────────────────────────────
 async function loadHeroImageAdminPreview() {
-  const preview = document.getElementById('hero-img-admin-preview')
-  if (!preview) return
   try {
     const { data } = await supabase
       .from('site_settings')
-      .select('value')
-      .eq('key', 'hero_image_url')
-      .single()
-    const url = data?.value
-    if (url) {
-      preview.innerHTML = `<img src="${url}" alt="Current hero" class="hero-img-admin-thumb" />`
-    } else {
-      preview.innerHTML = '<span class="hero-img-admin-empty">No image set</span>'
+      .select('key, value')
+      .in('key', ['hero_image_url', 'hero_image_mobile_url', 'hero_image_mobile_position'])
+
+    const settings = Object.fromEntries((data || []).map(r => [r.key, r.value]))
+
+    const preview = document.getElementById('hero-img-admin-preview')
+    if (preview) {
+      const url = settings.hero_image_url
+      preview.innerHTML = url
+        ? `<img src="${url}" alt="Current hero desktop" class="hero-img-admin-thumb" />`
+        : '<span class="hero-img-admin-empty">No image set</span>'
+      if (url) {
+        const lbl = document.getElementById('hero-upload-label')
+        const tn = lbl && Array.from(lbl.childNodes).find(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim())
+        if (tn) tn.textContent = ' ↺ Replace photo '
+      }
+    }
+
+    const mobilePreview = document.getElementById('hero-img-mobile-preview')
+    const mobileUrl = settings.hero_image_mobile_url
+    if (mobilePreview) {
+      mobilePreview.innerHTML = mobileUrl
+        ? `<img src="${mobileUrl}" alt="Current hero mobile" class="hero-img-admin-thumb" />`
+        : '<span class="hero-img-admin-empty">No image set</span>'
+      if (mobileUrl) {
+        const lbl = document.getElementById('hero-upload-mobile-label')
+        const tn = lbl && Array.from(lbl.childNodes).find(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim())
+        if (tn) tn.textContent = ' ↺ Replace photo '
+        showMobilePositionAdminUI(mobileUrl, settings.hero_image_mobile_position)
+      }
     }
   } catch (err) {
-    preview.innerHTML = '<span class="hero-img-admin-empty">Could not load</span>'
+    console.error(err)
   }
 }
 
-window.handleHeroImageUpload = async function(input) {
+function showMobilePositionAdminUI(imgUrl, savedPos) {
+  const wrap = document.getElementById('hero-mobile-position-wrap')
+  if (!wrap) return
+  wrap.style.display = 'block'
+
+  const parts = (savedPos || '65% 0%').split(' ')
+  const x = parseInt(parts[0]) || 65
+  const y = parseInt(parts[1]) || 0
+
+  const sliderX    = document.getElementById('hero-pos-x')
+  const sliderY    = document.getElementById('hero-pos-y')
+  const valX       = document.getElementById('hero-pos-x-val')
+  const valY       = document.getElementById('hero-pos-y-val')
+  const posPreview = document.getElementById('hero-pos-preview')
+  const crosshair  = document.getElementById('hero-pos-crosshair')
+
+  if (sliderX) sliderX.value = x
+  if (sliderY) sliderY.value = y
+  if (valX) valX.textContent = x + '%'
+  if (valY) valY.textContent = y + '%'
+
+  if (posPreview) {
+    posPreview.style.backgroundImage = `url('${imgUrl}')`
+    posPreview.style.backgroundPosition = `${x}% ${y}%`
+    posPreview.addEventListener('click', (e) => {
+      const rect = posPreview.getBoundingClientRect()
+      const nx = Math.round(((e.clientX - rect.left) / rect.width)  * 100)
+      const ny = Math.round(((e.clientY - rect.top)  / rect.height) * 100)
+      if (sliderX) sliderX.value = nx
+      if (sliderY) sliderY.value = ny
+      window.updateMobilePosition()
+    })
+  }
+  if (crosshair) { crosshair.style.left = x + '%'; crosshair.style.top = y + '%' }
+}
+
+window.updateMobilePosition = function() {
+  const x = document.getElementById('hero-pos-x')?.value || 65
+  const y = document.getElementById('hero-pos-y')?.value || 0
+  const valX = document.getElementById('hero-pos-x-val')
+  const valY = document.getElementById('hero-pos-y-val')
+  if (valX) valX.textContent = x + '%'
+  if (valY) valY.textContent = y + '%'
+  const posPreview = document.getElementById('hero-pos-preview')
+  const crosshair  = document.getElementById('hero-pos-crosshair')
+  if (posPreview) posPreview.style.backgroundPosition = `${x}% ${y}%`
+  if (crosshair) { crosshair.style.left = x + '%'; crosshair.style.top = y + '%' }
+  applyMobilePosition(`${x}% ${y}%`)
+}
+
+window.saveMobilePosition = async function() {
+  if (!appState.session) return showToast('Admin login required', 'error')
+  const x = document.getElementById('hero-pos-x')?.value || 65
+  const y = document.getElementById('hero-pos-y')?.value || 0
+  const pos = `${x}% ${y}%`
+  const statusEl = document.getElementById('hero-pos-status')
+  try {
+    const { error } = await supabase
+      .from('site_settings')
+      .update({ value: pos, updated_at: new Date().toISOString() })
+      .eq('key', 'hero_image_mobile_position')
+    if (error) throw error
+    if (statusEl) statusEl.innerHTML = '<span class="hero-upload-success">✓ Position saved</span>'
+    showToast('Mobile position saved', 'success')
+  } catch (err) {
+    if (statusEl) statusEl.innerHTML = `<span class="hero-upload-error">Failed: ${err.message}</span>`
+  }
+}
+
+window.handleHeroImageUpload = async function(input, device = 'desktop') {
   const file = input.files[0]
   if (!file) return
   if (!appState.session) return showToast('Admin login required', 'error')
 
-  const label  = document.getElementById('hero-upload-label')
-  const status = document.getElementById('hero-upload-status')
-  label.childNodes[0].textContent = 'Uploading…'
-  status.innerHTML = ''
+  const isDesktop  = device === 'desktop'
+  const labelId    = isDesktop ? 'hero-upload-label' : 'hero-upload-mobile-label'
+  const statusId   = isDesktop ? 'hero-upload-status' : 'hero-upload-mobile-status'
+  const settingKey = isDesktop ? 'hero_image_url' : 'hero_image_mobile_url'
+  const label      = document.getElementById(labelId)
+  const status     = document.getElementById(statusId)
+  const storagePath = `hero/${isDesktop ? 'main' : 'mobile'}.${file.name.split('.').pop()}`
 
-  const ext  = file.name.split('.').pop()
-  const path = `hero/main.${ext}`
+  const labelTn = label && Array.from(label.childNodes).find(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim())
+  if (labelTn) labelTn.textContent = ' Uploading… '
+  if (status) status.innerHTML = ''
 
   try {
     const { error: upErr } = await supabase.storage
       .from('site-images')
-      .upload(path, file, { upsert: true })
+      .upload(storagePath, file, { upsert: true })
     if (upErr) throw upErr
 
     const { data: { publicUrl } } = supabase.storage
       .from('site-images')
-      .getPublicUrl(path)
+      .getPublicUrl(storagePath)
 
-    // Save URL to site_settings
     const { error: dbErr } = await supabase
       .from('site_settings')
       .update({ value: publicUrl, updated_at: new Date().toISOString() })
-      .eq('key', 'hero_image_url')
+      .eq('key', settingKey)
     if (dbErr) throw dbErr
 
-    // Update live hero image without reload
-    const heroImg = document.querySelector('.hero-bg-img')
-    if (heroImg) heroImg.src = publicUrl + '?t=' + Date.now()
+    if (isDesktop) {
+      const heroImg = document.getElementById('hero-bg-img')
+      if (heroImg && window.innerWidth > 768) heroImg.src = publicUrl + '?t=' + Date.now()
+      const preview = document.getElementById('hero-img-admin-preview')
+      if (preview) preview.innerHTML = `<img src="${publicUrl}" alt="Current hero desktop" class="hero-img-admin-thumb" />`
+    } else {
+      const heroImg = document.getElementById('hero-bg-img')
+      if (heroImg && window.innerWidth <= 768) heroImg.src = publicUrl + '?t=' + Date.now()
+      const preview = document.getElementById('hero-img-mobile-preview')
+      if (preview) preview.innerHTML = `<img src="${publicUrl}" alt="Current hero mobile" class="hero-img-admin-thumb" />`
+      const savedPos = document.getElementById('hero-pos-x')
+        ? `${document.getElementById('hero-pos-x').value}% ${document.getElementById('hero-pos-y').value}%`
+        : '65% 0%'
+      showMobilePositionAdminUI(publicUrl, savedPos)
+    }
 
-    // Update admin preview
-    const preview = document.getElementById('hero-img-admin-preview')
-    if (preview) preview.innerHTML = `<img src="${publicUrl}" alt="Current hero" class="hero-img-admin-thumb" />`
-
-    status.innerHTML = '<span class="hero-upload-success">✓ Hero image updated</span>'
-    label.childNodes[0].textContent = '↺ Replace photo'
-    showToast('Hero image updated', 'success')
+    if (status) status.innerHTML = `<span class="hero-upload-success">✓ ${isDesktop ? 'Desktop' : 'Mobile'} image updated</span>`
+    if (labelTn) labelTn.textContent = ` ↺ Replace photo `
+    showToast(`${isDesktop ? 'Desktop' : 'Mobile'} hero updated`, 'success')
   } catch (err) {
     console.error(err)
-    status.innerHTML = `<span class="hero-upload-error">Upload failed: ${err.message}</span>`
-    label.childNodes[0].textContent = '↑ Choose photo'
+    if (status) status.innerHTML = `<span class="hero-upload-error">Upload failed: ${err.message}</span>`
+    if (labelTn) labelTn.textContent = ' ↑ Choose photo '
     showToast('Upload failed: ' + err.message, 'error')
   }
 }
 
-// Restore venue detail page on browser back/forward
+
+// ── Global function exports (required for inline onclick handlers) ────
+window.navigateHome               = navigateHome
+window.showPage                   = showPage
+window.showMyBookingsPage         = showMyBookingsPage
+window.showVenuePage              = showVenuePage
+window.selectTimeSlot             = selectTimeSlot
+window.showCalendarStep           = showCalendarStep
+window.updateGuestCount           = updateGuestCount
+window.showVenueBodyStep          = showVenueBodyStep
+window.updateBookingSummaryPrice  = updateBookingSummaryPrice
+window.handleInlineBookingSubmit  = handleInlineBookingSubmit
+window.submitBookingIntent        = submitBookingIntent
+window.showModal                  = showModal
+window.hideModal                  = hideModal
+window.updateAddOnTotal           = updateAddOnTotal
+window.updateAdvanceButton        = updateAdvanceButton
+window.sendOtpResend              = sendOtpResend
+
+// ── Restore venue detail page on browser back/forward ────────────────
 window.addEventListener('popstate', (event) => {
   if (event.state?.venueId) {
     showVenuePage(event.state.venueId, false)
@@ -4414,15 +4533,65 @@ window.addEventListener('popstate', (event) => {
 })
 
 
-// ================================================================
-// INIT
-// ================================================================
+// ── Admin page initialisation ────────────────────────────────
+function initAdminPage() {
+  // Wire up admin login form
+  const loginForm = document.getElementById('admin-login-form')
+  if (loginForm) loginForm.addEventListener('submit', handleAdminLogin)
+
+  // Wire up logout
+  const logoutBtn = document.getElementById('admin-logout')
+  if (logoutBtn) logoutBtn.addEventListener('click', handleAdminLogout)
+
+  // Wire up dashboard tab buttons
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab))
+  })
+
+  // Wire up menu link generator
+  const generateBtn = document.getElementById('generate-menu-link')
+  if (generateBtn) {
+    generateBtn.addEventListener('click', () => {
+      const foodCount = parseInt(document.getElementById('food-count')?.value || '3')
+      const bevCount  = parseInt(document.getElementById('bev-count')?.value  || '2')
+      generateMenuLink(foodCount, bevCount)
+    })
+  }
+
+  // Auth state listener — handles login/logout UI
+  supabase.auth.onAuthStateChange((_event, session) => {
+    applyAuthState(session)
+  })
+
+  // Check existing session on page load
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    applyAuthState(session)
+  })
+}
+
+// ── Menu selection page initialisation ───────────────────────
+function initMenuSelectionPage() {
+  // Tabs are rendered dynamically — delegation handled in renderMenuSelection
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.selection-tab-btn')
+    if (!btn) return
+    const tab = btn.dataset.tab
+    document.querySelectorAll('.selection-tab-btn').forEach(b => b.classList.remove('active'))
+    btn.classList.add('active')
+    document.querySelectorAll('#menu-selection-page .menu-tab-content').forEach(c => { c.style.display = 'none' })
+    const target = document.getElementById(tab)
+    if (target) target.style.display = 'block'
+    updateTabCounters()
+  })
+}
+
+
 document.addEventListener('DOMContentLoaded', () => {
   initializeMenuPreview()
   handleMenuPreviewTabs()
   renderAddonsStrip()
 
-  // Navbar scroll behaviour — transparent over hero, solid when scrolled
+  // Navbar scroll behaviour
   updateNavbarState('home-page')
   window.addEventListener('scroll', () => {
     const activePage = document.querySelector('.page.active')?.id || 'home-page'
@@ -4443,178 +4612,55 @@ document.addEventListener('DOMContentLoaded', () => {
     loadVenues().then(() => showVenuePage(parseInt(venueId, 10), false))
   }
 
+  // Nav link routing
+  document.querySelectorAll('.nav-link[data-route]').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault()
+      handleNavigation(link.dataset.route)
+    })
+  })
+
+  // Hero CTA
   const bookPicnicBtn = document.getElementById('book-picnic-btn')
   if (bookPicnicBtn) bookPicnicBtn.addEventListener('click', () => showModal('booking-modal'))
 
+  // Booking modal close
   const closeBookingModalBtn = document.getElementById('close-booking-modal')
   if (closeBookingModalBtn) closeBookingModalBtn.addEventListener('click', () => hideModal('booking-modal'))
 
   const cancelBookingBtn = document.getElementById('cancel-booking')
-  if (cancelBookingBtn) {
-    cancelBookingBtn.addEventListener('click', () => hideModal('booking-modal'))
+  if (cancelBookingBtn) cancelBookingBtn.addEventListener('click', () => hideModal('booking-modal'))
+
+  // Close modal on overlay click
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', () => overlay.closest('.modal')?.classList.add('hidden'))
+  })
+
+  // Venue card click delegation
+  const venuesGrid = document.getElementById('venues-grid')
+  if (venuesGrid) {
+    venuesGrid.addEventListener('click', (e) => {
+      const card = e.target.closest('[data-venue-id]')
+      if (!card) return
+      const id = parseInt(card.dataset.venueId, 10)
+      if (!isNaN(id)) showVenuePage(id)
+    })
+    venuesGrid.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return
+      const card = e.target.closest('[data-venue-id]')
+      if (!card) return
+      const id = parseInt(card.dataset.venueId, 10)
+      if (!isNaN(id)) showVenuePage(id)
+    })
   }
 
+  // Booking form submit
   const bookingForm = document.getElementById('booking-form')
   if (bookingForm) bookingForm.addEventListener('submit', handleBookingSubmit)
 
-  const adminLoginForm = document.getElementById('admin-login-form')
-  if (adminLoginForm) adminLoginForm.addEventListener('submit', handleAdminLogin)
-
-  const adminLogoutBtn = document.getElementById('admin-logout')
-  if (adminLogoutBtn) adminLogoutBtn.addEventListener('click', handleAdminLogout)
-
-  const bookingModal = document.getElementById('booking-modal')
-  if (bookingModal) {
-    bookingModal.addEventListener('click', (event) => {
-      if (event.target === bookingModal) hideModal('booking-modal')
-    })
-  }
-
-  document.querySelectorAll('.nav-link').forEach(link => {
-    link.addEventListener('click', (event) => {
-      event.preventDefault()
-      const route = link.getAttribute('data-route')
-      handleNavigation(route)
-    })
-  })
-
-  document.querySelectorAll('.tab-btn').forEach(button => {
-    button.addEventListener('click', () => {
-      switchTab(button.getAttribute('data-tab'))
-    })
-  })
-
-  const generateMenuLinkBtn = document.getElementById('generate-menu-link')
-  if (generateMenuLinkBtn) {
-    generateMenuLinkBtn.addEventListener('click', () => {
-      const foodCount = parseInt(document.getElementById('food-count').value, 10)
-      const bevCount  = parseInt(document.getElementById('bev-count').value, 10)
-      generateMenuLink(foodCount, bevCount)
-    })
-  }
-
-  const copyLinkBtn = document.getElementById('copy-link')
-  if (copyLinkBtn) {
-    copyLinkBtn.addEventListener('click', () => {
-      const linkInput = document.getElementById('generated-link-url')
-      if (linkInput) {
-        navigator.clipboard.writeText(linkInput.value)
-          .then(() => showToast('Link copied to clipboard', 'success'))
-          .catch(() => showToast('Failed to copy link', 'error'))
-      }
-    })
-  }
-
-  const preferredDateInput = document.getElementById('preferred-date')
-  if (preferredDateInput) {
-    preferredDateInput.min = localDateStr(new Date())
-  }
-
-  // Venue Manager listeners
-  document.getElementById('add-venue-btn')?.addEventListener('click', () => openVenueForm(null))
-  document.getElementById('vfp-close')?.addEventListener('click', closeVenueForm)
-  document.getElementById('venue-admin-form')?.addEventListener('submit', handleVenueFormSubmit)
-  document.getElementById('vf-add-image')?.addEventListener('click', addVfImage)
-  document.getElementById('vf-add-tier')?.addEventListener('click', addVfTier)
-  document.getElementById('vf-type')?.addEventListener('change', (e) => updateVfTypeVisibility(e.target.value))
-
-  // Availability Calendar listeners
-  document.getElementById('avail-venue-select')?.addEventListener('change', (e) => {
-    availState.venueId = e.target.value ? parseInt(e.target.value, 10) : null
-    loadAvailCalendar()
-  })
-  document.getElementById('avail-prev-month')?.addEventListener('click', () => {
-    availState.month--
-    if (availState.month < 0) { availState.month = 11; availState.year-- }
-    renderAvailMonthLabel()
-    loadAvailCalendar()
-  })
-  document.getElementById('avail-next-month')?.addEventListener('click', () => {
-    availState.month++
-    if (availState.month > 11) { availState.month = 0; availState.year++ }
-    renderAvailMonthLabel()
-    loadAvailCalendar()
-  })
-
-  loadTestimonials()
-
-  document.addEventListener('click', (event) => {
-    const venueCard = event.target.closest('.venue-card')
-    if (venueCard) {
-      const id = parseInt(venueCard.dataset.venueId, 10)
-      if (!isNaN(id)) showVenuePage(id)
-      return
-    }
-
-    const bookVenueBtn = event.target.closest('[data-book-venue-id]')
-    if (bookVenueBtn && !bookVenueBtn.disabled) {
-      const id    = parseInt(bookVenueBtn.dataset.bookVenueId, 10)
-      const venue = appState.venues.find(v => v.id === id)
-      if (!venue) return
-      // partner_bnb "already booked" button → old modal (picnic-add flow)
-      if (venue.type === 'partner_bnb') {
-        openBookingForVenue(venue)
-      } else if (appState.bookingStep === 'guests') {
-        // Guest step complete → show inline contact form
-        showBookingForm(venue)
-      } else {
-        // Date selected → show guest selector in sidebar
-        showGuestSelector(venue)
-      }
-      return
-    }
-
-    if (event.target.closest('.modern-qty-btn') && !event.target.closest('.modern-qty-btn').disabled) {
-      const btn      = event.target.closest('.modern-qty-btn')
-      updateQuantity(btn.getAttribute('data-item'), btn.getAttribute('data-category'), parseInt(btn.getAttribute('data-change'), 10))
-      return
-    }
-
-    if (event.target.classList.contains('quantity-btn') && !event.target.disabled) {
-      updateQuantity(event.target.getAttribute('data-item'), event.target.getAttribute('data-category'), parseInt(event.target.getAttribute('data-change'), 10))
-      return
-    }
-
-    if (event.target.closest('.modern-tab-btn')) {
-      const btn = event.target.closest('.modern-tab-btn')
-      const tab = btn.getAttribute('data-tab')
-      if (tab) {
-        document.querySelectorAll('.modern-tab-btn').forEach(b => b.classList.remove('active'))
-        btn.classList.add('active')
-        document.querySelectorAll('.modern-tab-content').forEach(c => { c.classList.remove('active'); c.style.display = 'none' })
-        const target = document.getElementById(tab)
-        if (target) { target.classList.add('active'); target.style.display = 'block' }
-      }
-      return
-    }
-
-    if (event.target.id === 'submit-menu-selection') { submitMenuSelection(); return }
-    const confirmBtn = event.target.closest('.confirm-booking-btn')
-    if (confirmBtn) {
-      confirmBooking(
-        confirmBtn.getAttribute('data-id'),
-        confirmBtn.getAttribute('data-venue-id'),
-        confirmBtn.getAttribute('data-venue-type'),
-        confirmBtn.getAttribute('data-preferred-date'),
-        confirmBtn.getAttribute('data-checkout-date'),
-      )
-      return
-    }
-    const generateMenuBtn = event.target.closest('.generate-menu-btn')
-    if (generateMenuBtn) { generateBookingMenuLink(generateMenuBtn.getAttribute('data-booking-id')); return }
-    const copyMenuBtn = event.target.closest('.copy-menu-btn')
-    if (copyMenuBtn) { copyBookingMenuLink(copyMenuBtn.getAttribute('data-booking-id')); return }
-  })
-
-  supabase.auth.onAuthStateChange((_event, session) => {
-    applyAuthState(session)
-    if (session) {
-      loadQueries()
-      loadBookings()
-      loadMenuLinks()
-    }
-  })
-
   loadVenues()
   loadHeroImage()
+  initAdminPage()
+  loadTestimonials()
+  initMenuSelectionPage()
 })

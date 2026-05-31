@@ -38,8 +38,9 @@
     <div id="home-page" class="page active">
         <!-- Hero Section — Split Screen -->
         <section class="hero">
-            <!-- Full-bleed background image — replace src with your actual photo -->
+            <!-- Full-bleed background image -->
             <img
+                id="hero-bg-img"
                 src="https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=1600&q=85"
                 alt=""
                 class="hero-bg-img"
@@ -517,22 +518,71 @@
                 <div class="tab-header">
                     <h3>Hero Image</h3>
                 </div>
-                <div class="hero-img-admin">
-                    <div class="hero-img-admin-preview-wrap">
-                        <p class="hero-img-admin-label">Current hero image</p>
+                <div class="hero-img-admin-grid">
+
+                    <!-- Desktop image -->
+                    <div class="hero-img-admin-panel">
+                        <div class="hero-img-panel-header">
+                            <span class="hero-img-panel-icon">🖥</span>
+                            <div>
+                                <p class="hero-img-admin-label">Desktop image</p>
+                                <p class="hero-img-admin-hint">1600×900px min. Left ~40% covered by text overlay.</p>
+                            </div>
+                        </div>
                         <div id="hero-img-admin-preview" class="hero-img-admin-preview">
                             <span class="hero-img-admin-empty">No image set</span>
                         </div>
-                    </div>
-                    <div class="hero-img-admin-upload">
-                        <p class="hero-img-admin-label">Upload new image</p>
-                        <p class="hero-img-admin-hint">Recommended: wide landscape photo, at least 1600×900px. The left ~40% of the image will be covered by the text overlay.</p>
                         <label class="vf-img-upload-btn hero-img-upload-btn" id="hero-upload-label">
                             ↑ Choose photo
-                            <input type="file" id="hero-img-file" accept="image/jpeg,image/png,image/webp" onchange="handleHeroImageUpload(this)" style="display:none" />
+                            <input type="file" id="hero-img-file" accept="image/jpeg,image/png,image/webp" onchange="handleHeroImageUpload(this, 'desktop')" style="display:none" />
                         </label>
                         <div id="hero-upload-status"></div>
                     </div>
+
+                    <!-- Mobile image -->
+                    <div class="hero-img-admin-panel">
+                        <div class="hero-img-panel-header">
+                            <span class="hero-img-panel-icon">📱</span>
+                            <div>
+                                <p class="hero-img-admin-label">Mobile image</p>
+                                <p class="hero-img-admin-hint">Portrait crop recommended. Falls back to desktop image if not set.</p>
+                            </div>
+                        </div>
+                        <div id="hero-img-mobile-preview" class="hero-img-admin-preview">
+                            <span class="hero-img-admin-empty">No image set</span>
+                        </div>
+                        <label class="vf-img-upload-btn hero-img-upload-btn" id="hero-upload-mobile-label">
+                            ↑ Choose photo
+                            <input type="file" id="hero-img-mobile-file" accept="image/jpeg,image/png,image/webp" onchange="handleHeroImageUpload(this, 'mobile')" style="display:none" />
+                        </label>
+                        <div id="hero-upload-mobile-status"></div>
+
+                        <!-- Position adjuster -->
+                        <div id="hero-mobile-position-wrap" class="hero-pos-wrap" style="display:none">
+                            <p class="hero-img-admin-label" style="margin-top:16px">Adjust framing</p>
+                            <p class="hero-img-admin-hint">Click or drag on the preview to set the focal point.</p>
+                            <div class="hero-pos-preview-wrap">
+                                <div id="hero-pos-preview" class="hero-pos-preview">
+                                    <div id="hero-pos-crosshair" class="hero-pos-crosshair"></div>
+                                </div>
+                            </div>
+                            <div class="hero-pos-sliders">
+                                <label class="hero-pos-slider-label">
+                                    Horizontal
+                                    <input type="range" id="hero-pos-x" min="0" max="100" value="65" oninput="updateMobilePosition()">
+                                    <span id="hero-pos-x-val">65%</span>
+                                </label>
+                                <label class="hero-pos-slider-label">
+                                    Vertical
+                                    <input type="range" id="hero-pos-y" min="0" max="100" value="0" oninput="updateMobilePosition()">
+                                    <span id="hero-pos-y-val">0%</span>
+                                </label>
+                            </div>
+                            <button class="btn btn--primary" onclick="saveMobilePosition()" style="margin-top:12px">Save position</button>
+                            <div id="hero-pos-status"></div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>
@@ -618,7 +668,7 @@
 
                     <div class="form-actions">
                         <button type="button" id="cancel-booking" class="btn btn--outline">Cancel</button>
-                        <button type="submit" id="booking-submit-btn" class="btn btn--primary">Continue →</button>
+                        <button type="submit" id="booking-submit-btn" class="btn btn--primary">Continue &rarr;</button>
                     </div>
                 </form>
             </div>
