@@ -801,23 +801,37 @@ body {
   min-height: 100vh;
 }
 
-/* --- Navigation --- */
+/* --- Navigation — fixed, transparent over hero --- */
 .navbar {
+  background: transparent;
+  padding: 20px 0;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  transition: background var(--duration-fast) var(--ease-standard),
+              box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+/* Solid navbar when scrolled or on non-hero pages */
+.navbar--solid {
   background: rgba(255, 248, 245, 0.96);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(196, 96, 122, 0.08);
-  padding: 14px 0;
-  position: sticky;
-  top: 0;
-  z-index: 100;
   box-shadow: 0 1px 0 rgba(196, 96, 122, 0.06);
+  border-bottom: 1px solid rgba(196, 96, 122, 0.08);
 }
 
 .navbar .container {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.nav-brand {
+  text-decoration: none;
+  display: block;
 }
 
 .nav-brand h2 {
@@ -841,10 +855,11 @@ body {
 .nav-links {
   display: flex;
   gap: var(--space-32);
+  align-items: center;
 }
 
 .nav-link {
-  color: var(--color-text-secondary);
+  color: var(--boho-text-dark);
   text-decoration: none;
   font-weight: var(--font-weight-medium);
   transition: all var(--duration-fast) var(--ease-standard);
@@ -867,11 +882,11 @@ body {
   border-radius: 1px;
 }
 
-/* --- Hero Section — Full-bleed photo --- */
+/* --- Hero Section — Full-bleed photo (navbar overlays top) --- */
 .hero {
   position: relative;
   overflow: hidden;
-  min-height: 600px;
+  min-height: 660px;
   display: flex;
   align-items: center;
 }
@@ -1578,6 +1593,11 @@ body {
 
 .page.active {
   display: block;
+}
+
+/* Non-hero pages need top padding to clear the fixed navbar */
+.page.active:not(#home-page) {
+  padding-top: 70px;
 }
 
 .page-header {

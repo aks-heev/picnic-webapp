@@ -198,20 +198,37 @@ function showPage(pageId) {
   // Hide all pages
   const allPages = document.querySelectorAll('.page')
   allPages.forEach(page => page.classList.remove('active'))
-  
+
   // Show target page
   const targetPage = document.getElementById(pageId)
   if (targetPage) {
     targetPage.classList.add('active')
   }
-  
+
   // Update navigation active state
   const allNavLinks = document.querySelectorAll('.nav-link')
   allNavLinks.forEach(link => link.classList.remove('active'))
-  
+
   const activeNavLink = document.querySelector(`[data-route="${pageId.replace('-page', '')}"]`)
   if (activeNavLink) {
     activeNavLink.classList.add('active')
+  }
+
+  // Navbar: solid on non-home pages, transparent on home (scroll handler manages it there)
+  updateNavbarState(pageId)
+  window.scrollTo(0, 0)
+}
+
+function updateNavbarState(pageId) {
+  const navbar = document.querySelector('.navbar')
+  if (!navbar) return
+  const isHome = !pageId || pageId === 'home-page'
+  if (isHome) {
+    // Transparent when at top of home, solid when scrolled
+    const scrolled = window.scrollY > 40
+    navbar.classList.toggle('navbar--solid', scrolled)
+  } else {
+    navbar.classList.add('navbar--solid')
   }
 }
 
@@ -4404,6 +4421,13 @@ document.addEventListener('DOMContentLoaded', () => {
   initializeMenuPreview()
   handleMenuPreviewTabs()
   renderAddonsStrip()
+
+  // Navbar scroll behaviour — transparent over hero, solid when scrolled
+  updateNavbarState('home-page')
+  window.addEventListener('scroll', () => {
+    const activePage = document.querySelector('.page.active')?.id || 'home-page'
+    updateNavbarState(activePage)
+  }, { passive: true })
 
   // URL parameter routing
   const urlParams = new URLSearchParams(window.location.search)
