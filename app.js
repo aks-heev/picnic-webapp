@@ -323,33 +323,54 @@ window.filterVenuesByCity = function(city, btn) {
   renderVenueGallery(venues)
 }
 
-function renderAddonsStrip() {
+// Category fallback emojis for when no image_url is set
+const ADDON_CAT_EMOJI = {
+  photography:   '📷',
+  decor:         '🌸',
+  food:          '🍰',
+  entertainment: '🎉',
+  extension:     '⏱',
+}
+
+async function renderAddonsStrip() {
   const strip = document.getElementById('addons-strip')
   if (!strip) return
 
-  // Category emoji placeholders + display names
-  const ADDON_MOOD = [
-    { emoji: '📷', label: 'Photography', desc: 'Capture every moment' },
-    { emoji: '🌸', label: 'Florals & Decor', desc: 'Blooms, drapes & fairy lights' },
-    { emoji: '🎂', label: 'Cake & Sweets', desc: 'Custom cakes to celebrate' },
-    { emoji: '💐', label: 'Bouquet', desc: 'A thoughtful finishing touch' },
-    { emoji: '🎨', label: 'Sip & Paint', desc: 'Guided painting with wine' },
-    { emoji: '🔥', label: 'Bonfire', desc: 'Warm evenings under the stars' },
-    { emoji: '✨', label: 'Cold Pyros', desc: 'A dramatic sparkle moment' },
-    { emoji: '🕯️', label: 'Extra Candles', desc: 'Candlelit atmosphere' },
-  ]
+  try {
+    const { data, error } = await supabase
+      .from('add_ons')
+      .select('id, name, description, category, image_url, is_active')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
 
-  strip.innerHTML = ADDON_MOOD.map(item => `
-    <div class="addon-strip-card">
-      <div class="addon-strip-visual">
-        <span class="addon-strip-emoji">${item.emoji}</span>
+    if (error) throw error
+
+    // One featured add-on per category (first by sort_order)
+    const seen = new Set()
+    const featured = (data || []).filter(a => {
+      if (seen.has(a.category)) return false
+      seen.add(a.category)
+      return true
+    })
+
+    if (!featured.length) return
+
+    strip.innerHTML = featured.map(a => `
+      <div class="addon-strip-card">
+        <div class="addon-strip-visual">
+          ${a.image_url
+            ? `<img src="${escapeHtml(a.image_url)}" alt="${escapeHtml(a.name)}" class="addon-strip-img">`
+            : `<span class="addon-strip-emoji">${ADDON_CAT_EMOJI[a.category] || '✨'}</span>`}
+        </div>
+        <div class="addon-strip-info">
+          <span class="addon-strip-name">${escapeHtml(a.name)}</span>
+          ${a.description ? `<span class="addon-strip-desc">${escapeHtml(a.description)}</span>` : ''}
+        </div>
       </div>
-      <div class="addon-strip-info">
-        <span class="addon-strip-name">${item.label}</span>
-        <span class="addon-strip-desc">${item.desc}</span>
-      </div>
-    </div>
-  `).join('')
+    `).join('')
+  } catch (err) {
+    console.error('Failed to load add-ons strip:', err)
+  }
 }
 
 // Render venue cards into the gallery grid
@@ -689,6 +710,11 @@ function renderVenueDetail(venue, addOns = []) {
                 <div class="vd-addons-scroll">
                   ${items.map(a => `
                   <div class="vd-addon-card">
+                    <div class="vd-addon-img">
+                      ${a.image_url
+                        ? `<img src="${escapeHtml(a.image_url)}" alt="${escapeHtml(a.name)}" loading="lazy">`
+                        : `<div class="vd-addon-img-placeholder"></div>`}
+                    </div>
                     <div class="vd-addon-body">
                       <div class="vd-addon-name">${escapeHtml(a.name)}</div>
                       ${a.description ? `<div class="vd-addon-desc">${escapeHtml(a.description)}</div>` : ''}
@@ -3014,6 +3040,8 @@ function switchTab(tabName) {
     initAvailabilityTab()
   } else if (tabName === 'add-ons') {
     loadAddOnsManager()
+  } else if (tabName === 'hero-image') {
+    loadHeroImageAdminPreview()
   }
 }
 
@@ -4249,7 +4277,145 @@ function loadTestimonials() {
 }
 
 // Global window exports (required for onclick handlers in templates/HTML)
-window.showModal            = showModal
+window.showModal                  = showModal
+window.hideModal                  = hideModal
+window.showPage                   = showPage
+window.copyMenuLink               = copyMenuLink
+window.handleNavigation           = handleNavigation
+window.openBookingForVenue        = openBookingForVenue
+window.showVenuePage              = showVenuePage
+window.navigateHome               = navigateHome
+window.updateAddOnTotal           = updateAddOnTotal
+window.selectCalendarDate         = selectCalendarDate
+window.selectTimeSlot             = selectTimeSlot
+window.selectBnbDate              = selectBnbDate
+window.customerSignOut            = customerSignOut
+window.showVenueBodyStep          = showVenueBodyStep
+window.updateBookingSummaryPrice  = updateBookingSummaryPrice
+window.handleInlineBookingSubmit  = handleInlineBookingSubmit
+window.submitBookingIntent        = submitBookingIntent
+window.showMyBookingsPage         = showMyBookingsPage
+window.updateGuestCount           = updateGuestCount
+window.showCalendarStep           = showCalendarStep
+window.filterVenuesByCity         = filterVenuesByCity
+
+// Restore venue detail page on browser back/forward
+window.addEventListener('popstate', (event) => {
+  if (event.state?.venueId) {
+    showVenuePage(event.state.venueId, false)
+  } else {
+    showPage('home-page')
+  }
+})
+
+// ── Page initialisation (runs once on module load) ────────────
+;(async function init() {
+  // Wire nav links
+  document.querySelectorAll('.nav-link[data-route]').forEach(link => {
+    link.addEventListener('click', e => {
+      e.preventDefault()
+      handleNavigation(link.dataset.route)
+    })
+  })
+
+  // URL parameter routing
+  const urlParams  = new URLSearchParams(window.location.search)
+  const menuToken  = urlParams.get('menu')
+  const bookingId  = urlParams.get('booking')
+  const venueId    = urlParams.get('venue')
+
+  if (menuToken) {
+    showPage('menu-selection-page')
+    loadMenuSelection(menuToken)
+    if (bookingId) appState.currentBooking = { id: parseInt(bookingId, 10) }
+  } else if (venueId) {
+    await loadVenues()
+    showVenuePage(parseInt(venueId, 10), false)
+  } else {
+    // Normal homepage boot
+    loadVenues()
+    loadTestimonials()
+    initializeMenuPreview()
+    handleMenuPreviewTabs()
+    renderAddonsStrip()
+    loadHeroImage()
+  }
+
+  // Admin auth state
+  const { data: { session } } = await supabase.auth.getSession()
+  applyAuthState(session)
+  supabase.auth.onAuthStateChange((_event, session) => applyAuthState(session))
+
+  // Admin login form
+  const adminLoginForm = document.getElementById('admin-login-form')
+  if (adminLoginForm) adminLoginForm.addEventListener('submit', handleAdminLogin)
+
+  const adminLogoutBtn = document.getElementById('admin-logout')
+  if (adminLogoutBtn) adminLogoutBtn.addEventListener('click', handleAdminLogout)
+
+  // Booking modal
+  const bookPicnicBtn = document.getElementById('book-picnic-btn')
+  if (bookPicnicBtn) bookPicnicBtn.addEventListener('click', () => showModal('booking-modal'))
+
+  const closeBookingModalBtn = document.getElementById('close-booking-modal')
+  if (closeBookingModalBtn) closeBookingModalBtn.addEventListener('click', () => hideModal('booking-modal'))
+
+  const cancelBookingBtn = document.getElementById('cancel-booking')
+  if (cancelBookingBtn) cancelBookingBtn.addEventListener('click', () => hideModal('booking-modal'))
+
+  const bookingForm = document.getElementById('booking-form')
+  if (bookingForm) bookingForm.addEventListener('submit', handleBookingFormSubmit)
+
+  // Admin dashboard tabs
+  document.querySelectorAll('.tab-btn[data-tab]').forEach(btn => {
+    btn.addEventListener('click', () => switchAdminTab(btn.dataset.tab))
+  })
+
+  // Venue form
+  document.getElementById('vf-add-image')?.addEventListener('click', addVfImage)
+  document.getElementById('vf-add-tier')?.addEventListener('click', addVfTier)
+  document.getElementById('vfp-close')?.addEventListener('click', closeVenueForm)
+  document.getElementById('venue-admin-form')?.addEventListener('submit', saveVenueForm)
+  document.getElementById('vf-type')?.addEventListener('change', e => updateVfTypeVisibility(e.target.value))
+
+  // Availability tab
+  document.getElementById('avail-venue-select')?.addEventListener('change', e => {
+    appState.availVenueId = parseInt(e.target.value, 10) || null
+    loadAvailCalendar()
+  })
+  document.getElementById('avail-prev-month')?.addEventListener('click', () => {
+    appState.availMonth = new Date(appState.availMonth.getFullYear(), appState.availMonth.getMonth() - 1, 1)
+    renderAvailMonthLabel()
+    renderAvailCalendarGrid()
+  })
+  document.getElementById('avail-next-month')?.addEventListener('click', () => {
+    appState.availMonth = new Date(appState.availMonth.getFullYear(), appState.availMonth.getMonth() + 1, 1)
+    renderAvailMonthLabel()
+    renderAvailCalendarGrid()
+  })
+
+  // Menu link generator
+  document.getElementById('generate-menu-link')?.addEventListener('click', () => {
+    const foodCount = parseInt(document.getElementById('food-count').value, 10)
+    const bevCount  = parseInt(document.getElementById('bev-count').value, 10)
+    generateMenuLink(foodCount, bevCount)
+  })
+  document.getElementById('copy-link')?.addEventListener('click', () => {
+    const url = document.getElementById('generated-link-url').value
+    if (url) copyMenuLink(url)
+  })
+
+  // Export queries
+  document.getElementById('export-queries')?.addEventListener('click', exportQueriesCSV)
+
+  // Search/filter for leads
+  document.getElementById('leads-search')?.addEventListener('input', filterLeads)
+  document.getElementById('location-filter')?.addEventListener('change', filterLeads)
+
+  // Venue search
+  document.getElementById('add-venue-btn')?.addEventListener('click', () => openVenueForm(null))
+})()
+          = showModal
 window.hideModal            = hideModal
 window.showPage             = showPage
 window.copyMenuLink         = copyMenuLink
@@ -4269,6 +4435,96 @@ window.submitBookingIntent        = submitBookingIntent
 window.showMyBookingsPage   = showMyBookingsPage
 window.updateGuestCount     = updateGuestCount
 window.showCalendarStep     = showCalendarStep
+
+// ── Hero image: load from site_settings on startup ───────────
+async function loadHeroImage() {
+  try {
+    const { data } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'hero_image_url')
+      .single()
+    const url = data?.value
+    if (url) {
+      const img = document.querySelector('.hero-bg-img')
+      if (img) img.src = url
+    }
+  } catch (err) {
+    // silently ignore — placeholder image stays
+  }
+}
+
+// ── Hero image: admin tab upload ──────────────────────────────
+async function loadHeroImageAdminPreview() {
+  const preview = document.getElementById('hero-img-admin-preview')
+  if (!preview) return
+  try {
+    const { data } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'hero_image_url')
+      .single()
+    const url = data?.value
+    if (url) {
+      preview.innerHTML = `<img src="${url}" alt="Current hero" class="hero-img-admin-thumb" />`
+    } else {
+      preview.innerHTML = '<span class="hero-img-admin-empty">No image set</span>'
+    }
+  } catch (err) {
+    preview.innerHTML = '<span class="hero-img-admin-empty">Could not load</span>'
+  }
+}
+
+window.handleHeroImageUpload = async function(input) {
+  const file = input.files[0]
+  if (!file) return
+  if (!appState.session) return showToast('Admin login required', 'error')
+
+  const label  = document.getElementById('hero-upload-label')
+  const status = document.getElementById('hero-upload-status')
+  label.childNodes[0].textContent = 'Uploading…'
+  status.innerHTML = ''
+
+  const ext  = file.name.split('.').pop()
+  const path = `hero/main.${ext}`
+
+  try {
+    const { error: upErr } = await supabase.storage
+      .from('site-images')
+      .upload(path, file, { upsert: true })
+    if (upErr) throw upErr
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('site-images')
+      .getPublicUrl(path)
+
+    // Save URL to site_settings
+    const { error: dbErr } = await supabase
+      .from('site_settings')
+      .update({ value: publicUrl, updated_at: new Date().toISOString() })
+      .eq('key', 'hero_image_url')
+    if (dbErr) throw dbErr
+
+    // Update live hero image without reload
+    const heroImg = document.querySelector('.hero-bg-img')
+    if (heroImg) heroImg.src = publicUrl + '?t=' + Date.now()
+
+    // Update admin preview
+    const preview = document.getElementById('hero-img-admin-preview')
+    if (preview) preview.innerHTML = `<img src="${publicUrl}" alt="Current hero" class="hero-img-admin-thumb" />`
+
+    status.innerHTML = '<span class="hero-upload-success">✓ Hero image updated</span>'
+    label.childNodes[0].textContent = '↺ Replace photo'
+    showToast('Hero image updated', 'success')
+  } catch (err) {
+    console.error(err)
+    status.innerHTML = `<span class="hero-upload-error">Upload failed: ${err.message}</span>`
+    label.childNodes[0].textContent = '↑ Choose photo'
+    showToast('Upload failed: ' + err.message, 'error')
+  }
+}
+
+window.handleHeroImageUpload = window.handleHeroImageUpload
 
 // Restore venue detail page on browser back/forward
 window.addEventListener('popstate', (event) => {

@@ -40,47 +40,39 @@
     <div id="home-page" class="page active">
         <!-- Hero Section — Split Screen -->
         <section class="hero">
-            <div class="container">
-                <div class="hero-split">
-                    <!-- Left: Text content -->
-                    <div class="hero-text">
-                        <p class="hero-eyebrow">Jaipur &middot; Gurugram</p>
-                        <h1 class="hero-title">Every moment<br>deserves a<br><em>beautiful setting</em></h1>
-                        <p class="hero-description">Boho-chic picnic arrangements with curated decor, ambient lighting, and gourmet food &mdash; across Jaipur and Gurugram's most stunning locations. From fairy lights to live musicians, every detail is yours to shape.</p>
-                        <div class="hero-actions">
-                            <button id="book-picnic-btn" class="btn btn--primary btn--lg">Book Your Picnic</button>
-                            <button class="btn btn--ghost btn--lg" onclick="document.getElementById('venues-section').scrollIntoView({behavior:'smooth'})">Browse Venues</button>
-                        </div>
-                        <div class="hero-stats">
-                            <div class="hero-stat">
-                                <span class="hero-stat-num">200+</span>
-                                <span class="hero-stat-label">Happy couples</span>
-                            </div>
-                            <div class="hero-stat-divider"></div>
-                            <div class="hero-stat">
-                                <span class="hero-stat-num">12</span>
-                                <span class="hero-stat-label">Curated venues</span>
-                            </div>
-                            <div class="hero-stat-divider"></div>
-                            <div class="hero-stat">
-                                <span class="hero-stat-num">4.9</span>
-                                <span class="hero-stat-label">Avg. rating</span>
-                            </div>
-                        </div>
+            <!-- Full-bleed background image — replace src with your actual photo -->
+            <img
+                src="https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=1600&q=85"
+                alt=""
+                class="hero-bg-img"
+                aria-hidden="true"
+            />
+            <!-- Gradient overlay: cream on left fades to transparent on right -->
+            <div class="hero-overlay" aria-hidden="true"></div>
+
+            <div class="container hero-container">
+                <div class="hero-text">
+                    <p class="hero-eyebrow">Jaipur &middot; Gurugram</p>
+                    <h1 class="hero-title">Every moment<br>deserves a<br><em>beautiful setting</em></h1>
+                    <p class="hero-description">Boho-chic picnic arrangements with curated decor, ambient lighting, and gourmet food &mdash; across Jaipur and Gurugram's most stunning locations.</p>
+                    <div class="hero-actions">
+                        <button id="book-picnic-btn" class="btn btn--primary btn--lg">Book Your Picnic</button>
+                        <button class="btn btn--ghost btn--lg" onclick="document.getElementById('venues-section').scrollIntoView({behavior:'smooth'})">Browse Venues</button>
                     </div>
-                    <!-- Right: Decorative visual -->
-                    <div class="hero-visual">
-                        <div class="hero-visual-frame">
-                            <div class="hero-visual-ring hero-visual-ring--1"></div>
-                            <div class="hero-visual-ring hero-visual-ring--2"></div>
-                            <div class="hero-visual-inner">
-                                <div class="hero-visual-tag">Boho-Chic Setup</div>
-                                <p class="hero-visual-label">Your perfect<br>outdoor escape</p>
-                            </div>
+                    <div class="hero-stats">
+                        <div class="hero-stat">
+                            <span class="hero-stat-num">200+</span>
+                            <span class="hero-stat-label">Happy couples</span>
                         </div>
-                        <div class="hero-visual-badge">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-                            Premium Experience
+                        <div class="hero-stat-divider"></div>
+                        <div class="hero-stat">
+                            <span class="hero-stat-num">12</span>
+                            <span class="hero-stat-label">Curated venues</span>
+                        </div>
+                        <div class="hero-stat-divider"></div>
+                        <div class="hero-stat">
+                            <span class="hero-stat-num">4.9</span>
+                            <span class="hero-stat-label">Avg. rating</span>
                         </div>
                     </div>
                 </div>
@@ -282,6 +274,7 @@
                 <button class="tab-btn" data-tab="availability" role="tab" aria-selected="false">Availability</button>
                 <button class="tab-btn" data-tab="menu-link" role="tab" aria-selected="false">Menu Link Generator</button>
                 <button class="tab-btn" data-tab="add-ons" role="tab" aria-selected="false">Add-ons</button>
+                <button class="tab-btn" data-tab="hero-image" role="tab" aria-selected="false">Hero Image</button>
             </div>
 
             <!-- Queries Tab -->
@@ -518,6 +511,30 @@
                 </div>
                 <div id="addons-manager-container">
                     <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- Hero Image Tab -->
+            <div id="hero-image-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="tab-header">
+                    <h3>Hero Image</h3>
+                </div>
+                <div class="hero-img-admin">
+                    <div class="hero-img-admin-preview-wrap">
+                        <p class="hero-img-admin-label">Current hero image</p>
+                        <div id="hero-img-admin-preview" class="hero-img-admin-preview">
+                            <span class="hero-img-admin-empty">No image set</span>
+                        </div>
+                    </div>
+                    <div class="hero-img-admin-upload">
+                        <p class="hero-img-admin-label">Upload new image</p>
+                        <p class="hero-img-admin-hint">Recommended: wide landscape photo, at least 1600×900px. The left ~40% of the image will be covered by the text overlay.</p>
+                        <label class="vf-img-upload-btn hero-img-upload-btn" id="hero-upload-label">
+                            ↑ Choose photo
+                            <input type="file" id="hero-img-file" accept="image/jpeg,image/png,image/webp" onchange="handleHeroImageUpload(this)" style="display:none" />
+                        </label>
+                        <div id="hero-upload-status"></div>
+                    </div>
                 </div>
             </div>
         </div>
