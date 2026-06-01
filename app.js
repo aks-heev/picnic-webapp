@@ -456,7 +456,7 @@ async function showVenuePage(venueId, pushState = true) {
     return
   }
 
-  document.title = `${venue.name} — The Picnic Story`
+  document.title = `${venue.name} — The Picnic Stories`
   if (pushState) {
     history.pushState({ venueId }, document.title, `/?venue=${venueId}`)
   }
@@ -486,8 +486,8 @@ async function showVenuePage(venueId, pushState = true) {
 
 // Go back to home — restore URL too
 function navigateHome() {
-  history.pushState({}, 'The Picnic Story', '/')
-  document.title = 'The Picnic Story'
+  history.pushState({}, 'The Picnic Stories', '/')
+  document.title = 'The Picnic Stories'
   showPage('home-page')
 }
 
@@ -4266,7 +4266,7 @@ function loadTestimonials() {
   const testimonialsContainer = document.getElementById('testimonials-container')
   if (!testimonialsContainer) return
   const testimonials = [
-    { text: "The Picnic Story created the most magical evening for our anniversary. Every detail was perfect!", author: "Priya & Rahul", rating: "★★★★★" },
+    { text: "The Picnic Stories created the most magical evening for our anniversary. Every detail was perfect!", author: "Priya & Rahul", rating: "★★★★★" },
     { text: "Professional service and stunning setup. Our corporate team loved the boho picnic experience.", author: "Tech Solutions Inc.", rating: "★★★★★" },
     
     { text: "Absolutely beautiful picnic setup in Jaipur. The food was delicious and the decor was breathtaking!", author: "Anjali M.", rating: "★★★★★" },
@@ -4523,7 +4523,43 @@ window.updateAddOnTotal           = updateAddOnTotal
 window.updateAdvanceButton        = updateAdvanceButton
 window.sendOtpResend              = sendOtpResend
 
-// ── Restore venue detail page on browser back/forward ────────────────
+// ── Admin page initialisation ────────────────────────────────
+function initAdminPage() {
+  const loginForm = document.getElementById('admin-login-form')
+  if (loginForm) loginForm.addEventListener('submit', handleAdminLogin)
+  const logoutBtn = document.getElementById('admin-logout')
+  if (logoutBtn) logoutBtn.addEventListener('click', handleAdminLogout)
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab))
+  })
+  const generateBtn = document.getElementById('generate-menu-link')
+  if (generateBtn) {
+    generateBtn.addEventListener('click', () => {
+      generateMenuLink(
+        parseInt(document.getElementById('food-count')?.value || '3'),
+        parseInt(document.getElementById('bev-count')?.value  || '2')
+      )
+    })
+  }
+  supabase.auth.onAuthStateChange((_event, session) => applyAuthState(session))
+  supabase.auth.getSession().then(({ data: { session } }) => applyAuthState(session))
+}
+
+// ── Menu selection page initialisation ───────────────────────
+function initMenuSelectionPage() {
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.selection-tab-btn')
+    if (!btn) return
+    document.querySelectorAll('.selection-tab-btn').forEach(b => b.classList.remove('active'))
+    btn.classList.add('active')
+    document.querySelectorAll('#menu-selection-page .menu-tab-content').forEach(c => { c.style.display = 'none' })
+    const target = document.getElementById(btn.dataset.tab)
+    if (target) target.style.display = 'block'
+    updateTabCounters()
+  })
+}
+
+// ── Restore venue detail page on browser back/forward ────────
 window.addEventListener('popstate', (event) => {
   if (event.state?.venueId) {
     showVenuePage(event.state.venueId, false)
@@ -4531,59 +4567,6 @@ window.addEventListener('popstate', (event) => {
     showPage('home-page')
   }
 })
-
-
-// ── Admin page initialisation ────────────────────────────────
-function initAdminPage() {
-  // Wire up admin login form
-  const loginForm = document.getElementById('admin-login-form')
-  if (loginForm) loginForm.addEventListener('submit', handleAdminLogin)
-
-  // Wire up logout
-  const logoutBtn = document.getElementById('admin-logout')
-  if (logoutBtn) logoutBtn.addEventListener('click', handleAdminLogout)
-
-  // Wire up dashboard tab buttons
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => switchTab(btn.dataset.tab))
-  })
-
-  // Wire up menu link generator
-  const generateBtn = document.getElementById('generate-menu-link')
-  if (generateBtn) {
-    generateBtn.addEventListener('click', () => {
-      const foodCount = parseInt(document.getElementById('food-count')?.value || '3')
-      const bevCount  = parseInt(document.getElementById('bev-count')?.value  || '2')
-      generateMenuLink(foodCount, bevCount)
-    })
-  }
-
-  // Auth state listener — handles login/logout UI
-  supabase.auth.onAuthStateChange((_event, session) => {
-    applyAuthState(session)
-  })
-
-  // Check existing session on page load
-  supabase.auth.getSession().then(({ data: { session } }) => {
-    applyAuthState(session)
-  })
-}
-
-// ── Menu selection page initialisation ───────────────────────
-function initMenuSelectionPage() {
-  // Tabs are rendered dynamically — delegation handled in renderMenuSelection
-  document.addEventListener('click', (e) => {
-    const btn = e.target.closest('.selection-tab-btn')
-    if (!btn) return
-    const tab = btn.dataset.tab
-    document.querySelectorAll('.selection-tab-btn').forEach(b => b.classList.remove('active'))
-    btn.classList.add('active')
-    document.querySelectorAll('#menu-selection-page .menu-tab-content').forEach(c => { c.style.display = 'none' })
-    const target = document.getElementById(tab)
-    if (target) target.style.display = 'block'
-    updateTabCounters()
-  })
-}
 
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -4653,6 +4636,16 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!isNaN(id)) showVenuePage(id)
     })
   }
+
+  // Sidebar / mobile "Select guests →" and "Book Now" button
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('#sidebar-book-btn, #mobile-bar-book-btn')
+    if (!btn || btn.disabled) return
+    const venueId = parseInt(btn.dataset.bookVenueId, 10)
+    if (isNaN(venueId)) return
+    const venue = appState.venues.find(v => v.id === venueId)
+    if (venue) openBookingForVenue(venue)
+  })
 
   // Booking form submit
   const bookingForm = document.getElementById('booking-form')
