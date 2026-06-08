@@ -3,450 +3,620 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Picnic Story - Boho Picnic Experiences</title>
-  <script type="module" crossorigin src="/assets/index-q_oSzkrc.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-yicceqHi.css">
+    <meta http-equiv="Content-Security-Policy"
+      content="default-src 'self';
+               script-src 'self' 'unsafe-inline';
+               connect-src https://*.supabase.co https://fonts.googleapis.com;
+               style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com;
+               font-src https://fonts.gstatic.com;
+               img-src 'self' data: https:;">
+    <title>The Picnic Stories - Premium Picnic Experiences</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Be+Vietnam+Pro:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script type="module" crossorigin src="/assets/index-B86D0P1C.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-BlpOtjYf.css">
 </head>
 <body>
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
     <!-- Navigation -->
     <nav class="navbar">
         <div class="container">
-            <div class="nav-brand">
-                <h2>The Picnic Story</h2>
-                <p class="brand-tagline">Boho Picnic Experiences</p>
-            </div>
+            <a href="#" class="nav-brand" onclick="navigateHome(); return false;" aria-label="Go to home">
+                <h2>The Picnic Stories</h2>
+                <p class="brand-tagline">Magical Moments</p>
+            </a>
             <div class="nav-links">
-                <a href="#" data-route="home" class="nav-link active">Home</a>
-                <a href="#" data-route="admin" class="nav-link">Admin</a>
+                <a href="#" class="nav-link" data-route="admin">Admin</a>
+                <button class="nav-mybookings-btn" onclick="showMyBookingsPage()">My Booking</button>
             </div>
         </div>
     </nav>
 
-    <!-- Main Content -->
-    <main id="app">
-        <!-- Landing Page -->
-        <section id="home-page" class="page active">
-            <!-- Hero Section -->
-            <section class="hero">
-                <div class="hero-background"></div>
-                <div class="container">
-                    <div class="hero-content">
-                        <h1 class="hero-title">The Picnic Story</h1>
-                        <p class="hero-tagline">Creating Unforgettable Boho Picnic Experiences</p>
-                        <p class="hero-description">We specialize in curating luxurious boho-style picnic setups for intimate gatherings, romantic dates, celebrations, and corporate events in Jaipur and Gurgaon.</p>
-                        <button class="btn btn--primary btn--lg" id="book-picnic-btn">Book Your Picnic</button>
-                    </div>
-                </div>
-            </section>
+    <!-- Home Page -->
+    <div id="home-page" class="page active">
+        <!-- Hero Section — Split Screen -->
+        <section class="hero">
+            <!-- Full-bleed background image -->
+            <img
+                id="hero-bg-img"
+                src="https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=1600&q=85"
+                alt=""
+                class="hero-bg-img"
+                aria-hidden="true"
+            />
+            <!-- Gradient overlay: cream on left fades to transparent on right -->
+            <div class="hero-overlay" aria-hidden="true"></div>
 
-            <!-- Services Section -->
-            <section class="services">
-                <div class="container">
-                    <h2 class="section-title">Our Services</h2>
-                    <div class="services-grid">
-                        <div class="service-card">
-                            <div class="service-icon">🌸</div>
-                            <h3>Luxury Boho Setups</h3>
-                            <p>Beautifully curated picnic arrangements with boho-chic decor, comfortable seating, and ambient lighting.</p>
+            <div class="container hero-container">
+                <div class="hero-text">
+                    <p class="hero-eyebrow">Jaipur &middot; Gurugram</p>
+                    <h1 class="hero-title">Every moment<br>deserves a<br><em>beautiful setting</em></h1>
+                    <p class="hero-description">Boho-chic picnic arrangements with curated decor, ambient lighting, and gourmet food &mdash; across Jaipur and Gurugram's most stunning locations.</p>
+                    <div class="hero-actions">
+                        <button class="btn btn--primary btn--lg" onclick="document.getElementById('venues-section').scrollIntoView({behavior:'smooth'})">Book Now</button>
+                        <a class="btn btn--ghost btn--lg" href="https://wa.me/919999999999" target="_blank" rel="noopener noreferrer">Contact Us</a>
+                    </div>
+                    <div class="hero-stats">
+                        <div class="hero-stat">
+                            <span class="hero-stat-num">200+</span>
+                            <span class="hero-stat-label">Happy couples</span>
                         </div>
-                        <div class="service-card">
-                            <div class="service-icon">💕</div>
-                            <h3>Intimate Gatherings</h3>
-                            <p>Perfect for romantic dates, small celebrations, and meaningful moments with your loved ones.</p>
+                        <div class="hero-stat-divider"></div>
+                        <div class="hero-stat">
+                            <span class="hero-stat-num">12</span>
+                            <span class="hero-stat-label">Curated venues</span>
                         </div>
-                        <div class="service-card">
-                            <div class="service-icon">🎉</div>
-                            <h3>Special Occasions</h3>
-                            <p>Corporate events, birthdays, anniversaries, and any celebration deserving of a magical outdoor experience.</p>
+                        <div class="hero-stat-divider"></div>
+                        <div class="hero-stat">
+                            <span class="hero-stat-num">4.9</span>
+                            <span class="hero-stat-label">Avg. rating</span>
                         </div>
                     </div>
                 </div>
-            </section>
-
-            <!-- Gallery Section -->
-            <section class="gallery">
-                <div class="container">
-                    <h2 class="section-title">Gallery</h2>
-                    <div class="gallery-grid">
-                        <div class="gallery-item">
-                            <div class="gallery-placeholder">
-                                <span>Romantic Sunset Picnic</span>
-                            </div>
-                        </div>
-                        <div class="gallery-item">
-                            <div class="gallery-placeholder">
-                                <span>Boho Garden Party</span>
-                            </div>
-                        </div>
-                        <div class="gallery-item">
-                            <div class="gallery-placeholder">
-                                <span>Corporate Team Event</span>
-                            </div>
-                        </div>
-                        <div class="gallery-item">
-                            <div class="gallery-placeholder">
-                                <span>Anniversary Celebration</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Testimonials Section -->
-            <section class="testimonials">
-                <div class="container">
-                    <h2 class="section-title">What Our Clients Say</h2>
-                    <div class="testimonials-grid" id="testimonials-container">
-                        <!-- Testimonials will be populated by JavaScript -->
-                    </div>
-                </div>
-            </section>
+            </div>
         </section>
 
-        <!-- Menu Preview Page -->
-        <section id="menu-preview-page" class="page">
+        <!-- Services Section — Editorial Asymmetric Grid -->
+        <section class="services">
             <div class="container">
-                <div class="page-header">
-                    <h1>Your Picnic Menu Preview</h1>
-                    <p>Here's a taste of what we offer. Your personalized menu will be sent to you within 24 hours.</p>
+                <div class="services-intro">
+                    <p class="section-label">What we offer</p>
+                    <h2 class="section-heading">Experiences crafted<br>for every occasion</h2>
                 </div>
-                
-                <div class="menu-sections">
-                    <div class="menu-section">
-                        <h2>Gourmet Food Items</h2>
-                        <div class="menu-items" id="preview-food-items">
-                            <!-- Sample food items will be populated here -->
+                <div class="services-grid">
+                    <!-- Featured card — spans both rows -->
+                    <div class="service-card service-card--featured">
+                        <div class="service-icon-wrap" aria-hidden="true">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                         </div>
-                    </div>
-                    
-                    <div class="menu-section">
-                        <h2>Premium Beverages</h2>
-                        <div class="menu-items" id="preview-beverage-items">
-                            <!-- Sample beverage items will be populated here -->
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="contact-info">
-                    <h3>Contact Information</h3>
-                    <p>We'll be in touch within 24 hours to finalize your personalized menu and event details.</p>
-                    <p>Email: hello@thepicnicstory.com | Phone: +91 98765 43210</p>
-                </div>
-                
-                <button class="btn btn--secondary" onclick="navigateToPage('home')">Back to Home</button>
-            </div>
-        </section>
-
-        <!-- Admin Dashboard -->
-        <section id="admin-page" class="page">
-            <!-- Admin Login -->
-            <div id="admin-login" class="admin-section">
-                <div class="container">
-                    <div class="login-card">
-                        <h2>Admin Login</h2>
-                        <div class="database-status" id="database-status">
-                            <span class="status-indicator"></span>
-                            <span class="status-text">Database Status: Connected</span>
-                        </div>
-                        <form id="admin-login-form">
-                            <div class="form-group">
-                                <label class="form-label">Password</label>
-                                <input type="password" class="form-control" id="admin-password" required>
-                            </div>
-                            <button type="submit" class="btn btn--primary btn--full-width">Login</button>
-                        </form>
-                        <div id="login-error" class="error-message hidden"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Admin Dashboard -->
-            <div id="admin-dashboard" class="admin-section hidden">
-                <div class="container">
-                    <div class="dashboard-header">
-                        <div>
-                            <h2>Admin Dashboard</h2>
-                            <div class="database-status" id="dashboard-database-status">
-                                <span class="status-indicator connected"></span>
-                                <span class="status-text">Supabase Connected</span>
-                            </div>
-                        </div>
-                        <div class="header-actions">
-                            <button class="btn btn--outline btn--sm" id="export-leads">Export Leads</button>
-                            <button class="btn btn--secondary" id="admin-logout">Logout</button>
-                        </div>
-                    </div>
-                    
-                    <div class="dashboard-tabs">
-                        <button class="tab-btn active" data-tab="leads">Customer Leads</button>
-                        <button class="tab-btn" data-tab="menu-generator">Menu Generator</button>
-                        <button class="tab-btn" data-tab="menu-links">Menu Links</button>
-                        <button class="tab-btn" data-tab="orders">Orders</button>
-                    </div>
-                    
-                    <!-- Leads Tab -->
-                    <div id="leads-tab" class="tab-content active">
-                        <div class="tab-header">
-                            <h3>Submitted Leads</h3>
-                            <div class="search-filters">
-                                <input type="text" placeholder="Search leads..." class="form-control search-input" id="leads-search">
-                                <select class="form-control filter-select" id="location-filter">
-                                    <option value="">All Locations</option>
-                                    <option value="Jaipur">Jaipur</option>
-                                    <option value="Gurgaon">Gurgaon</option>
-                                    <option value="Other Location">Other Location</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div id="leads-container">
-                            <!-- Leads will be populated here -->
-                        </div>
-                    </div>
-                    
-                    <!-- Menu Generator Tab -->
-                    <div id="menu-generator-tab" class="tab-content">
-                        <h3>Generate Menu Link</h3>
-                        <div class="menu-generator">
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label class="form-label">Number of Food Items (1-15)</label>
-                                    <select class="form-control" id="food-count">
-                                        <option value="5">5 items</option>
-                                        <option value="1">1 item</option>
-                                        <option value="2">2 items</option>
-                                        <option value="3">3 items</option>
-                                        <option value="4">4 items</option>
-                                        <option value="6">6 items</option>
-                                        <option value="7">7 items</option>
-                                        <option value="8">8 items</option>
-                                        <option value="9">9 items</option>
-                                        <option value="10">10 items</option>
-                                        <option value="11">11 items</option>
-                                        <option value="12">12 items</option>
-                                        <option value="13">13 items</option>
-                                        <option value="14">14 items</option>
-                                        <option value="15">15 items</option>
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label class="form-label">Number of Beverage Items (1-10)</label>
-                                    <select class="form-control" id="beverage-count">
-                                        <option value="4">4 items</option>
-                                        <option value="1">1 item</option>
-                                        <option value="2">2 items</option>
-                                        <option value="3">3 items</option>
-                                        <option value="5">5 items</option>
-                                        <option value="6">6 items</option>
-                                        <option value="7">7 items</option>
-                                        <option value="8">8 items</option>
-                                        <option value="9">9 items</option>
-                                        <option value="10">10 items</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <button class="btn btn--primary" id="generate-menu-link">
-                                <span class="btn-text">Generate Menu Link</span>
-                                <span class="loading-spinner hidden">Generating...</span>
-                            </button>
-                            
-                            <div id="generated-link-container" class="hidden">
-                                <div class="generated-link">
-                                    <label class="form-label">Generated Menu Link:</label>
-                                    <div class="link-display">
-                                        <input type="text" class="form-control" id="generated-link" readonly>
-                                        <button class="btn btn--secondary" id="copy-link">Copy</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Menu Links Tab -->
-                    <div id="menu-links-tab" class="tab-content">
-                        <h3>Generated Menu Links</h3>
-                        <div id="menu-links-container">
-                            <!-- Menu links will be populated here -->
-                        </div>
-                    </div>
-
-                    <!-- Orders Tab -->
-                    <div id="orders-tab" class="tab-content">
-                        <h3>Customer Orders</h3>
-                        <div id="orders-container">
-                            <!-- Orders will be populated here -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Customer Menu Selection Page -->
-        <section id="menu-selection-page" class="page">
-            <div class="container">
-                <div class="page-header">
-                    <h1>Select Your Menu Items</h1>
-                    <p>Choose your preferred items and quantities for your picnic experience.</p>
-                </div>
-                
-                <form id="menu-selection-form">
-                    <div class="menu-sections">
-                        <div class="menu-section">
-                            <h2>Food Items <span class="item-count" id="food-item-count"></span></h2>
-                            <div id="selection-food-items" class="selection-items">
-                                <!-- Food items with quantity selectors -->
-                            </div>
-                        </div>
-                        
-                        <div class="menu-section">
-                            <h2>Beverages <span class="item-count" id="beverage-item-count"></span></h2>
-                            <div id="selection-beverage-items" class="selection-items">
-                                <!-- Beverage items with quantity selectors -->
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="selection-summary" id="selection-summary">
-                        <h3>Order Summary</h3>
-                        <div id="summary-items">No items selected</div>
-                        <div class="total-items">Total Items: <span id="total-count">0</span></div>
-                    </div>
-                    
-                    <div class="form-actions">
-                        <button type="button" class="btn btn--secondary" onclick="navigateToPage('home')">Cancel</button>
-                        <button type="submit" class="btn btn--primary btn--lg">
-                            <span class="btn-text">Submit Menu Selection</span>
-                            <span class="loading-spinner hidden">Submitting...</span>
+                        <h3>Romantic Picnics</h3>
+                        <p>Perfect for dates, proposals, and anniversaries — every detail thoughtfully arranged for the couple who deserves an unforgettable experience.</p>
+                        <button class="service-link" onclick="handleNavigation('home')">
+                            Plan your date
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
                         </button>
                     </div>
-                    
-                    <div id="menu-selection-error" class="error-message hidden"></div>
-                </form>
+                    <!-- Regular cards — stacked right -->
+                    <div class="service-card">
+                        <div class="service-icon-wrap" aria-hidden="true">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
+                        </div>
+                        <h3>Corporate Events</h3>
+                        <p>Team outings, client entertainment, and offsite meetings — elevated with premium outdoor setup and gourmet catering.</p>
+                    </div>
+                    <div class="service-card">
+                        <div class="service-icon-wrap" aria-hidden="true">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+                        </div>
+                        <h3>Special Occasions</h3>
+                        <p>Birthdays, baby showers, and milestones — crafted into unforgettable outdoor celebrations with curated decor.</p>
+                    </div>
+                </div>
             </div>
         </section>
 
-        <!-- Confirmation Page -->
-        <section id="confirmation-page" class="page">
+        <!-- Venues Section -->
+        <section class="venues-section" id="venues-section">
             <div class="container">
-                <div class="confirmation-ticket" id="confirmation-ticket">
-                    <div class="ticket-header">
-                        <h1>Order Confirmation</h1>
-                        <div class="confirmation-number">
-                            <span>Confirmation #: <strong id="confirmation-number"></strong></span>
-                        </div>
+                <div class="venues-section-header">
+                    <div class="venues-section-text">
+                        <h2 class="venues-section-title">Choose Your Venue</h2>
+                        <p class="venues-section-subtitle">Curated spaces across Jaipur and Gurugram — from intimate gardens to rooftop terraces</p>
                     </div>
-                    
-                    <div class="ticket-content">
-                        <div class="customer-details">
-                            <h3>Customer Details</h3>
-                            <div id="customer-info"></div>
-                        </div>
-                        
-                        <div class="event-details">
-                            <h3>Event Details</h3>
-                            <div id="event-info"></div>
-                        </div>
-                        
-                        <div class="menu-details">
-                            <h3>Selected Menu Items</h3>
-                            <div id="selected-menu-items"></div>
-                        </div>
-                        
-                        <div class="next-steps">
-                            <h3>Next Steps</h3>
-                            <ul>
-                                <li>We'll contact you within 24 hours to confirm final details</li>
-                                <li>Payment instructions will be sent via email</li>
-                                <li>Setup will begin 2 hours before your event time</li>
-                                <li>Save this confirmation for your records</li>
-                            </ul>
-                        </div>
+                    <div class="city-filter" role="group" aria-label="Filter by city">
+                        <button class="city-pill active" data-city="all" onclick="filterVenuesByCity('all', this)">All</button>
+                        <button class="city-pill" data-city="Jaipur" onclick="filterVenuesByCity('Jaipur', this)">📍 Jaipur</button>
+                        <button class="city-pill" data-city="Gurugram" onclick="filterVenuesByCity('Gurugram', this)">📍 Gurugram</button>
                     </div>
                 </div>
-                
-                <div class="confirmation-actions">
-                    <button class="btn btn--secondary" onclick="window.print()">Print Confirmation</button>
-                    <button class="btn btn--primary" onclick="navigateToPage('home')">Book Another Picnic</button>
+                <div id="venues-grid" class="venues-grid">
+                    <div class="venues-loading">
+                        <span class="venues-loading-dot"></span>
+                        <span class="venues-loading-dot"></span>
+                        <span class="venues-loading-dot"></span>
+                    </div>
                 </div>
             </div>
         </section>
-    </main>
 
-    <!-- Booking Modal -->
-    <div id="booking-modal" class="modal hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Book Your Picnic</h2>
-                <button class="modal-close" id="close-booking-modal">&times;</button>
+        <!-- Add-ons Mood Strip -->
+        <section class="addons-strip-section">
+            <div class="container">
+                <div class="addons-strip-header">
+                    <p class="section-label">Make it yours</p>
+                    <h2 class="section-heading addons-strip-title">The details that make the memory</h2>
+                </div>
+                <div id="addons-strip" class="addons-strip-scroll">
+                    <!-- Populated by JS -->
+                </div>
             </div>
-            <div class="modal-body">
-                <form id="booking-form">
-                    <div class="form-group">
-                        <label class="form-label">Full Name *</label>
-                        <input type="text" class="form-control" id="full-name" required>
-                        <span class="form-error" id="full-name-error"></span>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Mobile Number *</label>
-                        <input type="tel" class="form-control" id="mobile-number" required pattern="[0-9]{10}">
-                        <span class="form-error" id="mobile-number-error"></span>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Email Address *</label>
-                        <input type="email" class="form-control" id="email-address" required>
-                        <span class="form-error" id="email-address-error"></span>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Location *</label>
-                        <select class="form-control" id="location" required>
-                            <option value="">Select Location</option>
-                            <option value="Jaipur">Jaipur</option>
-                            <option value="Gurgaon">Gurgaon</option>
-                            <option value="Other Location">Other Location</option>
-                        </select>
-                        <span class="form-error" id="location-error"></span>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Number of Guests *</label>
-                        <input type="number" class="form-control" id="guest-count" min="2" required>
-                        <span class="form-error" id="guest-count-error"></span>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Preferred Date *</label>
-                        <input type="date" class="form-control" id="preferred-date" required>
-                        <span class="form-error" id="preferred-date-error"></span>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Special Requirements</label>
-                        <textarea class="form-control" id="special-requirements" rows="3" placeholder="Any special requests or dietary restrictions..."></textarea>
-                    </div>
-                    
-                    <div class="form-actions">
-                        <button type="button" class="btn btn--secondary" id="cancel-booking">Cancel</button>
-                        <button type="submit" class="btn btn--primary">
-                            <span class="btn-text">Submit Booking</span>
-                            <span class="loading-spinner hidden">Submitting...</span>
-                        </button>
-                    </div>
-                    
-                    <div id="booking-error" class="error-message hidden"></div>
-                </form>
+        </section>
+
+        <!-- Testimonials Section -->
+        <section class="testimonials">
+            <div class="container">
+                <h2 class="section-title">What Our Customers Say</h2>
+                <div id="testimonials-container" class="testimonials-grid">
+                    <!-- Testimonials will be loaded by JavaScript -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Contact Section -->
+        <section class="contact-info">
+            <div class="container">
+                <h3>Ready for Your Perfect Picnic?</h3>
+                <p>Thank you for your interest! We'll contact you within 24 hours to discuss your picnic requirements.</p>
+                <p>Call us directly:📞 +91 99999-99999</p>
+                <button class="btn btn--primary btn--lg" onclick="handleNavigation('home')">Get Started</button>
+            </div>
+        </section>
+    </div>
+
+    <!-- Menu Preview Page -->
+    <div id="menu-preview-page" class="page">
+        <div class="container">
+            <div class="page-header">
+                <h1>Our Delicious Menu</h1>
+                <p>A carefully curated selection of authentic Indian dishes to make your picnic memorable</p>
+            </div>
+            
+            <!-- Menu Preview Tabs -->
+            <div class="menu-tabs">
+                <button class="menu-tab-btn active" data-tab="foods">
+                    🍽️ Food Items
+                </button>
+                <button class="menu-tab-btn" data-tab="beverages">
+                    🥤 Beverages
+                </button>
+            </div>
+
+            <!-- Food Items Tab -->
+            <div id="foods-preview" class="menu-tab-content">
+                <div class="menu-grid" id="food-preview-grid">
+                    <!-- Food items will be populated by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Beverages Tab -->
+            <div id="beverages-preview" class="menu-tab-content" style="display: none;">
+                <div class="menu-grid" id="beverage-preview-grid">
+                    <!-- Beverage items will be populated by JavaScript -->
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: var(--space-32);">
+                <button class="btn btn--primary btn--lg" onclick="handleNavigation('home')">
+                    Book Your Picnic Now
+                </button>
             </div>
         </div>
     </div>
 
-    <!-- Toast Notifications -->
-    <div id="toast-container" class="toast-container"></div>
+    <!-- Query Success Page -->
+    <div id="query-success-page" class="page">
+        <div id="booking-success-content">
+            <!-- Populated by renderSuccessPage() -->
+        </div>
+    </div>
 
-    <script>
-        window.SUPABASE_URL = 'YOUR_SUPABASE_URL'; // Replace with your Supabase Project URL
-        window.SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY'; // Replace with your Supabase anon key
-    </script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- My Bookings Page -->
+    <div id="my-bookings-page" class="page">
+        <div id="my-bookings-content"></div>
+    </div>
+
+    <!-- Venue Detail Page (dynamically populated) -->
+    <div id="venue-detail-page" class="page">
+        <div id="venue-detail-content">
+            <!-- Populated by renderVenueDetail() -->
+        </div>
+    </div>
+
+    <!-- Admin Page -->
+    <section id="admin-page" class="page container">
+        <!-- Admin login -->
+        <div id="admin-login" class="login-card">
+            <h2>Admin Login</h2>
+            <form id="admin-login-form" novalidate>
+                <div class="form-group">
+                    <label for="admin-email" class="form-label">Email</label>
+                    <input id="admin-email" type="email" class="form-control" required autocomplete="username" />
+                    <div id="admin-email-error" class="form-error" aria-live="polite"></div>
+                </div>
+                <div class="form-group">
+                    <label for="admin-password" class="form-label">Password</label>
+                    <input id="admin-password" type="password" class="form-control" required autocomplete="current-password" />
+                    <div id="admin-password-error" class="form-error" aria-live="polite"></div>
+                </div>
+                <button type="submit" class="btn btn--primary">Login</button>
+            </form>
+        </div>
+
+        <!-- Admin dashboard -->
+        <div id="admin-dashboard" class="admin-section hidden">
+            <div class="database-status">
+                <span class="status-indicator connected"></span>
+                <span class="status-text">Database Status: Connected</span>
+            </div>
+
+            <div class="dashboard-header">
+                <h2>Admin Dashboard</h2>
+                <button id="admin-logout" class="btn btn--secondary">Logout</button>
+            </div>
+
+            <div class="dashboard-tabs" role="tablist">
+                <button class="tab-btn active" data-tab="queries" role="tab" aria-selected="true">Queries</button>
+                <button class="tab-btn" data-tab="bookings" role="tab" aria-selected="false">Bookings</button>
+                <button class="tab-btn" data-tab="venues" role="tab" aria-selected="false">Venues</button>
+                <button class="tab-btn" data-tab="availability" role="tab" aria-selected="false">Availability</button>
+                <button class="tab-btn" data-tab="menu-link" role="tab" aria-selected="false">Menu Link Generator</button>
+                <button class="tab-btn" data-tab="add-ons" role="tab" aria-selected="false">Add-ons</button>
+                <button class="tab-btn" data-tab="hero-image" role="tab" aria-selected="false">Hero Image</button>
+            </div>
+
+            <!-- Queries Tab -->
+            <div id="queries-tab" class="tab-content active" role="tabpanel">
+                <div class="tab-header">
+                    <h3>Customer Queries</h3>
+                    <div class="search-filters">
+                        <input id="leads-search" class="search-input" type="search" placeholder="Search queries..." />
+                        <select id="location-filter" class="filter-select">
+                            <option value="">All Locations</option>
+                            <option value="jaipur-city">Jaipur City</option>
+                            <option value="jaipur-outskirts">Jaipur Outskirts</option>
+                            <option value="amber-fort">Near Amber Fort</option>
+                            <option value="jal-mahal">Near Jal Mahal</option>
+                            <option value="nahargarh">Nahargarh Area</option>
+                            <option value="custom">Custom Location</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="queries-container" class="data-container">
+                    <!-- Queries will be populated here by JavaScript -->
+                </div>
+                <button id="export-queries" class="btn btn--outline">Export Queries (CSV)</button>
+            </div>
+
+            <!-- Bookings Tab -->
+            <div id="bookings-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="tab-header">
+                    <h3>Confirmed Bookings</h3>
+                    <p>Bookings that have been confirmed with advance payment</p>
+                </div>
+                <div id="bookings-container" class="data-container">
+                    <!-- Bookings will be populated here by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Venues Tab -->
+            <div id="venues-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="tab-header">
+                    <h3>Venue Manager</h3>
+                    <p>Add, edit, or deactivate venues without SQL</p>
+                    <button id="add-venue-btn" class="btn btn--primary">+ Add Venue</button>
+                </div>
+                <div id="venues-list-container" class="data-container">
+                    <!-- Venue list rendered by JS -->
+                </div>
+                <!-- Venue form panel (hidden by default) -->
+                <div id="venue-form-panel" class="venue-form-panel hidden">
+                    <div class="vfp-header">
+                        <h4 id="vfp-title">Add Venue</h4>
+                        <button id="vfp-close" class="vfp-close-btn">&times;</button>
+                    </div>
+                    <form id="venue-admin-form" class="venue-admin-form">
+                        <input type="hidden" id="vf-id" />
+
+                        <div class="vf-row">
+                            <div class="vf-field">
+                                <label class="vf-label">Venue Name *</label>
+                                <input type="text" id="vf-name" class="vf-input" required placeholder="e.g. Haveli 14 — Heritage Stay" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Type *</label>
+                                <select id="vf-type" class="vf-input">
+                                    <option value="cafe">Cafe / Garden Space</option>
+                                    <option value="self_managed">Self-Managed BnB</option>
+                                    <option value="partner_bnb">Partner BnB (Airbnb-linked)</option>
+                                    <option value="custom">Custom</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="vf-field">
+                            <label class="vf-label">Description *</label>
+                            <textarea id="vf-description" class="vf-input vf-textarea" rows="4" required placeholder="Venue description shown to customers..."></textarea>
+                        </div>
+
+                        <div class="vf-row">
+                            <div class="vf-field">
+                                <label class="vf-label">Area</label>
+                                <input type="text" id="vf-area" class="vf-input" placeholder="e.g. Old City, C-Scheme" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">City</label>
+                                <input type="text" id="vf-city" class="vf-input" value="Jaipur" />
+                            </div>
+                        </div>
+
+                        <div class="vf-row">
+                            <div class="vf-field">
+                                <label class="vf-label">Min Guests</label>
+                                <input type="number" id="vf-cap-min" class="vf-input" min="1" value="2" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Max Guests</label>
+                                <input type="number" id="vf-cap-max" class="vf-input" min="1" value="10" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Base Price (₹)</label>
+                                <input type="number" id="vf-base-price" class="vf-input" min="0" step="100" value="0" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Concurrent Setups <span class="vf-hint">(how many bookings can share this venue at the same time)</span></label>
+                                <input type="number" id="vf-max-setups" class="vf-input" min="1" value="1" />
+                            </div>
+                        </div>
+
+                        <!-- External URL (partner_bnb only) -->
+                        <div class="vf-field vf-partner-only" style="display:none">
+                            <label class="vf-label">Airbnb URL</label>
+                            <input type="url" id="vf-external-url" class="vf-input" placeholder="https://airbnb.com/rooms/..." />
+                        </div>
+
+                        <!-- Google Maps link (all venue types) -->
+                        <div class="vf-field">
+                            <label class="vf-label">Maps Link <span class="vf-hint">(paste a Google Maps share link; powers the "Get Directions" button in confirmation emails)</span></label>
+                            <input type="url" id="vf-maps-url" class="vf-input" placeholder="https://maps.app.goo.gl/..." />
+                        </div>
+
+                        <!-- Images -->
+                        <div class="vf-field">
+                            <label class="vf-label">Images</label>
+                            <div id="vf-images-list" class="vf-images-list"></div>
+                            <button type="button" id="vf-add-image" class="vf-add-btn" onclick="addVfImage()">+ Add Image</button>
+                        </div>
+
+                        <!-- What's Included -->
+                        <div class="vf-field">
+                            <label class="vf-label">What's Included <span style="font-weight:400;opacity:.6">(comma-separated)</span></label>
+                            <input type="text" id="vf-includes" class="vf-input" placeholder="e.g. Full picnic setup, Curated menu, Setup &amp; cleanup" />
+                        </div>
+
+                        <!-- Pricing Tiers -->
+                        <div class="vf-section">
+                            <div class="vf-section-title">Pricing Tiers</div>
+                            <div id="vf-tiers-list" class="vf-tiers-list"></div>
+                            <button type="button" id="vf-add-tier" class="vf-add-btn" onclick="addVfTier()">+ Add Tier</button>
+                            <div class="vf-row" style="margin-top:10px">
+                                <div class="vf-field">
+                                    <label class="vf-label">Overage per person (₹)</label>
+                                    <input type="number" id="vf-overage" class="vf-input" min="0" step="100" value="2000" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- BnB metadata (self_managed only) -->
+                        <div id="vf-bnb-section" class="vf-section vf-bnb-only" style="display:none">
+                            <div class="vf-section-title">Property Details</div>
+                            <div class="vf-row">
+                                <div class="vf-field">
+                                    <label class="vf-label">Rooms</label>
+                                    <input type="number" id="vf-rooms" class="vf-input" min="1" value="2" />
+                                </div>
+                                <div class="vf-field">
+                                    <label class="vf-label">Bathrooms</label>
+                                    <input type="number" id="vf-bathrooms" class="vf-input" min="1" value="2" />
+                                </div>
+                                <div class="vf-field">
+                                    <label class="vf-label">Stay Price / Night (₹)</label>
+                                    <input type="number" id="vf-stay-price" class="vf-input" min="0" step="500" value="0" />
+                                </div>
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Amenities <span class="vf-hint">(comma-separated)</span></label>
+                                <input type="text" id="vf-amenities" class="vf-input" placeholder="Private pool, WiFi, AC rooms" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Highlights <span class="vf-hint">(comma-separated)</span></label>
+                                <input type="text" id="vf-highlights" class="vf-input" placeholder="Fort views, Walking distance to Hawa Mahal" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Ideal For <span class="vf-hint">(comma-separated)</span></label>
+                                <input type="text" id="vf-ideal-for" class="vf-input" placeholder="Couples, Families, Honeymoon" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Airbnb iCal Import URL <span class="vf-hint">(Airbnb → Listing → Availability → Connect/Export Calendar → copy the .ics link; leaving this blank disables import for this venue)</span></label>
+                                <input type="url" id="vf-airbnb-ical-url" class="vf-input" placeholder="https://www.airbnb.com/calendar/ical/12345.ics?s=..." />
+                            </div>
+                        </div>
+
+                        <div class="vf-row vf-actions">
+                            <label class="vf-toggle-label">
+                                <input type="checkbox" id="vf-active" checked />
+                                Active (visible to customers)
+                            </label>
+                            <button type="submit" class="btn btn--primary">Save Venue</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Availability Tab -->
+            <div id="availability-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="avail-toolbar">
+                    <select id="avail-venue-select" class="avail-venue-select">
+                        <option value="">Select a venue…</option>
+                    </select>
+                    <div class="avail-month-nav">
+                        <button id="avail-prev-month" class="avail-nav-btn" aria-label="Previous month">&#8592;</button>
+                        <span id="avail-month-label" class="avail-month-label"></span>
+                        <button id="avail-next-month" class="avail-nav-btn" aria-label="Next month">&#8594;</button>
+                    </div>
+                </div>
+                <div id="avail-stats-row" class="avail-stats-row" hidden></div>
+                <div id="avail-ical-panel" class="avail-ical-panel" hidden></div>
+                <div class="avail-legend">
+                    <span class="avail-legend-item"><span class="avail-legend-pip avail-pip--available"></span>Available</span>
+                    <span class="avail-legend-item"><span class="avail-legend-pip avail-pip--partial"></span>Partially booked</span>
+                    <span class="avail-legend-item"><span class="avail-legend-pip avail-pip--booked"></span>Fully booked</span>
+                    <span class="avail-legend-item"><span class="avail-legend-pip avail-pip--blocked"></span>Admin blocked</span>
+                    <span class="avail-legend-item avail-legend-hint">Click any date to view details and manage blocks</span>
+                </div>
+                <div id="avail-calendar-grid" class="avail-calendar-grid">
+                    <p class="avail-placeholder">Select a venue to view its calendar.</p>
+                </div>
+                <div id="avail-date-detail"></div>
+            </div>
+
+            <!-- Menu Link Generator Tab -->
+            <div id="menu-link-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="tab-header">
+                    <h3>Generate Menu Links</h3>
+                    <p>Create custom menu links with specific item limits for customers</p>
+                </div>
+                
+                <div class="menu-generator">
+                    <div class="menu-controls">
+                        <div class="control-group">
+                            <label for="food-count">Food Items (1-15):</label>
+                            <input type="number" id="food-count" min="1" max="15" value="3">
+                        </div>
+                        <div class="control-group">
+                            <label for="bev-count">Beverages (1-10):</label>
+                            <input type="number" id="bev-count" min="1" max="10" value="2">
+                        </div>
+                        <button id="generate-menu-link" class="btn btn--primary">Generate Link</button>
+                    </div>
+                    
+                    <div class="generated-link" style="display: none;">
+                        <label>Generated Menu Link:</label>
+                        <div class="link-display">
+                            <input type="text" id="generated-link-url" readonly>
+                            <button id="copy-link" class="btn btn--outline">Copy Link</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="menu-links-list" class="menu-links-list">
+                    <!-- Menu links will be populated here by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Add-ons Tab -->
+            <div id="add-ons-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="tab-header">
+                    <h3>Add-ons</h3>
+                    <button class="btn btn--primary" onclick="openAddOnForm()">+ New Add-on</button>
+                </div>
+                <div id="addons-manager-container">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- Hero Image Tab -->
+            <div id="hero-image-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="tab-header">
+                    <h3>Hero Image</h3>
+                </div>
+                <div class="hero-img-admin-grid">
+
+                    <!-- Desktop image -->
+                    <div class="hero-img-admin-panel">
+                        <div class="hero-img-panel-header">
+                            <span class="hero-img-panel-icon">🖥</span>
+                            <div>
+                                <p class="hero-img-admin-label">Desktop image</p>
+                                <p class="hero-img-admin-hint">1600×900px min. Left ~40% covered by text overlay.</p>
+                            </div>
+                        </div>
+                        <div id="hero-img-admin-preview" class="hero-img-admin-preview">
+                            <span class="hero-img-admin-empty">No image set</span>
+                        </div>
+                        <label class="vf-img-upload-btn hero-img-upload-btn" id="hero-upload-label">
+                            ↑ Choose photo
+                            <input type="file" id="hero-img-file" accept="image/jpeg,image/png,image/webp" onchange="handleHeroImageUpload(this, 'desktop')" style="display:none" />
+                        </label>
+                        <div id="hero-upload-status"></div>
+                    </div>
+
+                    <!-- Mobile image -->
+                    <div class="hero-img-admin-panel">
+                        <div class="hero-img-panel-header">
+                            <span class="hero-img-panel-icon">📱</span>
+                            <div>
+                                <p class="hero-img-admin-label">Mobile image</p>
+                                <p class="hero-img-admin-hint">Portrait crop recommended. Falls back to desktop image if not set.</p>
+                            </div>
+                        </div>
+                        <div id="hero-img-mobile-preview" class="hero-img-admin-preview">
+                            <span class="hero-img-admin-empty">No image set</span>
+                        </div>
+                        <label class="vf-img-upload-btn hero-img-upload-btn" id="hero-upload-mobile-label">
+                            ↑ Choose photo
+                            <input type="file" id="hero-img-mobile-file" accept="image/jpeg,image/png,image/webp" onchange="handleHeroImageUpload(this, 'mobile')" style="display:none" />
+                        </label>
+                        <div id="hero-upload-mobile-status"></div>
+
+                        <!-- Position adjuster -->
+                        <div id="hero-mobile-position-wrap" class="hero-pos-wrap" style="display:none">
+                            <p class="hero-img-admin-label" style="margin-top:16px">Adjust framing</p>
+                            <p class="hero-img-admin-hint">Click or drag on the preview to set the focal point.</p>
+                            <div class="hero-pos-preview-wrap">
+                                <div id="hero-pos-preview" class="hero-pos-preview">
+                                    <div id="hero-pos-crosshair" class="hero-pos-crosshair"></div>
+                                </div>
+                            </div>
+                            <div class="hero-pos-sliders">
+                                <label class="hero-pos-slider-label">
+                                    Horizontal
+                                    <input type="range" id="hero-pos-x" min="0" max="100" value="65" oninput="updateMobilePosition()">
+                                    <span id="hero-pos-x-val">65%</span>
+                                </label>
+                                <label class="hero-pos-slider-label">
+                                    Vertical
+                                    <input type="range" id="hero-pos-y" min="0" max="100" value="0" oninput="updateMobilePosition()">
+                                    <span id="hero-pos-y-val">0%</span>
+                                </label>
+                            </div>
+                            <button class="btn btn--primary" onclick="saveMobilePosition()" style="margin-top:12px">Save position</button>
+                            <div id="hero-pos-status"></div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Menu Selection Page (Dynamic) -->
+    <div id="menu-selection-page" class="page">
+        <!-- Content will be dynamically generated by JavaScript -->
+    </div>
+
+
 </body>
 </html>

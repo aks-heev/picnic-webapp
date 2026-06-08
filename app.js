@@ -964,6 +964,23 @@ function buildCalendarHTML(year, month, bookedData) {
   const firstDow  = new Date(year, month, 1).getDay()
   const totalDays = new Date(year, month + 1, 0).getDate()
 
+  // BnB: when a check-in is selected, find the first blocked night after it.
+  // That date is a valid checkout target (same-day turnover: guest leaves morning,
+  // next guest arrives afternoon). Dates *beyond* that blocker are not selectable.
+  let checkoutCutoffDate = null
+  if (!isCafe && appState.checkinDate && !appState.checkoutDate) {
+    const maxSetups = bookedData.maxConcurrentSetups || 1
+    const scan = new Date(appState.checkinDate + 'T00:00:00')
+    scan.setDate(scan.getDate() + 1)
+    for (let i = 0; i < 366; i++) {
+      const ds = localDateStr(scan)
+      const isAdminBlocked = bookedData.adminBlockedDates?.has(ds) ?? false
+      const bookingCount   = bookedData.bookingCountMap?.get(ds) || 0
+      if (isAdminBlocked || bookingCount >= maxSetups) { checkoutCutoffDate = ds; break }
+      scan.setDate(scan.getDate() + 1)
+    }
+  }
+
   let html = DOW.map(d => `<span class="avail-cal-dow">${d}</span>`).join('')
   for (let i = 0; i < firstDow; i++) html += `<span class="avail-cal-empty"></span>`
 
@@ -987,7 +1004,11 @@ function buildCalendarHTML(year, month, bookedData) {
       isFullyBooked = isAdminBlocked || bookingCount >= maxSetups
     }
 
-    const isDisabled = isPast || isFullyBooked
+    // A booked date is checkout-eligible if it's the first blocker after the selected checkin
+    // (all nights in the range are clear; this date is just the boundary/departure day).
+    const isCheckoutEligible = !isCafe && !!checkoutCutoffDate && dateStr === checkoutCutoffDate
+
+    const isDisabled = isPast || (isFullyBooked && !isCheckoutEligible)
     const isSelected  = isCafe && appState.selectedDate === dateStr
     const isCheckin   = !isCafe && appState.checkinDate === dateStr
     const isCheckout  = !isCafe && appState.checkoutDate === dateStr
@@ -996,14 +1017,15 @@ function buildCalendarHTML(year, month, bookedData) {
 
     const cls = [
       'avail-cal-day',
-      isPast        ? 'avail-cal-day--past'     : '',
-      isFullyBooked ? 'avail-cal-day--booked'   : '',
-      isToday       ? 'avail-cal-day--today'    : '',
-      isSelected    ? 'avail-cal-day--selected' : '',
-      isCheckin     ? 'avail-cal-day--checkin'  : '',
-      isCheckout    ? 'avail-cal-day--checkout' : '',
-      isInRange     ? 'avail-cal-day--in-range' : '',
-      !isDisabled   ? 'avail-cal-day--available': '',
+      isPast             ? 'avail-cal-day--past'             : '',
+      isFullyBooked      ? 'avail-cal-day--booked'           : '',
+      isCheckoutEligible ? 'avail-cal-day--checkout-eligible': '',
+      isToday            ? 'avail-cal-day--today'            : '',
+      isSelected         ? 'avail-cal-day--selected'         : '',
+      isCheckin          ? 'avail-cal-day--checkin'          : '',
+      isCheckout         ? 'avail-cal-day--checkout'         : '',
+      isInRange          ? 'avail-cal-day--in-range'         : '',
+      !isDisabled        ? 'avail-cal-day--available'        : '',
     ].filter(Boolean).join(' ')
 
     // Use data-attributes + delegated listener — never interpolate dateStr into onclick
@@ -1090,7 +1112,7 @@ function attachBnbHover() {
   const grid = document.getElementById('avail-cal-grid')
   if (!grid) return
   grid.addEventListener('mouseover', (e) => {
-    const btn = e.target.closest('.avail-cal-day--available')
+    const btn = e.target.closest('.avail-cal-day--available, .avail-cal-day--checkout-eligible')
     if (!btn || !appState.checkinDate || appState.checkoutDate) return
     const hoverDate = btn.dataset.date
     if (!hoverDate || hoverDate <= appState.checkinDate) return
@@ -1109,14 +1131,16 @@ function selectBnbDate(dateStr) {
   if (!appState.checkinDate || appState.checkoutDate) {
     appState.checkinDate  = dateStr
     appState.checkoutDate = null
-    updateBnbCalendarHighlight()
+    // Full re-draw so the first-blocker date renders as a checkout-eligible button
+    document.getElementById('avail-calendar-widget')?._calDraw?.() ?? updateBnbCalendarHighlight()
     updateBnbBarState()
     return
   }
   if (dateStr <= appState.checkinDate) {
     appState.checkinDate  = dateStr
     appState.checkoutDate = null
-    updateBnbCalendarHighlight()
+    // Full re-draw so the first-blocker date renders as a checkout-eligible button
+    document.getElementById('avail-calendar-widget')?._calDraw?.() ?? updateBnbCalendarHighlight()
     updateBnbBarState()
     return
   }

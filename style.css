@@ -5068,6 +5068,18 @@ body {
   gap: 2px;
 }
 
+/* Booked date that is still a valid checkout target (same-day turnover).
+   Has avail-cal-day--booked for the dot/strikethrough but overrides cursor/opacity. */
+.avail-cal-day--checkout-eligible {
+  cursor: pointer !important;
+  opacity: 1 !important;
+  text-decoration: none !important;
+}
+.avail-cal-day--checkout-eligible:hover {
+  background: #e8d5d9 !important;
+  color: #7a4050 !important;
+}
+
 .avail-cal-day-booked-dot {
   display: block;
   width: 4px;
