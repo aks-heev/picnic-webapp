@@ -3692,6 +3692,7 @@ function clearVenueForm() {
   document.getElementById('vf-cap-max').value = 10
   document.getElementById('vf-base-price').value = 0
   document.getElementById('vf-external-url').value = ''
+  document.getElementById('vf-maps-url').value = ''
   document.getElementById('vf-max-setups').value = 1
   document.getElementById('vf-overage').value = 2000
   document.getElementById('vf-rooms').value = 2
@@ -3718,6 +3719,7 @@ function populateVenueForm(venue) {
   document.getElementById('vf-cap-max').value = venue.capacity_max || 10
   document.getElementById('vf-base-price').value = venue.base_price || 0
   document.getElementById('vf-external-url').value = venue.external_url || ''
+  document.getElementById('vf-maps-url').value = venue.maps_url || ''
   document.getElementById('vf-max-setups').value = venue.max_concurrent_setups ?? 1
   document.getElementById('vf-active').checked = venue.is_active !== false
 
@@ -3889,6 +3891,7 @@ async function handleVenueFormSubmit(event) {
     capacity_max: parseInt(document.getElementById('vf-cap-max').value, 10),
     base_price: parseFloat(document.getElementById('vf-base-price').value) || 0,
     external_url: document.getElementById('vf-external-url').value.trim() || null,
+    maps_url: document.getElementById('vf-maps-url').value.trim() || null,
     airbnb_ical_url: document.getElementById('vf-airbnb-ical-url').value.trim() || null,
     is_active: document.getElementById('vf-active').checked,
     max_concurrent_setups: parseInt(document.getElementById('vf-max-setups').value, 10) || 1,
@@ -4764,12 +4767,11 @@ async function submitMenuSelection() {
 
   try {
     const orderData = {
-      menu_link_id: appState.currentMenuLink.id,
-      booking_id:   appState.currentMenuLink.booking_id || null,
-      items:        selectedItems,
-      created_at:   new Date().toISOString()
+      menu_link_id:   appState.currentMenuLink.id,
+      booking_id:     appState.currentMenuLink.booking_id || null,
+      selected_items: selectedItems
     }
-    const { error } = await supabase.from('menu_orders').insert([orderData])
+    const { error } = await supabase.from('orders').insert([orderData])
     if (error) throw error
     showToast('Menu selection submitted successfully!', 'success')
     handleNavigation('home')
