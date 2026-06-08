@@ -1460,13 +1460,13 @@ async function showBookingForm(venue) {
   // Price breakdown rows
   let priceRows = ''
   let baseTotal = picnicPrice
+  let hasStay = false
   if (venue.type === 'self_managed' && appState.checkinDate && appState.checkoutDate) {
-    const nights    = calcNights(appState.checkinDate, appState.checkoutDate)
-    const stayTotal = nights * (Number(venue.metadata?.stay_price_per_night) || 0)
-    baseTotal += stayTotal
-    priceRows += `<div class="vd-bv-price-row"><span>Stay · ${nights} night${nights !== 1 ? 's' : ''}</span><span>₹${stayTotal.toLocaleString('en-IN')}</span></div>`
+    const nights = calcNights(appState.checkinDate, appState.checkoutDate)
+    baseTotal += nights * (Number(venue.metadata?.stay_price_per_night) || 0)
+    hasStay = true
   }
-  priceRows += `<div class="vd-bv-price-row"><span>Picnic · ${guestLabel}</span><span>₹${picnicPrice.toLocaleString('en-IN')}</span></div>`
+  priceRows += `<div class="vd-bv-price-row"><span>${hasStay ? 'Stay + Picnic setup' : 'Picnic setup'}</span><span>₹${baseTotal.toLocaleString('en-IN')}</span></div>`
   priceRows += `<div id="bv-addon-price-rows"></div>`
 
   // Add-ons — grouped by category, each in a collapsible accordion
@@ -1525,7 +1525,7 @@ async function showBookingForm(venue) {
             ${priceRows}
             <div class="vd-bv-price-divider"></div>
             <div class="vd-bv-price-row vd-bv-price-row--total">
-              <span>Advance payment</span>
+              <span>Total</span>
               <span id="bv-total-price">₹${baseTotal.toLocaleString('en-IN')}</span>
             </div>
           </div>
@@ -1681,14 +1681,15 @@ function buildIntentSummaryHTML() {
     const billingGuests = calcBillingGuests(appState.adults, appState.children)
     const picnicPrice   = getVenuePrice(venue, billingGuests)
     let rows = ''
+    let setupBase = picnicPrice
+    let hasStay = false
     if (venue.type === 'self_managed' && lead.checkout_date) {
-      const nights    = calcNights(lead.preferred_date, lead.checkout_date)
-      const stayPrice = nights * (Number(venue.metadata?.stay_price_per_night) || 0)
-      rows += `<div class="vd-bv-price-row"><span>Stay · ${nights} night${nights !== 1 ? 's' : ''}</span><span>₹${stayPrice.toLocaleString('en-IN')}</span></div>`
+      const nights = calcNights(lead.preferred_date, lead.checkout_date)
+      setupBase += nights * (Number(venue.metadata?.stay_price_per_night) || 0)
+      hasStay = true
     }
-    if (picnicPrice) {
-      const guestLabel = `${billingGuests} guest${billingGuests !== 1 ? 's' : ''}`
-      rows += `<div class="vd-bv-price-row"><span>Picnic · ${guestLabel}</span><span>₹${picnicPrice.toLocaleString('en-IN')}</span></div>`
+    if (setupBase) {
+      rows += `<div class="vd-bv-price-row"><span>${hasStay ? 'Stay + Picnic setup' : 'Picnic setup'}</span><span>₹${setupBase.toLocaleString('en-IN')}</span></div>`
     }
     for (const ao of addOns) {
       const name = appState.currentVenueAddOns?.find(a => a.id === ao.addon_id)?.name || 'Add-on'
@@ -1699,7 +1700,7 @@ function buildIntentSummaryHTML() {
         ${rows}
         <div class="vd-bv-price-divider"></div>
         <div class="vd-bv-price-row vd-bv-price-row--total">
-          <span>Advance</span>
+          <span>Total</span>
           <span>₹${lead.advance_amount.toLocaleString('en-IN')}</span>
         </div>
       </div>`
@@ -1944,6 +1945,12 @@ async function submitBookingIntent(wantsToLock) {
       p_checkout_date:        lead.checkout_date        ?? null,
       p_time_slot:            lead.time_slot            ?? null,
       p_external_booking_ref: lead.external_booking_ref ?? null,
+      p_add_ons:              addOnsToInsert.map(a => ({
+        addon_id:              a.addon_id,
+        name:                  a.name,
+        price_at_booking:      a.price_at_booking,
+        requires_confirmation: a.requires_confirmation,
+      })),
     })
     if (error) throw error
 
@@ -1953,22 +1960,9 @@ async function submitBookingIntent(wantsToLock) {
       guest_count:    lead.guest_count,
     }
 
-    // Persist add-on line items — requires booking ID which anon can't read back.
-    // Add-ons are stored asynchronously; a server-side function or admin reconciliation
-    // can link them by email + date if booking_id is needed later.
-    // Now we have the booking ID from the RPC — link add-ons correctly
-    if (addOnsToInsert.length > 0) {
-      const { error: addOnErr } = await supabase.from('booking_add_ons').insert(
-        addOnsToInsert.map(a => ({
-          booking_id:            bookingRow.id ?? null,
-          addon_id:              a.addon_id,
-          name:                  a.name,
-          price_at_booking:      a.price_at_booking,
-          requires_confirmation: a.requires_confirmation,
-        }))
-      )
-      if (addOnErr) console.error('Failed to save add-ons:', addOnErr)
-    }
+    // Add-ons are now persisted inside the submit_booking_intent RPC (same
+    // transaction as the booking) so they're committed before the insert-trigger
+    // notification fires — the admin alert and confirmation email can include them.
 
     appState.currentBooking      = null
     appState.currentVenue        = null
