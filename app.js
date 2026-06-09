@@ -402,10 +402,9 @@ function renderVenueGallery(venues) {
         <div class="venue-card venue-card--custom" role="button" tabindex="0"
              data-venue-id="${venue.id}" aria-label="Book your own venue">
           <div class="venue-card-image venue-card-image--custom">
-            <div class="venue-custom-pattern" aria-hidden="true">
-              <span class="venue-custom-icon">✦</span>
-            </div>
-            <span class="venue-type-badge ${venueTypeBadgeClass(venue.type)}">${escapeHtml(formatVenueType(venue.type))}</span>
+            ${hasImage
+              ? `<img src="${escapeHtml(primaryImage.url)}" alt="${escapeHtml(primaryImage.alt || venue.name)}" loading="lazy">`
+              : `<div class="venue-custom-pattern" aria-hidden="true"><span class="venue-custom-icon">✦</span></div>`}
           </div>
           <div class="venue-card-body">
             <h3 class="venue-card-name">${escapeHtml(venue.name)}</h3>
@@ -507,9 +506,7 @@ function renderVenueDetail(venue, addOns = []) {
   const allImages = venue.images || []
   const galleryImgs = allImages
 
-  const heroBg = hasImage
-    ? `background-image: url('${escapeHtml(primaryImage.url)}')`
-    : `background: linear-gradient(150deg, #f0d8e0 0%, #e2c9d4 100%)`
+  const heroImgUrl = hasImage ? escapeHtml(primaryImage.url) : ''
 
   const galleryStrip = galleryImgs.length > 1
     ? `<div class="vd-gallery-strip">
@@ -544,7 +541,11 @@ function renderVenueDetail(venue, addOns = []) {
     <div class="vd-wrap">
 
       <!-- Full-bleed hero -->
-      <div class="vd-hero" style="${heroBg}">
+      <div class="vd-hero">
+        ${heroImgUrl
+          ? `<div class="vd-hero-blur-bg" style="background-image:url('${heroImgUrl}')"></div>
+             <img class="vd-hero-img" src="${heroImgUrl}" alt="${escapeHtml(venue.name)}">`
+          : `<div class="vd-hero-blur-bg vd-hero-blur-bg--fallback"></div>`}
         <div class="vd-hero-gradient"></div>
         <div class="vd-hero-top">
           <button class="vd-back-btn" id="vd-hero-back" onclick="navigateHome()" aria-label="Back to venues">
@@ -807,8 +808,10 @@ function renderVenueDetail(venue, addOns = []) {
     btn.addEventListener('click', () => {
       const url = btn.dataset.imgUrl
       if (!url) return
-      const hero = container.querySelector('.vd-hero')
-      if (hero) hero.style.backgroundImage = `url('${url}')`
+      const blurBg = container.querySelector('.vd-hero-blur-bg')
+      const heroImg = container.querySelector('.vd-hero-img')
+      if (blurBg) blurBg.style.backgroundImage = `url('${url}')`
+      if (heroImg) heroImg.src = url
       container.querySelectorAll('.vd-gallery-thumb').forEach(b => b.classList.remove('vd-gallery-thumb--active'))
       btn.classList.add('vd-gallery-thumb--active')
     })
@@ -3770,7 +3773,14 @@ function renderVfImages(images) {
   const list = document.getElementById('vf-images-list')
   if (!list) return
   list.innerHTML = images.map((img, i) => `
-    <div class="vf-image-row" data-index="${i}">
+    <div class="vf-image-row" data-index="${i}" draggable="true">
+      <div class="vf-img-drag-handle" title="Drag to reorder">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/>
+          <circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>
+          <circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/>
+        </svg>
+      </div>
       <div class="vf-img-preview-wrap">
         ${img.url
           ? `<img class="vf-img-thumb" src="${escapeHtml(img.url)}" alt="${escapeHtml(img.alt || '')}" />`
@@ -3788,6 +3798,38 @@ function renderVfImages(images) {
       <button type="button" class="vf-remove-btn" onclick="removeVfImage(${i})">✕</button>
     </div>
   `).join('')
+
+  // Wire drag-to-reorder
+  let dragIndex = null
+  list.querySelectorAll('.vf-image-row').forEach(row => {
+    row.addEventListener('dragstart', e => {
+      dragIndex = parseInt(row.dataset.index)
+      e.dataTransfer.effectAllowed = 'move'
+      setTimeout(() => row.classList.add('vf-img-dragging'), 0)
+    })
+    row.addEventListener('dragend', () => {
+      dragIndex = null
+      list.querySelectorAll('.vf-image-row').forEach(r => {
+        r.classList.remove('vf-img-dragging', 'vf-img-drag-over')
+      })
+    })
+    row.addEventListener('dragover', e => {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      list.querySelectorAll('.vf-image-row').forEach(r => r.classList.remove('vf-img-drag-over'))
+      if (parseInt(row.dataset.index) !== dragIndex) row.classList.add('vf-img-drag-over')
+    })
+    row.addEventListener('dragleave', () => row.classList.remove('vf-img-drag-over'))
+    row.addEventListener('drop', e => {
+      e.preventDefault()
+      const dropIndex = parseInt(row.dataset.index)
+      if (dragIndex === null || dragIndex === dropIndex) return
+      const imgs = readVfImages()
+      const [moved] = imgs.splice(dragIndex, 1)
+      imgs.splice(dropIndex, 0, moved)
+      renderVfImages(imgs)
+    })
+  })
 }
 
 window.handleVfImageUpload = async function(input, index) {
@@ -5205,16 +5247,41 @@ window.addEventListener('popstate', (event) => {
 
 
 document.addEventListener('DOMContentLoaded', () => {
-  initializeMenuPreview()
-  handleMenuPreviewTabs()
-  renderAddonsStrip()
+  // ---- Runs on every page that loads app.js (public site + admin.html) ----
+  // initAdminPage wires the admin form/tab handlers and the Supabase session
+  // check. Its getElementById lookups are all null-guarded, so it is a safe
+  // no-op on the public site where the admin elements are absent.
+  initAdminPage()
 
-  // Navbar scroll behaviour
-  updateNavbarState('home-page')
+  // Navbar scroll behaviour (the navbar exists on both pages)
+  updateNavbarState(document.querySelector('.page.active')?.id || 'home-page')
   window.addEventListener('scroll', () => {
     const activePage = document.querySelector('.page.active')?.id || 'home-page'
     updateNavbarState(activePage)
   }, { passive: true })
+
+  // Nav link routing (data-route links only exist on the public site)
+  document.querySelectorAll('.nav-link[data-route]').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault()
+      handleNavigation(link.dataset.route)
+    })
+  })
+
+  // Close modal on overlay click
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', () => overlay.closest('.modal')?.classList.add('hidden'))
+  })
+
+  // ---- Public homepage only ----
+  // admin.html has no #home-page, so skip all the storefront initialisers
+  // (and their Supabase calls) below to avoid needless work and console noise.
+  if (!document.getElementById('home-page')) return
+
+  initializeMenuPreview()
+  handleMenuPreviewTabs()
+  renderAddonsStrip()
+  initMenuSelectionPage()
 
   // URL parameter routing
   const urlParams = new URLSearchParams(window.location.search)
@@ -5229,19 +5296,6 @@ document.addEventListener('DOMContentLoaded', () => {
   } else if (venueId) {
     loadVenues().then(() => showVenuePage(parseInt(venueId, 10), false))
   }
-
-  // Nav link routing
-  document.querySelectorAll('.nav-link[data-route]').forEach(link => {
-    link.addEventListener('click', (e) => {
-      e.preventDefault()
-      handleNavigation(link.dataset.route)
-    })
-  })
-
-  // Close modal on overlay click
-  document.querySelectorAll('.modal-overlay').forEach(overlay => {
-    overlay.addEventListener('click', () => overlay.closest('.modal')?.classList.add('hidden'))
-  })
 
   // Venue card click delegation
   const venuesGrid = document.getElementById('venues-grid')
@@ -5276,7 +5330,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
   loadVenues()
   loadHeroImage()
-  initAdminPage()
   loadTestimonials()
-  initMenuSelectionPage()
 })

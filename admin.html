@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy"
+      content="default-src 'self';
+               script-src 'self' 'unsafe-inline';
+               connect-src https://*.supabase.co https://fonts.googleapis.com;
+               style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com;
+               font-src https://fonts.gstatic.com;
+               img-src 'self' data: https:;">
+    <title>Admin · The Picnic Stories</title>
+    <!-- Admin is private: keep it out of search engines and AI crawlers. -->
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="theme-color" content="#7a6a55">
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Be+Vietnam+Pro:wght@300;400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Navigation -->
+    <nav class="navbar navbar--solid">
+        <div class="container">
+            <a href="/" class="nav-brand" aria-label="The Picnic Stories — back to site">
+                <img src="/logo-mark.png" alt="The Picnic Stories logo" class="nav-logo" width="44" height="44">
+                <span class="nav-brand-text">
+                    <h2>The Picnic Stories</h2>
+                    <p class="brand-tagline">Admin</p>
+                </span>
+            </a>
+            <div class="nav-links">
+                <a href="/" class="nav-link">&larr; View site</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Admin Page -->
+    <section id="admin-page" class="page container active">
+        <!-- Admin login -->
+        <div id="admin-login" class="login-card">
+            <h2>Admin Login</h2>
+            <form id="admin-login-form" novalidate>
+                <div class="form-group">
+                    <label for="admin-email" class="form-label">Email</label>
+                    <input id="admin-email" type="email" class="form-control" required autocomplete="username" />
+                    <div id="admin-email-error" class="form-error" aria-live="polite"></div>
+                </div>
+                <div class="form-group">
+                    <label for="admin-password" class="form-label">Password</label>
+                    <input id="admin-password" type="password" class="form-control" required autocomplete="current-password" />
+                    <div id="admin-password-error" class="form-error" aria-live="polite"></div>
+                </div>
+                <button type="submit" class="btn btn--primary">Login</button>
+            </form>
+        </div>
+
+        <!-- Admin dashboard -->
+        <div id="admin-dashboard" class="admin-section hidden">
+            <div class="database-status">
+                <span class="status-indicator connected"></span>
+                <span class="status-text">Database Status: Connected</span>
+            </div>
+
+            <div class="dashboard-header">
+                <h2>Admin Dashboard</h2>
+                <button id="admin-logout" class="btn btn--secondary">Logout</button>
+            </div>
+
+            <div class="dashboard-tabs" role="tablist">
+                <button class="tab-btn active" data-tab="queries" role="tab" aria-selected="true">Queries</button>
+                <button class="tab-btn" data-tab="bookings" role="tab" aria-selected="false">Bookings</button>
+                <button class="tab-btn" data-tab="venues" role="tab" aria-selected="false">Venues</button>
+                <button class="tab-btn" data-tab="availability" role="tab" aria-selected="false">Availability</button>
+                <button class="tab-btn" data-tab="menu-link" role="tab" aria-selected="false">Menu Link Generator</button>
+                <button class="tab-btn" data-tab="add-ons" role="tab" aria-selected="false">Add-ons</button>
+                <button class="tab-btn" data-tab="hero-image" role="tab" aria-selected="false">Hero Image</button>
+            </div>
+
+            <!-- Queries Tab -->
+            <div id="queries-tab" class="tab-content active" role="tabpanel">
+                <div class="tab-header">
+                    <h3>Customer Queries</h3>
+                    <div class="search-filters">
+                        <input id="leads-search" class="search-input" type="search" placeholder="Search queries..." />
+                        <select id="location-filter" class="filter-select">
+                            <option value="">All Locations</option>
+                            <option value="jaipur-city">Jaipur City</option>
+                            <option value="jaipur-outskirts">Jaipur Outskirts</option>
+                            <option value="amber-fort">Near Amber Fort</option>
+                            <option value="jal-mahal">Near Jal Mahal</option>
+                            <option value="nahargarh">Nahargarh Area</option>
+                            <option value="custom">Custom Location</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="queries-container" class="data-container">
+                    <!-- Queries will be populated here by JavaScript -->
+                </div>
+                <button id="export-queries" class="btn btn--outline">Export Queries (CSV)</button>
+            </div>
+
+            <!-- Bookings Tab -->
+            <div id="bookings-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="tab-header">
+                    <h3>Confirmed Bookings</h3>
+                    <p>Bookings that have been confirmed with advance payment</p>
+                </div>
+                <div id="bookings-container" class="data-container">
+                    <!-- Bookings will be populated here by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Venues Tab -->
+            <div id="venues-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="tab-header">
+                    <h3>Venue Manager</h3>
+                    <p>Add, edit, or deactivate venues without SQL</p>
+                    <button id="add-venue-btn" class="btn btn--primary" onclick="openVenueForm()">+ Add Venue</button>
+                </div>
+                <div id="venues-list-container" class="data-container">
+                    <!-- Venue list rendered by JS -->
+                </div>
+                <!-- Venue form panel (hidden by default) -->
+                <div id="venue-form-panel" class="venue-form-panel hidden">
+                    <div class="vfp-header">
+                        <h4 id="vfp-title">Add Venue</h4>
+                        <button id="vfp-close" class="vfp-close-btn">&times;</button>
+                    </div>
+                    <form id="venue-admin-form" class="venue-admin-form">
+                        <input type="hidden" id="vf-id" />
+
+                        <div class="vf-row">
+                            <div class="vf-field">
+                                <label class="vf-label">Venue Name *</label>
+                                <input type="text" id="vf-name" class="vf-input" required placeholder="e.g. Haveli 14 — Heritage Stay" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Type *</label>
+                                <select id="vf-type" class="vf-input">
+                                    <option value="cafe">Cafe / Garden Space</option>
+                                    <option value="self_managed">Self-Managed BnB</option>
+                                    <option value="partner_bnb">Partner BnB (Airbnb-linked)</option>
+                                    <option value="custom">Custom</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="vf-field">
+                            <label class="vf-label">Description *</label>
+                            <textarea id="vf-description" class="vf-input vf-textarea" rows="4" required placeholder="Venue description shown to customers..."></textarea>
+                        </div>
+
+                        <div class="vf-row">
+                            <div class="vf-field">
+                                <label class="vf-label">Area</label>
+                                <input type="text" id="vf-area" class="vf-input" placeholder="e.g. Old City, C-Scheme" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">City</label>
+                                <input type="text" id="vf-city" class="vf-input" value="Jaipur" />
+                            </div>
+                        </div>
+
+                        <div class="vf-row">
+                            <div class="vf-field">
+                                <label class="vf-label">Min Guests</label>
+                                <input type="number" id="vf-cap-min" class="vf-input" min="1" value="2" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Max Guests</label>
+                                <input type="number" id="vf-cap-max" class="vf-input" min="1" value="10" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Base Price (₹)</label>
+                                <input type="number" id="vf-base-price" class="vf-input" min="0" step="100" value="0" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Concurrent Setups <span class="vf-hint">(how many bookings can share this venue at the same time)</span></label>
+                                <input type="number" id="vf-max-setups" class="vf-input" min="1" value="1" />
+                            </div>
+                        </div>
+
+                        <!-- External URL (partner_bnb only) -->
+                        <div class="vf-field vf-partner-only" style="display:none">
+                            <label class="vf-label">Airbnb URL</label>
+                            <input type="url" id="vf-external-url" class="vf-input" placeholder="https://airbnb.com/rooms/..." />
+                        </div>
+
+                        <!-- Google Maps link (all venue types) -->
+                        <div class="vf-field">
+                            <label class="vf-label">Maps Link <span class="vf-hint">(paste a Google Maps share link; powers the "Get Directions" button in confirmation emails)</span></label>
+                            <input type="url" id="vf-maps-url" class="vf-input" placeholder="https://maps.app.goo.gl/..." />
+                        </div>
+
+                        <!-- Images -->
+                        <div class="vf-field">
+                            <label class="vf-label">Images</label>
+                            <div id="vf-images-list" class="vf-images-list"></div>
+                            <button type="button" id="vf-add-image" class="vf-add-btn" onclick="addVfImage()">+ Add Image</button>
+                        </div>
+
+                        <!-- What's Included -->
+                        <div class="vf-field">
+                            <label class="vf-label">What's Included <span style="font-weight:400;opacity:.6">(comma-separated)</span></label>
+                            <input type="text" id="vf-includes" class="vf-input" placeholder="e.g. Full picnic setup, Curated menu, Setup &amp; cleanup" />
+                        </div>
+
+                        <!-- Pricing Tiers -->
+                        <div class="vf-section">
+                            <div class="vf-section-title">Pricing Tiers</div>
+                            <div id="vf-tiers-list" class="vf-tiers-list"></div>
+                            <button type="button" id="vf-add-tier" class="vf-add-btn" onclick="addVfTier()">+ Add Tier</button>
+                            <div class="vf-row" style="margin-top:10px">
+                                <div class="vf-field">
+                                    <label class="vf-label">Overage per person (₹)</label>
+                                    <input type="number" id="vf-overage" class="vf-input" min="0" step="100" value="2000" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- BnB metadata (self_managed only) -->
+                        <div id="vf-bnb-section" class="vf-section vf-bnb-only" style="display:none">
+                            <div class="vf-section-title">Property Details</div>
+                            <div class="vf-row">
+                                <div class="vf-field">
+                                    <label class="vf-label">Rooms</label>
+                                    <input type="number" id="vf-rooms" class="vf-input" min="1" value="2" />
+                                </div>
+                                <div class="vf-field">
+                                    <label class="vf-label">Bathrooms</label>
+                                    <input type="number" id="vf-bathrooms" class="vf-input" min="1" value="2" />
+                                </div>
+                                <div class="vf-field">
+                                    <label class="vf-label">Stay Price / Night (₹)</label>
+                                    <input type="number" id="vf-stay-price" class="vf-input" min="0" step="500" value="0" />
+                                </div>
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Amenities <span class="vf-hint">(comma-separated)</span></label>
+                                <input type="text" id="vf-amenities" class="vf-input" placeholder="Private pool, WiFi, AC rooms" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Highlights <span class="vf-hint">(comma-separated)</span></label>
+                                <input type="text" id="vf-highlights" class="vf-input" placeholder="Fort views, Walking distance to Hawa Mahal" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Ideal For <span class="vf-hint">(comma-separated)</span></label>
+                                <input type="text" id="vf-ideal-for" class="vf-input" placeholder="Couples, Families, Honeymoon" />
+                            </div>
+                            <div class="vf-field">
+                                <label class="vf-label">Airbnb iCal Import URL <span class="vf-hint">(Airbnb → Listing → Availability → Connect/Export Calendar → copy the .ics link; leaving this blank disables import for this venue)</span></label>
+                                <input type="url" id="vf-airbnb-ical-url" class="vf-input" placeholder="https://www.airbnb.com/calendar/ical/12345.ics?s=..." />
+                            </div>
+                        </div>
+
+                        <div class="vf-row vf-actions">
+                            <label class="vf-toggle-label">
+                                <input type="checkbox" id="vf-active" checked />
+                                Active (visible to customers)
+                            </label>
+                            <button type="submit" class="btn btn--primary">Save Venue</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Availability Tab -->
+            <div id="availability-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="avail-toolbar">
+                    <select id="avail-venue-select" class="avail-venue-select">
+                        <option value="">Select a venue…</option>
+                    </select>
+                    <div class="avail-month-nav">
+                        <button id="avail-prev-month" class="avail-nav-btn" aria-label="Previous month">&#8592;</button>
+                        <span id="avail-month-label" class="avail-month-label"></span>
+                        <button id="avail-next-month" class="avail-nav-btn" aria-label="Next month">&#8594;</button>
+                    </div>
+                </div>
+                <div id="avail-stats-row" class="avail-stats-row" hidden></div>
+                <div id="avail-ical-panel" class="avail-ical-panel" hidden></div>
+                <div class="avail-legend">
+                    <span class="avail-legend-item"><span class="avail-legend-pip avail-pip--available"></span>Available</span>
+                    <span class="avail-legend-item"><span class="avail-legend-pip avail-pip--partial"></span>Partially booked</span>
+                    <span class="avail-legend-item"><span class="avail-legend-pip avail-pip--booked"></span>Fully booked</span>
+                    <span class="avail-legend-item"><span class="avail-legend-pip avail-pip--blocked"></span>Admin blocked</span>
+                    <span class="avail-legend-item avail-legend-hint">Click any date to view details and manage blocks</span>
+                </div>
+                <div id="avail-calendar-grid" class="avail-calendar-grid">
+                    <p class="avail-placeholder">Select a venue to view its calendar.</p>
+                </div>
+                <div id="avail-date-detail"></div>
+            </div>
+
+            <!-- Menu Link Generator Tab -->
+            <div id="menu-link-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="tab-header">
+                    <h3>Generate Menu Links</h3>
+                    <p>Create custom menu links with specific item limits for customers</p>
+                </div>
+
+                <div class="menu-generator">
+                    <div class="menu-controls">
+                        <div class="control-group">
+                            <label for="food-count">Food Items (1-15):</label>
+                            <input type="number" id="food-count" min="1" max="15" value="3">
+                        </div>
+                        <div class="control-group">
+                            <label for="bev-count">Beverages (1-10):</label>
+                            <input type="number" id="bev-count" min="1" max="10" value="2">
+                        </div>
+                        <button id="generate-menu-link" class="btn btn--primary">Generate Link</button>
+                    </div>
+
+                    <div class="generated-link" style="display: none;">
+                        <label>Generated Menu Link:</label>
+                        <div class="link-display">
+                            <input type="text" id="generated-link-url" readonly>
+                            <button id="copy-link" class="btn btn--outline">Copy Link</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="menu-links-list" class="menu-links-list">
+                    <!-- Menu links will be populated here by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Add-ons Tab -->
+            <div id="add-ons-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="tab-header">
+                    <h3>Add-ons</h3>
+                    <button class="btn btn--primary" onclick="openAddOnForm()">+ New Add-on</button>
+                </div>
+                <div id="addons-manager-container">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- Hero Image Tab -->
+            <div id="hero-image-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="tab-header">
+                    <h3>Hero Image</h3>
+                </div>
+                <div class="hero-img-admin-grid">
+
+                    <!-- Desktop image -->
+                    <div class="hero-img-admin-panel">
+                        <div class="hero-img-panel-header">
+                            <span class="hero-img-panel-icon">🖥</span>
+                            <div>
+                                <p class="hero-img-admin-label">Desktop image</p>
+                                <p class="hero-img-admin-hint">1600×900px min. Left ~40% covered by text overlay.</p>
+                            </div>
+                        </div>
+                        <div id="hero-img-admin-preview" class="hero-img-admin-preview">
+                            <span class="hero-img-admin-empty">No image set</span>
+                        </div>
+                        <label class="vf-img-upload-btn hero-img-upload-btn" id="hero-upload-label">
+                            ↑ Choose photo
+                            <input type="file" id="hero-img-file" accept="image/jpeg,image/png,image/webp" onchange="handleHeroImageUpload(this, 'desktop')" style="display:none" />
+                        </label>
+                        <div id="hero-upload-status"></div>
+                    </div>
+
+                    <!-- Mobile image -->
+                    <div class="hero-img-admin-panel">
+                        <div class="hero-img-panel-header">
+                            <span class="hero-img-panel-icon">📱</span>
+                            <div>
+                                <p class="hero-img-admin-label">Mobile image</p>
+                                <p class="hero-img-admin-hint">Portrait crop recommended. Falls back to desktop image if not set.</p>
+                            </div>
+                        </div>
+                        <div id="hero-img-mobile-preview" class="hero-img-admin-preview">
+                            <span class="hero-img-admin-empty">No image set</span>
+                        </div>
+                        <label class="vf-img-upload-btn hero-img-upload-btn" id="hero-upload-mobile-label">
+                            ↑ Choose photo
+                            <input type="file" id="hero-img-mobile-file" accept="image/jpeg,image/png,image/webp" onchange="handleHeroImageUpload(this, 'mobile')" style="display:none" />
+                        </label>
+                        <div id="hero-upload-mobile-status"></div>
+
+                        <!-- Position adjuster -->
+                        <div id="hero-mobile-position-wrap" class="hero-pos-wrap" style="display:none">
+                            <p class="hero-img-admin-label" style="margin-top:16px">Adjust framing</p>
+                            <p class="hero-img-admin-hint">Click or drag on the preview to set the focal point.</p>
+                            <div class="hero-pos-preview-wrap">
+                                <div id="hero-pos-preview" class="hero-pos-preview">
+                                    <div id="hero-pos-crosshair" class="hero-pos-crosshair"></div>
+                                </div>
+                            </div>
+                            <div class="hero-pos-sliders">
+                                <label class="hero-pos-slider-label">
+                                    Horizontal
+                                    <input type="range" id="hero-pos-x" min="0" max="100" value="65" oninput="updateMobilePosition()">
+                                    <span id="hero-pos-x-val">65%</span>
+                                </label>
+                                <label class="hero-pos-slider-label">
+                                    Vertical
+                                    <input type="range" id="hero-pos-y" min="0" max="100" value="0" oninput="updateMobilePosition()">
+                                    <span id="hero-pos-y-val">0%</span>
+                                </label>
+                            </div>
+                            <button class="btn btn--primary" onclick="saveMobilePosition()" style="margin-top:12px">Save position</button>
+                            <div id="hero-pos-status"></div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
