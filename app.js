@@ -897,8 +897,7 @@ async function fetchBookedData(venueId, venueType, maxConcurrentSetups = 1) {
               .in('venue_id', childIds).in('source', ['admin', 'ical', 'parent'])
           : Promise.resolve({ data: [] }),
         childIds.length
-          ? supabase.from('bookings').select('preferred_date, checkout_date')
-              .in('venue_id', childIds).eq('confirmed', true)
+          ? supabase.rpc('get_booked_dates', { p_venue_ids: childIds })
           : Promise.resolve({ data: [] }),
       ])
 
@@ -923,7 +922,7 @@ async function fetchBookedData(venueId, venueType, maxConcurrentSetups = 1) {
       //      'parent' = this single is blocked because the whole floor is booked.
       const [adminResult, bookingsResult] = await Promise.all([
         supabase.from('venue_availability').select('date').eq('venue_id', venueId).in('source', ['admin', 'ical', 'parent']),
-        supabase.from('bookings').select('preferred_date, checkout_date').eq('venue_id', venueId).eq('confirmed', true),
+        supabase.rpc('get_booked_dates', { p_venue_ids: [venueId] }),
       ])
       if (adminResult.error) throw adminResult.error
       if (bookingsResult.error) throw bookingsResult.error
