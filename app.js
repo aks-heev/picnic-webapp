@@ -306,6 +306,7 @@ async function loadVenues() {
       .from('venues')
       .select('*')
       .eq('is_active', true)
+      .order('sort_order', { ascending: true, nullsFirst: false })
       .order('id', { ascending: true })
 
     if (error) throw error
@@ -3623,8 +3624,9 @@ async function loadVenueManager() {
   try {
     const { data, error } = await supabase
       .from('venues')
-      .select('id, name, type, area, city, capacity_min, capacity_max, base_price, is_active, images, external_url, metadata, description, max_concurrent_setups, airbnb_ical_url, last_ical_sync_at, last_ical_sync_status')
-      .order('id')
+      .select('id, name, type, area, city, capacity_min, capacity_max, base_price, is_active, images, external_url, metadata, description, max_concurrent_setups, airbnb_ical_url, last_ical_sync_at, last_ical_sync_status, sort_order')
+      .order('sort_order', { ascending: true, nullsFirst: false })
+      .order('id', { ascending: true })
     if (error) throw error
     venueManagerState.venues = data || []
     renderVenueList()
@@ -3642,10 +3644,18 @@ function renderVenueList() {
     container.innerHTML = '<p class="empty-text">No venues yet. Click "+ Add Venue" to create one.</p>'
     return
   }
+
+  const dragHandleSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/>
+    <circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>
+    <circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/>
+  </svg>`
+
   container.innerHTML = `
     <table class="admin-venue-table">
       <thead>
         <tr>
+          <th class="venue-th-drag"></th>
           <th>Name</th>
           <th>Type</th>
           <th>Area</th>
@@ -3655,9 +3665,10 @@ function renderVenueList() {
           <th>Actions</th>
         </tr>
       </thead>
-      <tbody>
-        ${venues.map(v => `
-          <tr class="${v.is_active ? '' : 'venue-row-inactive'}">
+      <tbody id="venue-sort-tbody">
+        ${venues.map((v, i) => `
+          <tr class="${v.is_active ? '' : 'venue-row-inactive'}" data-venue-id="${v.id}" data-index="${i}">
+            <td class="venue-drag-cell"><div class="venue-drag-handle" title="Drag to reorder">${dragHandleSvg}</div></td>
             <td class="venue-row-name" data-label="Name">${escapeHtml(v.name)}</td>
             <td data-label="Type"><span class="admin-venue-badge ${venueTypeBadgeClass(v.type)}">${escapeHtml(formatVenueType(v.type))}</span></td>
             <td data-label="Area">${escapeHtml(v.area || '—')}</td>
@@ -3673,6 +3684,51 @@ function renderVenueList() {
       </tbody>
     </table>
   `
+
+  // Wire drag-to-reorder
+  const tbody = document.getElementById('venue-sort-tbody')
+  let dragIdx = null
+  tbody.querySelectorAll('tr[data-index]').forEach(row => {
+    row.draggable = true
+    row.addEventListener('dragstart', e => {
+      dragIdx = parseInt(row.dataset.index)
+      e.dataTransfer.effectAllowed = 'move'
+      setTimeout(() => row.classList.add('venue-row--dragging'), 0)
+    })
+    row.addEventListener('dragend', () => {
+      dragIdx = null
+      tbody.querySelectorAll('tr').forEach(r => r.classList.remove('venue-row--dragging', 'venue-row--drag-over'))
+    })
+    row.addEventListener('dragover', e => {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      tbody.querySelectorAll('tr').forEach(r => r.classList.remove('venue-row--drag-over'))
+      if (parseInt(row.dataset.index) !== dragIdx) row.classList.add('venue-row--drag-over')
+    })
+    row.addEventListener('dragleave', () => row.classList.remove('venue-row--drag-over'))
+    row.addEventListener('drop', async e => {
+      e.preventDefault()
+      const dropIdx = parseInt(row.dataset.index)
+      if (dragIdx === null || dragIdx === dropIdx) return
+      const vs = [...venueManagerState.venues]
+      const [moved] = vs.splice(dragIdx, 1)
+      vs.splice(dropIdx, 0, moved)
+      venueManagerState.venues = vs
+      renderVenueList()
+      await saveVenueOrder(vs)
+    })
+  })
+}
+
+async function saveVenueOrder(venues) {
+  try {
+    await Promise.all(venues.map((v, idx) =>
+      supabase.from('venues').update({ sort_order: idx + 1 }).eq('id', v.id)
+    ))
+  } catch (err) {
+    console.error('Failed to save venue order', err)
+    showToast('Could not save order — try again', 'error')
+  }
 }
 
 function openVenueForm(venueId) {
@@ -5125,6 +5181,7 @@ window.handleHeroImageUpload = async function(input, device = 'desktop') {
 
 // ── Global function exports (required for inline onclick handlers) ────
 window.navigateHome               = navigateHome
+window.handleNavigation           = handleNavigation
 window.showPage                   = showPage
 window.showMyBookingsPage         = showMyBookingsPage
 window.showVenuePage              = showVenuePage
@@ -5138,6 +5195,8 @@ window.submitBookingIntent        = submitBookingIntent
 window.showModal                  = showModal
 window.hideModal                  = hideModal
 window.sendOtpResend              = sendOtpResend
+window.copyMenuLink               = copyMenuLink
+window.customerSignOut            = customerSignOut
 
 // ── Admin page initialisation ────────────────────────────────
 function initAdminPage() {

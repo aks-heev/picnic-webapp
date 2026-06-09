@@ -14,7 +14,14 @@
 | `base_price` | `numeric` | Nullable |
 | `images` | `jsonb` | |
 | `external_url` | `text` | Nullable |
+| `maps_url` | `text` | Nullable — pasted Google Maps share link; powers "Get Directions" button in confirmation email |
+| `metadata` | `jsonb` | Nullable — BnB rooms/amenities/highlights/tiers |
 | `is_active` | `bool` | |
+| `max_concurrent_setups` | `int4` | Default 1 (≥1) |
+| `airbnb_ical_url` | `text` | Nullable — Airbnb feed; non-null ENABLES iCal sync for the venue |
+| `last_ical_sync_at` | `timestamptz` | Nullable — last successful import |
+| `last_ical_sync_status` | `text` | Nullable — last import result / error string |
+| `sort_order` | `int4` | Nullable — display order (active-first by default); null sorts last |
 | `created_at` | `timestamptz` | |
 
 ## Table `bookings`
@@ -33,6 +40,23 @@
 | `venue_id` | `int8` | Nullable |
 | `venue_address` | `text` | Nullable |
 | `external_booking_ref` | `text` | Nullable |
+| `time_slot` | `text` | Nullable — café slot (`morning`/`afternoon`/`evening`) |
+| `checkout_date` | `date` | Nullable — self_managed stay end. EXCLUSIVE: nights are `[preferred_date, checkout_date)` |
+| `customer_intent` | `text` | Nullable — `query` \| `lock` |
+
+## Table `venue_availability`
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `int8` | Primary Identity |
+| `venue_id` | `int8` | FK venues, NOT NULL |
+| `date` | `date` | NOT NULL |
+| `status` | `text` | `blocked` \| `booked` |
+| `source` | `text` | `admin` \| `booking` \| `ical` |
+| `time_slot` | `text` | Nullable — slot block; NULL = full day |
+| `booking_id` | `int8` | Nullable, FK bookings |
+| `created_at` | `timestamptz` | |
+
+Partial unique indexes: one full-day admin block per (venue,date); one admin slot block per (venue,date,slot); one `ical` block per (venue,date). `source='ical'` rows are owned by the `sync-ical` edge function and reconciled atomically via `replace_ical_blocks(venue_id, dates[])` — do not hand-edit them.
 
 ## Table `add_ons`
 | Name | Type | Constraints |
@@ -48,16 +72,18 @@
 | `created_at` | `timestamptz` | Nullable |
 | `requires_confirmation_for` | `_text` | |
 
-## Table `booking_addons`
+## Table `booking_add_ons`
 | Name | Type | Constraints |
 |------|------|-------------|
-| `id` | `int4` | Primary |
-| `booking_id` | `int4` | |
-| `addon_id` | `int4` | |
-| `quantity` | `int4` | |
-| `price_at_booking` | `int4` | |
-| `requires_confirmation` | `bool` | |
+| `id` | `int8` | Primary Identity |
+| `booking_id` | `int8` | Nullable, FK bookings |
+| `addon_id` | `int4` | Nullable |
+| `name` | `text` | Snapshot of add-on name at booking time |
+| `price_at_booking` | `numeric` | |
+| `requires_confirmation` | `bool` | Whether the add-on needs host sign-off |
 | `created_at` | `timestamptz` | Nullable |
+
+Add-on line items are written inside `submit_booking_intent` (same transaction as the booking) so they exist before the insert-trigger email fires. No `quantity` column — one row per selected add-on.
 
 ## Table `menu_links`
 | Name | Type | Constraints |
@@ -81,7 +107,7 @@
 
 ## Notes
 
-- `venues.type` distinguishes self-managed venues from partner/Airbnb listings (`partner_bnb`).
-- Availability for self-managed venues is derived from `bookings` — query for `venue_id` + `preferred_date` conflicts where `confirmed = true`.
-- No separate blocked-dates table exists; host-side availability management is not yet implemented.
+- `venues.type`: `cafe` | `self_managed` | `partner_bnb` | `custom`. self_managed = dual-listed website+Airbnb stays — the only venues the iCal sync targets.
+- self_managed availability = admin blocks (`venue_availability.source='admin'`) ∪ imported Airbnb blocks (`source='ical'`) ∪ confirmed `bookings` expanded over `[preferred_date, checkout_date)`, counted per night vs `max_concurrent_setups`.
+- `venue_availability` stores `admin` and `ical` rows; live booking occupancy is computed from `bookings` (not stored here — `source='booking'` rows were removed in `20260603_concurrent_setups.sql`).
 - `booking_addons.requires_confirmation` tracks whether each add-on needs host sign-off.
