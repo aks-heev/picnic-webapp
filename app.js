@@ -140,9 +140,18 @@ function formatPrice(amount) {
   return '₹' + Number(amount).toLocaleString('en-IN')
 }
 
-// Billing guest count — children (under 10) count at 0.5×
-function calcBillingGuests(adults, children) {
-  return adults + Math.ceil((children || 0) * 0.5)
+// First N children free (per venue.metadata.free_children_count, default 2).
+function getFreeKids(venue) {
+  return Number(venue?.metadata?.free_children_count ?? 2)
+}
+// Full picnic price: tier price for adults + half overage per paid child.
+// Paid children (3rd+) each cost overage_per_person × 0.5 — no tier jumps.
+function getPicnicPrice(venue, adults, children) {
+  const freeKids    = getFreeKids(venue)
+  const paidKids    = Math.max(0, (children || 0) - freeKids)
+  const tierPrice   = getVenuePrice(venue, adults)
+  const overageRate = Number(venue?.metadata?.overage_per_person) || 0
+  return tierPrice + paidKids * overageRate * 0.5
 }
 
 // Tiered price for a venue given billing guest count.
@@ -380,65 +389,95 @@ async function renderAddonsStrip() {
   }
 }
 
-// Render venue cards into the gallery grid
+// Map a venue to its physical setting for home-gallery grouping.
+// Prefers the explicit `setting` column; falls back to `type` so the grid
+// still groups correctly if a row hasn't been classified yet. This is the
+// ONE place the type→setting assumption lives — if it ever stops holding,
+// fix it here (or rely on the `setting` column) rather than in render code.
+function venueSetting(venue) {
+  if (venue.setting === 'indoor' || venue.setting === 'outdoor') return venue.setting
+  if (venue.type === 'cafe')   return 'outdoor'
+  if (venue.type === 'custom') return null
+  return 'indoor'
+}
+
+// Build a single venue card (non-custom)
+function venueCardHtml(venue) {
+  const primaryImage = venue.images?.[0]
+  const hasImage = primaryImage?.url
+  const capacityText = venue.capacity_max
+    ? `${venue.capacity_min}–${venue.capacity_max} guests`
+    : `${venue.capacity_min}+ guests`
+  const priceText = venue.base_price ? `From ${formatPrice(venue.base_price)}` : 'Get a quote'
+
+  return `
+    <div class="venue-card" role="button" tabindex="0"
+         data-venue-id="${venue.id}" aria-label="View ${escapeHtml(venue.name)}">
+      <div class="venue-card-image">
+        ${hasImage
+          ? `<img src="${escapeHtml(primaryImage.url)}" alt="${escapeHtml(primaryImage.alt || venue.name)}" loading="lazy">`
+          : `<div class="venue-card-placeholder"><span>${escapeHtml(venue.name)}</span></div>`}
+        <span class="venue-type-badge ${venueTypeBadgeClass(venue.type)}">${escapeHtml(formatVenueType(venue.type))}</span>
+      </div>
+      <div class="venue-card-body">
+        <h3 class="venue-card-name">${escapeHtml(venue.name)}</h3>
+        <p class="venue-card-area">${escapeHtml(venue.area || venue.city)}</p>
+        <div class="venue-card-footer">
+          <span class="venue-card-capacity">${capacityText}</span>
+          <span class="venue-card-price">${priceText}</span>
+        </div>
+      </div>
+    </div>
+  `
+}
+
+// Render the venue gallery, grouped into Outdoor / Indoor sections, with a
+// standalone CTA for the location-flexible "custom" venue. Works on any
+// subset of venues (e.g. the city filter passes a filtered list); empty
+// sections are suppressed so a header never sits above a blank row.
 function renderVenueGallery(venues) {
   const grid = document.getElementById('venues-grid')
   if (!grid) return
 
-  if (venues.length === 0) {
-    grid.innerHTML = '<p class="venues-empty">No venues available at the moment. Check back soon!</p>'
+  const emptyMsg = '<p class="venues-empty">No spaces open just now. We add venues often — check back soon.</p>'
+
+  if (!venues || venues.length === 0) {
+    grid.innerHTML = emptyMsg
     return
   }
 
-  grid.innerHTML = venues.map(venue => {
-    const primaryImage = venue.images?.[0]
-    const hasImage = primaryImage?.url
-    const capacityText = venue.capacity_max
-      ? `${venue.capacity_min}–${venue.capacity_max} guests`
-      : `${venue.capacity_min}+ guests`
-    const priceText = venue.base_price ? `From ${formatPrice(venue.base_price)}` : 'Get a quote'
+  const outdoor     = venues.filter(v => v.type !== 'custom' && venueSetting(v) === 'outdoor')
+  const indoor      = venues.filter(v => v.type !== 'custom' && venueSetting(v) === 'indoor')
+  const customVenue = venues.find(v => v.type === 'custom')
 
-    if (venue.type === 'custom') {
-      return `
-        <div class="venue-card venue-card--custom" role="button" tabindex="0"
-             data-venue-id="${venue.id}" aria-label="Book your own venue">
-          <div class="venue-card-image venue-card-image--custom">
-            ${hasImage
-              ? `<img src="${escapeHtml(primaryImage.url)}" alt="${escapeHtml(primaryImage.alt || venue.name)}" loading="lazy">`
-              : `<div class="venue-custom-pattern" aria-hidden="true"><span class="venue-custom-icon">✦</span></div>`}
-          </div>
-          <div class="venue-card-body">
-            <h3 class="venue-card-name">${escapeHtml(venue.name)}</h3>
-            <p class="venue-card-area">Anywhere in Jaipur</p>
-            <div class="venue-card-footer">
-              <span class="venue-card-capacity">${capacityText}</span>
-              <span class="venue-card-price">${priceText}</span>
-            </div>
-          </div>
-        </div>
-      `
-    }
-
-    return `
-      <div class="venue-card" role="button" tabindex="0"
-           data-venue-id="${venue.id}" aria-label="View ${escapeHtml(venue.name)}">
-        <div class="venue-card-image">
-          ${hasImage
-            ? `<img src="${escapeHtml(primaryImage.url)}" alt="${escapeHtml(primaryImage.alt || venue.name)}" loading="lazy">`
-            : `<div class="venue-card-placeholder"><span>${escapeHtml(venue.name)}</span></div>`}
-          <span class="venue-type-badge ${venueTypeBadgeClass(venue.type)}">${escapeHtml(formatVenueType(venue.type))}</span>
-        </div>
-        <div class="venue-card-body">
-          <h3 class="venue-card-name">${escapeHtml(venue.name)}</h3>
-          <p class="venue-card-area">${escapeHtml(venue.area || venue.city)}</p>
-          <div class="venue-card-footer">
-            <span class="venue-card-capacity">${capacityText}</span>
-            <span class="venue-card-price">${priceText}</span>
-          </div>
-        </div>
+  const section = (title, sub, modifier, list) => list.length === 0 ? '' : `
+    <section class="venue-section">
+      <div class="venue-section-head">
+        <span class="venue-section-dot venue-section-dot--${modifier}" aria-hidden="true"></span>
+        <h3 class="venue-section-title">${title}</h3>
       </div>
-    `
-  }).join('')
+      <p class="venue-section-sub">${sub}</p>
+      <div class="venue-grid">${list.map(venueCardHtml).join('')}</div>
+    </section>
+  `
+
+  const customCta = !customVenue ? '' : `
+    <div class="venue-custom-cta" role="button" tabindex="0"
+         data-venue-id="${customVenue.id}" aria-label="Plan a custom picnic at a location of your choice">
+      <div class="venue-custom-cta-text">
+        <p class="venue-custom-cta-title">Have your own spot in mind?</p>
+        <p class="venue-custom-cta-sub">A backyard, rooftop, or a place that means something — we'll bring the picnic to you.</p>
+      </div>
+      <span class="venue-custom-cta-btn">Plan a custom picnic</span>
+    </div>
+  `
+
+  const html =
+    section('Outdoor', 'Open-air settings, under the sky', 'outdoor', outdoor) +
+    section('Indoor', 'Cosy, weatherproof spaces for any season', 'indoor', indoor) +
+    customCta
+
+  grid.innerHTML = html || emptyMsg
 }
 
 // Navigate to venue detail page and render it
@@ -542,7 +581,7 @@ function renderVenueDetail(venue, addOns = []) {
     <div class="vd-wrap">
 
       <!-- Full-bleed hero -->
-      <div class="vd-hero">
+      <div class="vd-hero" id="vd-hero-slider">
         ${heroImgUrl
           ? `<div class="vd-hero-blur-bg" style="background-image:url('${heroImgUrl}')"></div>
              <img class="vd-hero-img" src="${heroImgUrl}" alt="${escapeHtml(venue.name)}">`
@@ -562,6 +601,10 @@ function renderVenueDetail(venue, addOns = []) {
             ${escapeHtml(venue.area)}, ${escapeHtml(venue.city)}
           </p>` : ''}
         </div>
+        ${galleryImgs.length > 1 ? `
+        <div class="vd-hero-dots" aria-label="Image navigation">
+          ${galleryImgs.map((_, i) => `<button class="vd-hero-dot${i === 0 ? ' vd-hero-dot--active' : ''}" data-dot="${i}" aria-label="Photo ${i + 1}"></button>`).join('')}
+        </div>` : ''}
       </div>
 
       ${galleryStrip}
@@ -804,19 +847,93 @@ function renderVenueDetail(venue, addOns = []) {
     </div><!-- /vd-wrap -->
   `
 
-  // Wire gallery thumbnail clicks — swap hero background
-  container.querySelectorAll('.vd-gallery-thumb').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const url = btn.dataset.imgUrl
-      if (!url) return
-      const blurBg = container.querySelector('.vd-hero-blur-bg')
-      const heroImg = container.querySelector('.vd-hero-img')
+  // ---- Image slider (touch swipe + auto-advance + dot indicators) ----
+  if (galleryImgs.length > 1) {
+    const sliderImages = galleryImgs.map(img => img.url)
+    let sliderIndex = 0
+    let sliderTimer = null
+    let touchStartX = 0
+    let touchStartY = 0
+
+    const heroEl  = container.querySelector('#vd-hero-slider')
+    const blurBg  = container.querySelector('.vd-hero-blur-bg')
+    const heroImg = container.querySelector('.vd-hero-img')
+
+    function sliderGoTo(index) {
+      sliderIndex = ((index % sliderImages.length) + sliderImages.length) % sliderImages.length
+      const url = sliderImages[sliderIndex]
       if (blurBg) blurBg.style.backgroundImage = `url('${url}')`
-      if (heroImg) heroImg.src = url
-      container.querySelectorAll('.vd-gallery-thumb').forEach(b => b.classList.remove('vd-gallery-thumb--active'))
-      btn.classList.add('vd-gallery-thumb--active')
+      if (heroImg) {
+        heroImg.classList.add('vd-hero-img--transition')
+        heroImg.src = url
+        setTimeout(() => heroImg.classList.remove('vd-hero-img--transition'), 400)
+      }
+      // Sync dots
+      container.querySelectorAll('.vd-hero-dot').forEach((d, i) =>
+        d.classList.toggle('vd-hero-dot--active', i === sliderIndex))
+      // Sync thumbs
+      container.querySelectorAll('.vd-gallery-thumb').forEach((b, i) =>
+        b.classList.toggle('vd-gallery-thumb--active', i === sliderIndex))
+    }
+
+    function sliderStartAuto() {
+      sliderStopAuto()
+      sliderTimer = setInterval(() => sliderGoTo(sliderIndex + 1), 4000)
+    }
+    function sliderStopAuto() {
+      if (sliderTimer) { clearInterval(sliderTimer); sliderTimer = null }
+    }
+    function sliderResumeAfterDelay() {
+      sliderStopAuto()
+      setTimeout(sliderStartAuto, 3000)
+    }
+
+    // Touch swipe
+    if (heroEl) {
+      heroEl.addEventListener('touchstart', e => {
+        touchStartX = e.touches[0].clientX
+        touchStartY = e.touches[0].clientY
+        sliderStopAuto()
+      }, { passive: true })
+      heroEl.addEventListener('touchend', e => {
+        const dx = e.changedTouches[0].clientX - touchStartX
+        const dy = e.changedTouches[0].clientY - touchStartY
+        if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 36) {
+          sliderGoTo(sliderIndex + (dx < 0 ? 1 : -1))
+        }
+        sliderResumeAfterDelay()
+      }, { passive: true })
+      // Pause on hover (desktop)
+      heroEl.addEventListener('mouseenter', sliderStopAuto)
+      heroEl.addEventListener('mouseleave', sliderStartAuto)
+    }
+
+    // Dot clicks
+    container.querySelectorAll('.vd-hero-dot').forEach((dot, i) => {
+      dot.addEventListener('click', () => { sliderGoTo(i); sliderResumeAfterDelay() })
     })
-  })
+
+    // Thumb clicks
+    container.querySelectorAll('.vd-gallery-thumb').forEach((btn, i) => {
+      btn.addEventListener('click', () => { sliderGoTo(i); sliderResumeAfterDelay() })
+    })
+
+    sliderStartAuto()
+  } else {
+    // Single image — just wire thumb click (no-op if no strip)
+    container.querySelectorAll('.vd-gallery-thumb').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const url = btn.dataset.imgUrl
+        if (!url) return
+        const blurBg = container.querySelector('.vd-hero-blur-bg')
+        const heroImg = container.querySelector('.vd-hero-img')
+        if (blurBg) blurBg.style.backgroundImage = `url('${url}')`
+        if (heroImg) heroImg.src = url
+        container.querySelectorAll('.vd-gallery-thumb').forEach(b => b.classList.remove('vd-gallery-thumb--active'))
+        btn.classList.add('vd-gallery-thumb--active')
+      })
+    })
+  }
 }
 
 
@@ -1324,9 +1441,10 @@ function showGuestSelector(venue) {
 
   widget.innerHTML = `
     <div class="vd-guest-selector">
-      <button class="vd-guest-back" onclick="showCalendarStep()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
-        ${dateSummary || 'Change date'}
+      <button class="vd-guest-back" onclick="showCalendarStep()" aria-label="Change your date or time">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+        <span class="vd-guest-back-label">Change date</span>
+        ${dateSummary ? `<span class="vd-guest-back-date">${dateSummary}</span>` : ''}
       </button>
       <div class="vd-guest-rows">
         <div class="vd-guest-row">
@@ -1342,7 +1460,7 @@ function showGuestSelector(venue) {
         <div class="vd-guest-row">
           <div class="vd-guest-label">
             <span class="vd-guest-type">Children</span>
-            <span class="vd-guest-sublabel">Under 10 · half rate</span>
+            <span class="vd-guest-sublabel">Under 10 · first 2 free</span>
           </div>
           <div class="vd-guest-counter">
             <button class="vd-guest-btn" onclick="updateGuestCount('children',-1)" ${appState.children <= 0 ? 'disabled' : ''} aria-label="Remove child">−</button>
@@ -1394,8 +1512,7 @@ function updateGuestPrice(venue) {
   const labelEl = document.getElementById('sidebar-price-label')
   if (!priceEl || !venue) return
 
-  const billingGuests = calcBillingGuests(appState.adults, appState.children)
-  const picnicPrice   = getVenuePrice(venue, billingGuests)
+  const picnicPrice = getPicnicPrice(venue, appState.adults, appState.children)
 
   const guestLine = `${appState.adults} adult${appState.adults !== 1 ? 's' : ''}` +
     (appState.children ? ` · ${appState.children} child${appState.children !== 1 ? 'ren' : ''}` : '')
@@ -1464,8 +1581,7 @@ async function showBookingForm(venue) {
     addOns = await loadVenueAddOns(venue.type)
     appState.currentVenueAddOns = addOns
   }
-  const billingGuests = calcBillingGuests(appState.adults, appState.children)
-  const picnicPrice   = getVenuePrice(venue, billingGuests)
+  const picnicPrice = getPicnicPrice(venue, appState.adults, appState.children)
 
   // Date chips
   let dateChips = ''
@@ -1650,8 +1766,7 @@ function updateBookingSummaryPrice() {
   const venue = appState.currentVenue
   if (!venue) return
 
-  const billingGuests = calcBillingGuests(appState.adults, appState.children)
-  const picnicPrice   = getVenuePrice(venue, billingGuests)
+  const picnicPrice = getPicnicPrice(venue, appState.adults, appState.children)
   const addonSum      = Array.from(document.querySelectorAll('.bv-addon-check:checked'))
     .reduce((sum, cb) => sum + Number(cb.dataset.addonPrice), 0)
 
@@ -1699,14 +1814,17 @@ function buildIntentSummaryHTML() {
     chips.push(`<span class="vd-bv-chip">${slotInfo ? slotInfo.icon : '⏰'} ${slotInfo ? slotInfo.label + ' · ' + slotInfo.time : lead.time_slot}</span>`)
   }
   if (lead.guest_count) {
-    chips.push(`<span class="vd-bv-chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>${lead.guest_count} guest${lead.guest_count !== 1 ? 's' : ''}</span>`)
+    const adults   = lead.guest_count - (lead.children_count || 0)
+    const kids     = lead.children_count || 0
+    const guestStr = `${adults} adult${adults !== 1 ? 's' : ''}` +
+      (kids ? ` · ${kids} child${kids !== 1 ? 'ren' : ''} (first 2 free)` : '')
+    chips.push(`<span class="vd-bv-chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>${guestStr}</span>`)
   }
 
   // Price rows — only if there's a price to show
   let priceSection = ''
   if (lead.advance_amount > 0 && venue) {
-    const billingGuests = calcBillingGuests(appState.adults, appState.children)
-    const picnicPrice   = getVenuePrice(venue, billingGuests)
+    const picnicPrice = getPicnicPrice(venue, appState.adults, appState.children)
     let rows = ''
     let setupBase = picnicPrice
     let hasStay = false
@@ -1759,13 +1877,14 @@ function buildIntentScreenHTML(lead, { containerClass = 'vd-intent-wrap containe
   // the child-blocking fanout and the Airbnb sync buffer run. So we hide the
   // Lock button and offer only the request action for combos.
   const isCombo = appState.currentVenue?.type === 'combo'
+  const venueName = appState.currentVenue?.name || ''
   return `
     <div class="${containerClass}">
       <div class="vd-intent-card">
         <div class="vd-intent-body">
           <div class="vd-intent-icon">🧺</div>
-          <h2 class="vd-intent-heading">You're almost in!</h2>
-          <p class="vd-intent-sub">${isCombo ? 'Request the whole floor and we\'ll confirm availability with you.' : 'How would you like to proceed?'}</p>
+          <h2 class="vd-intent-heading">You're almost there!</h2>
+          <p class="vd-intent-sub">${isCombo ? 'Request the whole floor and we\'ll confirm availability with you.' : `${venueName ? `Your spot at <strong>${escapeHtml(venueName)}</strong> is one step away.` : 'One step away from your perfect picnic.'}`}</p>
 
           ${buildIntentSummaryHTML()}
 
@@ -1774,21 +1893,21 @@ function buildIntentScreenHTML(lead, { containerClass = 'vd-intent-wrap containe
             <button class="vd-intent-btn vd-intent-btn--lock" onclick="submitBookingIntent(true)">
               <span class="vd-intent-btn-icon">🔒</span>
               <span class="vd-intent-btn-text">
-                <span class="vd-intent-btn-title">${lead.advance_amount > 0 ? `Lock my date — ₹${totalFmt}` : 'Lock my date'}</span>
-                <span class="vd-intent-btn-desc">Pay the advance now and your spot is secured</span>
+                <span class="vd-intent-btn-title">${lead.advance_amount > 0 ? `Pay &amp; lock my date — ₹${totalFmt}` : 'Lock my date'}</span>
+                <span class="vd-intent-btn-desc">Your spot is reserved the moment payment goes through</span>
               </span>
             </button>
             <div class="vd-intent-divider">or</div>`}
             <button class="vd-intent-btn vd-intent-btn--query" onclick="submitBookingIntent(false)">
               <span class="vd-intent-btn-icon">📞</span>
               <span class="vd-intent-btn-text">
-                <span class="vd-intent-btn-title">${isCombo ? 'Request the whole floor' : 'Just checking — call me'}</span>
-                <span class="vd-intent-btn-desc">${isCombo ? 'We\'ll check the floor is free and reach out to confirm' : 'Drop a query and we\'ll reach out to confirm'}</span>
+                <span class="vd-intent-btn-title">${isCombo ? 'Request the whole floor' : 'I have questions — call me'}</span>
+                <span class="vd-intent-btn-desc">${isCombo ? 'We\'ll check the floor is free and reach out to confirm' : 'We\'ll call you back within a few hours'}</span>
               </span>
             </button>
           </div>
 
-          <p class="vd-intent-note">We'll hold the date for 24 hours while you decide.</p>
+          <p class="vd-intent-note">⏱ We'll hold this date for 24 hours.</p>
         </div>
       </div>
     </div>`
@@ -1811,8 +1930,7 @@ function handleInlineBookingSubmit(event) {
     return
   }
 
-  const billingGuests = calcBillingGuests(appState.adults, appState.children)
-  const picnicPrice   = getVenuePrice(venue, billingGuests)
+  const picnicPrice = getPicnicPrice(venue, appState.adults, appState.children)
   const addonSum      = Array.from(document.querySelectorAll('.bv-addon-check:checked'))
     .reduce((s, cb) => s + Number(cb.dataset.addonPrice), 0)
 
@@ -1822,6 +1940,7 @@ function handleInlineBookingSubmit(event) {
     mobile_number:        form['mobile-number'].value.trim(),
     email_address:        form['email-address'].value.trim(),
     guest_count:          appState.adults + appState.children,
+    children_count:       appState.children,
     preferred_date:       appState.selectedDate || appState.checkinDate || '',
     special_requirements: form['special-requirements'].value.trim(),
     advance_amount:       0,
@@ -3761,6 +3880,7 @@ function clearVenueForm() {
   document.getElementById('vf-id').value = ''
   document.getElementById('vf-name').value = ''
   document.getElementById('vf-type').value = 'cafe'
+  document.getElementById('vf-setting').value = ''
   document.getElementById('vf-description').value = ''
   document.getElementById('vf-area').value = ''
   document.getElementById('vf-city').value = 'Jaipur'
@@ -3788,6 +3908,7 @@ function populateVenueForm(venue) {
   document.getElementById('vf-id').value = venue.id
   document.getElementById('vf-name').value = venue.name || ''
   document.getElementById('vf-type').value = venue.type || 'cafe'
+  document.getElementById('vf-setting').value = venue.setting || ''
   document.getElementById('vf-description').value = venue.description || ''
   document.getElementById('vf-area').value = venue.area || ''
   document.getElementById('vf-city').value = venue.city || 'Jaipur'
@@ -3999,6 +4120,7 @@ async function handleVenueFormSubmit(event) {
   const payload = {
     name: document.getElementById('vf-name').value.trim(),
     type,
+    setting: document.getElementById('vf-setting').value || null,
     description: document.getElementById('vf-description').value.trim(),
     area: document.getElementById('vf-area').value.trim(),
     city: document.getElementById('vf-city').value.trim(),
