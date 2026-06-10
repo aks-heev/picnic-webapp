@@ -2304,8 +2304,23 @@ function renderSuccessPage({ booking, venueName, confirmed = false }) {
 }
 
 // ================================================================
-//  MY BOOKINGS — magic link customer flow
+//  MY BOOKINGS — phone OTP customer flow (Supabase Auth + Twilio SMS)
 // ================================================================
+
+// Normalise free-text Indian mobile input to E.164 (+91XXXXXXXXXX).
+// Bookings store numbers inconsistently, but Supabase Auth requires E.164 to
+// send the SMS. The server-side lookup (get_my_bookings) re-normalises both
+// sides to the last 10 digits, so format drift never hides a booking.
+function toE164India(raw) {
+  let d = String(raw || '').replace(/\D/g, '')
+  if (d.length === 11 && d.startsWith('0')) d = d.slice(1)   // 0XXXXXXXXXX
+  if (d.length === 10) d = '91' + d                          // bare 10-digit
+  return '+' + d
+}
+
+function isValidIndiaMobile(e164) {
+  return /^\+91[6-9]\d{9}$/.test(e164)
+}
 
 function showMyBookingsPage() {
   showPage('my-bookings-page')
@@ -2322,38 +2337,42 @@ function renderMyBookingsShell() {
         Back
       </button>
       <div class="mbk-body">
-        <div class="mbk-icon">📬</div>
+        <div class="mbk-icon">📱</div>
         <h2 class="mbk-heading">Find your booking</h2>
-        <p class="mbk-sub">Enter the email you used when booking. We'll send you a one-time code to view your bookings.</p>
-        <form class="mbk-form" id="mbk-email-form">
-          <input type="email" id="mbk-email" class="form-control mbk-input"
-                 placeholder="your@email.com" required autocomplete="email" />
+        <p class="mbk-sub">Enter the mobile number you used when booking. We'll text you a one-time code to view your bookings.</p>
+        <form class="mbk-form" id="mbk-phone-form">
+          <input type="tel" id="mbk-phone" class="form-control mbk-input"
+                 placeholder="98765 43210" required autocomplete="tel"
+                 inputmode="numeric" />
           <button type="submit" class="btn btn--primary mbk-btn" id="mbk-send-btn">
             Send code
           </button>
         </form>
-        <p class="mbk-hint">No account needed — just your email.</p>
+        <p class="mbk-hint">No account needed — just your phone number.</p>
       </div>
     </div>
   `
-  document.getElementById('mbk-email-form')
+  document.getElementById('mbk-phone-form')
     ?.addEventListener('submit', sendOtp)
 }
 
 async function sendOtp(e) {
   e.preventDefault()
-  const email     = document.getElementById('mbk-email').value.trim()
+  const phone     = toE164India(document.getElementById('mbk-phone').value)
   const submitBtn = document.getElementById('mbk-send-btn')
+
+  if (!isValidIndiaMobile(phone)) {
+    showToast('Enter a valid 10-digit Indian mobile number', 'error')
+    return
+  }
+
   submitBtn.disabled    = true
   submitBtn.textContent = 'Sending…'
 
   try {
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: false }
-    })
+    const { error } = await supabase.auth.signInWithOtp({ phone })
     if (error) throw error
-    renderOtpInput(email)
+    renderOtpInput(phone)
   } catch (err) {
     showToast(err.message || 'Failed to send code', 'error')
     submitBtn.disabled    = false
@@ -2361,7 +2380,7 @@ async function sendOtp(e) {
   }
 }
 
-function renderOtpInput(email) {
+function renderOtpInput(phone) {
   const el = document.getElementById('my-bookings-content')
   if (!el) return
   el.innerHTML = `
@@ -2373,7 +2392,7 @@ function renderOtpInput(email) {
       <div class="mbk-body">
         <div class="mbk-icon">✉️</div>
         <h2 class="mbk-heading">Enter the code</h2>
-        <p class="mbk-sub">We sent a 6-digit code to <strong>${escapeHtml(email)}</strong>.<br>Enter it below — it expires in 10 minutes.</p>
+        <p class="mbk-sub">We sent a 6-digit code to <strong>${escapeHtml(phone)}</strong>.<br>Enter it below — it expires shortly.</p>
         <form class="mbk-form" id="mbk-otp-form">
           <input type="text" id="mbk-otp" class="form-control mbk-input mbk-otp-input"
                  placeholder="000000" maxlength="6" inputmode="numeric"
@@ -2382,12 +2401,12 @@ function renderOtpInput(email) {
             View my bookings
           </button>
         </form>
-        <p class="mbk-hint">Didn't get it? Check your spam, or <button class="mbk-resend-btn" onclick="sendOtpResend('${escapeHtml(email)}')">resend the code</button>.</p>
+        <p class="mbk-hint">Didn't get it? Check your messages, or <button class="mbk-resend-btn" onclick="sendOtpResend('${escapeHtml(phone)}')">resend the code</button>.</p>
       </div>
     </div>
   `
   document.getElementById('mbk-otp-form')
-    ?.addEventListener('submit', (e) => verifyOtp(e, email))
+    ?.addEventListener('submit', (e) => verifyOtp(e, phone))
 
   // Auto-format: digits only
   document.getElementById('mbk-otp')?.addEventListener('input', (e) => {
@@ -2395,7 +2414,7 @@ function renderOtpInput(email) {
   })
 }
 
-async function verifyOtp(e, email) {
+async function verifyOtp(e, phone) {
   e.preventDefault()
   const token     = document.getElementById('mbk-otp').value.trim()
   const submitBtn = document.getElementById('mbk-verify-btn')
@@ -2403,9 +2422,9 @@ async function verifyOtp(e, email) {
   submitBtn.textContent = 'Verifying…'
 
   try {
-    const { data, error } = await supabase.auth.verifyOtp({ email, token, type: 'email' })
+    const { error } = await supabase.auth.verifyOtp({ phone, token, type: 'sms' })
     if (error) throw error
-    renderMyBookings(data.user.email)
+    renderMyBookings()
   } catch (err) {
     showToast(err.message || 'Invalid or expired code', 'error')
     submitBtn.disabled    = false
@@ -2413,11 +2432,11 @@ async function verifyOtp(e, email) {
   }
 }
 
-async function sendOtpResend(email) {
+async function sendOtpResend(phone) {
   try {
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false } })
+    const { error } = await supabase.auth.signInWithOtp({ phone })
     if (error) throw error
-    showToast('New code sent — check your inbox', 'success')
+    showToast('New code sent — check your messages', 'success')
   } catch (err) {
     showToast(err.message || 'Failed to resend', 'error')
   }
@@ -2433,18 +2452,16 @@ window.addVfTier         = addVfTier
 window.removeVfTier      = removeVfTier
 window.toggleBlockedDate = toggleBlockedDate
 
-async function renderMyBookings(email) {
+async function renderMyBookings() {
   const el = document.getElementById('my-bookings-content')
   if (!el) return
 
   el.innerHTML = `<div class="mbk-page"><div class="mbk-body"><p class="mbk-sub">Loading your bookings…</p></div></div>`
 
   try {
-    const { data, error } = await supabase
-      .from('bookings')
-      .select('*, venues(name, type, area)')
-      .eq('email_address', email)
-      .order('preferred_date', { ascending: false })
+    // Server-side RPC: derives the verified phone from the session JWT and
+    // matches on the last 10 digits, so messy stored formats still resolve.
+    const { data, error } = await supabase.rpc('get_my_bookings')
 
     if (error) throw error
 
@@ -2458,8 +2475,8 @@ async function renderMyBookings(email) {
           <div class="mbk-body">
             <div class="mbk-icon">🔍</div>
             <h2 class="mbk-heading">No bookings found</h2>
-            <p class="mbk-sub">We couldn't find any bookings for <strong>${escapeHtml(email)}</strong>.</p>
-            <button class="btn btn--outline" onclick="showMyBookingsPage()">Try a different email</button>
+            <p class="mbk-sub">We couldn't find any bookings under this mobile number.</p>
+            <button class="btn btn--outline" onclick="showMyBookingsPage()">Try a different number</button>
           </div>
         </div>
       `
@@ -2504,7 +2521,7 @@ async function renderMyBookings(email) {
         </button>
         <div class="mbk-list-header">
           <h2 class="mbk-heading">Your bookings</h2>
-          <p class="mbk-sub">${data.length} booking${data.length !== 1 ? 's' : ''} for ${escapeHtml(email)}</p>
+          <p class="mbk-sub">${data.length} booking${data.length !== 1 ? 's' : ''} found</p>
         </div>
         <div class="mbk-cards">${cards}</div>
         <div class="mbk-signout">
@@ -5468,6 +5485,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const menuToken = urlParams.get('menu')
   const bookingId = urlParams.get('booking')
   const venueId   = urlParams.get('venue')
+  const view      = urlParams.get('view')
 
   if (menuToken) {
     showPage('menu-selection-page')
@@ -5475,6 +5493,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (bookingId) appState.currentBooking = { id: parseInt(bookingId, 10) }
   } else if (venueId) {
     loadVenues().then(() => showVenuePage(parseInt(venueId, 10), false))
+  } else if (view === 'mybookings') {
+    showMyBookingsPage()
   }
 
   // Venue card click delegation

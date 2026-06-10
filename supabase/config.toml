@@ -1,0 +1,34 @@
+# Supabase project config.
+# Minimal — only declares per-function JWT behaviour for the iCal sync
+# functions. Everything else uses Supabase defaults.
+
+project_id = "evmftrogyzoudiccqkya"
+
+[functions.export-ical]
+# Airbnb fetches this calendar anonymously (no auth header), so the
+# endpoint MUST be public. With verify_jwt=true Airbnb's import gets a
+# 401 and silently shows no blocks. The function emits only busy dates
+# (no guest PII), so public exposure is safe.
+verify_jwt = false
+
+[functions.sync-ical]
+# Import side stays protected. The pg_cron caller passes the service-role
+# key as a bearer token (a valid JWT), and the admin "Sync now" button
+# passes the signed-in user's JWT — both satisfy verify_jwt.
+verify_jwt = true
+
+# notify-* functions are invoked by DB triggers via call_edge_function(),
+# which sends NO Authorization header. They MUST stay verify_jwt = false or
+# every trigger call 401s and no email is sent. Pinned here so a plain
+# `supabase functions deploy` never silently flips them back to the true default.
+[functions.notify-booking-received]
+verify_jwt = false
+
+[functions.notify-booking-confirmed]
+verify_jwt = false
+
+[functions.notify-menu-link]
+verify_jwt = false
+
+[functions.notify-order-received]
+verify_jwt = false
