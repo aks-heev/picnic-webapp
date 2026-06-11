@@ -584,7 +584,8 @@ function renderVenueDetail(venue, addOns = []) {
       <div class="vd-hero" id="vd-hero-slider">
         ${heroImgUrl
           ? `<div class="vd-hero-blur-bg" style="background-image:url('${heroImgUrl}')"></div>
-             <img class="vd-hero-img" src="${heroImgUrl}" alt="${escapeHtml(venue.name)}">`
+             <img class="vd-hero-img vd-hero-img--a is-visible" src="${heroImgUrl}" alt="${escapeHtml(venue.name)}">
+             <img class="vd-hero-img vd-hero-img--b" alt="" aria-hidden="true">`
           : `<div class="vd-hero-blur-bg vd-hero-blur-bg--fallback"></div>`}
         <div class="vd-hero-gradient"></div>
         <div class="vd-hero-top">
@@ -857,16 +858,30 @@ function renderVenueDetail(venue, addOns = []) {
 
     const heroEl  = container.querySelector('#vd-hero-slider')
     const blurBg  = container.querySelector('.vd-hero-blur-bg')
-    const heroImg = container.querySelector('.vd-hero-img')
+    const layerA  = container.querySelector('.vd-hero-img--a')
+    const layerB  = container.querySelector('.vd-hero-img--b')
+    let visibleLayer = layerA
 
     function sliderGoTo(index) {
       sliderIndex = ((index % sliderImages.length) + sliderImages.length) % sliderImages.length
       const url = sliderImages[sliderIndex]
-      if (blurBg) blurBg.style.backgroundImage = `url('${url}')`
-      if (heroImg) {
-        heroImg.classList.add('vd-hero-img--transition')
-        heroImg.src = url
-        setTimeout(() => heroImg.classList.remove('vd-hero-img--transition'), 400)
+      // Crossfade between two stacked layers so the blurred background
+      // is never exposed mid-transition.
+      if (layerA && layerB) {
+        const incoming = visibleLayer === layerA ? layerB : layerA
+        const pre = new Image()
+        pre.onload = () => {
+          incoming.src = url
+          if (blurBg) blurBg.style.backgroundImage = `url('${url}')`
+          requestAnimationFrame(() => {
+            incoming.classList.add('is-visible')
+            visibleLayer.classList.remove('is-visible')
+            visibleLayer = incoming
+          })
+        }
+        pre.src = url
+      } else if (blurBg) {
+        blurBg.style.backgroundImage = `url('${url}')`
       }
       // Sync dots
       container.querySelectorAll('.vd-hero-dot').forEach((d, i) =>

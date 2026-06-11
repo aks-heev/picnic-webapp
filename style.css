@@ -3519,11 +3519,12 @@ body {
   height: 100%;
   object-fit: contain;
   z-index: 1;
-  transition: opacity 0.35s ease;
+  opacity: 0;
+  transition: opacity 0.5s ease;
 }
 
-.vd-hero-img--transition {
-  opacity: 0.15;
+.vd-hero-img.is-visible {
+  opacity: 1;
 }
 
 /* ---- Slider dots ---- */
@@ -5570,15 +5571,23 @@ body {
 /* BnB range states */
 .avail-cal-day--checkin,
 .avail-cal-day--checkout {
-  background: var(--boho-accent-pink, #c4607a);
-  color: #fff;
-  border-color: var(--boho-accent-pink, #c4607a);
+  background: var(--boho-accent-pink, #c4607a) !important;
+  color: #fff !important;
+  border-color: var(--boho-accent-pink, #c4607a) !important;
   border-radius: 8px;
 }
+/* Keep selected endpoints solid even while hovered (the cursor sits on the
+   just-clicked checkout cell, which would otherwise pick up the
+   --available / --checkout-eligible hover tint). */
+.avail-cal-day--checkin:hover,
+.avail-cal-day--checkout:hover {
+  background: var(--boho-accent-pink, #c4607a) !important;
+  color: #fff !important;
+}
 .avail-cal-day--in-range {
-  background: rgba(196, 96, 122, 0.15);
-  color: var(--boho-text-dark, #3a2e2e);
-  border-color: transparent;
+  background: var(--boho-accent-pink, #c4607a) !important;
+  color: #fff !important;
+  border-color: var(--boho-accent-pink, #c4607a) !important;
   border-radius: 0;
 }
 .avail-cal-day--hover-range {
@@ -5586,6 +5595,21 @@ body {
   border-color: transparent;
   border-radius: 0;
 }
+/* A booked date selected as check-in/checkout (same-day turnover) must read as
+   part of the stay — override the leftover "booked" background/strikethrough so
+   both endpoints share the solid stay color. */
+.avail-cal-day--booked.avail-cal-day--checkin,
+.avail-cal-day--booked.avail-cal-day--checkout {
+  background: var(--boho-accent-pink, #c4607a) !important;
+  color: #fff !important;
+  text-decoration: none !important;
+  opacity: 1 !important;
+}
+.avail-cal-day--checkin .avail-cal-day-booked-dot,
+.avail-cal-day--checkout .avail-cal-day-booked-dot {
+  display: none;
+}
+
 /* Round the edges of the in-range band */
 .avail-cal-day--checkin { border-radius: 8px 0 0 8px !important; }
 .avail-cal-day--checkout { border-radius: 0 8px 8px 0 !important; }
@@ -7429,4 +7453,164 @@ body {
   margin-top: 14px;
   font-size: 12px;
   color: rgba(255,255,255,0.6);
+}
+
+/* ============================================================
+   Footer — legal links row
+   ============================================================ */
+.footer-legal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0;
+  margin-top: 20px;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+.footer-legal a {
+  color: rgba(255,255,255,0.65);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+.footer-legal a:hover { color: #ffffff; }
+
+/* ============================================================
+   Legal pages (privacy, terms, cancellation, disclaimer)
+   ============================================================ */
+.legal-page {
+  background: var(--boho-cream);
+  min-height: calc(100vh - 72px);
+  padding: 80px 24px 96px;    /* 80px top clears the fixed navbar */
+}
+
+.legal-container {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.legal-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--boho-accent-pink);
+  margin-bottom: 12px;
+}
+
+.legal-title {
+  font-family: var(--font-serif);
+  font-size: clamp(2rem, 4vw, 2.8rem);
+  font-weight: 500;
+  color: var(--boho-text-dark);
+  line-height: 1.15;
+  margin-bottom: 16px;
+}
+
+.legal-meta {
+  font-size: 14px;
+  color: var(--boho-text-light);
+  line-height: 1.6;
+  margin-bottom: 48px;
+  padding-bottom: 32px;
+  border-bottom: 1px solid var(--boho-border);
+}
+
+.legal-body h2 {
+  font-family: var(--font-serif);
+  font-size: clamp(1.3rem, 2.5vw, 1.65rem);
+  font-weight: 500;
+  color: var(--boho-text-dark);
+  margin: 52px 0 16px;
+  line-height: 1.25;
+}
+
+.legal-body h2:first-child { margin-top: 0; }
+
+.legal-body h3 {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--boho-text-light);
+  margin: 36px 0 10px;
+}
+
+.legal-body p {
+  font-size: 15px;
+  line-height: 1.85;
+  color: var(--boho-text-medium);
+  margin-bottom: 16px;
+}
+
+.legal-body ul,
+.legal-body ol {
+  margin: 0 0 20px 0;
+  padding-left: 22px;
+}
+
+.legal-body li {
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--boho-text-medium);
+  margin-bottom: 10px;
+}
+
+.legal-body strong {
+  color: var(--boho-text-dark);
+  font-weight: 600;
+}
+
+.legal-body a {
+  color: var(--boho-accent-pink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.legal-body a:hover { color: var(--boho-accent-rose); }
+
+.legal-contact {
+  margin-top: 32px;
+  padding: 24px 28px;
+  background: var(--boho-sand);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--boho-border);
+}
+
+.legal-contact strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--boho-text-dark);
+  margin-bottom: 10px;
+}
+
+.legal-contact p {
+  margin-bottom: 6px;
+  color: var(--boho-text-medium);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.legal-contact p:last-child { margin-bottom: 0; }
+
+.legal-hr {
+  border: none;
+  border-top: 1px solid var(--boho-border);
+  margin: 56px 0;
+}
+
+/* Yellow highlight for unfilled placeholders */
+.legal-placeholder {
+  background: #fffbe6;
+  color: #92400e;
+  border: 1px dashed #fbbf24;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.9em;
+  font-style: italic;
+}
+
+@media (max-width: 600px) {
+  .legal-page { padding: 72px 20px 72px; }
 }
