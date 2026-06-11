@@ -2276,7 +2276,7 @@ body {
      Bottom zone: cream content panel slides up over the photo.
   ─────────────────────────────────────────────────────────────── */
   .hero {
-    min-height: 100svh;        /* full viewport height */
+    min-height: 118svh;        /* taller than viewport — more photo above the cream panel */
     align-items: flex-end;     /* content panel hugs the bottom */
     padding-top: 0;
   }
