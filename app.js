@@ -1920,12 +1920,21 @@ function buildIntentSummaryHTML() {
       const name = appState.currentVenueAddOns?.find(a => a.id === ao.addon_id)?.name || 'Add-on'
       rows += `<div class="vd-bv-price-row"><span>${escapeHtml(name)}</span><span>+₹${Number(ao.price_at_booking).toLocaleString('en-IN')}</span></div>`
     }
+    const fullTotal = lead.advance_amount * 2
     priceSection = `
       <div class="vd-bv-price-table">
         ${rows}
         <div class="vd-bv-price-divider"></div>
         <div class="vd-bv-price-row vd-bv-price-row--total">
           <span>Total</span>
+          <span>₹${fullTotal.toLocaleString('en-IN')}</span>
+        </div>
+        <div class="vd-bv-price-row vd-bv-price-row--advance">
+          <span>Advance due now <span class="vd-bv-price-tag">50%</span></span>
+          <span>₹${lead.advance_amount.toLocaleString('en-IN')}</span>
+        </div>
+        <div class="vd-bv-price-row vd-bv-price-row--remaining">
+          <span>Remaining due on the day</span>
           <span>₹${lead.advance_amount.toLocaleString('en-IN')}</span>
         </div>
       </div>`
@@ -1978,8 +1987,8 @@ function buildIntentScreenHTML(lead, { containerClass = 'vd-intent-wrap containe
             <button class="vd-intent-btn vd-intent-btn--lock" onclick="submitBookingIntent(true)">
               <span class="vd-intent-btn-icon">🔒</span>
               <span class="vd-intent-btn-text">
-                <span class="vd-intent-btn-title">${lead.advance_amount > 0 ? `Pay &amp; lock my date — ₹${totalFmt}` : 'Lock my date'}</span>
-                <span class="vd-intent-btn-desc">Your spot is reserved the moment payment goes through</span>
+                <span class="vd-intent-btn-title">${lead.advance_amount > 0 ? `Pay advance &amp; lock my date — ₹${totalFmt}` : 'Lock my date'}</span>
+                <span class="vd-intent-btn-desc">${lead.advance_amount > 0 ? `Remaining ₹${totalFmt} due on the day · spot is reserved once payment clears` : 'Your spot is reserved the moment payment goes through'}</span>
               </span>
             </button>
             <div class="vd-intent-divider">or</div>`}
@@ -2044,13 +2053,13 @@ function handleInlineBookingSubmit(event) {
   if (venue.type !== 'custom') lead.venue_id = venue.id
   if (venue.type === 'cafe' && appState.selectedTimeSlot) {
     lead.time_slot      = appState.selectedTimeSlot
-    lead.advance_amount = picnicPrice + addonSum
+    lead.advance_amount = Math.round((picnicPrice + addonSum) * 0.5)
   }
   if (venue.type === 'self_managed' && appState.checkinDate && appState.checkoutDate) {
     lead.checkout_date  = appState.checkoutDate
     lead.preferred_date = appState.checkinDate
     const nights        = calcNights(appState.checkinDate, appState.checkoutDate)
-    lead.advance_amount = nights * (Number(venue.metadata?.stay_price_per_night) || 0) + picnicPrice + addonSum
+    lead.advance_amount = Math.round((nights * (Number(venue.metadata?.stay_price_per_night) || 0) + picnicPrice + addonSum) * 0.5)
   }
 
   // Snapshot selected add-ons (checkboxes disappear when we replace the view)

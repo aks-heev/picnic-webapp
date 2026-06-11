@@ -3907,6 +3907,28 @@ body {
   font-weight: 700;
   color: var(--boho-text-dark);
 }
+.vd-bv-price-row--advance {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--boho-rose, #c4607a);
+}
+.vd-bv-price-row--remaining {
+  font-size: 13px;
+  color: var(--boho-text-muted, #8c7b6b);
+}
+.vd-bv-price-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(196,96,122,0.1);
+  color: var(--boho-rose, #c4607a);
+  border-radius: 4px;
+  padding: 1px 5px;
+  vertical-align: middle;
+  margin-left: 4px;
+}
 
 .vd-bv-price-divider {
   height: 1px;
