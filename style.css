@@ -4080,6 +4080,33 @@ body {
   resize: vertical;
   min-height: 80px;
 }
+.vd-bf-select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  padding: 12px 44px 12px 14px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c4607a' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 17px 17px;
+  transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
+}
+.vd-bf-select:hover {
+  border-color: rgba(196, 96, 122, 0.5);
+  background-color: rgba(196, 96, 122, 0.03);
+}
+.vd-bf-select:focus {
+  border-color: var(--boho-accent-pink);
+  box-shadow: 0 0 0 3px rgba(196, 96, 122, 0.13);
+}
+/* Mute the control text while the placeholder option is selected */
+.vd-bf-select:has(option[value=""]:checked) {
+  color: var(--boho-text-muted, #8a7272);
+}
+.vd-bf-select option {
+  color: var(--boho-text-dark);
+}
 
 .vd-bf-submit {
   width: 100%;
@@ -4109,6 +4136,40 @@ body {
 .vd-guest-selector {
   padding: 4px 0 8px;
 }
+
+/* "What's included" banner — cafe food & drink inclusions */
+.vd-inclusion {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(143,168,135,0.10);
+  border: 1px solid rgba(143,168,135,0.30);
+}
+.vd-inclusion:empty { display: none; }
+.vd-inclusion-title {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--boho-accent-sage, #6f8a66);
+}
+.vd-inclusion-items {
+  font-family: var(--font-serif, var(--font-sans));
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--boho-text-dark);
+}
+.vd-inclusion-note {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.45;
+  color: #8a7d72;
+}
+.vd-inclusion--summary { margin-top: 12px; }
 
 .vd-guest-back {
   display: inline-flex;

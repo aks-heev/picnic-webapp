@@ -63,7 +63,7 @@ const appState = {
   checkinDate: null,         // bnb: check-in date
   checkoutDate: null,        // bnb: checkout date
   adults: 2,                 // guest selector: adult count
-  children: 0,               // guest selector: child count (under 10, 0.5× rate)
+  children: 0,               // guest selector: child count (under 10, free — no price/inclusion impact)
   bookingStep: 'calendar',   // 'calendar' | 'guests'
 }
 
@@ -140,18 +140,40 @@ function formatPrice(amount) {
   return '₹' + Number(amount).toLocaleString('en-IN')
 }
 
-// First N children free (per venue.metadata.free_children_count, default 2).
-function getFreeKids(venue) {
-  return Number(venue?.metadata?.free_children_count ?? 2)
+// Picnic price keys off adults only. Children (under 10) are free — they do
+// not affect price, inclusions, or capacity.
+function getPicnicPrice(venue, adults) {
+  return getVenuePrice(venue, adults)
 }
-// Full picnic price: tier price for adults + half overage per paid child.
-// Paid children (3rd+) each cost overage_per_person × 0.5 — no tier jumps.
-function getPicnicPrice(venue, adults, children) {
-  const freeKids    = getFreeKids(venue)
-  const paidKids    = Math.max(0, (children || 0) - freeKids)
-  const tierPrice   = getVenuePrice(venue, adults)
-  const overageRate = Number(venue?.metadata?.overage_per_person) || 0
-  return tierPrice + paidKids * overageRate * 0.5
+
+// Included food & drink counts for a booking, scaled to adults only.
+// food   = ceil(adults × food_multiplier)
+// drinks = ceil(adults × drink_multiplier)
+// Returns null when the venue has no multipliers (non-cafe venues show nothing).
+function getInclusions(venue, adults) {
+  const m = venue?.metadata
+  const foodMult  = Number(m?.food_multiplier)
+  const drinkMult = Number(m?.drink_multiplier)
+  if (!foodMult && !drinkMult) return null
+  const a = Math.max(0, Number(adults) || 0)
+  return {
+    food:   Math.ceil(a * (foodMult  || 0)),
+    drinks: Math.ceil(a * (drinkMult || 0)),
+  }
+}
+
+// HTML for the "what's included" banner shown in the guest selector & booking
+// view. Empty string for venues with no inclusions. Counts scale with adults;
+// children are free and order à la carte, so the note makes that explicit.
+function inclusionBannerHtml(venue, adults) {
+  const inc = getInclusions(venue, adults)
+  if (!inc) return ''
+  const foodTxt  = `${inc.food} food item${inc.food !== 1 ? 's' : ''}`
+  const drinkTxt = `${inc.drinks} beverage${inc.drinks !== 1 ? 's' : ''}`
+  return `
+    <span class="vd-inclusion-title">✨ Included in your price</span>
+    <span class="vd-inclusion-items">${foodTxt} &nbsp;·&nbsp; ${drinkTxt}</span>
+    <span class="vd-inclusion-note">Based on the number of adults. Children are welcome — order anything extra à la carte.</span>`
 }
 
 // Tiered price for a venue given billing guest count.
@@ -1475,7 +1497,7 @@ function showGuestSelector(venue) {
         <div class="vd-guest-row">
           <div class="vd-guest-label">
             <span class="vd-guest-type">Children</span>
-            <span class="vd-guest-sublabel">Under 10 · first 2 free</span>
+            <span class="vd-guest-sublabel">Under 10 · free</span>
           </div>
           <div class="vd-guest-counter">
             <button class="vd-guest-btn" onclick="updateGuestCount('children',-1)" ${appState.children <= 0 ? 'disabled' : ''} aria-label="Remove child">−</button>
@@ -1484,6 +1506,7 @@ function showGuestSelector(venue) {
           </div>
         </div>
       </div>
+      <div class="vd-inclusion" id="vd-inclusion-line">${inclusionBannerHtml(venue, appState.adults)}</div>
     </div>
   `
 
@@ -1527,7 +1550,11 @@ function updateGuestPrice(venue) {
   const labelEl = document.getElementById('sidebar-price-label')
   if (!priceEl || !venue) return
 
-  const picnicPrice = getPicnicPrice(venue, appState.adults, appState.children)
+  const picnicPrice = getPicnicPrice(venue, appState.adults)
+
+  // Refresh the live inclusion banner (cafe venues only)
+  const inclusionEl = document.getElementById('vd-inclusion-line')
+  if (inclusionEl) inclusionEl.innerHTML = inclusionBannerHtml(venue, appState.adults)
 
   const guestLine = `${appState.adults} adult${appState.adults !== 1 ? 's' : ''}` +
     (appState.children ? ` · ${appState.children} child${appState.children !== 1 ? 'ren' : ''}` : '')
@@ -1596,7 +1623,7 @@ async function showBookingForm(venue) {
     addOns = await loadVenueAddOns(venue.type)
     appState.currentVenueAddOns = addOns
   }
-  const picnicPrice = getPicnicPrice(venue, appState.adults, appState.children)
+  const picnicPrice = getPicnicPrice(venue, appState.adults)
 
   // Date chips
   let dateChips = ''
@@ -1679,6 +1706,7 @@ async function showBookingForm(venue) {
             <span class="venue-type-badge ${venueTypeBadgeClass(venue.type)}">${escapeHtml(formatVenueType(venue.type))}</span>
           </div>
           <div class="vd-bv-chips">${dateChips}${guestChips}</div>
+          ${inclusionBannerHtml(venue, appState.adults) ? `<div class="vd-inclusion vd-inclusion--summary">${inclusionBannerHtml(venue, appState.adults)}</div>` : ''}
           <div class="vd-bv-price-table">
             ${priceRows}
             <div class="vd-bv-price-divider"></div>
@@ -1711,8 +1739,40 @@ async function showBookingForm(venue) {
                 </div>
               </div>
               <div class="vd-bf-field">
+                <label class="vd-bf-label">Occasion</label>
+                <select class="vd-bf-input vd-bf-select" name="occasion"
+                        onchange="document.getElementById('occasion-other-wrap').style.display = this.value === 'Other' ? '' : 'none'">
+                  <option value="">Select an occasion (optional)</option>
+                  <option value="Birthday">Birthday</option>
+                  <option value="Anniversary">Anniversary</option>
+                  <option value="Proposal">Proposal</option>
+                  <option value="Baby Shower">Baby Shower</option>
+                  <option value="Bridal Shower">Bridal Shower</option>
+                  <option value="Date Night">Date Night</option>
+                  <option value="Graduation">Graduation</option>
+                  <option value="Just Because">Just Because</option>
+                  <option value="Other">Other…</option>
+                </select>
+                <div id="occasion-other-wrap" style="display:none; margin-top:8px;">
+                  <input class="vd-bf-input" type="text" name="occasion-other" placeholder="Tell us the occasion">
+                </div>
+              </div>
+              <div class="vd-bf-field">
+                <label class="vd-bf-label">Celebration board <span style="font-weight:400; opacity:0.6;">(optional)</span></label>
+                <select class="vd-bf-input vd-bf-select" name="board-type"
+                        onchange="document.getElementById('board-message-wrap').style.display = this.value ? '' : 'none'">
+                  <option value="">No board</option>
+                  <option value="black">Black board</option>
+                  <option value="white">White board</option>
+                </select>
+                <div id="board-message-wrap" style="display:none; margin-top:8px;">
+                  <input class="vd-bf-input" type="text" name="board-message" maxlength="120"
+                         placeholder="Message to write on the board, e.g. Happy Birthday Aanya!">
+                </div>
+              </div>
+              <div class="vd-bf-field">
                 <label class="vd-bf-label">Special requests</label>
-                <textarea class="vd-bf-input vd-bf-textarea" name="special-requirements" placeholder="Occasion, allergies, anything we should know…" rows="3"></textarea>
+                <textarea class="vd-bf-input vd-bf-textarea" name="special-requirements" placeholder="Allergies, dietary needs, anything else we should know…" rows="3"></textarea>
               </div>
               <button type="submit" class="btn btn--venue-primary vd-bf-submit" id="inline-submit-btn">
                 Continue →
@@ -1781,7 +1841,7 @@ function updateBookingSummaryPrice() {
   const venue = appState.currentVenue
   if (!venue) return
 
-  const picnicPrice = getPicnicPrice(venue, appState.adults, appState.children)
+  const picnicPrice = getPicnicPrice(venue, appState.adults)
   const addonSum      = Array.from(document.querySelectorAll('.bv-addon-check:checked'))
     .reduce((sum, cb) => sum + Number(cb.dataset.addonPrice), 0)
 
@@ -1832,14 +1892,14 @@ function buildIntentSummaryHTML() {
     const adults   = lead.guest_count - (lead.children_count || 0)
     const kids     = lead.children_count || 0
     const guestStr = `${adults} adult${adults !== 1 ? 's' : ''}` +
-      (kids ? ` · ${kids} child${kids !== 1 ? 'ren' : ''} (first 2 free)` : '')
+      (kids ? ` · ${kids} child${kids !== 1 ? 'ren' : ''} (free)` : '')
     chips.push(`<span class="vd-bv-chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>${guestStr}</span>`)
   }
 
   // Price rows — only if there's a price to show
   let priceSection = ''
   if (lead.advance_amount > 0 && venue) {
-    const picnicPrice = getPicnicPrice(venue, appState.adults, appState.children)
+    const picnicPrice = getPicnicPrice(venue, appState.adults)
     let rows = ''
     let setupBase = picnicPrice
     let hasStay = false
@@ -1945,7 +2005,7 @@ function handleInlineBookingSubmit(event) {
     return
   }
 
-  const picnicPrice = getPicnicPrice(venue, appState.adults, appState.children)
+  const picnicPrice = getPicnicPrice(venue, appState.adults)
   const addonSum      = Array.from(document.querySelectorAll('.bv-addon-check:checked'))
     .reduce((s, cb) => s + Number(cb.dataset.addonPrice), 0)
 
@@ -1961,6 +2021,16 @@ function handleInlineBookingSubmit(event) {
     advance_amount:       0,
     created_at:           new Date().toISOString(),
   }
+
+  // Occasion: dropdown value, or the free-text "Other" entry when selected
+  const occasionSel   = form['occasion']?.value || ''
+  const occasionOther = form['occasion-other']?.value.trim() || ''
+  lead.occasion = (occasionSel === 'Other' ? occasionOther : occasionSel) || null
+
+  // Celebration board: only stored when a type is chosen (optional)
+  const boardType    = form['board-type']?.value || ''
+  const boardMessage = form['board-message']?.value.trim() || ''
+  lead.board = boardType ? { type: boardType, message: boardMessage } : null
   if (venue.type !== 'custom') lead.venue_id = venue.id
   if (venue.type === 'cafe' && appState.selectedTimeSlot) {
     lead.time_slot      = appState.selectedTimeSlot
@@ -2106,6 +2176,9 @@ async function submitBookingIntent(wantsToLock) {
       p_checkout_date:        lead.checkout_date        ?? null,
       p_time_slot:            lead.time_slot            ?? null,
       p_external_booking_ref: lead.external_booking_ref ?? null,
+      p_occasion:             lead.occasion ?? null,
+      p_board:                lead.board    ?? null,
+      p_children_count:       lead.children_count ?? 0,
       p_add_ons:              addOnsToInsert.map(a => ({
         addon_id:              a.addon_id,
         name:                  a.name,
@@ -2791,6 +2864,7 @@ function renderQueries(queries) {
       </div>
 
       ${reqHtml}
+      ${occasionBoardHtml(query)}
       ${airbnbHtml}
 
       ${isCombo ? `<div class="adm-floor-note">🏠 Whole floor = The Nook + The Gathering</div>` : ''}
@@ -2843,6 +2917,20 @@ function renderQueries(queries) {
       </div>
     </div>`
   }).join('')
+}
+
+// Occasion + celebration-board detail rows shared by query/booking cards
+function occasionBoardHtml(b) {
+  let html = ''
+  if (b.occasion) {
+    html += `<div class="adm-detail-row" style="margin-top:8px; font-size:13px;">🎉 <strong>Occasion:</strong> ${escapeHtml(b.occasion)}</div>`
+  }
+  if (b.board && (b.board.type || b.board.message)) {
+    const type  = b.board.type ? b.board.type.charAt(0).toUpperCase() + b.board.type.slice(1) + ' board' : 'Board'
+    const msg   = b.board.message ? ` — “${escapeHtml(b.board.message)}”` : ''
+    html += `<div class="adm-detail-row" style="margin-top:8px; font-size:13px;">🪧 <strong>${escapeHtml(type)}:</strong>${msg}</div>`
+  }
+  return html
 }
 
 // Render bookings (confirmed bookings)
@@ -2930,6 +3018,7 @@ function renderBookings(bookings) {
       </div>
 
       ${reqHtml}
+      ${occasionBoardHtml(booking)}
       ${airbnbHtml}
       ${ordersHtml}
 
@@ -5298,26 +5387,31 @@ window.handleHeroImageUpload = async function(input, device = 'desktop') {
       .from('site-images')
       .getPublicUrl(storagePath)
 
+    // Stable storage path + upsert means the URL is identical on every upload,
+    // so the browser/CDN keeps serving the cached old image. Append a version
+    // token so the stored URL changes each time and the cache is bypassed.
+    const versionedUrl = publicUrl + '?v=' + Date.now()
+
     const { error: dbErr } = await supabase
       .from('site_settings')
-      .update({ value: publicUrl, updated_at: new Date().toISOString() })
+      .update({ value: versionedUrl, updated_at: new Date().toISOString() })
       .eq('key', settingKey)
     if (dbErr) throw dbErr
 
     if (isDesktop) {
       const heroImg = document.getElementById('hero-bg-img')
-      if (heroImg && window.innerWidth > 768) heroImg.src = publicUrl + '?t=' + Date.now()
+      if (heroImg && window.innerWidth > 768) heroImg.src = versionedUrl
       const preview = document.getElementById('hero-img-admin-preview')
-      if (preview) preview.innerHTML = `<img src="${publicUrl}" alt="Current hero desktop" class="hero-img-admin-thumb" />`
+      if (preview) preview.innerHTML = `<img src="${versionedUrl}" alt="Current hero desktop" class="hero-img-admin-thumb" />`
     } else {
       const heroImg = document.getElementById('hero-bg-img')
-      if (heroImg && window.innerWidth <= 768) heroImg.src = publicUrl + '?t=' + Date.now()
+      if (heroImg && window.innerWidth <= 768) heroImg.src = versionedUrl
       const preview = document.getElementById('hero-img-mobile-preview')
-      if (preview) preview.innerHTML = `<img src="${publicUrl}" alt="Current hero mobile" class="hero-img-admin-thumb" />`
+      if (preview) preview.innerHTML = `<img src="${versionedUrl}" alt="Current hero mobile" class="hero-img-admin-thumb" />`
       const savedPos = document.getElementById('hero-pos-x')
         ? `${document.getElementById('hero-pos-x').value}% ${document.getElementById('hero-pos-y').value}%`
         : '65% 0%'
-      showMobilePositionAdminUI(publicUrl, savedPos)
+      showMobilePositionAdminUI(versionedUrl, savedPos)
     }
 
     if (status) status.innerHTML = `<span class="hero-upload-success">✓ ${isDesktop ? 'Desktop' : 'Mobile'} image updated</span>`
