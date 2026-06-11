@@ -383,29 +383,33 @@ async function renderAddonsStrip() {
 
     if (error) throw error
 
-    // One featured add-on per category (first by sort_order)
-    const seen = new Set()
-    const featured = (data || []).filter(a => {
-      if (seen.has(a.category)) return false
-      seen.add(a.category)
-      return true
-    })
+    const addons = data || []
+    if (!addons.length) return
 
-    if (!featured.length) return
-
-    strip.innerHTML = featured.map(a => `
+    const cardHtml = (a) => `
       <div class="addon-strip-card">
         <div class="addon-strip-visual">
           ${a.image_url
-            ? `<img src="${escapeHtml(a.image_url)}" alt="${escapeHtml(a.name)}" class="addon-strip-img">`
+            ? `<img src="${escapeHtml(a.image_url)}" alt="${escapeHtml(a.name)}" class="addon-strip-img" loading="lazy">`
             : `<span class="addon-strip-emoji">${ADDON_CAT_EMOJI[a.category] || '✨'}</span>`}
         </div>
         <div class="addon-strip-info">
           <span class="addon-strip-name">${escapeHtml(a.name)}</span>
           ${a.description ? `<span class="addon-strip-desc">${escapeHtml(a.description)}</span>` : ''}
         </div>
+      </div>`
+
+    // Duplicate cards so the seamless -50% marquee loop works
+    const row1 = addons.map(cardHtml).join('')
+    const row2 = [...addons].reverse().map(cardHtml).join('')
+
+    strip.innerHTML = `
+      <div class="addons-marquee-row">
+        <div class="addons-marquee-track">${row1}${row1}</div>
       </div>
-    `).join('')
+      <div class="addons-marquee-row addons-marquee-row--reverse">
+        <div class="addons-marquee-track addons-marquee-track--rtl">${row2}${row2}</div>
+      </div>`
   } catch (err) {
     console.error('Failed to load add-ons strip:', err)
   }
@@ -443,10 +447,11 @@ function venueCardHtml(venue) {
       </div>
       <div class="venue-card-body">
         <h3 class="venue-card-name">${escapeHtml(venue.name)}</h3>
-        <p class="venue-card-area">${escapeHtml(venue.area || venue.city)}</p>
+        <p class="venue-card-area">${escapeHtml(venue.area ? `${venue.area} · ${venue.city}` : venue.city)}</p>
         <div class="venue-card-footer">
           <span class="venue-card-capacity">${capacityText}</span>
           <span class="venue-card-price">${priceText}</span>
+          ${venue.requires_confirmation ? '<span class="venue-card-on-request">On Request</span>' : ''}
         </div>
       </div>
     </div>
@@ -1951,7 +1956,10 @@ function buildIntentScreenHTML(lead, { containerClass = 'vd-intent-wrap containe
   // customer. A combo booking must route through admin Hold → Confirm, where
   // the child-blocking fanout and the Airbnb sync buffer run. So we hide the
   // Lock button and offer only the request action for combos.
+  // requires_confirmation venues work the same way — query-only, no lock.
   const isCombo = appState.currentVenue?.type === 'combo'
+  const requiresConfirmation = !!appState.currentVenue?.requires_confirmation
+  const queryOnly = isCombo || requiresConfirmation
   const venueName = appState.currentVenue?.name || ''
   return `
     <div class="${containerClass}">
@@ -1959,12 +1967,14 @@ function buildIntentScreenHTML(lead, { containerClass = 'vd-intent-wrap containe
         <div class="vd-intent-body">
           <div class="vd-intent-icon">🧺</div>
           <h2 class="vd-intent-heading">You're almost there!</h2>
-          <p class="vd-intent-sub">${isCombo ? 'Request the whole floor and we\'ll confirm availability with you.' : `${venueName ? `Your spot at <strong>${escapeHtml(venueName)}</strong> is one step away.` : 'One step away from your perfect picnic.'}`}</p>
+          <p class="vd-intent-sub">${queryOnly
+            ? (isCombo ? 'Request the whole floor and we\'ll confirm availability with you.' : `We'll check availability at <strong>${escapeHtml(venueName)}</strong> and get back to you shortly.`)
+            : `${venueName ? `Your spot at <strong>${escapeHtml(venueName)}</strong> is one step away.` : 'One step away from your perfect picnic.'}`}</p>
 
           ${buildIntentSummaryHTML()}
 
           <div class="vd-intent-options">
-            ${isCombo ? '' : `
+            ${queryOnly ? '' : `
             <button class="vd-intent-btn vd-intent-btn--lock" onclick="submitBookingIntent(true)">
               <span class="vd-intent-btn-icon">🔒</span>
               <span class="vd-intent-btn-text">
@@ -1976,8 +1986,8 @@ function buildIntentScreenHTML(lead, { containerClass = 'vd-intent-wrap containe
             <button class="vd-intent-btn vd-intent-btn--query" onclick="submitBookingIntent(false)">
               <span class="vd-intent-btn-icon">📞</span>
               <span class="vd-intent-btn-text">
-                <span class="vd-intent-btn-title">${isCombo ? 'Request the whole floor' : 'I have questions — call me'}</span>
-                <span class="vd-intent-btn-desc">${isCombo ? 'We\'ll check the floor is free and reach out to confirm' : 'We\'ll call you back within a few hours'}</span>
+                <span class="vd-intent-btn-title">${isCombo ? 'Request the whole floor' : requiresConfirmation ? 'Send a request' : 'I have questions — call me'}</span>
+                <span class="vd-intent-btn-desc">${isCombo ? 'We\'ll check the floor is free and reach out to confirm' : requiresConfirmation ? 'We\'ll confirm availability and reach out to finalise' : 'We\'ll call you back within a few hours'}</span>
               </span>
             </button>
           </div>
@@ -4020,6 +4030,7 @@ function clearVenueForm() {
   document.getElementById('vf-highlights').value = ''
   document.getElementById('vf-ideal-for').value = ''
   document.getElementById('vf-active').checked = true
+  document.getElementById('vf-requires-confirmation').checked = false
   renderVfImages([])
   renderVfTiers([{ up_to: 2, price: 9900 }, { up_to: 4, price: 12900 }, { up_to: 6, price: 15900 }, { up_to: 8, price: 18900 }])
   updateVfTypeVisibility('cafe')
@@ -4040,6 +4051,7 @@ function populateVenueForm(venue) {
   document.getElementById('vf-maps-url').value = venue.maps_url || ''
   document.getElementById('vf-max-setups').value = venue.max_concurrent_setups ?? 1
   document.getElementById('vf-active').checked = venue.is_active !== false
+  document.getElementById('vf-requires-confirmation').checked = !!venue.requires_confirmation
 
   const meta = venue.metadata || {}
   renderVfImages(Array.isArray(venue.images) ? venue.images : (venue.images ? JSON.parse(venue.images) : []))
@@ -4252,6 +4264,7 @@ async function handleVenueFormSubmit(event) {
     maps_url: document.getElementById('vf-maps-url').value.trim() || null,
     airbnb_ical_url: document.getElementById('vf-airbnb-ical-url').value.trim() || null,
     is_active: document.getElementById('vf-active').checked,
+    requires_confirmation: document.getElementById('vf-requires-confirmation').checked,
     max_concurrent_setups: parseInt(document.getElementById('vf-max-setups').value, 10) || 1,
     images: images,
     metadata

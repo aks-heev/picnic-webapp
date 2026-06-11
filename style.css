@@ -1305,18 +1305,52 @@ body {
   margin-top: 6px;
 }
 
-.addons-strip-scroll {
-  display: flex;
-  gap: 14px;
+/* ── Marquee animation keyframes ─────────────────────────────── */
+@keyframes marquee-ltr {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+@keyframes marquee-rtl {
+  from { transform: translateX(-50%); }
+  to   { transform: translateX(0); }
+}
+
+/* ── Marquee container ───────────────────────────────────────── */
+#addons-strip {
+  overflow: hidden;
+}
+
+.addons-marquee-row {
   overflow-x: auto;
-  padding-bottom: 4px;
-  /* Allow cards to bleed to the edge on mobile for a cinematic feel */
-  padding-right: 24px;
-  scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
-.addons-strip-scroll::-webkit-scrollbar { display: none; }
+.addons-marquee-row::-webkit-scrollbar { display: none; }
+
+/* Second row hidden on desktop; shown on mobile */
+.addons-marquee-row--reverse {
+  display: none;
+  margin-top: 14px;
+}
+
+.addons-marquee-track {
+  display: flex;
+  gap: 14px;
+  width: max-content;
+  animation: marquee-ltr 38s linear infinite;
+}
+
+.addons-marquee-track--rtl {
+  animation-name: marquee-rtl;
+}
+
+.addons-marquee-row:hover .addons-marquee-track {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .addons-marquee-track { animation: none; }
+}
 
 /* ── Card ────────────────────────────────────────────────────── */
 .addon-strip-card {
@@ -1326,7 +1360,6 @@ body {
   background: #fff;
   border-radius: 16px;
   overflow: hidden;
-  scroll-snap-align: start;
   box-shadow: 0 2px 12px rgba(44, 24, 16, 0.06);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   cursor: default;
@@ -3110,6 +3143,10 @@ body {
 }
 @media (max-width: 580px) {
   .venue-grid { grid-template-columns: 1fr; }
+
+  /* Add-ons: show second marquee row on mobile */
+  .addons-marquee-row--reverse { display: block; }
+  .addon-strip-card { flex: 0 0 162px; }
 }
 
 /* ---------------------------------------------------------------
@@ -3307,6 +3344,19 @@ body {
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--venue-primary);
+}
+.venue-card-on-request {
+  font-family: var(--font-sans-venue);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--boho-text-muted, #8c7b6b);
+  background: rgba(140, 123, 107, 0.1);
+  border: 1px solid rgba(140, 123, 107, 0.2);
+  border-radius: 20px;
+  padding: 2px 8px;
+  white-space: nowrap;
 }
 
 /* ---------------------------------------------------------------
