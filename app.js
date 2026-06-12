@@ -343,11 +343,28 @@ async function loadVenues() {
     if (error) throw error
     appState.venues = data || []
     renderVenueGallery(data || [])
+    renderCityPills(data || [])
   } catch (error) {
     console.error('Failed to load venues:', error)
     const grid = document.getElementById('venues-grid')
     if (grid) grid.innerHTML = '<p class="venues-error">Unable to load venues. Please refresh the page.</p>'
   }
+}
+
+function renderCityPills(venues) {
+  const filter = document.querySelector('.city-filter')
+  if (!filter) return
+  const cities = [...new Set(venues.map(v => v.city).filter(Boolean))].sort()
+  // Remove any previously rendered city pills (keep only All)
+  filter.querySelectorAll('.city-pill:not([data-city="all"])').forEach(p => p.remove())
+  cities.forEach(city => {
+    const btn = document.createElement('button')
+    btn.className = 'city-pill'
+    btn.dataset.city = city
+    btn.textContent = '📍 ' + city
+    btn.setAttribute('onclick', `filterVenuesByCity('${city}', this)`)
+    filter.appendChild(btn)
+  })
 }
 
 window.filterVenuesByCity = function(city, btn) {
@@ -450,8 +467,10 @@ function venueCardHtml(venue) {
         <p class="venue-card-area">${escapeHtml(venue.area ? `${venue.area} · ${venue.city}` : venue.city)}</p>
         <div class="venue-card-footer">
           <span class="venue-card-capacity">${capacityText}</span>
-          <span class="venue-card-price">${priceText}</span>
-          ${venue.requires_confirmation ? '<span class="venue-card-on-request">On Request</span>' : ''}
+          <div class="venue-card-price-group">
+            <span class="venue-card-price">${priceText}</span>
+            ${venue.requires_confirmation ? '<span class="venue-card-on-request">On Request</span>' : ''}
+          </div>
         </div>
       </div>
     </div>

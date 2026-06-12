@@ -77,7 +77,7 @@
     <nav class="navbar">
         <div class="container">
             <a href="#" class="nav-brand" onclick="navigateHome(); return false;" aria-label="The Picnic Stories — go to home">
-                <img src="/logo-mark.png" alt="The Picnic Stories logo" class="nav-logo" width="44" height="44">
+                <img src="/logo3.png" alt="The Picnic Stories logo" class="nav-logo" width="44" height="44">
                 <span class="nav-brand-text">
                     <h2>The Picnic Stories</h2>
                     <p class="brand-tagline">Magical Moments</p>
@@ -182,8 +182,6 @@
                     </div>
                     <div class="city-filter" role="group" aria-label="Filter by city">
                         <button class="city-pill active" data-city="all" onclick="filterVenuesByCity('all', this)">All</button>
-                        <button class="city-pill" data-city="Jaipur" onclick="filterVenuesByCity('Jaipur', this)">📍 Jaipur</button>
-                        <button class="city-pill" data-city="Gurugram" onclick="filterVenuesByCity('Gurugram', this)">📍 Gurugram</button>
                     </div>
                 </div>
                 <div id="venues-grid" class="venues-grid">
@@ -222,10 +220,13 @@
         <!-- Contact / Footer Section -->
         <footer class="contact-info">
             <div class="container">
-                <img src="/logo-mark.png" alt="The Picnic Stories logo" class="footer-logo" width="84" height="84">
+                <img src="/logo3.png" alt="The Picnic Stories logo" class="footer-logo" width="150" height="150">
                 <h3>Ready for Your Perfect Picnic?</h3>
                 <p>Browse our venues and book a picnic your people will remember.</p>
-                <p>Call us directly: 📞 <a href="tel:+919773703982" class="footer-link">+91 97737-03982</a></p>
+                <p class="footer-phones">
+                    <span class="footer-phone">📞 <a href="tel:+919773703982" class="footer-link">+91 97737-03982</a></span>
+                    <span class="footer-phone">📞 <a href="tel:+919266964666" class="footer-link">+91 92669-64666</a></span>
+                </p>
                 <button class="btn btn--primary btn--lg" onclick="handleNavigation('home')">Get Started</button>
 
                 <div class="footer-meta">
