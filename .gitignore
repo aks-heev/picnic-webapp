@@ -1,0 +1,17 @@
+# Environment variables (contain secrets)
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Vite temp files
+node_modules/.vite-temp/
+
+# OS
+.DS_Store
+Thumbs.db

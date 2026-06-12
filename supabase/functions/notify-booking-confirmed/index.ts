@@ -19,6 +19,22 @@ const TIME_SLOTS: Record<string, string> = {
   evening:   "5 PM – 8 PM",
 }
 
+const OCCASION_HEADINGS: Record<string, string> = {
+  "Birthday":      "MAKE A WISH",
+  "Anniversary":   "HERE'S TO YOU TWO",
+  "Proposal":      "THE MOMENT IS ALMOST HERE",
+  "Baby Shower":   "BABY IS ON THE WAY",
+  "Bridal Shower": "TO THE BRIDE-TO-BE",
+  "Date Night":    "IT'S A DATE",
+  "Graduation":    "YOU DID IT",
+  "Just Because":  "BECAUSE TODAY IS ENOUGH",
+}
+
+function occasionHeading(occasion: unknown): string {
+  if (!occasion || typeof occasion !== "string") return "IT'S A DATE"
+  return OCCASION_HEADINGS[occasion] ?? "IT'S A DATE"
+}
+
 function formatDate(d: string | null | undefined): string {
   if (!d) return "—"
   const dt = new Date(d + "T00:00:00")
@@ -31,6 +47,29 @@ function timeRow(record: Record<string, unknown>): string {
   }
   const slot = record.time_slot as string | null
   return (slot && TIME_SLOTS[slot]) ? TIME_SLOTS[slot] : "—"
+}
+
+function esc(s: unknown): string {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+}
+
+// "Black board — “message”" from the board jsonb, or "" if no board.
+function boardText(board: unknown): string {
+  if (!board || typeof board !== "object") return ""
+  const b = board as { type?: string; message?: string }
+  if (!b.type && !b.message) return ""
+  const type = b.type ? b.type.charAt(0).toUpperCase() + b.type.slice(1) + " board" : "Board"
+  return b.message ? `${esc(type)} — “${esc(b.message)}”` : esc(type)
+}
+
+function reservationRow(label: string, value: string): string {
+  return `
+                      <tr>
+                        <td style="padding: 8px 0; border-bottom: 1px solid #c4607a; font-family: Garamond, 'Times New Roman', serif; font-size: 18px; color: #2D1F14;"><strong>${label}</strong></td>
+                        <td align="right" style="padding: 8px 0; border-bottom: 1px solid #c4607a; font-family: Garamond, 'Times New Roman', serif; font-size: 18px; color: #2D1F14;">${value}</td>
+                      </tr>`
 }
 
 function extrasSection(addons: AddOn[]): string {
@@ -85,6 +124,8 @@ function buildHtml(record: Record<string, unknown>, venueLabel: string | null, d
     : `${record.guest_count} ${Number(record.guest_count) === 1 ? "Person" : "Persons"}`
   const advAmt    = Number(record.advance_amount || 0)
   const setupLabel = record.checkout_date ? "Stay + Picnic setup" : "Picnic setup"
+  const occasionRowHtml = record.occasion ? reservationRow("OCCASION", esc(record.occasion)) : ""
+  const boardRowHtml    = boardText(record.board) ? reservationRow("BOARD", boardText(record.board)) : ""
 
   return `<!DOCTYPE html>
 <html>
@@ -123,7 +164,7 @@ function buildHtml(record: Record<string, unknown>, venueLabel: string | null, d
               <!-- HERO -->
               <tr>
                 <td align="center" style="padding: 32px; word-wrap: break-word; overflow-wrap: break-word;">
-                  <h2 style="margin: 0; font-family: Garamond, 'Times New Roman', serif; font-size: 48px; color: #2D1F14; font-weight: normal; line-height: 1.1; text-transform: uppercase;">IT'S A DATE</h2>
+                  <h2 style="margin: 0; font-family: Garamond, 'Times New Roman', serif; font-size: 48px; color: #2D1F14; font-weight: normal; line-height: 1.1; text-transform: uppercase;">${occasionHeading(record.occasion)}</h2>
                   <p style="margin: 20px 0 32px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 20px; color: #c4607a; line-height: 1.4;">
                     ${name.split(" ")[0]}, your luxury picnic is officially on the calendar. We are curating the magic — you just bring the memories.
                   </p>
@@ -167,6 +208,8 @@ function buildHtml(record: Record<string, unknown>, venueLabel: string | null, d
                         <td style="padding: 8px 0; border-bottom: 1px solid #c4607a; font-family: Garamond, 'Times New Roman', serif; font-size: 18px; color: #2D1F14;"><strong>LOCATION</strong></td>
                         <td align="right" style="padding: 8px 0; border-bottom: 1px solid #c4607a; font-family: Garamond, 'Times New Roman', serif; font-size: 18px; color: #2D1F14;">${location}</td>
                       </tr>
+                      ${occasionRowHtml}
+                      ${boardRowHtml}
                       <tr>
                         <td style="padding: 8px 0; ${advAmt > 0 ? "border-bottom: 1px solid #c4607a;" : ""} font-family: Garamond, 'Times New Roman', serif; font-size: 18px; color: #2D1F14;"><strong>GUESTS</strong></td>
                         <td align="right" style="padding: 8px 0; ${advAmt > 0 ? "border-bottom: 1px solid #c4607a;" : ""} font-family: Garamond, 'Times New Roman', serif; font-size: 18px; color: #2D1F14;">${guests}</td>

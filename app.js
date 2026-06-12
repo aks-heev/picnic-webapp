@@ -773,6 +773,38 @@ function renderVenueDetail(venue, addOns = []) {
               </div>`
             })()}
 
+          </div><!-- /vd-main -->
+
+          <!-- Sticky booking sidebar -->
+          <aside class="vd-sidebar">
+            <div class="vd-booking-card">
+              ${venue.base_price ? `
+              <div class="vd-price-row">
+                <span class="vd-price-amount" id="sidebar-price-amount">${escapeHtml(formatPrice(venue.base_price))}</span>
+                <span class="vd-price-label" id="sidebar-price-label">starting price</span>
+              </div>` : `
+              <div class="vd-price-row">
+                <span class="vd-price-amount" id="sidebar-price-amount">Custom</span>
+                <span class="vd-price-label" id="sidebar-price-label">pricing on request</span>
+              </div>`}
+              <p class="vd-price-note">Final price confirmed after we review your requirements.</p>
+              <div class="vd-card-divider"></div>
+              ${ctaBlock}
+              <ul class="vd-reassure">
+                <li>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                  Instant confirmation on advance payment
+                </li>
+                <li>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                  Personal host assigned
+                </li>
+              </ul>
+            </div>
+          </aside>
+
+          <!-- Add-ons — own grid area so it sits below main on desktop, below calendar on mobile -->
+          <div class="vd-addons-outer">
             ${(function() {
               if (!addOns.length) return ''
               const CATEGORY_LABELS = {
@@ -818,36 +850,7 @@ function renderVenueDetail(venue, addOns = []) {
               </div>`).join('')}
             </div>`
             })()}
-
-          </div><!-- /vd-main -->
-
-          <!-- Sticky booking sidebar -->
-          <aside class="vd-sidebar">
-            <div class="vd-booking-card">
-              ${venue.base_price ? `
-              <div class="vd-price-row">
-                <span class="vd-price-amount" id="sidebar-price-amount">${escapeHtml(formatPrice(venue.base_price))}</span>
-                <span class="vd-price-label" id="sidebar-price-label">starting price</span>
-              </div>` : `
-              <div class="vd-price-row">
-                <span class="vd-price-amount" id="sidebar-price-amount">Custom</span>
-                <span class="vd-price-label" id="sidebar-price-label">pricing on request</span>
-              </div>`}
-              <p class="vd-price-note">Final price confirmed after we review your requirements.</p>
-              <div class="vd-card-divider"></div>
-              ${ctaBlock}
-              <ul class="vd-reassure">
-                <li>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-                  Instant confirmation on advance payment
-                </li>
-                <li>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-                  Personal host assigned
-                </li>
-              </ul>
-            </div>
-          </aside>
+          </div><!-- /vd-addons-outer -->
 
         </div><!-- /vd-layout -->
       </div><!-- /vd-body -->
@@ -1767,12 +1770,12 @@ async function showBookingForm(venue) {
                 <select class="vd-bf-input vd-bf-select" name="board-type"
                         onchange="document.getElementById('board-message-wrap').style.display = this.value ? '' : 'none'">
                   <option value="">No board</option>
-                  <option value="black">Black board</option>
-                  <option value="white">White board</option>
+                  <option value="black">Black chalkboard</option>
+                  <option value="white">White wooden arch board</option>
                 </select>
                 <div id="board-message-wrap" style="display:none; margin-top:8px;">
-                  <input class="vd-bf-input" type="text" name="board-message" maxlength="120"
-                         placeholder="Message to write on the board, e.g. Happy Birthday Aanya!">
+                  <input class="vd-bf-input" type="text" name="board-message" maxlength="60"
+                         placeholder="Short one-liner only — e.g. Happy Birthday Aanya!">
                 </div>
               </div>
               <div class="vd-bf-field">

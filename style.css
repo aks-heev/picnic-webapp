@@ -3733,9 +3733,15 @@ body {
 .vd-layout {
   display: grid;
   grid-template-columns: 1fr 360px;
+  grid-template-areas:
+    "main    sidebar"
+    "addons  sidebar";
   gap: 64px;
   align-items: start;
 }
+.vd-main         { grid-area: main; }
+.vd-sidebar      { grid-area: sidebar; }
+.vd-addons-outer { grid-area: addons; min-width: 0; }
 
 /* ---- Main column ---- */
 .vd-main {
@@ -4661,6 +4667,7 @@ body {
 @media (max-width: 768px) {
   .vd-layout {
     grid-template-columns: 1fr;
+    grid-template-areas: none;
   }
 
   .vd-booking-card {
@@ -4722,9 +4729,9 @@ body {
 
 /* Card */
 .vd-addon-card {
-  flex: 0 0 190px;
+  flex: 0 0 155px;
   background: #fff;
-  border-radius: 14px;
+  border-radius: 12px;
   overflow: hidden;
   border: 1px solid rgba(196, 96, 122, 0.1);
   scroll-snap-align: start;
@@ -4754,24 +4761,24 @@ body {
 }
 
 .vd-addon-body {
-  padding: 12px 14px 14px;
+  padding: 9px 11px 11px;
 }
 
 .vd-addon-name {
   font-family: var(--font-sans);
-  font-size: 13.5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--boho-text-dark);
-  margin-bottom: 4px;
+  margin-bottom: 3px;
   line-height: 1.3;
 }
 
 .vd-addon-desc {
   font-family: var(--font-sans);
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--color-text-secondary);
   line-height: 1.5;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -4788,7 +4795,7 @@ body {
 
 .vd-addon-price {
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--boho-accent-pink);
 }
@@ -5026,7 +5033,7 @@ body {
 
   /* Add-on experience cards — slightly narrower on mobile */
   .vd-addon-card {
-    flex: 0 0 180px;
+    flex: 0 0 148px;
   }
 
   /* Gallery strip — smaller thumbs */
@@ -5107,9 +5114,9 @@ body {
     font-size: 14px;
   }
 
-  /* Add-on cards — show 1.4 cards to hint scroll */
+  /* Add-on cards — show 1.6 cards to hint scroll */
   .vd-addon-card {
-    flex: 0 0 72vw;
+    flex: 0 0 58vw;
   }
 
   /* Booking addons total */
@@ -5141,12 +5148,17 @@ body {
 
   .vd-mobile-select-dates {
     display: block;
-    padding: 16px 0 8px;
+    padding: 4px 0 8px;
   }
 
   .vd-mobile-select-dates-btn {
     width: 100%;
     text-align: center;
+  }
+
+  /* Hide the hr immediately before the Select Dates button — redundant on mobile */
+  .vd-divider:has(+ .vd-mobile-select-dates) {
+    display: none;
   }
 
   /* Show the sticky bar */
@@ -5222,13 +5234,18 @@ body {
     min-width: 0;
   }
 
-  /* vd-layout: ensure sidebar appears below main (not beside) */
+  /* vd-layout: single column; DOM order = main → sidebar (calendar) → add-ons */
   .vd-layout {
-    display: block;
+    display: flex;
+    flex-direction: column;
   }
 
   .vd-sidebar {
     margin-top: 32px;
+  }
+
+  .vd-addons-outer {
+    margin-top: 0;
   }
 
   /* Gallery strip — ensure it scrolls */
