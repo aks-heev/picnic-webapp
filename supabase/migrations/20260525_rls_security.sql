@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration: Row-Level Security for The Picnic Story
+-- Migration: Row-Level Security for The Picnic Stories
 -- Run this in Supabase SQL Editor or via Supabase CLI
 -- ============================================================
 

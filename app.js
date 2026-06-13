@@ -539,7 +539,7 @@ function renderVenueGallery(venues) {
   const customVenue = venues.find(v => v.type === 'custom')
 
   const section = (title, sub, modifier, list) => list.length === 0 ? '' : `
-    <section class="venue-section">
+    <section class="venue-section" id="${modifier}-venues">
       <div class="venue-section-head">
         <span class="venue-section-dot venue-section-dot--${modifier}" aria-hidden="true"></span>
         <h3 class="venue-section-title">${title}</h3>
@@ -831,14 +831,37 @@ function renderVenueDetail(venue, addOns = []) {
             ${(() => {
               const meta = venue.metadata || {}
               const svgWrap = paths => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`
+              const checkSvg   = svgWrap('<polyline points="20 6 9 17 4 12"/>')
+              const isCafe     = venue.type === 'cafe' || venue.type === 'self_managed'
+              const isStay     = venue.type === 'partner_bnb' || venue.type === 'combo'
+
+              // Items shared by both cafes and stays (all except Food & Beverages)
+              const sharedSetup = [
+                { label: 'Fresh Fruits',       icon: svgWrap('<path d="M12 22c4.97 0 9-2.69 9-6s-4.03-6-9-6-9 2.69-9 6 4.03 6 9 6z"/><path d="M12 10V3"/><path d="M8 6l4-3 4 3"/>') },
+                { label: 'Fresh Flowers',      icon: svgWrap('<circle cx="12" cy="12" r="3"/><path d="M12 2a4 4 0 0 1 4 4c0 2.5-4 6-4 6s-4-3.5-4-6a4 4 0 0 1 4-4z"/><path d="M12 22a4 4 0 0 1-4-4c0-2.5 4-6 4-6s4 3.5 4 6a4 4 0 0 1-4 4z"/><path d="M2 12a4 4 0 0 1 4-4c2.5 0 6 4 6 4s-3.5 4-6 4a4 4 0 0 1-4-4z"/><path d="M22 12a4 4 0 0 1-4 4c-2.5 0-6-4-6-4s3.5-4 6-4a4 4 0 0 1 4 4z"/>') },
+                { label: 'Wax Candles',        icon: svgWrap('<line x1="12" y1="2" x2="12" y2="6"/><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>') },
+                { label: 'Electric Candles',   icon: svgWrap('<line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/>') },
+                { label: 'Macrame Tent',       icon: svgWrap('<path d="M2 20 L12 3 L22 20"/><line x1="2" y1="20" x2="22" y2="20"/><path d="M9.5 20 L12 14 L14.5 20"/>') },
+                { label: 'Macrame Umbrella',   icon: svgWrap('<path d="M23 12a11.05 11.05 0 0 0-22 0zm-5 7a3 3 0 0 1-6 0v-7"/>') },
+                { label: 'Portable Speaker',   icon: svgWrap('<rect x="4" y="2" width="16" height="20" rx="2"/><circle cx="12" cy="14" r="4"/><line x1="12" y1="6" x2="12.01" y2="6"/>') },
+                { label: 'Board with Message', icon: svgWrap('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>') },
+                { label: 'Cutlery & Essentials', icon: svgWrap('<line x1="8" y1="6" x2="8" y2="12"/><path d="M6.5 12 8 15.5 9.5 12"/><path d="M16 6v4a2 2 0 0 1-2 2h-.5l1 7.5"/><line x1="16" y1="6" x2="16" y2="12"/>') },
+              ]
+
               const hardcoded = [
                 ...(venue.id === 15 ? [{ label: 'Whole 2BHK Apartment', icon: svgWrap('<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>') }] : []),
-                { label: 'Full picnic setup',       icon: '<span style="font-size:18px;line-height:1" aria-hidden="true">⛺</span>' },
-                { label: 'Boho decor & lighting',   icon: svgWrap('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>') },
-                { label: 'Setup & cleanup',          icon: svgWrap('<polyline points="20 6 9 17 4 12"/>') },
-                { label: 'Dedicated host support',   icon: svgWrap('<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.6 19.79 19.79 0 0 1 1.61 5 2 2 0 0 1 3.6 3h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 10.6a16 16 0 0 0 6 6l.94-.94a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 18z"/>') },
+                ...(isCafe ? [
+                  { label: 'Food & Beverages', icon: svgWrap('<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/>') },
+                  ...sharedSetup,
+                ] : isStay ? [
+                  ...sharedSetup,
+                ] : [
+                  { label: 'Full picnic setup',     icon: '<span style="font-size:18px;line-height:1" aria-hidden="true">⛺</span>' },
+                  { label: 'Boho decor & lighting', icon: svgWrap('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>') },
+                ]),
+                { label: 'Setup & cleanup',        icon: checkSvg },
+                { label: 'Dedicated host support', icon: svgWrap('<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.6 19.79 19.79 0 0 1 1.61 5 2 2 0 0 1 3.6 3h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 10.6a16 16 0 0 0 6 6l.94-.94a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 18z"/>') },
               ]
-              const checkSvg = svgWrap('<polyline points="20 6 9 17 4 12"/>')
               const custom = (meta.includes || []).map(item => ({ label: item, icon: checkSvg }))
               const allItems = [...hardcoded, ...custom]
               return `<div class="vd-section">
@@ -1812,7 +1835,13 @@ async function showBookingForm(venue) {
             <span class="vd-bv-venue-name">${escapeHtml(venue.name)}</span>
             <span class="venue-type-badge ${venueTypeBadgeClass(venue.type)}">${escapeHtml(formatVenueType(venue.type))}</span>
           </div>
-          <div class="vd-bv-chips">${dateChips}${guestChips}</div>
+          <div class="vd-bv-chips-wrap">
+            <div class="vd-bv-chips">${dateChips}${guestChips}</div>
+            <button class="vd-bv-change-btn" onclick="goBackToVenueDetail('form')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Change date &amp; time
+            </button>
+          </div>
           ${inclusionBannerHtml(venue, appState.adults) ? `<div class="vd-inclusion vd-inclusion--summary">${inclusionBannerHtml(venue, appState.adults)}</div>` : ''}
           <div class="vd-bv-price-table">
             ${priceRows}
@@ -1842,7 +1871,7 @@ async function showBookingForm(venue) {
                 </div>
                 <div class="vd-bf-field">
                   <label class="vd-bf-label">Phone *</label>
-                  <input class="vd-bf-input" type="tel" name="mobile-number" placeholder="+91 98765 43210" required>
+                  <input class="vd-bf-input" type="tel" name="mobile-number" placeholder="10-digit mobile number" required inputmode="numeric" maxlength="10" pattern="[0-9]{10}" onkeydown="if(!/[0-9]/.test(event.key)&&!['Backspace','Delete','ArrowLeft','ArrowRight','Tab'].includes(event.key))event.preventDefault()" onpaste="setTimeout(()=>{this.value=this.value.replace(/\D/g,'').slice(0,10)},0)" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)">
                 </div>
               </div>
               <div class="vd-bf-field">
@@ -1900,6 +1929,27 @@ async function showBookingForm(venue) {
   if (backBtn) {
     backBtn.setAttribute('onclick', 'showVenueBodyStep()')
     backBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg> Back to venue`
+  }
+
+  // If user came back to change date from the booking form, restore their saved values
+  if (appState.changeMode === 'form' && appState.changeModeData) {
+    const saved = appState.changeModeData
+    ;['name','email','mobile-number','special-requirements','occasion','occasion-other','board-type','board-message']
+      .forEach(f => { const el = bookView.querySelector(`[name="${f}"]`); if (el && saved[f] !== undefined) el.value = saved[f] })
+    if (saved.addons) {
+      saved.addons.forEach(val => {
+        const cb = bookView.querySelector(`.vd-bf-addon[value="${val}"]`)
+        if (cb) { cb.checked = true; cb.dispatchEvent(new Event('change')) }
+      })
+    }
+    if (saved['occasion'] === 'Other') {
+      const w = bookView.querySelector('#occasion-other-wrap'); if (w) w.style.display = ''
+    }
+    if (saved['board-type']) {
+      const w = bookView.querySelector('#board-message-wrap'); if (w) w.style.display = ''
+    }
+    appState.changeMode     = null
+    appState.changeModeData = null
   }
 }
 
@@ -2054,7 +2104,13 @@ function buildIntentSummaryHTML() {
   return `
     <div class="vd-intent-summary">
       ${venueBlock}
-      <div class="vd-bv-chips">${chips.join('')}</div>
+      <div class="vd-bv-chips-wrap">
+        <div class="vd-bv-chips">${chips.join('')}</div>
+        <button class="vd-bv-change-btn" onclick="goBackToVenueDetail('intent')">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Change date &amp; time
+        </button>
+      </div>
       ${priceSection}
     </div>`
 }
@@ -5832,6 +5888,7 @@ function openMenuViewer(venueId, startIndex = 0) {
   overlay.addEventListener('click', e => { if (e.target === overlay) closeMenuViewer() })
 
   const stage = overlay.querySelector('#menu-viewer-stage')
+  stage.addEventListener('click', e => { if (e.target === stage) closeMenuViewer() })
   stage.addEventListener('touchstart', e => { menuViewerState.touchStartX = e.changedTouches[0].clientX }, { passive: true })
   stage.addEventListener('touchend', e => {
     if (!menuViewerState || menuViewerState.touchStartX === null) return
@@ -5913,6 +5970,45 @@ window.copyMenuLink               = copyMenuLink
 window.customerSignOut            = customerSignOut
 window.saveTeam                   = saveTeam
 window.setAdminTeamFilter         = setAdminTeamFilter
+
+function goToVenueSection(setting) {
+  // Navigate home if not already there, then scroll to the outdoor/indoor section
+  handleNavigation('home')
+  setTimeout(() => {
+    const target = document.getElementById(`${setting}-venues`)
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    } else {
+      // Fallback: scroll to top of venues section
+      document.getElementById('venues-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, 80)
+}
+window.goToVenueSection = goToVenueSection
+
+// mode: 'intent' = coming from the review screen (pendingLead exists)
+//       'form'   = coming from the booking form (read values from DOM)
+function goBackToVenueDetail(mode) {
+  const venue = appState.currentVenue
+  if (!venue) return
+
+  if (mode === 'intent' && appState.pendingLead) {
+    appState.changeMode     = 'intent'
+    appState.changeModeData = { ...appState.pendingLead }
+  } else if (mode === 'form') {
+    appState.changeMode = 'form'
+    const saved = {}
+    ;['name','email','mobile-number','special-requirements','occasion','occasion-other','board-type','board-message']
+      .forEach(f => { const el = document.querySelector(`[name="${f}"]`); if (el) saved[f] = el.value })
+    saved.addons = [...document.querySelectorAll('.vd-bf-addon:checked')].map(cb => cb.value)
+    appState.changeModeData = saved
+  }
+
+  appState.pendingLead   = null
+  appState.pendingAddOns = null
+  showVenuePage(venue.id, false)
+}
+window.goBackToVenueDetail = goBackToVenueDetail
 
 // ── Admin page initialisation ────────────────────────────────
 function initAdminPage() {
@@ -6104,8 +6200,30 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isNaN(venueId)) return
     const venue = appState.venues.find(v => v.id === venueId)
     if (venue) {
-      if (appState.bookingStep === 'guests') showBookingForm(venue)
-      else showGuestSelector(venue)
+      if (appState.bookingStep === 'guests') {
+        if (appState.changeMode === 'intent' && appState.changeModeData) {
+          // Fast-resume: update date/slot on saved lead, skip the form entirely
+          const lead = {
+            ...appState.changeModeData,
+            preferred_date: appState.selectedDate,
+            time_slot:      appState.selectedTimeSlot || appState.changeModeData.time_slot,
+          }
+          appState.pendingLead    = lead
+          appState.changeMode     = null
+          appState.changeModeData = null
+          const body     = document.getElementById('vd-body')
+          const bookView = document.getElementById('vd-booking-view')
+          if (body)     body.style.display = 'none'
+          if (bookView) {
+            bookView.style.display = ''
+            bookView.innerHTML = buildIntentScreenHTML(lead, { containerClass: 'vd-intent-wrap container' })
+          }
+        } else {
+          showBookingForm(venue)
+        }
+      } else {
+        showGuestSelector(venue)
+      }
     }
   })
 

@@ -1,12 +1,12 @@
 # Venue-Based Booking Flow
-**The Picnic Story — Feature Spec v1**
+**The Picnic Stories — Feature Spec v1**
 *Status: Draft | Last updated: May 2026*
 
 ---
 
 ## Problem Statement
 
-The current booking flow presents a single modal form where customers select a location from a plain dropdown. This doesn't communicate the actual venue options — cafes, Airbnbs, outdoor spaces — that The Picnic Story now offers. Customers have no way to browse what a venue looks, feels, or is suited for before committing to an enquiry. This means the app undersells the product, and the admin receives under-informed bookings that require additional back-and-forth to clarify venue, capacity, and suitability.
+The current booking flow presents a single modal form where customers select a location from a plain dropdown. This doesn't communicate the actual venue options — cafes, Airbnbs, outdoor spaces — that The Picnic Stories now offers. Customers have no way to browse what a venue looks, feels, or is suited for before committing to an enquiry. This means the app undersells the product, and the admin receives under-informed bookings that require additional back-and-forth to clarify venue, capacity, and suitability.
 
 ---
 
@@ -38,7 +38,7 @@ Three venue types drive different booking flows. Everything in this spec branche
 
 | Type | Who controls it | Booking flow |
 |---|---|---|
-| `self_managed` | The Picnic Story | Browse → Venue page → Book Now → Form |
+| `self_managed` | The Picnic Stories | Browse → Venue page → Book Now → Form |
 | `partner_bnb` | Third-party Airbnb host | Browse → Venue page → Book on Airbnb (external) → Book Our Services → Form |
 | `custom` | The customer | "Your own space" card → Form with free-text address field |
 
@@ -50,13 +50,13 @@ Three venue types drive different booking flows. Everything in this spec branche
 
 - As a customer, I want to browse all available venues in a visual gallery so that I can find a space that fits my vibe before committing to an enquiry.
 - As a customer, I want to see venue photos, capacity range, and location at a glance on the gallery card so that I can shortlist without clicking into each venue.
-- As a customer, I want to see a clearly marked "Your own space" option in the gallery so that I know I can book The Picnic Story's services at my own terrace, park, or booked space.
+- As a customer, I want to see a clearly marked "Your own space" option in the gallery so that I know I can book The Picnic Stories's services at my own terrace, park, or booked space.
 
 ### Customer — Venue Detail
 
 - As a customer browsing a self-managed venue, I want to see full photos, a description, capacity, and a "Book Now" button so that I can move to the booking form with confidence.
-- As a customer browsing a partner Airbnb, I want to clearly understand that I need to book the property on Airbnb first, and then book The Picnic Story's services separately, so that I'm not confused about the two-step process.
-- As a customer who has already booked a partner Airbnb, I want a simple way to add The Picnic Story's picnic setup as a service, with an optional field to enter my Airbnb booking reference, so that the admin can coordinate with the host.
+- As a customer browsing a partner Airbnb, I want to clearly understand that I need to book the property on Airbnb first, and then book The Picnic Stories's services separately, so that I'm not confused about the two-step process.
+- As a customer who has already booked a partner Airbnb, I want a simple way to add The Picnic Stories's picnic setup as a service, with an optional field to enter my Airbnb booking reference, so that the admin can coordinate with the host.
 
 ### Customer — Booking Form
 

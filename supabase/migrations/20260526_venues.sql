@@ -1,6 +1,6 @@
 -- ============================================================
 -- Migration: Venue-Based Booking Flow
--- The Picnic Story — v1
+-- The Picnic Stories — v1
 --
 -- Run in: Supabase Dashboard → SQL Editor
 -- Depends on: 20260525_create_schema.sql (bookings table must exist)
@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS venues (
 
   name             text    NOT NULL,
 
-  -- 'self_managed' : The Picnic Story owns/manages the property
+  -- 'self_managed' : The Picnic Stories owns/manages the property
   -- 'partner_bnb'  : Third-party Airbnb; customer books externally first
   -- 'custom'       : Reserved row for the "Your own space" entry point
   type             text    NOT NULL

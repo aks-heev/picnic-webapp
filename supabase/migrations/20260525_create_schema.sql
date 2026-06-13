@@ -1,5 +1,5 @@
 -- ============================================================
--- The Picnic Story — Complete Database Schema
+-- The Picnic Stories — Complete Database Schema
 -- Reconstructed from app.js source analysis
 --
 -- Run this in: Supabase Dashboard → SQL Editor → New query
