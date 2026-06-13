@@ -58,6 +58,7 @@ const appState = {
   currentVenue: null,        // set when customer picks a venue before booking
   currentVenueAddOns: [],    // add-ons loaded for the current venue
   venues: [],                // cached venue list
+  teams: [],                 // cached teams list (Jaipur, Gurugram, …)
   selectedDate: null,        // cafe: selected date
   selectedTimeSlot: null,    // cafe: selected time slot
   checkinDate: null,         // bnb: check-in date
@@ -66,6 +67,11 @@ const appState = {
   children: 0,               // guest selector: child count (under 10, free — no price/inclusion impact)
   bookingStep: 'calendar',   // 'calendar' | 'guests'
 }
+
+// Admin team filter state — persists across loadQueries/loadBookings calls
+let loadedQueries  = []
+let loadedBookings = []
+let adminTeamFilter = null   // null = all | 'jaipur' | 'gurugram'
 
 // Helper: format a Date object as a local YYYY-MM-DD string (avoids UTC offset shift from toISOString)
 function localDateStr(d) {
@@ -349,6 +355,42 @@ async function loadVenues() {
     const grid = document.getElementById('venues-grid')
     if (grid) grid.innerHTML = '<p class="venues-error">Unable to load venues. Please refresh the page.</p>'
   }
+}
+
+// ── Teams ─────────────────────────────────────────────────────
+async function loadTeams() {
+  try {
+    const { data, error } = await supabase
+      .from('teams')
+      .select('*')
+      .order('id', { ascending: true })
+    if (error) throw error
+    appState.teams = data || []
+    renderFooterTeams(data || [])
+  } catch (err) {
+    console.error('Failed to load teams:', err)
+  }
+}
+
+function renderFooterTeams(teams) {
+  const container = document.getElementById('footer-teams')
+  if (!container) return
+  if (!teams.length) return
+  container.innerHTML = teams.map(t => `
+    <div class="footer-team-card">
+      <span class="footer-team-name">${escapeHtml(t.name)}</span>
+      <div class="footer-team-contacts">
+        <a href="tel:${escapeHtml(t.phone || '')}" class="footer-link footer-team-phone">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.5a19.79 19.79 0 01-3.04-8.84A2 2 0 012.18 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.09a16 16 0 006 6l.94-.94a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14.92z"/></svg>
+          ${escapeHtml(t.phone || '')}
+        </a>
+        <a href="https://wa.me/${escapeHtml(t.whatsapp || '')}" target="_blank" rel="noopener noreferrer" class="footer-link footer-team-wa">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+          WhatsApp
+        </a>
+      </div>
+    </div>
+  `).join('')
 }
 
 function renderCityPills(venues) {
@@ -706,6 +748,25 @@ function renderVenueDetail(venue, addOns = []) {
             <hr class="vd-divider">` : ''}
 
             ${(function() {
+              const pages = Array.isArray(venue.menu_pages) ? venue.menu_pages.filter(p => p && p.url) : []
+              if (!pages.length) return ''
+              return `
+            <div class="vd-section vd-menu-section">
+              <h2 class="vd-section-title">The menu</h2>
+              <p class="vd-menu-sub">See what's on the menu before you book.</p>
+              <div class="vd-menu-thumbs">
+                ${pages.map((p, i) => `
+                  <button type="button" class="vd-menu-thumb" onclick="openMenuViewer(${venue.id}, ${i})"
+                          aria-label="View menu page ${i + 1} of ${pages.length}">
+                    <img src="${escapeHtml(p.url)}" alt="${escapeHtml(p.alt || `Menu page ${i + 1}`)}" loading="lazy">
+                    <span class="vd-menu-thumb-num">${i + 1}</span>
+                  </button>`).join('')}
+              </div>
+            </div>
+            <hr class="vd-divider">`
+            })()}
+
+            ${(function() {
               if (venue.type !== 'self_managed' || !venue.metadata) return ''
               const m = venue.metadata
               const amenities = Array.isArray(m.amenities) ? m.amenities : []
@@ -997,6 +1058,25 @@ function renderVenueDetail(venue, addOns = []) {
         btn.classList.add('vd-gallery-thumb--active')
       })
     })
+  }
+
+  // ── Floating WhatsApp button (team-specific) ──────────────────
+  const detailPage = document.getElementById('venue-detail-page')
+  if (detailPage) {
+    detailPage.querySelector('.vd-wa-float')?.remove()
+    const team = appState.teams.find(t => t.id === venue.team_id)
+    if (team?.whatsapp) {
+      const msgText = encodeURIComponent(`Hi! I'm interested in booking ${venue.name}`)
+      const waBtn = document.createElement('a')
+      waBtn.className = 'vd-wa-float'
+      waBtn.href = `https://wa.me/${team.whatsapp}?text=${msgText}`
+      waBtn.target = '_blank'
+      waBtn.rel = 'noopener noreferrer'
+      waBtn.setAttribute('aria-label', `WhatsApp the ${team.name} team`)
+      waBtn.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        <span>Chat with us</span>`
+      detailPage.appendChild(waBtn)
+    }
   }
 }
 
@@ -2577,6 +2657,8 @@ window.openVenueForm     = openVenueForm
 window.toggleVenueActive = toggleVenueActive
 window.addVfImage        = addVfImage
 window.removeVfImage     = removeVfImage
+window.addVfMenuPage     = addVfMenuPage
+window.removeVfMenuPage  = removeVfMenuPage
 window.addVfTier         = addVfTier
 window.removeVfTier      = removeVfTier
 window.toggleBlockedDate = toggleBlockedDate
@@ -2766,12 +2848,13 @@ async function loadQueries() {
   try {
     const { data, error } = await supabase
       .from('bookings')
-      .select('*, venues(name, type, area)')
+      .select('*, venues(name, type, area, team_id)')
       .eq('confirmed', false)
       .order('created_at', { ascending: false })
 
     if (error) throw error
-    renderQueries(data)
+    loadedQueries = data || []
+    renderQueries(loadedQueries)
   } catch (error) {
     console.error(error)
     showToast('Failed to load queries', 'error')
@@ -2786,7 +2869,7 @@ async function loadBookings() {
     // Fetch confirmed bookings, including venue info via FK join
     const { data: bookings, error: bErr } = await supabase
       .from('bookings')
-      .select('*, venues(name, type, area)')
+      .select('*, venues(name, type, area, team_id)')
       .eq('confirmed', true)
       .order('created_at', { ascending: false })
     
@@ -2807,7 +2890,8 @@ async function loadBookings() {
 
     const bookingsWithOrders = bookings.map(b => ({ ...b, orders: ordersByBooking[b.id] || [] }))
 
-    renderBookings(bookingsWithOrders)
+    loadedBookings = bookingsWithOrders
+    renderBookings(loadedBookings)
   } catch (error) {
     console.error(error)
     showToast('Failed to load bookings', 'error')
@@ -2833,7 +2917,15 @@ function renderQueries(queries) {
   const container = document.getElementById('queries-container')
   if (!container) return
 
-  if (!queries || queries.length === 0) {
+  // Apply team filter
+  const teamIdForFilter = adminTeamFilter
+    ? (appState.teams.find(t => t.city === adminTeamFilter)?.id ?? null)
+    : null
+  const filtered = teamIdForFilter !== null
+    ? (queries || []).filter(q => q.venues?.team_id === teamIdForFilter)
+    : (queries || [])
+
+  if (!filtered.length) {
     container.innerHTML = `
       <div class="adm-empty">
         <div class="adm-empty-icon">📭</div>
@@ -2843,7 +2935,7 @@ function renderQueries(queries) {
     return
   }
 
-  container.innerHTML = queries.map(query => {
+  container.innerHTML = filtered.map(query => {
     // Venue chip
     let venueChip = ''
     if (query.venues) {
@@ -2979,7 +3071,15 @@ function renderBookings(bookings) {
   const container = document.getElementById('bookings-container')
   if (!container) return
 
-  if (!bookings || bookings.length === 0) {
+  // Apply team filter
+  const teamIdForFilter = adminTeamFilter
+    ? (appState.teams.find(t => t.city === adminTeamFilter)?.id ?? null)
+    : null
+  const filtered = teamIdForFilter !== null
+    ? (bookings || []).filter(b => b.venues?.team_id === teamIdForFilter)
+    : (bookings || [])
+
+  if (!filtered.length) {
     container.innerHTML = `
       <div class="adm-empty">
         <div class="adm-empty-icon">🗓️</div>
@@ -2989,7 +3089,7 @@ function renderBookings(bookings) {
     return
   }
 
-  container.innerHTML = bookings.map(booking => {
+  container.innerHTML = filtered.map(booking => {
     // Venue chip
     let venueChip = ''
     if (booking.venues) {
@@ -3563,7 +3663,91 @@ function switchTab(tabName) {
     loadAddOnsManager()
   } else if (tabName === 'hero-image') {
     loadHeroImageAdminPreview()
+  } else if (tabName === 'teams') {
+    loadTeamsManager()
   }
+}
+
+// ================================================================
+// TEAMS MANAGER
+// ================================================================
+
+async function loadTeamsManager() {
+  if (!appState.session) return
+  const container = document.getElementById('teams-manager-container')
+  if (!container) return
+  container.innerHTML = '<p class="loading-text">Loading teams…</p>'
+  try {
+    const { data, error } = await supabase.from('teams').select('*').order('id')
+    if (error) throw error
+    renderTeamsManager(data || [])
+  } catch (err) {
+    console.error(err)
+    showToast('Failed to load teams', 'error')
+  }
+}
+
+function renderTeamsManager(teams) {
+  const container = document.getElementById('teams-manager-container')
+  if (!container) return
+  container.innerHTML = teams.map(t => `
+    <div class="tm-card" data-team-id="${t.id}">
+      <div class="tm-card-header">
+        <h4 class="tm-city">${escapeHtml(t.name)}</h4>
+        <span class="tm-city-slug">${escapeHtml(t.city)}</span>
+      </div>
+      <div class="tm-fields">
+        <label class="tm-label">Display name
+          <input class="tm-input" data-field="name" value="${escapeHtml(t.name || '')}" placeholder="e.g. Gurugram / Delhi-NCR">
+        </label>
+        <label class="tm-label">Phone (display)
+          <input class="tm-input" data-field="phone" value="${escapeHtml(t.phone || '')}" placeholder="+91 99999-99999">
+        </label>
+        <label class="tm-label">WhatsApp number (digits only, with country code)
+          <input class="tm-input" data-field="whatsapp" value="${escapeHtml(t.whatsapp || '')}" placeholder="919999999999">
+        </label>
+        <label class="tm-label">Team contact email
+          <input class="tm-input" data-field="contact_email" value="${escapeHtml(t.contact_email || '')}" placeholder="team@example.com">
+        </label>
+        <label class="tm-label">Display address (optional)
+          <input class="tm-input" data-field="display_address" value="${escapeHtml(t.display_address || '')}" placeholder="City, State">
+        </label>
+      </div>
+      <div class="tm-actions">
+        <button class="btn btn--primary btn--sm" onclick="saveTeam(${t.id})">Save</button>
+      </div>
+    </div>
+  `).join('')
+}
+
+async function saveTeam(id) {
+  if (!appState.session) return
+  const card = document.querySelector(`.tm-card[data-team-id="${id}"]`)
+  if (!card) return
+  const payload = {}
+  card.querySelectorAll('.tm-input[data-field]').forEach(input => {
+    payload[input.dataset.field] = input.value.trim() || null
+  })
+  try {
+    const { error } = await supabase.from('teams').update(payload).eq('id', id)
+    if (error) throw error
+    // Refresh appState.teams so footer + venue WA button pick up new values
+    appState.teams = appState.teams.map(t => t.id === id ? { ...t, ...payload } : t)
+    renderFooterTeams(appState.teams)
+    showToast('Team saved', 'success')
+  } catch (err) {
+    console.error(err)
+    showToast('Failed to save team: ' + err.message, 'error')
+  }
+}
+
+// Team filter pill handler (called from admin.html inline onclick)
+function setAdminTeamFilter(city, btn) {
+  adminTeamFilter = city || null
+  document.querySelectorAll('.adm-team-pill').forEach(p => p.classList.remove('active'))
+  if (btn) btn.classList.add('active')
+  renderQueries(loadedQueries)
+  renderBookings(loadedBookings)
 }
 
 // ================================================================
@@ -3904,7 +4088,7 @@ async function loadVenueManager() {
   try {
     const { data, error } = await supabase
       .from('venues')
-      .select('id, name, type, area, city, capacity_min, capacity_max, base_price, is_active, images, external_url, metadata, description, max_concurrent_setups, airbnb_ical_url, last_ical_sync_at, last_ical_sync_status, sort_order')
+      .select('id, name, type, area, city, capacity_min, capacity_max, base_price, is_active, images, menu_pages, external_url, metadata, description, max_concurrent_setups, airbnb_ical_url, last_ical_sync_at, last_ical_sync_status, sort_order')
       .order('sort_order', { ascending: true, nullsFirst: false })
       .order('id', { ascending: true })
     if (error) throw error
@@ -4028,6 +4212,14 @@ function openVenueForm(venueId) {
     clearVenueForm()
   }
 
+  // Populate team select from loaded teams
+  const teamSel = document.getElementById('vf-team')
+  if (teamSel && appState.teams.length) {
+    teamSel.innerHTML = appState.teams.map(t =>
+      `<option value="${t.id}">${escapeHtml(t.name)}</option>`
+    ).join('')
+  }
+
   panel.classList.remove('hidden')
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
@@ -4062,7 +4254,10 @@ function clearVenueForm() {
   document.getElementById('vf-ideal-for').value = ''
   document.getElementById('vf-active').checked = true
   document.getElementById('vf-requires-confirmation').checked = false
+  const teamSelClear = document.getElementById('vf-team')
+  if (teamSelClear && appState.teams.length) teamSelClear.value = appState.teams[0].id
   renderVfImages([])
+  renderVfMenuPages([])
   renderVfTiers([{ up_to: 2, price: 9900 }, { up_to: 4, price: 12900 }, { up_to: 6, price: 15900 }, { up_to: 8, price: 18900 }])
   updateVfTypeVisibility('cafe')
 }
@@ -4086,6 +4281,7 @@ function populateVenueForm(venue) {
 
   const meta = venue.metadata || {}
   renderVfImages(Array.isArray(venue.images) ? venue.images : (venue.images ? JSON.parse(venue.images) : []))
+  renderVfMenuPages(Array.isArray(venue.menu_pages) ? venue.menu_pages : (venue.menu_pages ? JSON.parse(venue.menu_pages) : []))
   renderVfTiers(meta.tiers || [])
   document.getElementById('vf-overage').value = meta.overage_per_person || 2000
 
@@ -4098,6 +4294,8 @@ function populateVenueForm(venue) {
   document.getElementById('vf-highlights').value = (meta.highlights || []).join(', ')
   document.getElementById('vf-ideal-for').value = (meta.ideal_for || []).join(', ')
   document.getElementById('vf-airbnb-ical-url').value = venue.airbnb_ical_url || ''
+  const teamSelPop = document.getElementById('vf-team')
+  if (teamSelPop && venue.team_id) teamSelPop.value = venue.team_id
 
   updateVfTypeVisibility(venue.type)
 }
@@ -4222,6 +4420,121 @@ function readVfImages() {
   }))
 }
 
+// ── Menu pages (mirrors the venue-images editor; reuses .vf-image-* styles
+// and the public `venue-images` storage bucket with a `menu-` path prefix) ──
+function renderVfMenuPages(pages) {
+  const list = document.getElementById('vf-menu-list')
+  if (!list) return
+  list.innerHTML = pages.map((img, i) => `
+    <div class="vf-image-row" data-index="${i}" draggable="true">
+      <div class="vf-img-drag-handle" title="Drag to reorder">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/>
+          <circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>
+          <circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/>
+        </svg>
+      </div>
+      <div class="vf-img-preview-wrap">
+        ${img.url
+          ? `<img class="vf-img-thumb" src="${escapeHtml(img.url)}" alt="${escapeHtml(img.alt || '')}" />`
+          : `<div class="vf-img-thumb-placeholder">📄</div>`}
+      </div>
+      <div class="vf-img-fields">
+        <label class="vf-img-upload-btn">
+          ${img.url ? '↺ Replace page' : '↑ Upload page'}
+          <input type="file" class="vf-img-file" accept="image/jpeg,image/png,image/webp"
+                 onchange="handleVfMenuUpload(this, ${i})" style="display:none" />
+        </label>
+        <input type="hidden" class="vf-img-url" value="${escapeHtml(img.url || '')}" />
+        <input type="text" class="vf-input vf-img-alt" placeholder="Alt text (e.g. Menu page 1)" value="${escapeHtml(img.alt || '')}" />
+      </div>
+      <button type="button" class="vf-remove-btn" onclick="removeVfMenuPage(${i})">✕</button>
+    </div>
+  `).join('')
+
+  // Wire drag-to-reorder
+  let dragIndex = null
+  list.querySelectorAll('.vf-image-row').forEach(row => {
+    row.addEventListener('dragstart', e => {
+      dragIndex = parseInt(row.dataset.index)
+      e.dataTransfer.effectAllowed = 'move'
+      setTimeout(() => row.classList.add('vf-img-dragging'), 0)
+    })
+    row.addEventListener('dragend', () => {
+      dragIndex = null
+      list.querySelectorAll('.vf-image-row').forEach(r => {
+        r.classList.remove('vf-img-dragging', 'vf-img-drag-over')
+      })
+    })
+    row.addEventListener('dragover', e => {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      list.querySelectorAll('.vf-image-row').forEach(r => r.classList.remove('vf-img-drag-over'))
+      if (parseInt(row.dataset.index) !== dragIndex) row.classList.add('vf-img-drag-over')
+    })
+    row.addEventListener('dragleave', () => row.classList.remove('vf-img-drag-over'))
+    row.addEventListener('drop', e => {
+      e.preventDefault()
+      const dropIndex = parseInt(row.dataset.index)
+      if (dragIndex === null || dragIndex === dropIndex) return
+      const pgs = readVfMenuPages()
+      const [moved] = pgs.splice(dragIndex, 1)
+      pgs.splice(dropIndex, 0, moved)
+      renderVfMenuPages(pgs)
+    })
+  })
+}
+
+window.handleVfMenuUpload = async function(input, index) {
+  const file = input.files[0]
+  if (!file) return
+  if (!appState.session) return showToast('Admin login required', 'error')
+
+  const ext  = file.name.split('.').pop()
+  const path = `menu-${Date.now()}-${index}.${ext}`
+
+  const row = input.closest('.vf-image-row')
+  const label = row.querySelector('.vf-img-upload-btn')
+  label.textContent = 'Uploading…'
+
+  try {
+    const { error: upErr } = await supabase.storage.from('venue-images').upload(path, file, { upsert: true })
+    if (upErr) throw upErr
+
+    const { data: { publicUrl } } = supabase.storage.from('venue-images').getPublicUrl(path)
+
+    row.querySelector('.vf-img-url').value = publicUrl
+    const wrap = row.querySelector('.vf-img-preview-wrap')
+    wrap.innerHTML = `<img class="vf-img-thumb" src="${publicUrl}" alt="" />`
+    label.textContent = '↺ Replace page'
+    showToast('Menu page uploaded', 'success')
+  } catch (err) {
+    console.error(err)
+    showToast('Upload failed: ' + err.message, 'error')
+    label.textContent = '↑ Upload page'
+  }
+}
+
+function addVfMenuPage() {
+  const pgs = readVfMenuPages()
+  pgs.push({ url: '', alt: '' })
+  renderVfMenuPages(pgs)
+}
+
+function removeVfMenuPage(index) {
+  const pgs = readVfMenuPages()
+  pgs.splice(index, 1)
+  renderVfMenuPages(pgs)
+}
+
+function readVfMenuPages() {
+  const rows = document.querySelectorAll('#vf-menu-list .vf-image-row')
+  return Array.from(rows).map(row => ({
+    url: row.querySelector('.vf-img-url').value.trim(),
+    alt: row.querySelector('.vf-img-alt').value.trim()
+  }))
+}
+
 function renderVfTiers(tiers) {
   const list = document.getElementById('vf-tiers-list')
   if (!list) return
@@ -4263,6 +4576,7 @@ async function handleVenueFormSubmit(event) {
   const type = document.getElementById('vf-type').value
 
   const images = readVfImages().filter(img => img.url)
+  const menuPages = readVfMenuPages().filter(p => p.url)
   const tiers = readVfTiers().sort((a, b) => a.up_to - b.up_to) // ensure ascending order for getVenuePrice()
   const overage = parseInt(document.getElementById('vf-overage').value, 10) || 2000
 
@@ -4297,7 +4611,9 @@ async function handleVenueFormSubmit(event) {
     is_active: document.getElementById('vf-active').checked,
     requires_confirmation: document.getElementById('vf-requires-confirmation').checked,
     max_concurrent_setups: parseInt(document.getElementById('vf-max-setups').value, 10) || 1,
+    team_id: parseInt(document.getElementById('vf-team')?.value, 10) || null,
     images: images,
+    menu_pages: menuPages,
     metadata
   }
 
@@ -5470,7 +5786,114 @@ window.handleHeroImageUpload = async function(input, device = 'desktop') {
 }
 
 
+// ── Menu viewer — full-screen, swipeable lightbox for venue menu pages ──
+// Appended to <body> and removed on close, so the venue page underneath
+// (and its scroll position / booking CTA) is preserved on dismiss.
+let menuViewerState = null
+
+function openMenuViewer(venueId, startIndex = 0) {
+  const venue = appState.venues.find(v => v.id === venueId)
+  const pages = venue && Array.isArray(venue.menu_pages) ? venue.menu_pages.filter(p => p && p.url) : []
+  if (!pages.length) return
+
+  closeMenuViewer() // clear any stray instance
+  const idx = Math.min(Math.max(0, startIndex), pages.length - 1)
+  menuViewerState = { pages, index: idx, touchStartX: null, zoomed: false }
+
+  const overlay = document.createElement('div')
+  overlay.className = 'menu-viewer'
+  overlay.id = 'menu-viewer'
+  overlay.setAttribute('role', 'dialog')
+  overlay.setAttribute('aria-modal', 'true')
+  overlay.setAttribute('aria-label', `${venue.name} menu`)
+  overlay.innerHTML = `
+    <div class="menu-viewer-bar">
+      <span class="menu-viewer-title">${escapeHtml(venue.name)} · Menu</span>
+      <button type="button" class="menu-viewer-close" onclick="closeMenuViewer()" aria-label="Close menu">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <button type="button" class="menu-viewer-nav menu-viewer-prev" aria-label="Previous page">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <div class="menu-viewer-stage" id="menu-viewer-stage"></div>
+    <button type="button" class="menu-viewer-nav menu-viewer-next" aria-label="Next page">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+    <div class="menu-viewer-footer">
+      <span class="menu-viewer-counter" id="menu-viewer-counter"></span>
+    </div>
+  `
+  document.body.appendChild(overlay)
+  document.body.classList.add('menu-viewer-open')
+
+  overlay.querySelector('.menu-viewer-prev').addEventListener('click', () => menuViewerGo(-1))
+  overlay.querySelector('.menu-viewer-next').addEventListener('click', () => menuViewerGo(1))
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeMenuViewer() })
+
+  const stage = overlay.querySelector('#menu-viewer-stage')
+  stage.addEventListener('touchstart', e => { menuViewerState.touchStartX = e.changedTouches[0].clientX }, { passive: true })
+  stage.addEventListener('touchend', e => {
+    if (!menuViewerState || menuViewerState.touchStartX === null) return
+    const dx = e.changedTouches[0].clientX - menuViewerState.touchStartX
+    if (Math.abs(dx) > 40) menuViewerGo(dx < 0 ? 1 : -1)
+    menuViewerState.touchStartX = null
+  }, { passive: true })
+
+  document.addEventListener('keydown', menuViewerKeydown)
+  renderMenuViewer()
+}
+
+function renderMenuViewer() {
+  if (!menuViewerState) return
+  const { pages, index, zoomed } = menuViewerState
+  const stage = document.getElementById('menu-viewer-stage')
+  const counter = document.getElementById('menu-viewer-counter')
+  if (!stage) return
+  const page = pages[index]
+  stage.innerHTML = `<img class="menu-viewer-img${zoomed ? ' is-zoomed' : ''}" src="${escapeHtml(page.url)}" alt="${escapeHtml(page.alt || `Menu page ${index + 1}`)}">`
+  stage.querySelector('.menu-viewer-img').addEventListener('click', menuViewerToggleZoom)
+  if (counter) counter.textContent = `Page ${index + 1} of ${pages.length}`
+  const overlay = document.getElementById('menu-viewer')
+  if (overlay) {
+    const multi = pages.length > 1
+    overlay.querySelector('.menu-viewer-prev').style.display = multi ? '' : 'none'
+    overlay.querySelector('.menu-viewer-next').style.display = multi ? '' : 'none'
+  }
+}
+
+function menuViewerGo(delta) {
+  if (!menuViewerState) return
+  const n = menuViewerState.pages.length
+  menuViewerState.index = (menuViewerState.index + delta + n) % n
+  menuViewerState.zoomed = false
+  renderMenuViewer()
+}
+
+function menuViewerToggleZoom() {
+  if (!menuViewerState) return
+  menuViewerState.zoomed = !menuViewerState.zoomed
+  renderMenuViewer()
+}
+
+function menuViewerKeydown(e) {
+  if (!menuViewerState) return
+  if (e.key === 'Escape') closeMenuViewer()
+  else if (e.key === 'ArrowLeft') menuViewerGo(-1)
+  else if (e.key === 'ArrowRight') menuViewerGo(1)
+}
+
+function closeMenuViewer() {
+  const overlay = document.getElementById('menu-viewer')
+  if (overlay) overlay.remove()
+  document.body.classList.remove('menu-viewer-open')
+  document.removeEventListener('keydown', menuViewerKeydown)
+  menuViewerState = null
+}
+
 // ── Global function exports (required for inline onclick handlers) ────
+window.openMenuViewer             = openMenuViewer
+window.closeMenuViewer            = closeMenuViewer
 window.navigateHome               = navigateHome
 window.handleNavigation           = handleNavigation
 window.showPage                   = showPage
@@ -5488,6 +5911,8 @@ window.hideModal                  = hideModal
 window.sendOtpResend              = sendOtpResend
 window.copyMenuLink               = copyMenuLink
 window.customerSignOut            = customerSignOut
+window.saveTeam                   = saveTeam
+window.setAdminTeamFilter         = setAdminTeamFilter
 
 // ── Admin page initialisation ────────────────────────────────
 function initAdminPage() {
@@ -5622,6 +6047,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.modal-overlay').forEach(overlay => {
     overlay.addEventListener('click', () => overlay.closest('.modal')?.classList.add('hidden'))
   })
+
+  // Teams data is needed on both admin and public (footer + admin filter)
+  loadTeams()
 
   // ---- Public homepage only ----
   // admin.html has no #home-page, so skip all the storefront initialisers

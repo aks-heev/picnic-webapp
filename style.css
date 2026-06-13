@@ -1176,11 +1176,10 @@ body {
   margin-bottom: 48px;
 }
 
-/* Asymmetric grid: featured left (spans 2 rows) + 2 stacked right */
+/* 2×2 equal grid — featured card distinguished by bg, not row-span */
 .services-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto auto;
   gap: 20px;
 }
 
@@ -1219,9 +1218,8 @@ body {
   transform: scaleY(1);
 }
 
-/* Featured card: full left column, warm tinted */
+/* Featured card: warm tinted, flex for button pinning */
 .service-card--featured {
-  grid-row: span 2;
   display: flex;
   flex-direction: column;
   background: linear-gradient(155deg, #fff0f4 0%, #fce0ea 100%);
@@ -2295,7 +2293,6 @@ body {
 
   .services-grid {
     grid-template-columns: 1fr 1fr;
-    grid-template-rows: auto auto;
   }
 }
 
@@ -2388,10 +2385,6 @@ body {
   /* Services: single column */
   .services-grid {
     grid-template-columns: 1fr;
-  }
-
-  .service-card--featured {
-    grid-row: span 1;
   }
 
   .gallery-grid {
@@ -7766,17 +7759,210 @@ body {
   margin: 56px 0;
 }
 
-/* Yellow highlight for unfilled placeholders */
-.legal-placeholder {
-  background: #fffbe6;
-  color: #92400e;
-  border: 1px dashed #fbbf24;
-  border-radius: 4px;
-  padding: 1px 6px;
-  font-size: 0.9em;
-  font-style: italic;
+/* ═══════════════════════════════════════════════════════
+   TEAMS — footer cards
+═══════════════════════════════════════════════════════ */
+
+.footer-teams {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 20px;
+  margin: 24px 0 8px;
 }
 
-@media (max-width: 600px) {
-  .legal-page { padding: 72px 20px 72px; }
+.footer-team-card {
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 12px;
+  padding: 16px 22px;
+  min-width: 200px;
+  text-align: left;
+}
+
+.footer-team-name {
+  font-family: 'EB Garamond', serif;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: .03em;
+  color: #fff;
+  margin-bottom: 10px;
+}
+
+.footer-team-contacts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.footer-team-phone,
+.footer-team-wa {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  color: rgba(255,255,255,.82);
+  text-decoration: none;
+  transition: color .15s;
+}
+.footer-team-phone:hover,
+.footer-team-wa:hover { color: #fff; }
+
+.footer-team-phone svg,
+.footer-team-wa svg { flex-shrink: 0; }
+
+/* ═══════════════════════════════════════════════════════
+   TEAMS — floating WhatsApp button on venue detail page
+═══════════════════════════════════════════════════════ */
+
+.vd-wa-float {
+  position: fixed;
+  bottom: 28px;
+  left: 24px;
+  z-index: 900;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 18px 11px 14px;
+  background: #25D366;
+  color: #fff;
+  border-radius: 50px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: 0 4px 18px rgba(37,211,102,.35);
+  transition: background .18s, box-shadow .18s, transform .18s;
+  white-space: nowrap;
+}
+.vd-wa-float:hover {
+  background: #1ebe5d;
+  box-shadow: 0 6px 24px rgba(37,211,102,.45);
+  transform: translateY(-2px);
+}
+.vd-wa-float svg { flex-shrink: 0; }
+
+@media (max-width: 580px) {
+  .vd-wa-float {
+    bottom: 16px;
+    left: 14px;
+    padding: 10px 14px 10px 12px;
+    font-size: 13px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   ADMIN — team filter pills
+═══════════════════════════════════════════════════════ */
+
+.adm-team-pills {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.adm-team-pill {
+  padding: 5px 16px;
+  border-radius: 20px;
+  border: 1.5px solid var(--boho-border);
+  background: transparent;
+  color: var(--boho-text-medium);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+  font-family: inherit;
+}
+.adm-team-pill:hover {
+  border-color: var(--boho-accent-rose);
+  color: var(--boho-accent-rose);
+}
+.adm-team-pill.active {
+  background: var(--boho-accent-rose);
+  border-color: var(--boho-accent-rose);
+  color: #fff;
+}
+
+/* ═══════════════════════════════════════════════════════
+   ADMIN — teams manager cards
+═══════════════════════════════════════════════════════ */
+
+#teams-manager-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+  margin-top: 8px;
+}
+
+.tm-card {
+  background: var(--boho-sand);
+  border: 1px solid var(--boho-border);
+  border-radius: var(--radius-lg);
+  padding: 22px 24px;
+}
+
+.tm-card-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.tm-city {
+  font-family: 'EB Garamond', serif;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--boho-text-dark);
+  margin: 0;
+}
+
+.tm-city-slug {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--boho-text-light);
+  background: var(--boho-cream);
+  border: 1px solid var(--boho-border);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.tm-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.tm-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--boho-text-light);
+}
+
+.tm-input {
+  padding: 8px 12px;
+  border: 1px solid var(--boho-border);
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  background: #fff;
+  color: var(--boho-text-dark);
+  transition: border-color .15s;
+}
+.tm-input:focus {
+  outline: none;
+  border-color: var(--boho-accent-rose);
+  box-shadow: 0 0 0 3px rgba(196,96,122,.12);
+}
+
+.tm-actions {
+  display: flex;
+  justify-content: flex-end;
 }
