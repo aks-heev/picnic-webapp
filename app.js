@@ -6236,20 +6236,4 @@ document.addEventListener('DOMContentLoaded', () => {
   loadVenues()
   loadHeroImage()
   loadTestimonials()
-})w) {
-            bookView.style.display = ''
-            bookView.innerHTML = buildIntentScreenHTML(lead, { containerClass: 'vd-intent-wrap container' })
-          }
-        } else {
-          showBookingForm(venue)
-        }
-      } else {
-        showGuestSelector(venue)
-      }
-    }
-  })
-
-  loadVenues()
-  loadHeroImage()
-  loadTestimonials()
 })
