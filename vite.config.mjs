@@ -15,6 +15,10 @@ export default defineConfig({
       input: {
         main: resolve(here, 'index.html'),
         admin: resolve(here, 'admin.html'),
+        privacy: resolve(here, 'privacy.html'),
+        terms: resolve(here, 'terms.html'),
+        cancellation: resolve(here, 'cancellation.html'),
+        disclaimer: resolve(here, 'disclaimer.html'),
       },
     },
   },

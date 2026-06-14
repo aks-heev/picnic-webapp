@@ -1,52 +1,5 @@
 # The Picnic Stories — Claude Working Notes
 
-## Session Handoff — 2026-06-09 (earlier)
-
-• **Project**: Vanilla-JS Vite SPA (`D:\Projects\picnic-webapp`), multi-page build (`index.html` + `admin.html`), deployed on Vercel. Supabase project `evmftrogyzoudiccqkya` (ap-northeast-1). Site live at `picnicstories.com`.
-
-• **CRITICAL — file editing rule**: `app.js` is 5,335+ lines; bash sandbox shows a stale/truncated version (~5,304 lines). **Never edit `app.js` or run builds via bash** — always use Read/Edit/Write file tools. File tools are source of truth.
-
-• **ES module exports**: functions in `app.js` are not auto-global. Any function called via inline `onclick` must be explicitly assigned: `window.fnName = fnName` in the exports block (~line 5127). Missing exports = silent `ReferenceError` in browser.
-
-• **Completed this session** (all committed + pushed):
-  - Domain: all URLs/canonical/JSON-LD updated to `picnicstories.com`; `team@picnicstories.com` in footer + JSON-LD
-  - Venue admin: active-first ordering + drag-to-reorder (`sort_order int4` column added to `venues` table); `renderVenueList` + `saveVenueOrder` in `app.js`
-  - Window exports added: `handleNavigation`, `copyMenuLink`, `customerSignOut`
-  - CSP fixed in both HTML files: `ws://localhost:* wss://localhost:*` added to `connect-src`
-  - All 4 edge functions redeployed: sender = `The Picnic Stories <team@picnicstories.com>`, APP_URL fallback = `https://picnicstories.com`; "Picnic Story" typo fixed in `notify-menu-link`
-  - Resend domain verified for `picnicstories.com`; Vercel domain live
-  - `children_count integer NOT NULL DEFAULT 0` added to bookings table
-  - `free_children_count: 2` added to all venue metadata
-  - `notify-booking-received` + `notify-booking-confirmed` show "X adults · Y children (first 2 free)" — both deployed as v9 (ACTIVE)
-
-• **Venue IDs**: Gathering=15, Nook=16, Reunion=17 (handoff doc had Nook/Gathering swapped — trust these IDs)
-
-• **Edge functions** (`supabase/functions/`): each has its own copy of `_shared/resend.ts`, `_shared/venue.ts`, `_shared/addons.ts`. Changes to shared files must be redeployed to all 4 functions: `notify-booking-received`, `notify-booking-confirmed`, `notify-menu-link`, `notify-order-received`.
-
-## Session Handoff — 2026-06-09 (latest)
-
-• **Pricing fix — code done, commit blocked**: `getPicnicPrice(venue, adults, children)` written at app.js ~line 149. Replaces `calcBillingGuests`. Tier price based on adults only; each paid child (3rd+) adds `overage_per_person × 0.5`. All 5 call sites updated to `const picnicPrice = getPicnicPrice(venue, appState.adults, appState.children)`.
-
-• **To unblock commit**: delete `D:\Projects\picnic-webapp\.git\index.lock` (Windows side — sandbox can't remove it), then: `git add app.js && git commit -m "fix: price paid children at overage_per_person x0.5" && git push`. Vercel auto-deploys on push.
-
-• **Pricing logic**: `getPicnicPrice` = `getVenuePrice(venue, adults)` (integer tier lookup) + `max(0, children - free_children_count) * overage_per_person * 0.5`. Sunroom example (overage=₹2,000): 2A+3C → ₹11,900 + ₹1,000 = **₹12,900** (was ₹14,900 full tier jump). Monotonically increasing, no inversions.
-
-## Session Handoff — 2026-06-09 (Indoor/Outdoor venue split)
-
-• **Feature**: Home gallery (`#venues-grid`) now groups active venues into Outdoor → Indoor sections + a standalone custom CTA. Driven by a new `setting` column, **decoupled from `type`** (type = ownership/booking model; setting = physical location — orthogonal axes, do not conflate). Status: **all edits LOCAL, not committed/pushed/deployed** (note: `.git\index.lock` may block commit per the pricing handoff above).
-
-• **DB migration** `add_venue_setting_column` (applied to `evmftrogyzoudiccqkya`): `venues.setting text` nullable, `CHECK (setting in ('indoor','outdoor'))` (null allowed). Backfill: `cafe→outdoor`, `self_managed/partner_bnb/combo→indoor`, `custom→null`. Active venues+settings: Beige Cafe(14)=outdoor, Sunroom(18)=outdoor, Gathering(15)=indoor, Nook(16)=indoor, Reunion(17)=indoor, Your Own Space(5)=null → **2 outdoor, 3 indoor, 1 CTA**.
-
-• **`app.js`**: rewrote `renderVenueGallery` → added `venueSetting(venue)` (prefers `setting` col, falls back to type — the ONE place the type→setting assumption lives) + `venueCardHtml(venue)`. Empty sections suppressed. Custom rendered as `.venue-custom-cta` band carrying `data-venue-id` → reuses existing `#venues-grid` click+keydown delegation (~line 5360), so **no new handler/window export needed**.
-
-• **`style.css`**: `.venues-grid` repurposed to `flex-direction:column`; card grid moved to new `.venue-grid` (+ 900/580px media queries). Added `.venue-section-*` (outdoor dot `--boho-accent-sage`, indoor dot `--venue-primary`, EB Garamond title) and `.venue-custom-cta*` band.
-
-• **Admin form**: `vf-setting` `<select>` (Auto=`''` / outdoor / indoor) added in `admin.html` beside Type (`vf-type`). Wired into payload (`setting: ...value || null`), `clearVenueForm` (reset `''`), `populateVenueForm` (from `venue.setting`). Editing preserves backfilled values; custom-type venues ignore setting (gallery filters `type!=='custom'` before reading setting).
-
-• **Copy** (`/design:ux-copy`): Outdoor sub "Open-air settings, under the sky"; Indoor sub "Cosy, weatherproof spaces for any season"; CTA "Have your own spot in mind?" / "A backyard, rooftop, or a place that means something — we'll bring the picnic to you." / button "Plan a custom picnic"; empty state "No spaces open just now. We add venues often — check back soon."
-
-• **Verification gap**: DB backfill verified via SQL + code review only — **not browser-rendered** (stale sandbox blocks build check). Next: commit+push (Vercel auto-deploy) and/or load in Chrome to confirm home sections + admin Setting field.
-
 ## Session Handoff — 2026-06-10 (code review + design critique)
 
 • **Repo state correction vs the two 06-09 handoffs above**: pricing fix (`getPicnicPrice`) AND venue indoor/outdoor split are **committed & pushed** (`35b2fc1` "major changes", `cf9927d` phone-OTP); `main` == `origin/main`, `.git/index.lock` gone, live site renders the split correctly (verified in Chrome). Bash sandbox app.js no longer stale (5,534 lines, matches HEAD). Uncommitted working tree: index.html (+9 footer legal nav), style.css (+160 legal-page styles), brand rename "Picnic Story→Stories" in docs/preview/migration comments, + 4 untracked legal pages (privacy/terms/cancellation/disclaimer.html).
@@ -76,3 +29,27 @@
 • **Dropdown restyle** (`style.css` after `.vd-bf-textarea` ~4082): new `.vd-bf-select` — `appearance:none`, custom rose chevron data-URI, focus ring `box-shadow 0 0 0 3px rgba(196,96,122,.13)`, hover tint, padding `12px 44px 12px 14px`, `:has(option[value=""]:checked)` mutes placeholder text. User chose **polished-native (closed control only)** over a custom component — open option list stays OS-native by design. Applied to both occasion + board selects.
 
 • **Next**: `git add app.js style.css && commit && push` to deploy the form fields + dropdown styling + children_count frontend wiring (DB/RPC/emails already live). Until push, live site won't show occasion/board form and saves children_count=0.
+
+## Session Handoff — 2026-06-13 (Teams feature: Jaipur/Gurugram)
+
+• **Teams feature: ALL code LOCAL, not committed/pushed** — DB + edge functions are live. One `git add -A && git commit && git push` will deploy everything to Vercel.
+
+• **DB state (live)**: `teams` table — Jaipur (id=1, city='jaipur', whatsapp='919266964666', phone='+91 92669-64666', contact_email='thepicnicstories@outlook.com'), Gurugram (id=2, city='gurugram', whatsapp='919773703982', phone='+91 97737-03982', contact_email='aksh.eeev@gmail.com'). `venues.team_id` FK live. **Correct team_id assignments**: Jaipur = IDs 5,19,20,21; Gurugram = IDs 14,15,16,17,18 (original backfill set all to 1 — fixed this session via SQL UPDATE).
+
+• **Edge functions deployed**: `notify-booking-received` → v12, `notify-order-received` → v3 — both route admin email to `[team.contact_email, "team@picnicstories.com"]` via nested join `bookings→venues→teams`. `_shared/resend.ts` `to` field is now `string | string[]`.
+
+• **`app.js` changes (LOCAL)**: `loadTeams()` called before the `if (!document.getElementById('home-page')) return` guard so it runs on admin too (was after guard = bug — filter was always no-op); `appState.teams[]` + `loadedQueries`/`loadedBookings`/`adminTeamFilter` module-level vars; `renderFooterTeams()` builds `#footer-teams` div; floating WA button appended to `#venue-detail-page` in `renderVenueDetail`; `loadTeamsManager`/`renderTeamsManager`/`saveTeam`/`setAdminTeamFilter` admin functions; venue form `vf-team` select populated from `appState.teams` in `openVenueForm`, cleared in `clearVenueForm`, populated in `populateVenueForm`, saved as `team_id` in payload; `window.saveTeam` + `window.setAdminTeamFilter` exported.
+
+• **`index.html`/`admin.html`/`style.css` changes (LOCAL)**: footer phones replaced with `<div id="footer-teams">`. Admin: Teams tab button + `#teams-tab` panel + `#teams-manager-container`; team filter pills (All/Jaipur/Gurugram) in both Queries and Bookings tabs; `vf-team` select in venue form row. CSS: `.footer-teams`, `.footer-team-card`, `.vd-wa-float` (fixed bottom-left, green `#25D366`), `.adm-team-pill/.adm-team-pills`, `.tm-card` and related admin team manager styles.
+
+• **CRITICAL — file editing rule**: `app.js` is 6,100+ lines. Never edit via bash — always use Read/Edit/Write file tools. Edge-fn source of truth = deployed version; always `get_edge_function` before editing.
+
+## Session Handoff — 2026-06-13 (UI/UX batch: overnight stays, menu viewer, booking UX — COMMITTED)
+
+• **All changes committed and pushed** — Vercel auto-deploying. Committed files: `app.js`, `style.css`, `index.html`, `admin.html`, `homepage-preview.html`, `docs/venue-booking-flow-spec.md`, `supabase/migrations/20260525_*.sql` + `20260526_venues.sql`, deleted `"The Picnic Story - Web Application Analysis.md"`.
+
+• **What shipped**: Services grid → Overnight Stays as twin primary card alongside Romantic Picnics; `goToVenueSection('outdoor'|'indoor')` scrolls to `#outdoor-venues`/`#indoor-venues`. Menu viewer: `.vd-menu-thumb*` thumbnails (120×160px) + full `.menu-viewer` lightbox CSS (was entirely missing). Change-mode pattern: `appState.changeMode`/`appState.changeModeData` — `goBackToVenueDetail('intent')` fast-resumes from intent screen, `goBackToVenueDetail('form')` saves DOM values and pre-fills form on return. What's Included: type-aware (cafes get Food & Beverages, stays don't), SVG tent icon. Phone field: numeric-only 10-digit (triple guard). Intent card: chips-wrap flex row (`justify-content:space-between`) so "Change date & time" sits right of chips; advance amount uses `var(--boho-accent-pink)` (was `--boho-rose` = near-white = invisible); price badge `var(--boho-accent-rose, #a84d66)` + `rgba(196,96,122,0.15)` bg.
+
+• **Remaining known issues**: The Nook (id=16) + The Reunion (id=17) have no photos (empty beige boxes). Legal pages (privacy/terms/cancellation/disclaimer.html) untracked, 12 unfilled `legal-placeholder` spans, not in `vite.config.mjs` `rollupOptions.input` → will 404 in prod. `sync-ical` function still has old sender `"The Picnic Story <onboarding@resend.dev>"`. `"Stories's"` → `"Stories'"` typo ×3 still in `docs/venue-booking-flow-spec.md`.
+
+• **CRITICAL — file editing rule**: `app.js` is 6,100+ lines. Never edit via bash — file tools only. Edge-fn source of truth = deployed; always `get_edge_function` before editing. Never commit without explicit user go-ahead.

@@ -604,6 +604,7 @@ async function showVenuePage(venueId, pushState = true) {
     needsCalendar ? fetchBookedData(venue.id, venue.type, venue.max_concurrent_setups || 1) : Promise.resolve(null),
   ])
   appState.currentVenueAddOns = addOns
+  appState.lastViewedVenue = venue
   renderVenueDetail(venue, addOns)
   showPage('venue-detail-page')
 
@@ -612,11 +613,16 @@ async function showVenuePage(venueId, pushState = true) {
   }
 }
 
-// Go back to home — restore URL too
+// Go back to home — restore URL and scroll to the right venue section
 function navigateHome() {
   history.pushState({}, 'The Picnic Stories', '/')
   document.title = 'The Picnic Stories'
   showPage('home-page')
+  const setting = appState.lastViewedVenue?.setting
+  const targetId = (setting === 'indoor' || setting === 'outdoor')
+    ? `${setting}-venues`
+    : 'venues-section'
+  setTimeout(() => document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
 }
 
 // Render full venue detail into venue-detail-page
@@ -6215,6 +6221,22 @@ document.addEventListener('DOMContentLoaded', () => {
           const bookView = document.getElementById('vd-booking-view')
           if (body)     body.style.display = 'none'
           if (bookView) {
+            bookView.style.display = ''
+            bookView.innerHTML = buildIntentScreenHTML(lead, { containerClass: 'vd-intent-wrap container' })
+          }
+        } else {
+          showBookingForm(venue)
+        }
+      } else {
+        showGuestSelector(venue)
+      }
+    }
+  })
+
+  loadVenues()
+  loadHeroImage()
+  loadTestimonials()
+})w) {
             bookView.style.display = ''
             bookView.innerHTML = buildIntentScreenHTML(lead, { containerClass: 'vd-intent-wrap container' })
           }
