@@ -17,6 +17,10 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 // Admin identity — loaded from env so it never touches the client bundle as a literal
 const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL
 
+// Razorpay publishable key id — safe for the client. The KEY SECRET lives only
+// in the create-order / verify-payment edge functions, never in this bundle.
+const RAZORPAY_KEY_ID = import.meta.env.VITE_RAZORPAY_KEY_ID
+
 // Menu Data with detailed Indian menu items
 const foodList = [
   "Plain Omelette","Cheese Burst Omelette","Chicken Omelette","Bread Omelette",
@@ -2352,7 +2356,9 @@ async function submitBookingIntent(wantsToLock) {
       p_preferred_date:       lead.preferred_date,
       p_special_requirements: lead.special_requirements || '',
       p_advance_amount:       lead.advance_amount,
-      p_confirmed:            wantsToLock,
+      // Always insert UNCONFIRMED. A lock booking is confirmed only after the
+      // verify-payment edge function validates the Razorpay signature server-side.
+      p_confirmed:            false,
       p_customer_intent:      wantsToLock ? 'lock' : 'query',
       p_venue_id:             lead.venue_id             ?? null,
       p_venue_address:        lead.venue_address        ?? null,
@@ -2377,24 +2383,22 @@ async function submitBookingIntent(wantsToLock) {
       guest_count:    lead.guest_count,
     }
 
-    // Add-ons are now persisted inside the submit_booking_intent RPC (same
+    // Add-ons are persisted inside the submit_booking_intent RPC (same
     // transaction as the booking) so they're committed before the insert-trigger
-    // notification fires — the admin alert and confirmation email can include them.
+    // notification fires — the admin alert email can include them.
 
-    appState.currentBooking      = null
-    appState.currentVenue        = null
-    appState.currentVenueAddOns  = []
-    appState.pendingLead         = null
-    appState.pendingAddOns       = null
+    // Lock path with a real advance → collect payment via Razorpay, then let
+    // the server confirm. The booking was just inserted as an unconfirmed lead;
+    // verify-payment flips it to confirmed only on a valid signature (which
+    // fires the confirmation email), so an abandoned payment leaves a clean
+    // "call me" lead the team can follow up on.
+    if (wantsToLock && (lead.advance_amount ?? 0) > 0 && bookingRow.id) {
+      await startRazorpayCheckout(bookingRow, lead, venue)
+      return
+    }
 
-    const venueName = venue?.name || null
-
-    const bv = document.getElementById('vd-booking-view')
-    if (bv) bv.style.display = 'none'
-
-    // Pass wantsToLock for display purposes only — not stored as confirmed
-    renderSuccessPage({ booking: bookingRow, venueName, confirmed: wantsToLock })
-    showPage('query-success-page')
+    // Query path (or zero-advance) → finish immediately as an unconfirmed lead.
+    finishBookingFlow(bookingRow, venue, false)
 
   } catch (err) {
     console.error(err)
@@ -2403,6 +2407,122 @@ async function submitBookingIntent(wantsToLock) {
     if (activeBtn) activeBtn.querySelector('.vd-intent-btn-title').textContent =
       wantsToLock ? `Lock my date — ₹${lead.advance_amount.toLocaleString('en-IN')}` : 'Just checking — call me'
   }
+}
+
+// ----------------------------------------------------------------
+// RAZORPAY PAYMENT (Standard Checkout)
+// ----------------------------------------------------------------
+// The booking row already exists (unconfirmed). Flow:
+//   create-order (server) → Razorpay modal → verify-payment (server) → confirmed.
+// The KEY SECRET never reaches the client; signature verification is server-side.
+
+async function startRazorpayCheckout(bookingRow, lead, venue) {
+  const bookingId  = bookingRow?.id
+  const amountPaise = Math.round((lead.advance_amount || 0) * 100)
+
+  // Razorpay's checkout.js must have loaded. If it didn't (blocked/offline),
+  // don't lose the lead — keep it as an unconfirmed request.
+  if (typeof window.Razorpay === 'undefined') {
+    showToast('Payment couldn’t load — we’ve saved your request and will reach out.', 'success')
+    finishBookingFlow(bookingRow, venue, false)
+    return
+  }
+  if (!bookingId || amountPaise < 100) {
+    finishBookingFlow(bookingRow, venue, false)
+    return
+  }
+
+  try {
+    // 1) Create the order server-side
+    const { data: order, error: orderErr } = await supabase.functions.invoke('create-order', {
+      body: {
+        amount:     amountPaise,
+        currency:   'INR',
+        receipt:    `booking_${bookingId}`,
+        booking_id: bookingId,
+      },
+    })
+    if (orderErr || !order?.order_id) {
+      throw new Error(order?.error || orderErr?.message || 'Could not start the payment.')
+    }
+
+    // 2) Open Razorpay Standard Checkout
+    const rzp = new window.Razorpay({
+      key:         order.key_id || RAZORPAY_KEY_ID,
+      order_id:    order.order_id,
+      amount:      order.amount,
+      currency:    order.currency || 'INR',
+      name:        'The Picnic Stories',
+      description: venue?.name ? `Advance — ${venue.name}` : 'Picnic advance payment',
+      prefill: {
+        name:    lead.full_name || '',
+        email:   lead.email_address || '',
+        contact: lead.mobile_number || '',
+      },
+      notes:  { booking_id: String(bookingId) },
+      theme:  { color: '#c4607a' },
+      handler: (resp) => { verifyAndFinish(resp, bookingRow, venue) },
+      modal: {
+        ondismiss: () => {
+          showToast('Payment cancelled — we’ve saved your request and will reach out.', 'success')
+          finishBookingFlow(bookingRow, venue, false)
+        },
+      },
+    })
+    rzp.on('payment.failed', (resp) => {
+      showToast(resp?.error?.description || 'Payment failed. We’ve saved your request.', 'error')
+      finishBookingFlow(bookingRow, venue, false)
+    })
+    rzp.open()
+  } catch (err) {
+    console.error('startRazorpayCheckout:', err)
+    showToast(err.message || 'Could not start the payment. We’ve saved your request.', 'error')
+    finishBookingFlow(bookingRow, venue, false)
+  }
+}
+
+// Send the three Razorpay tokens to the server for signature verification.
+// Only a verified signature flips the booking to confirmed (done server-side).
+async function verifyAndFinish(resp, bookingRow, venue) {
+  try {
+    const { data: result, error } = await supabase.functions.invoke('verify-payment', {
+      body: {
+        booking_id:          bookingRow.id,
+        razorpay_order_id:   resp.razorpay_order_id,
+        razorpay_payment_id: resp.razorpay_payment_id,
+        razorpay_signature:  resp.razorpay_signature,
+      },
+    })
+    if (error || !result?.ok) {
+      throw new Error(result?.error || error?.message || 'Payment verification failed.')
+    }
+    finishBookingFlow(bookingRow, venue, true)
+  } catch (err) {
+    console.error('verifyAndFinish:', err)
+    showToast(
+      err.message ||
+        'We couldn’t verify your payment. If money was deducted it will be refunded — please contact us.',
+      'error',
+    )
+    finishBookingFlow(bookingRow, venue, false)
+  }
+}
+
+// Clear booking state and show the success page.
+function finishBookingFlow(bookingRow, venue, confirmed) {
+  const venueName = venue?.name || null
+
+  appState.currentBooking      = null
+  appState.currentVenue        = null
+  appState.currentVenueAddOns  = []
+  appState.pendingLead         = null
+  appState.pendingAddOns       = null
+
+  const bv = document.getElementById('vd-booking-view')
+  if (bv) bv.style.display = 'none'
+
+  renderSuccessPage({ booking: bookingRow, venueName, confirmed })
+  showPage('query-success-page')
 }
 
 // ----------------------------------------------------------------
@@ -3036,6 +3156,7 @@ function renderQueries(queries) {
           <span class="adm-status-dot adm-status-dot--new"></span>
           <span class="adm-name">${escapeHtml(query.full_name)}</span>
           <span class="adm-badge adm-badge--new">New</span>
+          ${paymentBadgeHtml(query)}
         </div>
         <span class="adm-timestamp" title="${new Date(query.created_at).toLocaleString()}">${timeAgo}</span>
       </div>
@@ -3112,6 +3233,22 @@ function renderQueries(queries) {
       </div>
     </div>`
   }).join('')
+}
+
+// Payment-status pill shared by query/booking card headers.
+// Renders from booking.payment_status; null/legacy rows render nothing.
+function paymentBadgeHtml(b) {
+  const map = {
+    paid:    { label: 'Paid',            cls: 'adm-pay--paid' },
+    pending: { label: 'Payment pending', cls: 'adm-pay--pending' },
+    failed:  { label: 'Payment failed',  cls: 'adm-pay--failed' },
+  }
+  const m = map[b.payment_status]
+  if (!m) return ''
+  const pid = b.razorpay_payment_id
+    ? `<code class="adm-pay-id" title="Razorpay payment id">${escapeHtml(b.razorpay_payment_id)}</code>`
+    : ''
+  return `<span class="adm-pay-badge ${m.cls}">${m.label}</span>${pid}`
 }
 
 // Occasion + celebration-board detail rows shared by query/booking cards
@@ -3197,6 +3334,7 @@ function renderBookings(bookings) {
           <span class="adm-badge adm-badge--confirmed">Confirmed</span>
         </div>
         <div class="adm-card-header-right">
+          ${paymentBadgeHtml(booking)}
           <span class="adm-amount-badge">₹${advanceFormatted} paid</span>
           <span class="adm-timestamp" title="${new Date(booking.created_at).toLocaleString()}">${timeAgo}</span>
         </div>

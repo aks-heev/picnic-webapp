@@ -7218,6 +7218,41 @@ body.menu-viewer-open {
   border: 1px solid rgba(var(--color-success-rgb), 0.25);
 }
 
+/* Payment status pill (shared by query + booking cards) */
+.adm-pay-badge {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+.adm-pay--paid {
+  background: rgba(var(--color-success-rgb), 0.12);
+  color: var(--color-success);
+  border: 1px solid rgba(var(--color-success-rgb), 0.25);
+}
+.adm-pay--pending {
+  background: rgba(var(--color-warning-rgb), 0.12);
+  color: var(--color-warning);
+  border: 1px solid rgba(var(--color-warning-rgb), 0.25);
+}
+.adm-pay--failed {
+  background: rgba(var(--color-error-rgb), 0.12);
+  color: var(--color-error);
+  border: 1px solid rgba(var(--color-error-rgb), 0.25);
+}
+.adm-pay-id {
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  color: var(--color-text-secondary, #6b6b6b);
+  background: rgba(0, 0, 0, 0.04);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm, 6px);
+  flex-shrink: 0;
+}
+
 /* Amount paid badge */
 .adm-amount-badge {
   font-size: var(--font-size-sm);
