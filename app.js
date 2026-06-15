@@ -3193,7 +3193,7 @@ function renderQueries(queries) {
       ${occasionBoardHtml(query)}
       ${airbnbHtml}
 
-      ${isCombo ? `<div class="adm-floor-note">🏠 Whole floor = The Nook + The Gathering</div>` : ''}
+      ${isCombo ? `<div class="adm-floor-note">🏠 Whole floor = Terracottage Ochre + Terracottage Umber</div>` : ''}
 
       ${isCombo && isHeld ? `
         <div class="adm-hold-banner">
