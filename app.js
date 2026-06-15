@@ -4288,7 +4288,7 @@ async function loadVenueManager() {
   try {
     const { data, error } = await supabase
       .from('venues')
-      .select('id, name, type, area, city, capacity_min, capacity_max, base_price, is_active, images, menu_pages, external_url, metadata, description, max_concurrent_setups, airbnb_ical_url, last_ical_sync_at, last_ical_sync_status, sort_order')
+      .select('id, name, type, setting, area, city, capacity_min, capacity_max, base_price, is_active, requires_confirmation, images, menu_pages, external_url, maps_url, metadata, description, max_concurrent_setups, airbnb_ical_url, last_ical_sync_at, last_ical_sync_status, sort_order, team_id')
       .order('sort_order', { ascending: true, nullsFirst: false })
       .order('id', { ascending: true })
     if (error) throw error
@@ -4510,7 +4510,9 @@ function updateVfTypeVisibility(type) {
 function renderVfImages(images) {
   const list = document.getElementById('vf-images-list')
   if (!list) return
-  list.innerHTML = images.map((img, i) => `
+  list.innerHTML = images.map((img, i) => {
+    const filename = img.name || ''
+    return `
     <div class="vf-image-row" data-index="${i}" draggable="true">
       <div class="vf-img-drag-handle" title="Drag to reorder">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -4523,6 +4525,7 @@ function renderVfImages(images) {
         ${img.url
           ? `<img class="vf-img-thumb" src="${escapeHtml(img.url)}" alt="${escapeHtml(img.alt || '')}" />`
           : `<div class="vf-img-thumb-placeholder">🖼</div>`}
+        ${filename ? `<span class="vf-img-filename" title="${escapeHtml(filename)}">${escapeHtml(filename)}</span>` : ''}
       </div>
       <div class="vf-img-fields">
         <label class="vf-img-upload-btn">
@@ -4531,11 +4534,12 @@ function renderVfImages(images) {
                  onchange="handleVfImageUpload(this, ${i})" style="display:none" />
         </label>
         <input type="hidden" class="vf-img-url" value="${escapeHtml(img.url || '')}" />
+        <input type="hidden" class="vf-img-name" value="${escapeHtml(filename)}" />
         <input type="text" class="vf-input vf-img-alt" placeholder="Alt text / caption" value="${escapeHtml(img.alt || '')}" />
       </div>
       <button type="button" class="vf-remove-btn" onclick="removeVfImage(${i})">✕</button>
     </div>
-  `).join('')
+  `}).join('')
 
   // Wire drag-to-reorder
   let dragIndex = null
@@ -4589,8 +4593,9 @@ window.handleVfImageUpload = async function(input, index) {
     const { data: { publicUrl } } = supabase.storage.from('venue-images').getPublicUrl(path)
 
     row.querySelector('.vf-img-url').value = publicUrl
+    row.querySelector('.vf-img-name').value = file.name
     const wrap = row.querySelector('.vf-img-preview-wrap')
-    wrap.innerHTML = `<img class="vf-img-thumb" src="${publicUrl}" alt="" />`
+    wrap.innerHTML = `<img class="vf-img-thumb" src="${publicUrl}" alt="" /><span class="vf-img-filename" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>`
     label.textContent = '↺ Replace photo'
     showToast('Photo uploaded', 'success')
   } catch (err) {
@@ -4616,7 +4621,8 @@ function readVfImages() {
   const rows = document.querySelectorAll('#vf-images-list .vf-image-row')
   return Array.from(rows).map(row => ({
     url: row.querySelector('.vf-img-url').value.trim(),
-    alt: row.querySelector('.vf-img-alt').value.trim()
+    alt: row.querySelector('.vf-img-alt').value.trim(),
+    name: row.querySelector('.vf-img-name')?.value.trim() || ''
   }))
 }
 
@@ -4625,7 +4631,9 @@ function readVfImages() {
 function renderVfMenuPages(pages) {
   const list = document.getElementById('vf-menu-list')
   if (!list) return
-  list.innerHTML = pages.map((img, i) => `
+  list.innerHTML = pages.map((img, i) => {
+    const filename = img.name || ''
+    return `
     <div class="vf-image-row" data-index="${i}" draggable="true">
       <div class="vf-img-drag-handle" title="Drag to reorder">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -4638,6 +4646,7 @@ function renderVfMenuPages(pages) {
         ${img.url
           ? `<img class="vf-img-thumb" src="${escapeHtml(img.url)}" alt="${escapeHtml(img.alt || '')}" />`
           : `<div class="vf-img-thumb-placeholder">📄</div>`}
+        ${filename ? `<span class="vf-img-filename" title="${escapeHtml(filename)}">${escapeHtml(filename)}</span>` : ''}
       </div>
       <div class="vf-img-fields">
         <label class="vf-img-upload-btn">
@@ -4646,11 +4655,12 @@ function renderVfMenuPages(pages) {
                  onchange="handleVfMenuUpload(this, ${i})" style="display:none" />
         </label>
         <input type="hidden" class="vf-img-url" value="${escapeHtml(img.url || '')}" />
+        <input type="hidden" class="vf-img-name" value="${escapeHtml(filename)}" />
         <input type="text" class="vf-input vf-img-alt" placeholder="Alt text (e.g. Menu page 1)" value="${escapeHtml(img.alt || '')}" />
       </div>
       <button type="button" class="vf-remove-btn" onclick="removeVfMenuPage(${i})">✕</button>
     </div>
-  `).join('')
+  `}).join('')
 
   // Wire drag-to-reorder
   let dragIndex = null
@@ -4704,8 +4714,9 @@ window.handleVfMenuUpload = async function(input, index) {
     const { data: { publicUrl } } = supabase.storage.from('venue-images').getPublicUrl(path)
 
     row.querySelector('.vf-img-url').value = publicUrl
+    row.querySelector('.vf-img-name').value = file.name
     const wrap = row.querySelector('.vf-img-preview-wrap')
-    wrap.innerHTML = `<img class="vf-img-thumb" src="${publicUrl}" alt="" />`
+    wrap.innerHTML = `<img class="vf-img-thumb" src="${publicUrl}" alt="" /><span class="vf-img-filename" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>`
     label.textContent = '↺ Replace page'
     showToast('Menu page uploaded', 'success')
   } catch (err) {
@@ -4731,7 +4742,62 @@ function readVfMenuPages() {
   const rows = document.querySelectorAll('#vf-menu-list .vf-image-row')
   return Array.from(rows).map(row => ({
     url: row.querySelector('.vf-img-url').value.trim(),
-    alt: row.querySelector('.vf-img-alt').value.trim()
+    alt: row.querySelector('.vf-img-alt').value.trim(),
+    name: row.querySelector('.vf-img-name')?.value.trim() || ''
+  }))
+}
+
+// Multi-file upload handler shared by venue images and menu pages.
+// type = 'venue' | 'menu'
+window.addVfImagesMulti = async function(input, type) {
+  const files = Array.from(input.files)
+  input.value = '' // reset so same files can be re-selected later
+  if (!files.length) return
+  if (!appState.session) return showToast('Admin login required', 'error')
+
+  const isVenue  = type === 'venue'
+  const listId   = isVenue ? 'vf-images-list' : 'vf-menu-list'
+  const prefix   = isVenue ? 'venue' : 'menu'
+  const readFn   = isVenue ? readVfImages   : readVfMenuPages
+  const renderFn = isVenue ? renderVfImages : renderVfMenuPages
+  const placeholder = isVenue ? '🖼' : '📄'
+
+  // Add placeholder rows for every file up-front, then upload in parallel
+  const existing   = readFn()
+  const startIndex = existing.length
+  const newEntries = files.map(f => ({ url: '', alt: '', name: f.name }))
+  renderFn([...existing, ...newEntries])
+
+  const list = document.getElementById(listId)
+
+  await Promise.all(files.map(async (file, i) => {
+    const rowIndex = startIndex + i
+    const row   = list.querySelector(`.vf-image-row[data-index="${rowIndex}"]`)
+    const label = row?.querySelector('.vf-img-upload-btn')
+    if (label) label.textContent = 'Uploading…'
+
+    try {
+      const ext  = file.name.split('.').pop()
+      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const path = `${prefix}-${Date.now()}-${i}-${safe}`
+
+      const { error: upErr } = await supabase.storage.from('venue-images').upload(path, file, { upsert: true })
+      if (upErr) throw upErr
+
+      const { data: { publicUrl } } = supabase.storage.from('venue-images').getPublicUrl(path)
+
+      if (row) {
+        row.querySelector('.vf-img-url').value  = publicUrl
+        row.querySelector('.vf-img-name').value = file.name
+        row.querySelector('.vf-img-preview-wrap').innerHTML =
+          `<img class="vf-img-thumb" src="${publicUrl}" alt="" /><span class="vf-img-filename" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>`
+        if (label) label.textContent = isVenue ? '↺ Replace photo' : '↺ Replace page'
+      }
+    } catch (err) {
+      console.error(err)
+      showToast(`Failed: ${file.name} — ${err.message}`, 'error')
+      if (label) label.textContent = isVenue ? '↑ Upload photo' : '↑ Upload page'
+    }
   }))
 }
 

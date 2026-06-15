@@ -6453,6 +6453,10 @@ body.menu-viewer-open {
   letter-spacing: 0.04em;
 }
 .vf-hint { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--boho-text-muted, #8c7b6b); }
+.vf-input-row { display: flex; gap: 8px; align-items: center; }
+.vf-input-row .vf-input { flex: 1; min-width: 0; }
+.vf-copy-btn { flex-shrink: 0; padding: 9px 14px; border: 1px solid var(--boho-border, #e8ddd0); border-radius: 8px; background: var(--boho-surface, #faf8f5); color: var(--boho-text-muted, #8c7b6b); font-size: 13px; cursor: pointer; white-space: nowrap; transition: background 0.15s, color 0.15s; }
+.vf-copy-btn:hover { background: var(--boho-accent-pink, #c4607a); color: #fff; border-color: var(--boho-accent-pink, #c4607a); }
 .vf-input {
   padding: 9px 12px;
   border: 1px solid var(--boho-border, #e8ddd0);
@@ -6695,6 +6699,22 @@ body.menu-viewer-open {
 
 .vf-img-preview-wrap {
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 64px;
+}
+.vf-img-filename {
+  display: block;
+  width: 64px;
+  font-size: 10px;
+  color: var(--boho-text-muted, #8c7b6b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  line-height: 1.3;
 }
 
 .vf-img-fields {

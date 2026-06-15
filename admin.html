@@ -211,21 +211,32 @@
                         <!-- Google Maps link (all venue types) -->
                         <div class="vf-field">
                             <label class="vf-label">Maps Link <span class="vf-hint">(paste a Google Maps share link; powers the "Get Directions" button in confirmation emails)</span></label>
-                            <input type="url" id="vf-maps-url" class="vf-input" placeholder="https://maps.app.goo.gl/..." />
+                            <div class="vf-input-row">
+                                <input type="url" id="vf-maps-url" class="vf-input" placeholder="https://maps.app.goo.gl/..." />
+                                <button type="button" class="vf-copy-btn" title="Copy link" onclick="const v=document.getElementById('vf-maps-url').value;if(v){navigator.clipboard.writeText(v).then(()=>{this.textContent='✓';setTimeout(()=>{this.textContent='Copy'},1200)}).catch(()=>{})}">Copy</button>
+                            </div>
                         </div>
 
                         <!-- Images -->
                         <div class="vf-field">
                             <label class="vf-label">Images</label>
                             <div id="vf-images-list" class="vf-images-list"></div>
-                            <button type="button" id="vf-add-image" class="vf-add-btn" onclick="addVfImage()">+ Add Image</button>
+                            <label class="vf-add-btn" id="vf-add-image">
+                                + Add Images
+                                <input type="file" accept="image/jpeg,image/png,image/webp" multiple style="display:none"
+                                       onchange="addVfImagesMulti(this, 'venue')" />
+                            </label>
                         </div>
 
                         <!-- Menu pages -->
                         <div class="vf-field">
                             <label class="vf-label">Menu pages <span class="vf-hint">(upload 2–3 menu pages as images; drag to reorder — guests view them before booking)</span></label>
                             <div id="vf-menu-list" class="vf-images-list"></div>
-                            <button type="button" id="vf-add-menu" class="vf-add-btn" onclick="addVfMenuPage()">+ Add Menu Page</button>
+                            <label class="vf-add-btn" id="vf-add-menu">
+                                + Add Menu Pages
+                                <input type="file" accept="image/jpeg,image/png,image/webp" multiple style="display:none"
+                                       onchange="addVfImagesMulti(this, 'menu')" />
+                            </label>
                         </div>
 
                         <!-- What's Included -->
