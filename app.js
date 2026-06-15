@@ -760,18 +760,28 @@ function renderVenueDetail(venue, addOns = []) {
             ${(function() {
               const pages = Array.isArray(venue.menu_pages) ? venue.menu_pages.filter(p => p && p.url) : []
               if (!pages.length) return ''
+              const preview = pages.slice(0, 3)
               return `
             <div class="vd-section vd-menu-section">
-              <h2 class="vd-section-title">The menu</h2>
-              <p class="vd-menu-sub">See what's on the menu before you book.</p>
-              <div class="vd-menu-thumbs">
-                ${pages.map((p, i) => `
+              <h2 class="vd-section-title">Our menu</h2>
+              <p class="vd-menu-sub">Browse before you book · ${pages.length} page${pages.length === 1 ? '' : 's'}</p>
+              <div class="vd-menu-strip">
+                ${preview.map((p, i) => `
                   <button type="button" class="vd-menu-thumb" onclick="openMenuViewer(${venue.id}, ${i})"
                           aria-label="View menu page ${i + 1} of ${pages.length}">
                     <img src="${escapeHtml(p.url)}" alt="${escapeHtml(p.alt || `Menu page ${i + 1}`)}" loading="lazy">
                     <span class="vd-menu-thumb-num">${i + 1}</span>
                   </button>`).join('')}
+                ${pages.length > 3 ? `
+                  <button type="button" class="vd-menu-thumb vd-menu-thumb-more" onclick="openMenuViewer(${venue.id}, 3)"
+                          aria-label="View all ${pages.length} menu pages">
+                    <span class="vd-menu-more-count">+${pages.length - 3}</span>
+                    <span class="vd-menu-more-label">more</span>
+                  </button>` : ''}
               </div>
+              <button type="button" class="vd-menu-view-all" onclick="openMenuViewer(${venue.id}, 0)">
+                View full menu · ${pages.length} pages →
+              </button>
             </div>
             <hr class="vd-divider">`
             })()}

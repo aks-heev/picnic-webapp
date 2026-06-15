@@ -3816,10 +3816,54 @@ body {
   margin: -8px 0 16px;
 }
 
-.vd-menu-thumbs {
+/* Strip — fixed 3 thumbs, no wrap */
+.vd-menu-strip {
   display: flex;
-  flex-wrap: wrap;
   gap: 12px;
+  align-items: stretch;
+}
+
+/* "View full menu" CTA below the strip */
+.vd-menu-view-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 14px;
+  padding: 0;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--boho-accent-rose, #a84d66);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.15s;
+}
+.vd-menu-view-all:hover { color: var(--boho-accent-pink, #c4607a); }
+
+/* "+N more" overflow tile */
+.vd-menu-thumb-more {
+  background: rgba(196, 96, 122, 0.06) !important;
+  border: 1.5px dashed rgba(196, 96, 122, 0.3) !important;
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.vd-menu-more-count {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--boho-accent-rose, #a84d66);
+  line-height: 1;
+}
+.vd-menu-more-label {
+  font-size: 11px;
+  color: var(--boho-text-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .vd-menu-thumb {
@@ -3827,6 +3871,7 @@ body {
   width: 120px;
   height: 160px;
   border-radius: 8px;
+  flex-shrink: 0;
   overflow: hidden;
   border: 1px solid rgba(196,96,122,0.12);
   background: var(--boho-cream);
