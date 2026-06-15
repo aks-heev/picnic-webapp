@@ -4812,6 +4812,37 @@ body.menu-viewer-open {
   gap: 10px;
 }
 
+/* Partner-BnB two-step framing */
+.vd-steps-intro {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--boho-text-medium);
+  margin: 0 0 10px;
+}
+
+.vd-step-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+
+.vd-step-badge--ghost {
+  background: rgba(196, 96, 122, 0.12);
+  color: var(--boho-accent-pink);
+}
+
 /* Reassurance list */
 .vd-reassure {
   list-style: none;
@@ -6541,6 +6572,29 @@ body.menu-viewer-open {
   transition: background 0.15s;
 }
 .vf-add-btn:hover { background: #fff5f7; }
+
+/* ── Per-venue add-on checklist (venue form) ─────────────────── */
+.vf-section-title .vf-addons-prefill { float: right; margin-top: -4px; }
+.vf-addons-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  margin-top: 6px;
+}
+.vf-addon-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  padding: 8px 12px;
+  border: 1px solid var(--boho-border, #e8ddd0);
+  border-radius: 8px;
+  cursor: pointer;
+  background: var(--boho-surface, #faf8f5);
+  transition: border-color 0.15s, background 0.15s;
+}
+.vf-addon-check:hover { border-color: var(--boho-accent-pink, #c4607a); }
+.vf-addon-check input { margin: 0; flex-shrink: 0; accent-color: var(--boho-accent-pink, #c4607a); }
 
 /* ── Image upload UI (venue + add-on forms) ──────────────────── */
 .vf-img-upload-btn {

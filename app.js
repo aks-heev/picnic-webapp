@@ -127,17 +127,19 @@ function venueTypeBadgeClass(type) {
   return classes[type] || ''
 }
 
-// Fetch add-ons available for a given venue type, filtered server-side by available_for
-async function loadVenueAddOns(venueType) {
+// Fetch add-ons mapped to a specific venue via the venue_add_ons junction.
+// Availability is per-venue (not per-type); presence of a junction row = shown.
+async function loadVenueAddOns(venueId) {
   try {
     const { data, error } = await supabase
       .from('add_ons')
-      .select('*')
+      .select('*, venue_add_ons!inner(venue_id)')
       .eq('is_active', true)
-      .contains('available_for', [venueType])
+      .eq('venue_add_ons.venue_id', venueId)
       .order('sort_order')
     if (error) throw error
-    return data || []
+    // Strip the embedded junction key so add-on objects stay clean downstream.
+    return (data || []).map(({ venue_add_ons, ...addon }) => addon)
   } catch (err) {
     console.error('Failed to load add-ons:', err)
     return []
@@ -582,7 +584,7 @@ async function showVenuePage(venueId, pushState = true) {
 
   // Custom type: skip detail page, go straight to booking form
   if (venue.type === 'custom') {
-    const addOns = await loadVenueAddOns(venue.type)
+    const addOns = await loadVenueAddOns(venue.id)
     appState.currentVenueAddOns = addOns
     showBookingForm(venue)
     return
@@ -604,7 +606,7 @@ async function showVenuePage(venueId, pushState = true) {
 
   const needsCalendar = venue.type !== 'partner_bnb'
   const [addOns, bookedData] = await Promise.all([
-    loadVenueAddOns(venue.type),
+    loadVenueAddOns(venue.id),
     needsCalendar ? fetchBookedData(venue.id, venue.type, venue.max_concurrent_setups || 1) : Promise.resolve(null),
   ])
   appState.currentVenueAddOns = addOns
@@ -658,17 +660,20 @@ function renderVenueDetail(venue, addOns = []) {
     : ''
 
   const ctaBlock = venue.type === 'partner_bnb'
-    ? `<div class="vd-cta-stack">
+    ? `<p class="vd-steps-intro">Two steps to book</p>
+       <div class="vd-cta-stack">
          <a href="${venue.external_url?.startsWith('https://') ? escapeHtml(venue.external_url) : '#'}" target="_blank" rel="noopener noreferrer"
             class="btn btn--venue-primary" ${!venue.external_url ? 'aria-disabled="true"' : ''}>
+           <span class="vd-step-badge" aria-hidden="true">1</span>
            Book on Airbnb
            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg>
          </a>
          <button class="btn btn--venue-secondary" data-book-venue-id="${venue.id}">
-           Already booked? Add picnic setup
+           <span class="vd-step-badge vd-step-badge--ghost" aria-hidden="true">2</span>
+           Add picnic setup
          </button>
        </div>
-       <p class="vd-hint">Book the property on Airbnb first, then add our picnic setup.</p>`
+       <p class="vd-hint">Reserve your dates on Airbnb first. Already booked? Start at step 2.</p>`
     : `<div id="avail-calendar-widget" class="avail-calendar-widget"></div>
        <button class="btn btn--venue-primary" id="sidebar-book-btn"
                data-book-venue-id="${venue.id}" disabled>
@@ -904,7 +909,7 @@ function renderVenueDetail(venue, addOns = []) {
               ${venue.base_price ? `
               <div class="vd-price-row">
                 <span class="vd-price-amount" id="sidebar-price-amount">${escapeHtml(formatPrice(venue.base_price))}</span>
-                <span class="vd-price-label" id="sidebar-price-label">starting price</span>
+                <span class="vd-price-label" id="sidebar-price-label">${venue.type === 'partner_bnb' ? 'starting price · picnic setup only' : 'starting price'}</span>
               </div>` : `
               <div class="vd-price-row">
                 <span class="vd-price-amount" id="sidebar-price-amount">Custom</span>
@@ -916,7 +921,7 @@ function renderVenueDetail(venue, addOns = []) {
               <ul class="vd-reassure">
                 <li>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-                  Instant confirmation on advance payment
+                  Your date is locked the moment your advance is paid
                 </li>
                 <li>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
@@ -986,7 +991,7 @@ function renderVenueDetail(venue, addOns = []) {
         ${venue.type === 'partner_bnb'
           ? `<div class="vd-mobile-book-price">
                <span class="vd-mobile-book-amount">${venue.base_price ? escapeHtml(formatPrice(venue.base_price)) : 'Custom'}</span>
-               <span class="vd-mobile-book-label">${venue.base_price ? 'starting price' : 'price on request'}</span>
+               <span class="vd-mobile-book-label">${venue.base_price ? (venue.type === 'partner_bnb' ? 'picnic setup · from' : 'starting price') : 'price on request'}</span>
              </div>
              <a href="${venue.external_url?.startsWith('https://') ? escapeHtml(venue.external_url) : '#'}" target="_blank" rel="noopener noreferrer" class="btn btn--venue-primary">Book on Airbnb</a>`
           : `<div class="vd-mobile-book-price">
@@ -1699,6 +1704,8 @@ function updateGuestPrice(venue) {
   const priceEl = document.getElementById('sidebar-price-amount')
   const labelEl = document.getElementById('sidebar-price-label')
   if (!priceEl || !venue) return
+  // Partner BnBs show a fixed "picnic setup only" label — don't overwrite it
+  if (venue.type === 'partner_bnb') return
 
   const picnicPrice = getPicnicPrice(venue, appState.adults)
 
@@ -1770,7 +1777,7 @@ async function showBookingForm(venue) {
   // drops the whole "Add to your experience" section. Load on demand if empty.
   let addOns = appState.currentVenueAddOns
   if (!addOns || !addOns.length) {
-    addOns = await loadVenueAddOns(venue.type)
+    addOns = await loadVenueAddOns(venue.id)
     appState.currentVenueAddOns = addOns
   }
   const picnicPrice = getPicnicPrice(venue, appState.adults)
@@ -4405,10 +4412,13 @@ async function saveVenueOrder(venues) {
   }
 }
 
-function openVenueForm(venueId) {
+async function openVenueForm(venueId) {
   const panel = document.getElementById('venue-form-panel')
   const title = document.getElementById('vfp-title')
   if (!panel) return
+
+  // Load the add-on catalogue before rendering the checklist.
+  await loadVfAddOns()
 
   if (venueId) {
     const venue = venueManagerState.venues.find(v => v.id === venueId)
@@ -4416,6 +4426,8 @@ function openVenueForm(venueId) {
     venueManagerState.editingId = venueId
     title.textContent = 'Edit Venue'
     populateVenueForm(venue)
+    const selected = await loadVfAddonSelection(venueId)
+    renderVfAddons(selected)
   } else {
     venueManagerState.editingId = null
     title.textContent = 'Add Venue'
@@ -4470,6 +4482,7 @@ function clearVenueForm() {
   renderVfMenuPages([])
   renderVfTiers([{ up_to: 2, price: 9900 }, { up_to: 4, price: 12900 }, { up_to: 6, price: 15900 }, { up_to: 8, price: 18900 }])
   updateVfTypeVisibility('cafe')
+  renderVfAddons([])
 }
 
 function populateVenueForm(venue) {
@@ -4515,6 +4528,80 @@ function updateVfTypeVisibility(type) {
   const bnbSection = document.getElementById('vf-bnb-section')
   partnerOnly.forEach(el => { el.style.display = type === 'partner_bnb' ? '' : 'none' })
   if (bnbSection) bnbSection.style.display = type === 'self_managed' ? '' : 'none'
+}
+
+// ── Per-venue add-on mapping (venue_add_ons) ───────────────────────────
+// Holds the active add-on catalogue for the venue form checklist.
+let vfAllAddOns = []
+
+// Fetch the active add-on catalogue (id, name, available_for) for the form.
+async function loadVfAddOns() {
+  try {
+    const { data, error } = await supabase
+      .from('add_ons')
+      .select('id, name, available_for, sort_order')
+      .eq('is_active', true)
+      .order('sort_order')
+    if (error) throw error
+    vfAllAddOns = data || []
+  } catch (err) {
+    console.error('Failed to load add-on catalogue:', err)
+    vfAllAddOns = []
+  }
+  return vfAllAddOns
+}
+
+// Render the checklist; selectedIds = add-on ids currently mapped to the venue.
+function renderVfAddons(selectedIds) {
+  const list = document.getElementById('vf-addons-list')
+  if (!list) return
+  const sel = new Set((selectedIds || []).map(Number))
+  if (!vfAllAddOns.length) {
+    list.innerHTML = '<p class="vf-hint">No active add-ons to map.</p>'
+    return
+  }
+  list.innerHTML = vfAllAddOns.map(a => `
+    <label class="vf-addon-check">
+      <input type="checkbox" name="vf-addon" value="${a.id}" ${sel.has(a.id) ? 'checked' : ''} />
+      ${escapeHtml(a.name)}
+    </label>`).join('')
+}
+
+// Fetch the add-on ids currently mapped to a venue.
+async function loadVfAddonSelection(venueId) {
+  try {
+    const { data, error } = await supabase
+      .from('venue_add_ons')
+      .select('addon_id')
+      .eq('venue_id', venueId)
+    if (error) throw error
+    return (data || []).map(r => r.addon_id)
+  } catch (err) {
+    console.error('Failed to load venue add-on mapping:', err)
+    return []
+  }
+}
+
+// Check the add-ons whose available_for includes the selected venue type.
+// This is the only place type-inheritance survives — as a seeding convenience.
+function prefillVfAddons() {
+  const type = document.getElementById('vf-type')?.value
+  const ids = vfAllAddOns.filter(a => (a.available_for || []).includes(type)).map(a => a.id)
+  renderVfAddons(ids)
+}
+window.prefillVfAddons = prefillVfAddons
+
+// Persist the checklist to venue_add_ons (delete-all + insert checked set).
+async function saveVenueAddOns(venueId) {
+  const checked = Array.from(document.querySelectorAll('input[name="vf-addon"]:checked'))
+    .map(cb => parseInt(cb.value, 10))
+  const { error: delErr } = await supabase.from('venue_add_ons').delete().eq('venue_id', venueId)
+  if (delErr) throw delErr
+  if (checked.length) {
+    const rows = checked.map(addon_id => ({ venue_id: venueId, addon_id }))
+    const { error: insErr } = await supabase.from('venue_add_ons').insert(rows)
+    if (insErr) throw insErr
+  }
 }
 
 function renderVfImages(images) {
@@ -4895,12 +4982,17 @@ async function handleVenueFormSubmit(event) {
 
   try {
     let error
+    let savedVenueId = id ? parseInt(id, 10) : null
     if (id) {
       ;({ error } = await supabase.from('venues').update(payload).eq('id', parseInt(id, 10)))
     } else {
-      ;({ error } = await supabase.from('venues').insert([payload]))
+      const res = await supabase.from('venues').insert([payload]).select('id').single()
+      error = res.error
+      savedVenueId = res.data?.id ?? null
     }
     if (error) throw error
+    // Persist the per-venue add-on mapping (venue_add_ons).
+    if (savedVenueId) await saveVenueAddOns(savedVenueId)
     showToast(id ? 'Venue updated!' : 'Venue added!', 'success')
     closeVenueForm()
     loadVenueManager()
