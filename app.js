@@ -762,6 +762,56 @@ function renderVenueDetail(venue, addOns = []) {
             </div>
             <hr class="vd-divider">` : ''}
 
+            <!-- What's included -->
+            ${(() => {
+              const meta = venue.metadata || {}
+              const svgWrap = paths => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`
+              const checkSvg   = svgWrap('<polyline points="20 6 9 17 4 12"/>')
+              const isCafe     = venue.type === 'cafe' || venue.type === 'self_managed'
+              const isStay     = venue.type === 'partner_bnb' || venue.type === 'combo'
+
+              // Items shared by both cafes and stays (all except Food & Beverages)
+              const sharedSetup = [
+                { label: 'Fresh Fruits',       icon: svgWrap('<path d="M12 22c4.97 0 9-2.69 9-6s-4.03-6-9-6-9 2.69-9 6 4.03 6 9 6z"/><path d="M12 10V3"/><path d="M8 6l4-3 4 3"/>') },
+                { label: 'Fresh Flowers',      icon: svgWrap('<circle cx="12" cy="12" r="3"/><path d="M12 2a4 4 0 0 1 4 4c0 2.5-4 6-4 6s-4-3.5-4-6a4 4 0 0 1 4-4z"/><path d="M12 22a4 4 0 0 1-4-4c0-2.5 4-6 4-6s4 3.5 4 6a4 4 0 0 1-4 4z"/><path d="M2 12a4 4 0 0 1 4-4c2.5 0 6 4 6 4s-3.5 4-6 4a4 4 0 0 1-4-4z"/><path d="M22 12a4 4 0 0 1-4 4c-2.5 0-6-4-6-4s3.5-4 6-4a4 4 0 0 1 4 4z"/>') },
+                { label: 'Wax Candles',        icon: svgWrap('<line x1="12" y1="2" x2="12" y2="6"/><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>') },
+                { label: 'Electric Candles',   icon: svgWrap('<line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/>') },
+                { label: 'Macrame Tent',       icon: svgWrap('<path d="M2 20 L12 3 L22 20"/><line x1="2" y1="20" x2="22" y2="20"/><path d="M9.5 20 L12 14 L14.5 20"/>') },
+                { label: 'Macrame Umbrella',   icon: svgWrap('<path d="M23 12a11.05 11.05 0 0 0-22 0zm-5 7a3 3 0 0 1-6 0v-7"/>') },
+                { label: 'Portable Speaker',   icon: svgWrap('<rect x="4" y="2" width="16" height="20" rx="2"/><circle cx="12" cy="14" r="4"/><line x1="12" y1="6" x2="12.01" y2="6"/>') },
+                { label: 'Board with Message', icon: svgWrap('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>') },
+                { label: 'Cutlery & Essentials', icon: svgWrap('<line x1="8" y1="6" x2="8" y2="12"/><path d="M6.5 12 8 15.5 9.5 12"/><path d="M16 6v4a2 2 0 0 1-2 2h-.5l1 7.5"/><line x1="16" y1="6" x2="16" y2="12"/>') },
+              ]
+
+              const hardcoded = [
+                ...(venue.id === 15 ? [{ label: 'Whole 2BHK Apartment', icon: svgWrap('<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>') }] : []),
+                ...(isCafe ? [
+                  { label: 'Food & Beverages', icon: svgWrap('<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/>') },
+                  ...sharedSetup,
+                ] : isStay ? [
+                  ...sharedSetup,
+                ] : [
+                  { label: 'Full picnic setup',     icon: '<span style="font-size:18px;line-height:1" aria-hidden="true">⛺</span>' },
+                  { label: 'Boho decor & lighting', icon: svgWrap('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>') },
+                ]),
+                { label: 'Setup & cleanup',        icon: checkSvg },
+                { label: 'Dedicated host support', icon: svgWrap('<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.6 19.79 19.79 0 0 1 1.61 5 2 2 0 0 1 3.6 3h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 10.6a16 16 0 0 0 6 6l.94-.94a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 18z"/>') },
+              ]
+              const custom = (meta.includes || []).map(item => ({ label: item, icon: checkSvg }))
+              const allItems = [...hardcoded, ...custom]
+              return `<div class="vd-section">
+                <h2 class="vd-section-title">What's included</h2>
+                <div class="vd-includes">
+                  ${allItems.map(({ label, icon }) => `
+                    <div class="vd-include-item">
+                      ${icon}
+                      <span>${escapeHtml(label)}</span>
+                    </div>`).join('')}
+                </div>
+              </div>
+            <hr class="vd-divider">`
+            })()}
+
             ${(function() {
               const pages = Array.isArray(venue.menu_pages) ? venue.menu_pages.filter(p => p && p.url) : []
               if (!pages.length) return ''
@@ -852,54 +902,6 @@ function renderVenueDetail(venue, addOns = []) {
             <hr class="vd-divider">`
             })()}
 
-            <!-- What's included -->
-            ${(() => {
-              const meta = venue.metadata || {}
-              const svgWrap = paths => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`
-              const checkSvg   = svgWrap('<polyline points="20 6 9 17 4 12"/>')
-              const isCafe     = venue.type === 'cafe' || venue.type === 'self_managed'
-              const isStay     = venue.type === 'partner_bnb' || venue.type === 'combo'
-
-              // Items shared by both cafes and stays (all except Food & Beverages)
-              const sharedSetup = [
-                { label: 'Fresh Fruits',       icon: svgWrap('<path d="M12 22c4.97 0 9-2.69 9-6s-4.03-6-9-6-9 2.69-9 6 4.03 6 9 6z"/><path d="M12 10V3"/><path d="M8 6l4-3 4 3"/>') },
-                { label: 'Fresh Flowers',      icon: svgWrap('<circle cx="12" cy="12" r="3"/><path d="M12 2a4 4 0 0 1 4 4c0 2.5-4 6-4 6s-4-3.5-4-6a4 4 0 0 1 4-4z"/><path d="M12 22a4 4 0 0 1-4-4c0-2.5 4-6 4-6s4 3.5 4 6a4 4 0 0 1-4 4z"/><path d="M2 12a4 4 0 0 1 4-4c2.5 0 6 4 6 4s-3.5 4-6 4a4 4 0 0 1-4-4z"/><path d="M22 12a4 4 0 0 1-4 4c-2.5 0-6-4-6-4s3.5-4 6-4a4 4 0 0 1 4 4z"/>') },
-                { label: 'Wax Candles',        icon: svgWrap('<line x1="12" y1="2" x2="12" y2="6"/><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>') },
-                { label: 'Electric Candles',   icon: svgWrap('<line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/>') },
-                { label: 'Macrame Tent',       icon: svgWrap('<path d="M2 20 L12 3 L22 20"/><line x1="2" y1="20" x2="22" y2="20"/><path d="M9.5 20 L12 14 L14.5 20"/>') },
-                { label: 'Macrame Umbrella',   icon: svgWrap('<path d="M23 12a11.05 11.05 0 0 0-22 0zm-5 7a3 3 0 0 1-6 0v-7"/>') },
-                { label: 'Portable Speaker',   icon: svgWrap('<rect x="4" y="2" width="16" height="20" rx="2"/><circle cx="12" cy="14" r="4"/><line x1="12" y1="6" x2="12.01" y2="6"/>') },
-                { label: 'Board with Message', icon: svgWrap('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>') },
-                { label: 'Cutlery & Essentials', icon: svgWrap('<line x1="8" y1="6" x2="8" y2="12"/><path d="M6.5 12 8 15.5 9.5 12"/><path d="M16 6v4a2 2 0 0 1-2 2h-.5l1 7.5"/><line x1="16" y1="6" x2="16" y2="12"/>') },
-              ]
-
-              const hardcoded = [
-                ...(venue.id === 15 ? [{ label: 'Whole 2BHK Apartment', icon: svgWrap('<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>') }] : []),
-                ...(isCafe ? [
-                  { label: 'Food & Beverages', icon: svgWrap('<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/>') },
-                  ...sharedSetup,
-                ] : isStay ? [
-                  ...sharedSetup,
-                ] : [
-                  { label: 'Full picnic setup',     icon: '<span style="font-size:18px;line-height:1" aria-hidden="true">⛺</span>' },
-                  { label: 'Boho decor & lighting', icon: svgWrap('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>') },
-                ]),
-                { label: 'Setup & cleanup',        icon: checkSvg },
-                { label: 'Dedicated host support', icon: svgWrap('<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.6 19.79 19.79 0 0 1 1.61 5 2 2 0 0 1 3.6 3h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 10.6a16 16 0 0 0 6 6l.94-.94a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 18z"/>') },
-              ]
-              const custom = (meta.includes || []).map(item => ({ label: item, icon: checkSvg }))
-              const allItems = [...hardcoded, ...custom]
-              return `<div class="vd-section">
-                <h2 class="vd-section-title">What's included</h2>
-                <div class="vd-includes">
-                  ${allItems.map(({ label, icon }) => `
-                    <div class="vd-include-item">
-                      ${icon}
-                      <span>${escapeHtml(label)}</span>
-                    </div>`).join('')}
-                </div>
-              </div>`
-            })()}
 
           </div><!-- /vd-main -->
 
@@ -2528,6 +2530,7 @@ async function verifyAndFinish(resp, bookingRow, venue) {
 // Clear booking state and show the success page.
 function finishBookingFlow(bookingRow, venue, confirmed) {
   const venueName = venue?.name || null
+  const venueTeamId = venue?.team_id || null
 
   appState.currentBooking      = null
   appState.currentVenue        = null
@@ -2538,7 +2541,7 @@ function finishBookingFlow(bookingRow, venue, confirmed) {
   const bv = document.getElementById('vd-booking-view')
   if (bv) bv.style.display = 'none'
 
-  renderSuccessPage({ booking: bookingRow, venueName, confirmed })
+  renderSuccessPage({ booking: bookingRow, venueName, venueTeamId, confirmed })
   showPage('query-success-page')
 }
 
@@ -2546,9 +2549,14 @@ function finishBookingFlow(bookingRow, venue, confirmed) {
 // BOOKING SUCCESS PAGE
 // ----------------------------------------------------------------
 
-function renderSuccessPage({ booking, venueName, confirmed = false }) {
+function renderSuccessPage({ booking, venueName, venueTeamId, confirmed = false }) {
   const container = document.getElementById('booking-success-content')
   if (!container) return
+
+  // Resolve team phone for contact nudge
+  const team = venueTeamId ? (appState.teams || []).find(t => t.id === venueTeamId) : null
+  const teamPhone     = team?.phone    || '+91 92669-64666'
+  const teamPhoneE164 = teamPhone.replace(/[\s\-]/g, '')
 
   // Format date nicely: "Saturday, 14 June 2026"
   let dateFormatted = ''
@@ -2703,7 +2711,7 @@ function renderSuccessPage({ booking, venueName, confirmed = false }) {
         <!-- Contact nudge -->
         <p class="bsc-contact-nudge">
           Questions? Call or WhatsApp us at
-          <a href="tel:+919999999999">+91 99999-99999</a>
+          <a href="tel:${teamPhoneE164}">${teamPhone}</a>
         </p>
 
       </div><!-- /bsc-body -->
@@ -2916,7 +2924,7 @@ async function renderMyBookings() {
           <div class="mbk-card-details">
             <span>📅 ${dateStr}${checkoutStr}${slot}</span>
             <span>👥 ${b.guest_count} guest${b.guest_count !== 1 ? 's' : ''}</span>
-            <span>💰 ₹${Number(b.advance_amount || 0).toLocaleString('en-IN')} advance paid</span>
+            ${b.confirmed && b.advance_amount > 0 ? `<span>💰 ₹${Number(b.advance_amount).toLocaleString('en-IN')} advance paid</span>` : ''}
           </div>
           ${b.special_requirements ? `<p class="mbk-card-note">"${escapeHtml(b.special_requirements)}"</p>` : ''}
         </div>
