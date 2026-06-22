@@ -3249,6 +3249,9 @@ body {
    Venue Card
    --------------------------------------------------------------- */
 .venue-card {
+  display: block;
+  text-decoration: none;
+  color: inherit;
   border-radius: var(--venue-card-radius);
   overflow: hidden;
   background: #fff;

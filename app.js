@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { track, identifyUser } from './analytics.js'
 
 // Initialize Supabase client
 // Vite exposes VITE_* variables from .env.local via import.meta.env
@@ -502,8 +503,8 @@ function venueCardHtml(venue) {
   const priceText = venue.base_price ? `From ${formatPrice(venue.base_price)}` : 'Get a quote'
 
   return `
-    <div class="venue-card" role="button" tabindex="0"
-         data-venue-id="${venue.id}" aria-label="View ${escapeHtml(venue.name)}">
+    <a class="venue-card" href="/venues/${escapeHtml(venue.slug || '')}"
+       data-venue-id="${venue.id}" aria-label="View ${escapeHtml(venue.name)}">
       <div class="venue-card-image">
         ${hasImage
           ? `<img src="${escapeHtml(primaryImage.url)}" alt="${escapeHtml(primaryImage.alt || venue.name)}" loading="lazy">`
@@ -521,7 +522,7 @@ function venueCardHtml(venue) {
           </div>
         </div>
       </div>
-    </div>
+    </a>
   `
 }
 
@@ -592,7 +593,7 @@ async function showVenuePage(venueId, pushState = true) {
 
   document.title = `${venue.name} — The Picnic Stories`
   if (pushState) {
-    history.pushState({ venueId }, document.title, `/?venue=${venueId}`)
+    history.pushState({ venueId }, document.title, `/venues/${venue.slug || venueId}`)
   }
 
   // Reset all calendar + guest state when navigating to a new venue
@@ -613,6 +614,7 @@ async function showVenuePage(venueId, pushState = true) {
   appState.lastViewedVenue = venue
   renderVenueDetail(venue, addOns)
   showPage('venue-detail-page')
+  track('venue_viewed', { venue_id: venue.id, venue_name: venue.name, venue_type: venue.type, venue_city: venue.city })
 
   if (needsCalendar && bookedData) {
     renderAvailabilityCalendar('avail-calendar-widget', bookedData)
@@ -2262,6 +2264,20 @@ function handleInlineBookingSubmit(event) {
   appState.pendingLead   = lead
   appState.pendingAddOns = pendingAddOns
 
+  // Identify the user once they've filled in their details
+  if (lead.mobile_number) {
+    identifyUser(lead.mobile_number, { name: lead.full_name, email: lead.email_address })
+  }
+  track('booking_form_submitted', {
+    venue_id:     venue.id,
+    venue_name:   venue.name,
+    venue_type:   venue.type,
+    guests:       lead.guest_count,
+    has_occasion: !!lead.occasion,
+    has_board:    !!lead.board,
+    addon_count:  (pendingAddOns || []).length,
+  })
+
   // Replace booking form with intent screen
   const bookView = document.getElementById('vd-booking-view')
   if (!bookView) return
@@ -2405,6 +2421,14 @@ async function submitBookingIntent(wantsToLock) {
     // Add-ons are persisted inside the submit_booking_intent RPC (same
     // transaction as the booking) so they're committed before the insert-trigger
     // notification fires — the admin alert email can include them.
+    track('booking_intent_submitted', {
+      intent:          wantsToLock ? 'lock' : 'query',
+      booking_id:      bookingRow.id,
+      venue_id:        lead.venue_id,
+      venue_name:      venue?.name,
+      guests:          lead.guest_count,
+      advance_amount:  lead.advance_amount,
+    })
 
     // Lock path with a real advance → collect payment via Razorpay, then let
     // the server confirm. The booking was just inserted as an unconfirmed lead;
@@ -2489,8 +2513,20 @@ async function startRazorpayCheckout(bookingRow, lead, venue) {
       },
     })
     rzp.on('payment.failed', (resp) => {
+      track('payment_failed', {
+        booking_id: bookingId,
+        venue_name: venue?.name,
+        reason:     resp?.error?.description || 'unknown',
+        error_code: resp?.error?.code,
+      })
       showToast(resp?.error?.description || 'Payment failed. We’ve saved your request.', 'error')
       finishBookingFlow(bookingRow, venue, false)
+    })
+    track('payment_initiated', {
+      booking_id:  bookingId,
+      venue_name:  venue?.name,
+      amount_inr:  Math.round(amountPaise / 100),
+      order_id:    order.order_id,
     })
     rzp.open()
   } catch (err) {
@@ -2515,9 +2551,18 @@ async function verifyAndFinish(resp, bookingRow, venue) {
     if (error || !result?.ok) {
       throw new Error(result?.error || error?.message || 'Payment verification failed.')
     }
+    track('payment_succeeded', {
+      booking_id:  bookingRow.id,
+      payment_id:  resp.razorpay_payment_id,
+      venue_name:  venue?.name,
+    })
     finishBookingFlow(bookingRow, venue, true)
   } catch (err) {
     console.error('verifyAndFinish:', err)
+    track('payment_verification_failed', {
+      booking_id: bookingRow.id,
+      reason:     err.message,
+    })
     showToast(
       err.message ||
         'We couldn’t verify your payment. If money was deducted it will be refunded — please contact us.',
@@ -2531,6 +2576,14 @@ async function verifyAndFinish(resp, bookingRow, venue) {
 function finishBookingFlow(bookingRow, venue, confirmed) {
   const venueName = venue?.name || null
   const venueTeamId = venue?.team_id || null
+
+  track(confirmed ? 'booking_confirmed' : 'booking_query_submitted', {
+    booking_id:  bookingRow?.id,
+    venue_name:  venueName,
+    venue_type:  venue?.type,
+    guests:      bookingRow?.guest_count,
+    advance_amount: bookingRow?.advance_amount,
+  })
 
   appState.currentBooking      = null
   appState.currentVenue        = null
@@ -6429,9 +6482,14 @@ function initMenuSelectionPage() {
 
 // ── Restore venue detail page on browser back/forward ────────
 window.addEventListener('popstate', (event) => {
+  const m = window.location.pathname.match(/^\/venues\/([^/]+)\/?$/)
+  const v = m ? appState.venues.find(x => x.slug === decodeURIComponent(m[1])) : null
   if (event.state?.venueId) {
     showVenuePage(event.state.venueId, false)
+  } else if (v) {
+    showVenuePage(v.id, false)
   } else {
+    document.title = 'The Picnic Stories'
     showPage('home-page')
   }
 })
@@ -6477,36 +6535,58 @@ document.addEventListener('DOMContentLoaded', () => {
   renderAddonsStrip()
   initMenuSelectionPage()
 
-  // URL parameter routing
+  // URL routing — path-based /venues/<slug> plus legacy query params
   const urlParams = new URLSearchParams(window.location.search)
   const menuToken = urlParams.get('menu')
   const bookingId = urlParams.get('booking')
   const venueId   = urlParams.get('venue')
   const view      = urlParams.get('view')
+  const venuePath = window.location.pathname.match(/^\/venues\/([^/]+)\/?$/)
 
   if (menuToken) {
     showPage('menu-selection-page')
     loadMenuSelection(menuToken)
     if (bookingId) appState.currentBooking = { id: parseInt(bookingId, 10) }
+  } else if (venuePath) {
+    const slug = decodeURIComponent(venuePath[1])
+    loadVenues().then(() => {
+      const v = appState.venues.find(x => x.slug === slug)
+      if (v) showVenuePage(v.id, false)
+      else showPage('home-page')
+    })
   } else if (venueId) {
-    loadVenues().then(() => showVenuePage(parseInt(venueId, 10), false))
+    // Legacy ?venue=ID deep links → resolve, then swap the URL to the slug form
+    loadVenues().then(() => {
+      const v = appState.venues.find(x => x.id === parseInt(venueId, 10))
+      if (!v) { showPage('home-page'); return }
+      showVenuePage(v.id, false)
+      if (v.slug) history.replaceState({ venueId: v.id }, document.title, `/venues/${v.slug}`)
+    })
   } else if (view === 'mybookings') {
     showMyBookingsPage()
   }
 
-  // Venue card click delegation
+  // Venue card click delegation. Cards are real <a href="/venues/slug"> anchors,
+  // so let the browser handle modifier/middle clicks (new tab, copy link) natively
+  // and intercept only plain left-clicks for in-app SPA navigation.
   const venuesGrid = document.getElementById('venues-grid')
   if (venuesGrid) {
     venuesGrid.addEventListener('click', (e) => {
       const card = e.target.closest('[data-venue-id]')
       if (!card) return
+      if (e.defaultPrevented || e.button === 1 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
       const id = parseInt(card.dataset.venueId, 10)
-      if (!isNaN(id)) showVenuePage(id)
+      if (isNaN(id)) return
+      e.preventDefault()
+      showVenuePage(id)
     })
+    // The custom CTA is a <div role="button"> (no detail page / not an anchor) —
+    // keep keyboard activation for it. Anchors handle Enter natively.
     venuesGrid.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter' && e.key !== ' ') return
-      const card = e.target.closest('[data-venue-id]')
+      const card = e.target.closest('.venue-custom-cta[data-venue-id]')
       if (!card) return
+      e.preventDefault()
       const id = parseInt(card.dataset.venueId, 10)
       if (!isNaN(id)) showVenuePage(id)
     })

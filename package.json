@@ -8,11 +8,12 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.53.0",
+    "posthog-js": "^1.257.1",
     "vite": "^7.0.6"
   },
   "scripts": {
     "dev": "node ./node_modules/vite/bin/vite.js",
-    "build": "node ./node_modules/vite/bin/vite.js build",
+    "build": "node ./node_modules/vite/bin/vite.js build && node scripts/prerender-venues.mjs",
     "preview": "node ./node_modules/vite/bin/vite.js preview"
   }
 }
