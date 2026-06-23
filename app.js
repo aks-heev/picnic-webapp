@@ -603,7 +603,7 @@ async function showVenuePage(venueId, pushState = true) {
   appState.children         = 0
   appState.bookingStep      = 'calendar'
 
-  const needsCalendar = venue.type !== 'partner_bnb'
+  const needsCalendar = true
   const [addOns, bookedData] = await Promise.all([
     loadVenueAddOns(venue.id),
     needsCalendar ? fetchBookedData(venue.id, venue.type, venue.max_concurrent_setups || 1) : Promise.resolve(null),
@@ -617,6 +617,7 @@ async function showVenuePage(venueId, pushState = true) {
   if (needsCalendar && bookedData) {
     renderAvailabilityCalendar('avail-calendar-widget', bookedData)
   }
+
 }
 
 // Go back to home — restore URL and scroll to the right venue section
@@ -709,19 +710,27 @@ function renderVenueDetail(venue, addOns = []) {
 
   const ctaBlock = venue.type === 'partner_bnb'
     ? `<p class="vd-steps-intro">Two steps to book</p>
-       <div class="vd-cta-stack">
-         <a href="${venue.external_url?.startsWith('https://') ? escapeHtml(venue.external_url) : '#'}" target="_blank" rel="noopener noreferrer"
-            class="btn btn--venue-primary" ${!venue.external_url ? 'aria-disabled="true"' : ''}>
-           <span class="vd-step-badge" aria-hidden="true">1</span>
-           Book on Airbnb
-           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg>
-         </a>
-         <button class="btn btn--venue-secondary" data-book-venue-id="${venue.id}">
-           <span class="vd-step-badge vd-step-badge--ghost" aria-hidden="true">2</span>
-           Add picnic setup
-         </button>
+       <div id="bnb-step-ui">
+         <div class="vd-cta-stack">
+           <a href="${venue.external_url?.startsWith('https://') ? escapeHtml(venue.external_url) : '#'}" target="_blank" rel="noopener noreferrer"
+              class="btn btn--venue-primary" ${!venue.external_url ? 'aria-disabled="true"' : ''}>
+             <span class="vd-step-badge" aria-hidden="true">1</span>
+             Book on Airbnb
+             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg>
+           </a>
+           <button class="btn btn--venue-secondary" data-action="reveal-bnb-calendar" data-book-venue-id="${venue.id}">
+             <span class="vd-step-badge vd-step-badge--ghost" aria-hidden="true">2</span>
+             Add picnic setup
+           </button>
+         </div>
+         <p class="vd-hint">Reserve your dates on Airbnb first. Already booked? Start at step 2.</p>
        </div>
-       <p class="vd-hint">Reserve your dates on Airbnb first. Already booked? Start at step 2.</p>`
+       <!-- Revealed after clicking Add picnic setup -->
+       <div id="avail-calendar-widget" class="avail-calendar-widget" style="display:none"></div>
+       <button class="btn btn--venue-secondary" id="sidebar-book-btn"
+               data-book-venue-id="${venue.id}" disabled style="display:none">
+         Select a date to book
+       </button>`
     : `<div id="avail-calendar-widget" class="avail-calendar-widget"></div>
        <button class="btn btn--venue-primary" id="sidebar-book-btn"
                data-book-venue-id="${venue.id}" disabled>
@@ -1062,9 +1071,9 @@ function renderVenueDetail(venue, addOns = []) {
         ${venue.type === 'partner_bnb'
           ? `<div class="vd-mobile-book-price">
                <span class="vd-mobile-book-amount">${venue.base_price ? escapeHtml(formatPrice(venue.base_price)) : 'Custom'}</span>
-               <span class="vd-mobile-book-label">${venue.base_price ? (venue.type === 'partner_bnb' ? 'picnic setup · from' : 'starting price') : 'price on request'}</span>
+               <span class="vd-mobile-book-label">picnic setup · from</span>
              </div>
-             <a href="${venue.external_url?.startsWith('https://') ? escapeHtml(venue.external_url) : '#'}" target="_blank" rel="noopener noreferrer" class="btn btn--venue-primary">Book on Airbnb</a>`
+             <button class="btn btn--venue-primary" data-action="reveal-bnb-calendar" data-book-venue-id="${venue.id}">Add picnic setup</button>`
           : `<div class="vd-mobile-book-price">
                <span class="vd-mobile-book-amount" id="mobile-bar-date-text">Pick a date ↑</span>
                <span class="vd-mobile-book-label">${venue.base_price ? escapeHtml(formatPrice(venue.base_price)) : 'Custom pricing'}</span>
@@ -1221,7 +1230,7 @@ const CAFE_SLOTS = [
 // venue_availability booking-source rows (which are no longer written after this migration).
 async function fetchBookedData(venueId, venueType, maxConcurrentSetups = 1) {
   try {
-    if (venueType === 'cafe') {
+    if (venueType === 'cafe' || venueType === 'partner_bnb') {
       // Three parallel fetches:
       // 1. Confirmed slot bookings (via SECURITY DEFINER RPC)
       // 2. Admin full-day blocks (time_slot IS NULL)
@@ -6773,6 +6782,34 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!isNaN(id)) showVenuePage(id)
     })
   }
+
+  // partner_bnb "Add picnic setup" reveal — shows calendar + replaces mobile bar
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action="reveal-bnb-calendar"]')
+    if (!btn) return
+    const venueId = parseInt(btn.dataset.bookVenueId, 10)
+    const venue   = appState.venues.find(v => v.id === venueId)
+
+    document.getElementById('bnb-step-ui')?.style.setProperty('display', 'none')
+
+    const widget    = document.getElementById('avail-calendar-widget')
+    const sidebarBtn = document.getElementById('sidebar-book-btn')
+    if (widget)     widget.style.display    = ''
+    if (sidebarBtn) sidebarBtn.style.display = ''
+
+    // Swap mobile bar to standard date-picker bar
+    const mobileBar = document.querySelector('.vd-mobile-book-bar')
+    if (mobileBar && venue) {
+      mobileBar.innerHTML = `
+        <div class="vd-mobile-book-price">
+          <span class="vd-mobile-book-amount" id="mobile-bar-date-text">Pick a date ↑</span>
+          <span class="vd-mobile-book-label">${venue.base_price ? escapeHtml(formatPrice(venue.base_price)) : 'Custom pricing'}</span>
+        </div>
+        <button class="btn btn--venue-primary" id="mobile-bar-book-btn"
+                data-book-venue-id="${venue.id}" disabled>Select a date to book</button>
+      `
+    }
+  })
 
   // Sidebar / mobile "Select guests →" and "Book Now" button
   document.addEventListener('click', (e) => {
