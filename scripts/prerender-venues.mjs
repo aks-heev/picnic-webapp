@@ -197,7 +197,7 @@ function buildCityPages(template, allVenues, urls) {
       const badgeLabel = isPicnic ? '🌿&nbsp;Picnic Experience' : '🌙&nbsp;Overnight Stay'
       const badgeMod   = isPicnic ? 'card-badge--picnic' : 'card-badge--stay'
       return `
-        <a href="/venues/${esc(v.slug)}" class="venue-card">
+        <a href="/venues/${esc(v.slug)}" class="city-card">
           <figure class="card-media">
             <img src="${esc(img)}" alt="${esc(v.name)}" loading="lazy" width="600" height="375">
             <span class="card-badge ${badgeMod}">${badgeLabel}</span>
@@ -214,7 +214,7 @@ function buildCityPages(template, allVenues, urls) {
 
     // --- Section blocks ---
     const picnicSection = picnics.length ? `
-    <section class="venue-section" id="picnic-venues">
+    <section class="city-section" id="picnic-venues">
       <div class="section-inner">
         <div class="section-hd">
           <p class="section-eyebrow"><span class="eyebrow-line"></span>Picnic Experiences&ensp;&middot;&ensp;${picnics.length} venue${picnics.length > 1 ? 's' : ''}</p>
@@ -226,7 +226,7 @@ function buildCityPages(template, allVenues, urls) {
     </section>` : ''
 
     const staySection = stays.length ? `
-    <section class="venue-section venue-section--alt" id="overnight-stays">
+    <section class="city-section city-section--alt" id="overnight-stays">
       <div class="section-inner">
         <div class="section-hd">
           <p class="section-eyebrow"><span class="eyebrow-line"></span>Overnight Stays&ensp;&middot;&ensp;${stays.length} propert${stays.length > 1 ? 'ies' : 'y'}</p>
@@ -319,25 +319,25 @@ function buildCityPages(template, allVenues, urls) {
     .sec-pill:hover,.sec-pill.is-active{background:#a84d66;color:#fff;border-color:#a84d66}
 
     /* ── Hero ── */
-    .hero{position:relative;overflow:hidden;padding:5rem 1.5rem 4rem;text-align:center;background:linear-gradient(155deg,#fdf6ef 0%,#f8ede4 45%,#f3e4db 100%)}
-    .hero::before{content:'';position:absolute;inset:0;background:var(--hero-url) center/cover no-repeat;opacity:.08;z-index:0}
-    .hero-inner{position:relative;z-index:1;max-width:680px;margin:0 auto}
-    .breadcrumb{display:flex;align-items:center;justify-content:center;gap:.35rem;font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:#b09890;margin-bottom:1.5rem}
-    .breadcrumb a{color:#b09890;transition:color .15s}
-    .breadcrumb a:hover{color:#a84d66}
-    .hero h1{font-family:'EB Garamond',Georgia,serif;font-size:clamp(2.4rem,5.5vw,3.8rem);font-weight:400;line-height:1.12;color:#2d2420;margin-bottom:1.1rem}
-    .hero h1 em{font-style:italic;color:#a84d66;font-weight:400}
-    .hero-lead{font-size:1.06rem;color:#6b5d57;line-height:1.72;max-width:520px;margin:0 auto 2.25rem}
-    .hero-jumps{display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap}
-    .jump-btn{display:inline-flex;align-items:center;gap:.4rem;padding:.65rem 1.5rem;border-radius:999px;font-size:.88rem;font-weight:700;letter-spacing:.03em;transition:all .2s}
-    .jump-btn--outline{color:#a84d66;border:2px solid #a84d66;background:transparent}
-    .jump-btn--outline:hover{background:#a84d66;color:#fff}
-    .jump-btn--solid{background:#2d2420;color:#f5ede8;border:2px solid #2d2420}
-    .jump-btn--solid:hover{background:#a84d66;border-color:#a84d66}
+    .city-hero{position:relative;overflow:hidden;padding:5rem 1.5rem 4rem;text-align:center;background:linear-gradient(155deg,#fdf6ef 0%,#f8ede4 45%,#f3e4db 100%);min-height:0;height:auto;display:block}
+    .city-hero::before{content:'';position:absolute;inset:0;background:var(--hero-url) center/cover no-repeat;opacity:.08;z-index:0}
+    .city-hero-inner{position:relative;z-index:1;max-width:680px;margin:0 auto}
+    .city-breadcrumb{display:flex;align-items:center;justify-content:center;gap:.35rem;font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:#b09890;margin-bottom:1.5rem}
+    .city-breadcrumb a{color:#b09890;transition:color .15s}
+    .city-breadcrumb a:hover{color:#a84d66}
+    .city-hero h1{font-family:'EB Garamond',Georgia,serif;font-size:clamp(2.4rem,5.5vw,3.8rem);font-weight:400;line-height:1.12;color:#2d2420;margin-bottom:1.1rem}
+    .city-hero h1 em{font-style:italic;color:#a84d66;font-weight:400}
+    .city-hero-lead{font-size:1.06rem;color:#6b5d57;line-height:1.72;max-width:520px;margin:0 auto 2.25rem}
+    .city-hero-jumps{display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap}
+    .city-jump-btn{display:inline-flex;align-items:center;gap:.4rem;padding:.65rem 1.5rem;border-radius:999px;font-size:.88rem;font-weight:700;letter-spacing:.03em;transition:all .2s}
+    .city-jump-btn--outline{color:#a84d66;border:2px solid #a84d66;background:transparent}
+    .city-jump-btn--outline:hover{background:#a84d66;color:#fff}
+    .city-jump-btn--solid{background:#2d2420;color:#f5ede8;border:2px solid #2d2420}
+    .city-jump-btn--solid:hover{background:#a84d66;border-color:#a84d66}
 
     /* ── Sections ── */
-    .venue-section{padding:4.5rem 1.5rem}
-    .venue-section--alt{background:#faf5f0}
+    .city-section{padding:4.5rem 1.5rem}
+    .city-section--alt{background:#faf5f0}
     .section-inner{max-width:1140px;margin:0 auto}
     .section-hd{margin-bottom:2.75rem}
     .section-eyebrow{display:flex;align-items:center;gap:.6rem;font-size:.72rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#a84d66;margin-bottom:.8rem}
@@ -347,11 +347,11 @@ function buildCityPages(template, allVenues, urls) {
 
     /* ── Cards ── */
     .cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1.75rem}
-    .venue-card{display:flex;flex-direction:column;border-radius:16px;overflow:hidden;border:1px solid #ede6de;background:#fff;transition:transform .26s cubic-bezier(.4,0,.2,1),box-shadow .26s}
-    .venue-card:hover{transform:translateY(-5px);box-shadow:0 16px 48px rgba(168,77,102,.14)}
+    .city-card{display:flex;flex-direction:column;border-radius:16px;overflow:hidden;border:1px solid #ede6de;background:#fff;transition:transform .26s cubic-bezier(.4,0,.2,1),box-shadow .26s}
+    .city-card:hover{transform:translateY(-5px);box-shadow:0 16px 48px rgba(168,77,102,.14)}
     .card-media{position:relative;aspect-ratio:16/10;overflow:hidden;background:#f0ebe5;margin:0}
     .card-media img{width:100%;height:100%;object-fit:cover;transition:transform .45s cubic-bezier(.4,0,.2,1)}
-    .venue-card:hover .card-media img{transform:scale(1.05)}
+    .city-card:hover .card-media img{transform:scale(1.05)}
     .card-badge{position:absolute;top:.8rem;left:.8rem;padding:.28rem .75rem;border-radius:999px;font-size:.68rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
     .card-badge--picnic{background:rgba(168,77,102,.88);color:#fff}
     .card-badge--stay{background:rgba(45,36,32,.82);color:#f5ede8}
@@ -361,7 +361,7 @@ function buildCityPages(template, allVenues, urls) {
     .card-sub{font-size:.76rem;color:#9a8b85;margin-bottom:.7rem;letter-spacing:.015em}
     .card-desc{font-size:.875rem;color:#6b5d57;line-height:1.6;flex:1;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:1.1rem}
     .card-link{display:inline-flex;align-items:center;gap:.35rem;font-size:.82rem;font-weight:700;color:#a84d66;letter-spacing:.03em;margin-top:auto;transition:gap .2s}
-    .venue-card:hover .card-link{gap:.55rem}
+    .city-card:hover .card-link{gap:.55rem}
 
     /* ── CTA band ── */
     .cta-band{background:linear-gradient(140deg,#1e1410 0%,#2d2420 60%,#352820 100%);color:#f5ede8;padding:5rem 1.5rem;text-align:center}
@@ -380,15 +380,15 @@ function buildCityPages(template, allVenues, urls) {
 
     /* ── Responsive ── */
     @media(max-width:640px){
-      .hero{padding:3.5rem 1.25rem 3rem}
-      .venue-section{padding:3rem 1.25rem}
+      .city-hero{padding:3rem 1.25rem 2.5rem}
+      .city-section{padding:3rem 1.25rem}
       .cards-grid{grid-template-columns:1fr}
       .header-sections{display:none}
-      .hero h1{font-size:2.1rem}
+      .city-hero h1{font-size:2.1rem}
     }
     @media(max-width:480px){
-      .hero-jumps{flex-direction:column;align-items:center}
-      .jump-btn{width:100%;max-width:240px;justify-content:center}
+      .city-hero-jumps{flex-direction:column;align-items:center}
+      .city-jump-btn{width:100%;max-width:240px;justify-content:center}
     }
   </style>
 </head>
@@ -409,16 +409,16 @@ function buildCityPages(template, allVenues, urls) {
   </header>
 
   <!-- Hero -->
-  <div class="hero" style="--hero-url:url('${HERO_FALLBACK}')">
-    <div class="hero-inner">
-      <nav class="breadcrumb" aria-label="Breadcrumb">
+  <div class="city-hero" style="--hero-url:url('${HERO_FALLBACK}')">
+    <div class="city-hero-inner">
+      <nav class="city-breadcrumb" aria-label="Breadcrumb">
         <a href="/">Home</a>${CHEV_SVG}<span>${esc(city)}</span>
       </nav>
       <h1>Picnic Venues &amp; Stays<br>in <em>${esc(city)}</em></h1>
-      <p class="hero-lead">${esc(cfg.intro)}</p>
-      <div class="hero-jumps">
-        ${picnics.length ? `<a href="#picnic-venues" class="jump-btn jump-btn--outline">🌿 Picnic Venues</a>` : ''}
-        ${stays.length ? `<a href="#overnight-stays" class="jump-btn jump-btn--solid">🌙 Overnight Stays</a>` : ''}
+      <p class="city-hero-lead">${esc(cfg.intro)}</p>
+      <div class="city-hero-jumps">
+        ${picnics.length ? `<a href="#picnic-venues" class="city-jump-btn city-jump-btn--outline">🌿 Picnic Venues</a>` : ''}
+        ${stays.length ? `<a href="#overnight-stays" class="city-jump-btn city-jump-btn--solid">🌙 Overnight Stays</a>` : ''}
       </div>
     </div>
   </div>
