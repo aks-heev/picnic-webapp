@@ -3189,7 +3189,14 @@ async function loadQueries() {
       .order('created_at', { ascending: false })
 
     if (error) throw error
-    loadedQueries = data || []
+
+    // Batch add-ons fetch
+    const qIds = (data || []).map(q => q.id)
+    const { data: qAddons } = qIds.length
+      ? await supabase.from('booking_add_ons').select('booking_id, name, price_at_booking, requires_confirmation').in('booking_id', qIds)
+      : { data: [] }
+    const addonsByQuery = (qAddons || []).reduce((acc, a) => { ;(acc[a.booking_id] ||= []).push(a); return acc }, {})
+    loadedQueries = (data || []).map(q => ({ ...q, booking_add_ons: addonsByQuery[q.id] || [] }))
     renderQueries(loadedQueries)
   } catch (error) {
     console.error(error)
@@ -3224,7 +3231,13 @@ async function loadBookings() {
       return acc
     }, {})
 
-    const bookingsWithOrders = bookings.map(b => ({ ...b, orders: ordersByBooking[b.id] || [] }))
+    // Batch add-ons fetch
+    const { data: allAddons } = bookingIds.length
+      ? await supabase.from('booking_add_ons').select('booking_id, name, price_at_booking, requires_confirmation').in('booking_id', bookingIds)
+      : { data: [] }
+    const addonsByBooking = (allAddons || []).reduce((acc, a) => { ;(acc[a.booking_id] ||= []).push(a); return acc }, {})
+
+    const bookingsWithOrders = bookings.map(b => ({ ...b, orders: ordersByBooking[b.id] || [], booking_add_ons: addonsByBooking[b.id] || [] }))
 
     loadedBookings = bookingsWithOrders
     renderBookings(loadedBookings)
@@ -3335,6 +3348,7 @@ function renderQueries(queries) {
 
       ${reqHtml}
       ${occasionBoardHtml(query)}
+      ${query.booking_add_ons?.length ? `<div class="adm-booking-addons">${query.booking_add_ons.map(a => `<span class="adm-addon-pill">${escapeHtml(a.name || 'Add-on')} <span class="adm-addon-pill-price">+₹${Number(a.price_at_booking || 0).toLocaleString('en-IN')}</span>${a.requires_confirmation ? ' <span class="adm-addon-pill-tag">on req.</span>' : ''}</span>`).join('')}</div>` : ''}
       ${airbnbHtml}
 
       ${isCombo ? `<div class="adm-floor-note">🏠 Whole floor = Terracottage Ochre + Terracottage Umber</div>` : ''}
@@ -3514,6 +3528,7 @@ function renderBookings(bookings) {
 
       ${reqHtml}
       ${occasionBoardHtml(booking)}
+      ${booking.booking_add_ons?.length ? `<div class="adm-booking-addons">${booking.booking_add_ons.map(a => `<span class="adm-addon-pill">${escapeHtml(a.name || 'Add-on')} <span class="adm-addon-pill-price">+₹${Number(a.price_at_booking || 0).toLocaleString('en-IN')}</span>${a.requires_confirmation ? ' <span class="adm-addon-pill-tag">on req.</span>' : ''}</span>`).join('')}</div>` : ''}
       ${airbnbHtml}
       ${ordersHtml}
 
