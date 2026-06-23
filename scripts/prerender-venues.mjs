@@ -8,7 +8,7 @@ import { resolve } from 'node:path'
 import { createClient } from '@supabase/supabase-js'
 import { loadEnv } from 'vite'
 
-const SITE = (process.env.SITE_URL || 'https://picnicstories.com').replace(/\/$/, '')
+const SITE = (process.env.SITE_URL || 'https://www.picnicstories.com').replace(/\/$/, '')
 const DIST = resolve(process.cwd(), 'dist')
 
 // Reuse the same VITE_ vars the client build already relies on (.env.local / Vercel env).
