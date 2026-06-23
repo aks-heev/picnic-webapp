@@ -583,11 +583,9 @@ async function showVenuePage(venueId, pushState = true) {
     return
   }
 
-  // Custom type: skip detail page, go straight to booking form
+  // Custom type: open the custom picnic enquiry modal instead of the booking form
   if (venue.type === 'custom') {
-    const addOns = await loadVenueAddOns(venue.id)
-    appState.currentVenueAddOns = addOns
-    showBookingForm(venue)
+    openCustomPicnicModal()
     return
   }
 
@@ -631,6 +629,54 @@ function navigateHome() {
     ? `${setting}-venues`
     : 'venues-section'
   setTimeout(() => document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+}
+
+// ── Venue testimonials (placeholder quotes — swap for real ones as they come in) ─
+const VENUE_TESTIMONIALS = {
+  14: [ // Beige Cafe, Gurugram
+    { text: "The setup at Beige Cafe was straight out of Pinterest. We booked it for my wife's birthday and she cried happy tears. 10/10.", author: "Rohit K.", occasion: "Birthday" },
+    { text: "Came for a date night and the picnic setup was so intimate and thoughtful. The food was delicious. Perfect evening.", author: "Naina S.", occasion: "Date night" }
+  ],
+  15: [ // Terracottage Umber, Gurugram
+    { text: "Woke up to terracotta walls and golden light. It's the kind of place that slows you down. Absolutely loved every moment.", author: "Deepika & Rahul", occasion: "Anniversary stay" },
+    { text: "We did the overnight + picnic combo and it was magical. Felt like a proper escape without leaving NCR.", author: "Aisha M.", occasion: "Weekend getaway" }
+  ],
+  16: [ // Terracottage Ochre, Gurugram
+    { text: "The warm tones and cozy rooms made us never want to leave. Perfect for a slow weekend reset.", author: "Sanya & Rohit", occasion: "Weekend stay" },
+    { text: "Such a beautiful space. The terracotta aesthetic is stunning in person — even better than the photos.", author: "Komal T.", occasion: "Girls trip" }
+  ],
+  17: [ // Terracottage Sienna, Gurugram
+    { text: "Booked the whole-floor combo for our anniversary. Private, beautiful, with a picnic at sunset. Couldn't have asked for more.", author: "Ishaan & Meera", occasion: "Anniversary" },
+    { text: "The team was incredibly attentive and the space was immaculate. We're already planning a return trip.", author: "Siddharth P.", occasion: "Birthday celebration" }
+  ],
+  18: [ // The Sunroom, Gurugram
+    { text: "That skylight! The natural light in The Sunroom is unlike anything else. Our anniversary brunch photos were stunning.", author: "Priya V.", occasion: "Anniversary" },
+    { text: "Hidden gem of Gurugram — you'd never guess it's right in the city. So peaceful, so beautiful.", author: "Ishaan T.", occasion: "Date night" }
+  ],
+  19: [ // Castle Valley, Jaipur
+    { text: "The old stone walls and that view made us feel like we'd stepped into a fairytale. Perfect setting for our anniversary.", author: "Neha & Vikas", occasion: "Anniversary" },
+    { text: "Castle Valley lives up to its name. Regal, quiet, breathtaking — and the team made us feel like royalty.", author: "Pooja M.", occasion: "Birthday" }
+  ],
+  20: [ // Om Niwas Suite Hotel, Jaipur
+    { text: "A heritage property with a picnic in the garden — everything about this was perfect for our anniversary dinner.", author: "Siddharth P.", occasion: "Anniversary" },
+    { text: "We've done picnics at a few places and Om Niwas is in a league of its own. The Rajasthani vibe hits differently.", author: "Mansi & Karan", occasion: "Date night" }
+  ],
+  21: [ // Once Upon A Time At The Bagh, Jaipur
+    { text: "The garden is so lush and private. Our daughter's birthday was a storybook picnic — exactly as the name suggests.", author: "Seema T.", occasion: "Birthday" },
+    { text: "One of those experiences that makes you put down your phone and just be present. Truly magical.", author: "Arjun & Kavya", occasion: "Date night" }
+  ],
+  22: [ // Countryside Offgrid
+    { text: "Drove out of the city and felt like we'd gone to another world. The quiet here is rare — and so needed.", author: "Prateek N.", occasion: "Weekend trip" },
+    { text: "Booked it as an anniversary surprise. My husband still talks about it. The picnic under the open sky was surreal.", author: "Divya S.", occasion: "Anniversary" }
+  ],
+  23: [ // House of Amer Stay, Jaipur
+    { text: "Woke up to birdsong with the Aravalli hills in the distance. The Airbnb + picnic combo is something truly special.", author: "Ritu & Abhishek", occasion: "Anniversary stay" },
+    { text: "For anyone wanting to experience old Jaipur in comfort — this is it. The host was warm and the setup was beautiful.", author: "Shreya K.", occasion: "Weekend getaway" }
+  ],
+  24: [ // House of Amer (Cafe), Jaipur
+    { text: "The setting at House of Amer feels like a period film set. We had our anniversary picnic here and it exceeded every expectation.", author: "Shweta & Dev", occasion: "Anniversary" },
+    { text: "Stunning property, thoughtful setup, great food. Genuinely one of the best experiences we've had in Jaipur.", author: "Tarun M.", occasion: "Date night" }
+  ]
 }
 
 // Render full venue detail into venue-detail-page
@@ -839,6 +885,27 @@ function renderVenueDetail(venue, addOns = []) {
               <button type="button" class="vd-menu-view-all" onclick="openMenuViewer(${venue.id}, 0)">
                 View full menu · ${pages.length} pages →
               </button>
+            </div>
+            <hr class="vd-divider">`
+            })()}
+
+            ${(function() {
+              const quotes = VENUE_TESTIMONIALS[venue.id]
+              if (!quotes?.length) return ''
+              return `
+            <div class="vd-section vd-testimonials">
+              <h2 class="vd-section-title">What guests say</h2>
+              <div class="vd-testimonial-grid">
+                ${quotes.map(q => `
+                  <div class="vd-testimonial-card">
+                    <div class="vd-testimonial-stars">★★★★★</div>
+                    <p class="vd-testimonial-text">"${escapeHtml(q.text)}"</p>
+                    <div class="vd-testimonial-meta">
+                      <span class="vd-testimonial-author">— ${escapeHtml(q.author)}</span>
+                      ${q.occasion ? `<span class="vd-testimonial-occasion">${escapeHtml(q.occasion)}</span>` : ''}
+                    </div>
+                  </div>`).join('')}
+              </div>
             </div>
             <hr class="vd-divider">`
             })()}
@@ -6495,6 +6562,109 @@ window.addEventListener('popstate', (event) => {
 })
 
 
+// ── Custom Picnic Modal ───────────────────────────────────────
+function openCustomPicnicModal() {
+  const modal = document.getElementById('custom-picnic-modal')
+  if (!modal) return
+  // Set min date to today so users can't pick the past
+  const dateInput = document.getElementById('cpm-date')
+  if (dateInput) dateInput.min = new Date().toISOString().split('T')[0]
+  modal.style.display = 'flex'
+  document.body.style.overflow = 'hidden'
+}
+
+function closeCustomPicnicModal() {
+  const modal = document.getElementById('custom-picnic-modal')
+  if (!modal) return
+  modal.style.display = 'none'
+  document.body.style.overflow = ''
+  document.getElementById('custom-picnic-form')?.reset()
+  const formStep    = document.getElementById('cpm-form-step')
+  const successStep = document.getElementById('cpm-success-step')
+  if (formStep)    formStep.style.display = ''
+  if (successStep) successStep.style.display = 'none'
+}
+
+async function handleCustomPicnicSubmit(e) {
+  e.preventDefault()
+  const form = e.target
+
+  const name     = form['cpm-name'].value.trim()
+  const phone    = form['cpm-phone'].value.trim()
+  const city     = form['cpm-city'].value        // 'jaipur' or 'ncr'
+  const date     = form['cpm-date'].value
+  const location = form['cpm-location'].value.trim()
+  const guests   = parseInt(form['cpm-guests'].value, 10)
+  const occasion = form['cpm-occasion'].value || null
+
+  // Validate
+  if (!name)                      { showToast('Please enter your name', 'error'); return }
+  if (!/^\d{10}$/.test(phone))    { showToast('Please enter a valid 10-digit phone number', 'error'); return }
+  if (!city)                      { showToast('Please select a city', 'error'); return }
+  if (!date)                      { showToast('Please select a date', 'error'); return }
+  if (!location)                  { showToast('Please describe your spot', 'error'); return }
+  if (isNaN(guests) || guests < 1){ showToast('Please enter a valid guest count', 'error'); return }
+
+  const customVenue = appState.venues.find(v => v.type === 'custom')
+  if (!customVenue) { showToast('Something went wrong', 'error'); return }
+
+  // Route to the right team by city selection
+  const teamCity = city === 'jaipur' ? 'jaipur' : 'gurugram'
+  const team     = (appState.teams || []).find(t => t.city === teamCity)
+
+  const btn = document.getElementById('cpm-submit-btn')
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending...' }
+
+  try {
+    const { error } = await supabase.rpc('submit_booking_intent', {
+      p_full_name:            name,
+      p_mobile_number:        phone,
+      p_email_address:        '',
+      p_guest_count:          guests,
+      p_preferred_date:       date,
+      p_special_requirements: location,
+      p_advance_amount:       0,
+      p_confirmed:            false,
+      p_customer_intent:      'query',
+      p_venue_id:             customVenue.id,
+      p_venue_address:        location,
+      p_checkout_date:        null,
+      p_time_slot:            null,
+      p_external_booking_ref: null,
+      p_occasion:             occasion,
+      p_board:                null,
+      p_children_count:       0,
+      p_add_ons:              [],
+    })
+    if (error) throw error
+
+    // Build pre-populated WhatsApp message
+    const waNumber = team?.whatsapp || '919266964666'
+    const waBody   = [
+      'Hi! I would like to plan a custom picnic',
+      `📍 Location: ${location}`,
+      `📅 Date: ${date}`,
+      `👥 Guests: ${guests}`,
+      occasion ? `🎉 Occasion: ${occasion}` : null,
+      `\nMy name is ${name}.`,
+    ].filter(Boolean).join('\n')
+
+    const waLink = document.getElementById('cpm-wa-link')
+    if (waLink) waLink.href = `https://wa.me/${waNumber}?text=${encodeURIComponent(waBody)}`
+
+    const formStep    = document.getElementById('cpm-form-step')
+    const successStep = document.getElementById('cpm-success-step')
+    if (formStep)    formStep.style.display = 'none'
+    if (successStep) successStep.style.display = ''
+
+  } catch (err) {
+    console.error('Custom picnic submit error:', err)
+    showToast('Something went wrong — please try again.', 'error')
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Send Enquiry' }
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // ---- Runs on every page that loads app.js (public site + admin.html) ----
   // initAdminPage wires the admin form/tab handlers and the Supabase session
@@ -6524,6 +6694,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Teams data is needed on both admin and public (footer + admin filter)
   loadTeams()
+
+  // Custom picnic modal
+  const cpmModal   = document.getElementById('custom-picnic-modal')
+  const cpmForm    = document.getElementById('custom-picnic-form')
+  const cpmClosBtn = document.getElementById('cpm-close-btn')
+  const cpmDoneBtn = document.getElementById('cpm-done-btn')
+  if (cpmModal) {
+    cpmClosBtn?.addEventListener('click', closeCustomPicnicModal)
+    cpmDoneBtn?.addEventListener('click', closeCustomPicnicModal)
+    cpmModal.addEventListener('click', (e) => { if (e.target === cpmModal) closeCustomPicnicModal() })
+    cpmForm?.addEventListener('submit', handleCustomPicnicSubmit)
+  }
 
   // ---- Public homepage only ----
   // admin.html has no #home-page, so skip all the storefront initialisers
