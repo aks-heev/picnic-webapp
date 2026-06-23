@@ -147,18 +147,69 @@ function buildPage(template, v) {
       <p><strong>${esc(v.area ? `${v.area}, ${v.city}` : v.city)}</strong> · ${esc(capText)} · ${esc(priceText)}</p>
       <p><a href="/picnic-venues-${esc(slugify(v.city))}">Browse all picnic venues &amp; stays in ${esc(v.city)} &rarr;</a></p>`
 
+  // Branded loading overlay — covers the raw SEO text until app.js has fully
+  // rendered the interactive venue detail. Detected via MutationObserver watching
+  // for the first element with a 'vd-' class that app.js injects.
+  const loader = `
+<div id="pr-loader" aria-hidden="true" style="position:fixed;inset:0;z-index:99999;background:#fdfaf7;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem">
+  <img src="/logo3.png" alt="" style="height:56px;width:auto" id="pr-logo">
+  <div style="width:40px;height:3px;border-radius:2px;background:#e8e0d8;overflow:hidden">
+    <div id="pr-bar" style="height:100%;width:0%;background:#a84d66;border-radius:2px;transition:width .1s linear"></div>
+  </div>
+</div>
+<style>
+  @keyframes pr-logo-pulse{0%,100%{opacity:.5}50%{opacity:1}}
+  #pr-logo{animation:pr-logo-pulse 1.4s ease-in-out infinite}
+</style>
+<script>
+(function(){
+  var lo=document.getElementById('pr-loader');
+  var bar=document.getElementById('pr-bar');
+  if(!lo)return;
+  var prog=0;
+  var fill=setInterval(function(){prog=Math.min(prog+2,88);if(bar)bar.style.width=prog+'%';},50);
+  var gone=false;
+  function rm(){
+    if(gone)return;gone=true;
+    clearInterval(fill);
+    if(bar)bar.style.width='100%';
+    setTimeout(function(){
+      lo.style.transition='opacity .28s';
+      lo.style.opacity='0';
+      setTimeout(function(){lo.parentNode&&lo.parentNode.removeChild(lo);},300);
+    },120);
+  }
+  // Primary: detect when app.js inserts a vd- element (interactive venue detail ready)
+  if(window.MutationObserver){
+    var obs=new MutationObserver(function(){
+      if(document.querySelector('[class*="vd-"]')){obs.disconnect();rm();}
+    });
+    obs.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
+  }
+  // Fallback A: hide 300ms after all resources (including app.js) have loaded
+  window.addEventListener('load',function(){setTimeout(rm,300);});
+  // Fallback B: hard cap at 6s — never block the user forever
+  setTimeout(rm,6000);
+})();
+</script>`
+
   html = html
     .replace('<div id="home-page" class="page active">', '<div id="home-page" class="page">')
     .replace('<div id="venue-detail-page" class="page">', '<div id="venue-detail-page" class="page active">')
     .replace('<div id="venue-detail-content">', `<div id="venue-detail-content">${seo}`)
+    .replace('</body>', `${loader}\n</body>`)
 
   return { slug, url, html }
 }
 
 /** Generate /picnic-venues-<city> landing pages, one per city in CITY_CONFIG. */
 function buildCityPages(template, allVenues, urls) {
-  // Extract the hashed CSS link Vite emitted so city pages share the same stylesheet.
-  const cssTag = template.match(/<link rel="stylesheet"[^>]+>/)?.[0] || ''
+  // Extract Vite-emitted CSS link and app.js URL from the compiled index.html.
+  // We prefetch app.js so it's cached before the user clicks through to a venue page,
+  // making the hydration overlay nearly invisible.
+  const cssTag   = template.match(/<link rel="stylesheet"[^>]+>/)?.[0] || ''
+  const appJsSrc = template.match(/<script type="module" crossorigin src="([^"]+)"/)?.[1] || ''
+  const prefetch = appJsSrc ? `<link rel="prefetch" href="${appJsSrc}" as="script">` : ''
 
   const PICNIC_TYPES = new Set(['cafe'])
   const STAY_TYPES   = new Set(['partner_bnb', 'combo', 'self_managed'])
@@ -296,6 +347,7 @@ function buildCityPages(template, allVenues, urls) {
   <meta name="twitter:description" content="${esc(desc)}">
   <meta name="twitter:image" content="${HERO_FALLBACK}">
   <link rel="icon" href="/favicon.ico" sizes="any">
+  ${prefetch}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Lato:wght@400;700&display=swap" rel="stylesheet">
