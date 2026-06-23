@@ -157,11 +157,16 @@ function buildPage(template, v) {
 
 /** Generate /picnic-venues-<city> landing pages, one per city in CITY_CONFIG. */
 function buildCityPages(template, allVenues, urls) {
-  // Extract the hashed CSS link Vite emitted so city pages share the same sheet.
+  // Extract the hashed CSS link Vite emitted so city pages share the same stylesheet.
   const cssTag = template.match(/<link rel="stylesheet"[^>]+>/)?.[0] || ''
 
   const PICNIC_TYPES = new Set(['cafe'])
   const STAY_TYPES   = new Set(['partner_bnb', 'combo', 'self_managed'])
+
+  // Arrow SVG for card CTAs
+  const ARROW_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`
+  // Chevron SVG for breadcrumb
+  const CHEV_SVG = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>`
 
   let count = 0
 
@@ -173,11 +178,11 @@ function buildCityPages(template, allVenues, urls) {
     const stays   = cityVenues.filter(v => STAY_TYPES.has(v.type))
     if (!picnics.length && !stays.length) continue
 
-    const pageUrl = `${SITE}/picnic-venues-${cfg.slug}`
-    const title   = `Picnic Venues &amp; Overnight Stays in ${city} | The Picnic Stories`
+    const pageUrl    = `${SITE}/picnic-venues-${cfg.slug}`
     const titlePlain = `Picnic Venues & Overnight Stays in ${city} | The Picnic Stories`
-    const desc    = `Discover curated outdoor picnic venues and unique overnight stays in ${city} by The Picnic Stories — boho-chic decor, gourmet food, and unforgettable settings.`
+    const desc       = `Discover curated outdoor picnic venues and unique overnight stays in ${city} by The Picnic Stories — boho-chic decor, gourmet food, and unforgettable settings.`
 
+    // --- Venue card ---
     const cardHtml = (v) => {
       const img      = v.images?.[0]?.url || HERO_FALLBACK
       const capacity = v.capacity_max
@@ -185,36 +190,54 @@ function buildCityPages(template, allVenues, urls) {
         : `${v.capacity_min}+ guests`
       const price    = Number(v.base_price) > 0
         ? `From ₹${Math.round(Number(v.base_price)).toLocaleString('en-IN')}`
-        : 'On request'
-      const area     = v.area ? `${v.area}, ${city}` : city
-      const excerpt  = clamp(v.description || '', 110)
+        : null
+      const area    = v.area ? `${v.area}, ${city}` : city
+      const excerpt = clamp(v.description || '', 115)
+      const isPicnic = PICNIC_TYPES.has(v.type)
+      const badgeLabel = isPicnic ? '🌿&nbsp;Picnic Experience' : '🌙&nbsp;Overnight Stay'
+      const badgeMod   = isPicnic ? 'card-badge--picnic' : 'card-badge--stay'
       return `
-        <a href="/venues/${esc(v.slug)}" class="cpl-card">
-          <div class="cpl-card-img" style="background-image:url('${esc(img)}')"></div>
-          <div class="cpl-card-body">
-            <h3 class="cpl-card-name">${esc(v.name)}</h3>
-            <p class="cpl-card-meta">${esc(area)} &middot; ${esc(capacity)} &middot; ${esc(price)}</p>
-            ${excerpt ? `<p class="cpl-card-desc">${esc(excerpt)}</p>` : ''}
-            <span class="cpl-card-cta">View details &rarr;</span>
+        <a href="/venues/${esc(v.slug)}" class="venue-card">
+          <figure class="card-media">
+            <img src="${esc(img)}" alt="${esc(v.name)}" loading="lazy" width="600" height="375">
+            <span class="card-badge ${badgeMod}">${badgeLabel}</span>
+            ${price ? `<span class="card-price">${esc(price)}</span>` : ''}
+          </figure>
+          <div class="card-info">
+            <h3 class="card-title">${esc(v.name)}</h3>
+            <p class="card-sub">${esc(area)}&ensp;&middot;&ensp;${esc(capacity)}</p>
+            ${excerpt ? `<p class="card-desc">${esc(excerpt)}</p>` : ''}
+            <span class="card-link">View details ${ARROW_SVG}</span>
           </div>
         </a>`
     }
 
+    // --- Section blocks ---
     const picnicSection = picnics.length ? `
-      <section class="cpl-section" id="picnic-venues">
-        <h2>${esc(cfg.picnicHeading)}</h2>
-        <p class="cpl-section-intro">${esc(cfg.picnicIntro)}</p>
-        <div class="cpl-grid">${picnics.map(cardHtml).join('')}</div>
-      </section>` : ''
+    <section class="venue-section" id="picnic-venues">
+      <div class="section-inner">
+        <div class="section-hd">
+          <p class="section-eyebrow"><span class="eyebrow-line"></span>Picnic Experiences&ensp;&middot;&ensp;${picnics.length} venue${picnics.length > 1 ? 's' : ''}</p>
+          <h2>${esc(cfg.picnicHeading)}</h2>
+          <p class="section-lead">${esc(cfg.picnicIntro)}</p>
+        </div>
+        <div class="cards-grid">${picnics.map(cardHtml).join('')}</div>
+      </div>
+    </section>` : ''
 
     const staySection = stays.length ? `
-      <section class="cpl-section" id="overnight-stays">
-        <h2>${esc(cfg.stayHeading)}</h2>
-        <p class="cpl-section-intro">${esc(cfg.stayIntro)}</p>
-        <div class="cpl-grid">${stays.map(cardHtml).join('')}</div>
-      </section>` : ''
+    <section class="venue-section venue-section--alt" id="overnight-stays">
+      <div class="section-inner">
+        <div class="section-hd">
+          <p class="section-eyebrow"><span class="eyebrow-line"></span>Overnight Stays&ensp;&middot;&ensp;${stays.length} propert${stays.length > 1 ? 'ies' : 'y'}</p>
+          <h2>${esc(cfg.stayHeading)}</h2>
+          <p class="section-lead">${esc(cfg.stayIntro)}</p>
+        </div>
+        <div class="cards-grid">${stays.map(cardHtml).join('')}</div>
+      </div>
+    </section>` : ''
 
-    // ItemList + LocalBusiness JSON-LD
+    // --- JSON-LD ---
     const allVenuesList = [...picnics, ...stays]
     const jsonLd = JSON.stringify([
       {
@@ -250,6 +273,7 @@ function buildCityPages(template, allVenues, urls) {
 
     const waMsg = encodeURIComponent(`Hi! I found you on the ${city} page and want to book a picnic.`)
 
+    // --- Full HTML ---
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -272,98 +296,179 @@ function buildCityPages(template, allVenues, urls) {
   <meta name="twitter:description" content="${esc(desc)}">
   <meta name="twitter:image" content="${HERO_FALLBACK}">
   <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Lato:wght@400;700&display=swap" rel="stylesheet">
   ${cssTag}
   <script type="application/ld+json">${jsonLd}</script>
   <style>
-    /* City landing page — standalone layout using site CSS variables */
-    *,*::before,*::after{box-sizing:border-box}
-    body{margin:0;font-family:'Lato',system-ui,sans-serif;background:#fff;color:#2d2420}
-    a{color:inherit}
-    /* Nav */
-    .cpl-nav{display:flex;align-items:center;padding:.9rem 1.5rem;border-bottom:1px solid #e8e0d8;max-width:1100px;margin:0 auto}
-    .cpl-nav-inner{border-bottom:1px solid #e8e0d8}
-    .cpl-nav-brand{display:flex;align-items:center;gap:.6rem;text-decoration:none;color:#2d2420;font-family:'EB Garamond',Georgia,serif;font-size:1.2rem}
-    .cpl-nav-brand img{height:34px;width:auto}
-    /* Layout */
-    .cpl-wrap{max-width:1100px;margin:0 auto;padding:0 1.25rem}
-    /* Hero */
-    .cpl-hero{padding:2.5rem 0 1.5rem}
-    .cpl-crumb{font-size:.8rem;color:#9a8b85;margin-bottom:.9rem}
-    .cpl-crumb a{color:#9a8b85;text-decoration:none}
-    .cpl-crumb a:hover{color:#a84d66}
-    .cpl-hero h1{font-family:'EB Garamond',Georgia,serif;font-size:clamp(1.9rem,4vw,2.8rem);font-weight:400;line-height:1.2;margin:0 0 .75rem;color:#2d2420}
-    .cpl-hero-intro{font-size:1.05rem;color:#6b5d57;max-width:600px;margin:0;line-height:1.65}
-    .cpl-divider{border:none;border-top:1px solid #e8e0d8;margin:1.5rem 0 0}
-    /* Sections */
-    .cpl-section{padding:2.5rem 0 .5rem}
-    .cpl-section h2{font-family:'EB Garamond',Georgia,serif;font-size:clamp(1.4rem,3vw,2rem);font-weight:400;color:#2d2420;margin:0 0 .5rem}
-    .cpl-section-intro{color:#6b5d57;font-size:.95rem;max-width:580px;margin:0 0 1.5rem;line-height:1.6}
-    /* Cards grid */
-    .cpl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:1.5rem;margin-bottom:.5rem}
-    .cpl-card{display:block;text-decoration:none;color:inherit;border-radius:12px;overflow:hidden;border:1px solid #e8e0d8;background:#fff;transition:box-shadow .2s,transform .2s}
-    .cpl-card:hover{box-shadow:0 6px 24px rgba(0,0,0,.1);transform:translateY(-2px)}
-    .cpl-card-img{height:210px;background-size:cover;background-position:center;background-color:#f0ebe5}
-    .cpl-card-body{padding:1rem 1.25rem 1.25rem}
-    .cpl-card-name{font-family:'EB Garamond',Georgia,serif;font-size:1.15rem;font-weight:500;margin:0 0 .35rem;color:#2d2420}
-    .cpl-card-meta{font-size:.78rem;color:#9a8b85;margin:0 0 .6rem;letter-spacing:.01em}
-    .cpl-card-desc{font-size:.875rem;color:#6b5d57;margin:0 0 .9rem;line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-    .cpl-card-cta{font-size:.85rem;color:#a84d66;font-weight:500}
-    /* CTA band */
-    .cpl-cta-band{background:#f9f5f0;border-radius:12px;padding:2.25rem 2rem;margin:2.5rem 0 1rem;text-align:center}
-    .cpl-cta-band h3{font-family:'EB Garamond',Georgia,serif;font-size:1.6rem;font-weight:400;margin:0 0 .5rem;color:#2d2420}
-    .cpl-cta-band p{color:#6b5d57;margin:0 0 1.4rem;font-size:.97rem}
-    .cpl-cta-btn{display:inline-block;background:#a84d66;color:#fff;text-decoration:none;padding:.75rem 2.25rem;border-radius:999px;font-size:.95rem;font-weight:500;transition:background .18s}
-    .cpl-cta-btn:hover{background:#8f3e55}
-    /* Footer */
-    .cpl-footer{padding:2.5rem 1.25rem;text-align:center;color:#9a8b85;font-size:.85rem;border-top:1px solid #e8e0d8;margin-top:2rem}
-    .cpl-footer a{color:#9a8b85;text-decoration:none}
-    .cpl-footer a:hover{color:#a84d66}
+    /* ── Reset ── */
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+    body{font-family:'Lato',system-ui,sans-serif;background:#fdfaf7;color:#2d2420;-webkit-font-smoothing:antialiased;line-height:1.6}
+    a{color:inherit;text-decoration:none}
+    img{display:block;max-width:100%}
+
+    /* ── Sticky header ── */
+    .site-header{position:sticky;top:0;z-index:50;background:rgba(253,250,247,.93);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(232,224,216,.8)}
+    .header-inner{max-width:1140px;margin:0 auto;padding:.85rem 1.5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem}
+    .header-brand{display:flex;align-items:center;gap:.55rem;font-family:'EB Garamond',Georgia,serif;font-size:1.15rem;color:#2d2420;letter-spacing:.01em;flex-shrink:0}
+    .header-brand img{height:32px;width:auto}
+    .header-sections{display:flex;gap:.45rem;flex-wrap:wrap}
+    .sec-pill{padding:.38rem 1rem;border-radius:999px;font-size:.78rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b5d57;border:1.5px solid #ddd5cb;transition:background .18s,color .18s,border-color .18s;white-space:nowrap}
+    .sec-pill:hover,.sec-pill.is-active{background:#a84d66;color:#fff;border-color:#a84d66}
+
+    /* ── Hero ── */
+    .hero{position:relative;overflow:hidden;padding:5rem 1.5rem 4rem;text-align:center;background:linear-gradient(155deg,#fdf6ef 0%,#f8ede4 45%,#f3e4db 100%)}
+    .hero::before{content:'';position:absolute;inset:0;background:var(--hero-url) center/cover no-repeat;opacity:.08;z-index:0}
+    .hero-inner{position:relative;z-index:1;max-width:680px;margin:0 auto}
+    .breadcrumb{display:flex;align-items:center;justify-content:center;gap:.35rem;font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:#b09890;margin-bottom:1.5rem}
+    .breadcrumb a{color:#b09890;transition:color .15s}
+    .breadcrumb a:hover{color:#a84d66}
+    .hero h1{font-family:'EB Garamond',Georgia,serif;font-size:clamp(2.4rem,5.5vw,3.8rem);font-weight:400;line-height:1.12;color:#2d2420;margin-bottom:1.1rem}
+    .hero h1 em{font-style:italic;color:#a84d66;font-weight:400}
+    .hero-lead{font-size:1.06rem;color:#6b5d57;line-height:1.72;max-width:520px;margin:0 auto 2.25rem}
+    .hero-jumps{display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap}
+    .jump-btn{display:inline-flex;align-items:center;gap:.4rem;padding:.65rem 1.5rem;border-radius:999px;font-size:.88rem;font-weight:700;letter-spacing:.03em;transition:all .2s}
+    .jump-btn--outline{color:#a84d66;border:2px solid #a84d66;background:transparent}
+    .jump-btn--outline:hover{background:#a84d66;color:#fff}
+    .jump-btn--solid{background:#2d2420;color:#f5ede8;border:2px solid #2d2420}
+    .jump-btn--solid:hover{background:#a84d66;border-color:#a84d66}
+
+    /* ── Sections ── */
+    .venue-section{padding:4.5rem 1.5rem}
+    .venue-section--alt{background:#faf5f0}
+    .section-inner{max-width:1140px;margin:0 auto}
+    .section-hd{margin-bottom:2.75rem}
+    .section-eyebrow{display:flex;align-items:center;gap:.6rem;font-size:.72rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#a84d66;margin-bottom:.8rem}
+    .eyebrow-line{display:inline-block;width:28px;height:1.5px;background:#a84d66;flex-shrink:0}
+    .section-hd h2{font-family:'EB Garamond',Georgia,serif;font-size:clamp(1.8rem,3.8vw,2.6rem);font-weight:400;color:#2d2420;line-height:1.18;margin-bottom:.65rem}
+    .section-lead{font-size:1rem;color:#6b5d57;max-width:540px;line-height:1.7}
+
+    /* ── Cards ── */
+    .cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1.75rem}
+    .venue-card{display:flex;flex-direction:column;border-radius:16px;overflow:hidden;border:1px solid #ede6de;background:#fff;transition:transform .26s cubic-bezier(.4,0,.2,1),box-shadow .26s}
+    .venue-card:hover{transform:translateY(-5px);box-shadow:0 16px 48px rgba(168,77,102,.14)}
+    .card-media{position:relative;aspect-ratio:16/10;overflow:hidden;background:#f0ebe5;margin:0}
+    .card-media img{width:100%;height:100%;object-fit:cover;transition:transform .45s cubic-bezier(.4,0,.2,1)}
+    .venue-card:hover .card-media img{transform:scale(1.05)}
+    .card-badge{position:absolute;top:.8rem;left:.8rem;padding:.28rem .75rem;border-radius:999px;font-size:.68rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+    .card-badge--picnic{background:rgba(168,77,102,.88);color:#fff}
+    .card-badge--stay{background:rgba(45,36,32,.82);color:#f5ede8}
+    .card-price{position:absolute;bottom:.8rem;right:.8rem;background:rgba(253,250,247,.93);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:8px;padding:.28rem .65rem;font-size:.76rem;font-weight:700;color:#2d2420;letter-spacing:.01em}
+    .card-info{padding:1.25rem 1.4rem 1.5rem;display:flex;flex-direction:column;flex:1}
+    .card-title{font-family:'EB Garamond',Georgia,serif;font-size:1.22rem;font-weight:500;color:#2d2420;margin-bottom:.35rem;line-height:1.3}
+    .card-sub{font-size:.76rem;color:#9a8b85;margin-bottom:.7rem;letter-spacing:.015em}
+    .card-desc{font-size:.875rem;color:#6b5d57;line-height:1.6;flex:1;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:1.1rem}
+    .card-link{display:inline-flex;align-items:center;gap:.35rem;font-size:.82rem;font-weight:700;color:#a84d66;letter-spacing:.03em;margin-top:auto;transition:gap .2s}
+    .venue-card:hover .card-link{gap:.55rem}
+
+    /* ── CTA band ── */
+    .cta-band{background:linear-gradient(140deg,#1e1410 0%,#2d2420 60%,#352820 100%);color:#f5ede8;padding:5rem 1.5rem;text-align:center}
+    .cta-band-inner{max-width:520px;margin:0 auto}
+    .cta-band h3{font-family:'EB Garamond',Georgia,serif;font-size:clamp(1.9rem,4vw,2.7rem);font-weight:400;line-height:1.18;margin-bottom:.75rem}
+    .cta-band p{font-size:1.02rem;color:rgba(245,237,232,.68);margin-bottom:2.1rem;line-height:1.7}
+    .cta-wa{display:inline-flex;align-items:center;gap:.65rem;background:#25D366;color:#fff;padding:.9rem 2.1rem;border-radius:999px;font-size:.97rem;font-weight:700;letter-spacing:.025em;transition:filter .2s,transform .18s}
+    .cta-wa:hover{filter:brightness(1.08);transform:translateY(-2px)}
+    .cta-wa svg{flex-shrink:0}
+
+    /* ── Footer ── */
+    .page-footer{padding:2.75rem 1.5rem;text-align:center;font-size:.82rem;color:#9a8b85;border-top:1px solid #e8e0d8;background:#fdfaf7}
+    .page-footer a{color:#9a8b85;transition:color .15s}
+    .page-footer a:hover{color:#a84d66}
+    .footer-links{display:flex;justify-content:center;gap:1.75rem;flex-wrap:wrap;margin:.6rem 0 1rem}
+
+    /* ── Responsive ── */
+    @media(max-width:640px){
+      .hero{padding:3.5rem 1.25rem 3rem}
+      .venue-section{padding:3rem 1.25rem}
+      .cards-grid{grid-template-columns:1fr}
+      .header-sections{display:none}
+      .hero h1{font-size:2.1rem}
+    }
+    @media(max-width:480px){
+      .hero-jumps{flex-direction:column;align-items:center}
+      .jump-btn{width:100%;max-width:240px;justify-content:center}
+    }
   </style>
 </head>
 <body>
-  <div class="cpl-nav-inner">
-    <nav class="cpl-nav" aria-label="Site navigation">
-      <a href="/" class="cpl-nav-brand">
+
+  <!-- Sticky header with section nav -->
+  <header class="site-header">
+    <div class="header-inner">
+      <a href="/" class="header-brand">
         <img src="/logo3.png" alt="The Picnic Stories logo">
         The Picnic Stories
       </a>
-    </nav>
+      <nav class="header-sections" aria-label="Jump to section">
+        ${picnics.length ? `<a href="#picnic-venues" class="sec-pill" id="pill-picnic">🌿 Picnic Venues</a>` : ''}
+        ${stays.length ? `<a href="#overnight-stays" class="sec-pill" id="pill-stay">🌙 Overnight Stays</a>` : ''}
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <div class="hero" style="--hero-url:url('${HERO_FALLBACK}')">
+    <div class="hero-inner">
+      <nav class="breadcrumb" aria-label="Breadcrumb">
+        <a href="/">Home</a>${CHEV_SVG}<span>${esc(city)}</span>
+      </nav>
+      <h1>Picnic Venues &amp; Stays<br>in <em>${esc(city)}</em></h1>
+      <p class="hero-lead">${esc(cfg.intro)}</p>
+      <div class="hero-jumps">
+        ${picnics.length ? `<a href="#picnic-venues" class="jump-btn jump-btn--outline">🌿 Picnic Venues</a>` : ''}
+        ${stays.length ? `<a href="#overnight-stays" class="jump-btn jump-btn--solid">🌙 Overnight Stays</a>` : ''}
+      </div>
+    </div>
   </div>
 
   <main>
-    <div class="cpl-wrap">
-      <div class="cpl-hero">
-        <nav class="cpl-crumb" aria-label="Breadcrumb">
-          <a href="/">Home</a> &rsaquo; <span>${esc(city)}</span>
-        </nav>
-        <h1>Picnic Venues &amp; Overnight Stays in ${esc(city)}</h1>
-        <p class="cpl-hero-intro">${esc(cfg.intro)}</p>
-      </div>
+    ${picnicSection}
+    ${staySection}
 
-      <hr class="cpl-divider">
-
-      ${picnicSection}
-      ${stays.length && picnics.length ? '<hr class="cpl-divider">' : ''}
-      ${staySection}
-
-      <div class="cpl-cta-band">
+    <!-- WhatsApp CTA -->
+    <div class="cta-band">
+      <div class="cta-band-inner">
         <h3>Something specific in mind?</h3>
-        <p>Tell us your date, occasion, and guest count — we'll find the right spot for you.</p>
-        <a href="https://wa.me/${cfg.wa}?text=${waMsg}" class="cpl-cta-btn" rel="noopener">Chat with us on WhatsApp</a>
+        <p>Tell us your date, occasion, and guest count — we'll find the perfect setting for you.</p>
+        <a href="https://wa.me/${cfg.wa}?text=${waMsg}" class="cta-wa" rel="noopener">
+          <svg width="22" height="22" viewBox="0 0 32 32" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M16 2C8.28 2 2 8.28 2 16c0 2.46.65 4.77 1.78 6.78L2 30l7.42-1.74A13.93 13.93 0 0 0 16 30c7.72 0 14-6.28 14-14S23.72 2 16 2Zm7.78 19.44c-.32.9-1.88 1.72-2.6 1.82-.68.1-1.54.14-2.48-.16-.57-.18-1.3-.42-2.22-.82-3.9-1.68-6.44-5.62-6.64-5.88-.18-.26-1.52-2.02-1.52-3.86 0-1.84.96-2.74 1.3-3.12.34-.38.74-.48 1-.48.24 0 .48 0 .7.02.22 0 .52-.08.82.62.32.72 1.08 2.62 1.18 2.82.1.18.16.4.04.64-.12.24-.18.38-.34.58-.18.2-.38.44-.54.6-.18.16-.36.34-.16.66.22.32 1 1.56 2.14 2.52 1.48 1.28 2.72 1.68 3.1 1.86.38.18.6.16.82-.1.22-.24.94-1.1 1.18-1.48.26-.38.5-.32.84-.18.34.14 2.14 1.02 2.52 1.2.38.18.62.28.72.44.1.14.1.82-.22 1.72Z"/></svg>
+          Chat with us on WhatsApp
+        </a>
       </div>
     </div>
   </main>
 
-  <footer class="cpl-footer">
-    <p>Serving <strong>${esc(city)}</strong> &mdash; <a href="tel:${cfg.phone.replace(/\s/g, '')}">${esc(cfg.phone)}</a></p>
-    <p style="margin-top:.5rem">
-      <a href="/">Home</a> &middot;
-      <a href="/privacy.html">Privacy</a> &middot;
-      <a href="/terms.html">Terms</a> &middot;
+  <footer class="page-footer">
+    <p>${esc(city)} &mdash; <a href="tel:${cfg.phone.replace(/\s/g, '')}">${esc(cfg.phone)}</a></p>
+    <nav class="footer-links" aria-label="Footer links">
+      <a href="/">Home</a>
+      <a href="/privacy.html">Privacy</a>
+      <a href="/terms.html">Terms</a>
       <a href="/cancellation.html">Cancellation</a>
-    </p>
-    <p style="margin-top:.75rem">&copy; ${new Date().getFullYear()} The Picnic Stories. All rights reserved.</p>
+    </nav>
+    <p>&copy; ${new Date().getFullYear()} The Picnic Stories. All rights reserved.</p>
   </footer>
+
+  <script>
+    // Highlight the active section pill in the sticky nav as user scrolls
+    (function () {
+      var ids = ['picnic-venues', 'overnight-stays'];
+      var pillIds = ['pill-picnic', 'pill-stay'];
+      var sections = ids.map(function(id){ return document.getElementById(id); });
+      var pills    = pillIds.map(function(id){ return document.getElementById(id); });
+      if (!('IntersectionObserver' in window)) return;
+      var obs = new IntersectionObserver(function(entries) {
+        entries.forEach(function(e) {
+          var i = sections.indexOf(e.target);
+          if (i >= 0 && pills[i]) pills[i].classList.toggle('is-active', e.isIntersecting);
+        });
+      }, { threshold: 0.25 });
+      sections.filter(Boolean).forEach(function(s){ obs.observe(s); });
+    })();
+  </script>
+
 </body>
 </html>`
 
