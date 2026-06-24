@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { track, identifyUser } from './analytics.js'
+import { injectSpeedInsights } from '@vercel/speed-insights'
+injectSpeedInsights()
 
 // Initialize Supabase client
 // Vite exposes VITE_* variables from .env.local via import.meta.env
@@ -3673,12 +3675,12 @@ function renderQueries(queries) {
     return `
     <div class="adm-card adm-card--query" data-id="${escapeHtml(query.id)}">
       <div class="adm-card-header">
-        <div class="adm-card-header-left">
+        <div class="adm-card-header-name">
           ${queryStatusSelectHtml(query)}
           <span class="adm-name">${escapeHtml(query.full_name)}</span>
-          ${paymentBadgeHtml(query)}
         </div>
-        <div class="adm-card-header-right">
+        <div class="adm-card-header-meta">
+          ${paymentBadgeHtml(query)}
           ${priceBadges}
           <span class="adm-timestamp" title="${new Date(query.created_at).toLocaleString()}">${timeAgo}</span>
         </div>
@@ -3783,13 +3785,14 @@ function paymentBadgeHtml(b) {
 function occasionBoardHtml(b) {
   let html = ''
   if (b.occasion) {
-    html += `<div class="adm-detail-row" style="margin-top:8px; font-size:13px;">🎉 <strong>Occasion:</strong> ${escapeHtml(b.occasion)}</div>`
+    html += `<div class=”adm-detail-row”>🎉 <strong>Occasion:</strong> ${escapeHtml(b.occasion)}</div>`
   }
   if (b.board && (b.board.type || b.board.message)) {
     const type  = b.board.type ? b.board.type.charAt(0).toUpperCase() + b.board.type.slice(1) + ' board' : 'Board'
     const msg   = b.board.message ? ` — “${escapeHtml(b.board.message)}”` : ''
-    html += `<div class="adm-detail-row" style="margin-top:8px; font-size:13px;">🪧 <strong>${escapeHtml(type)}:</strong>${msg}</div>`
+    html += `<div class=”adm-detail-row”>🪧 <strong>${escapeHtml(type)}:</strong>${msg}</div>`
   }
+  if (html) html = `<div class=”adm-detail-section”>${html}</div>`
   return html
 }
 
@@ -3856,12 +3859,12 @@ function renderBookings(bookings) {
     return `
     <div class="adm-card adm-card--booking" data-id="${escapeHtml(booking.id)}">
       <div class="adm-card-header">
-        <div class="adm-card-header-left">
+        <div class="adm-card-header-name">
           <span class="adm-status-dot adm-status-dot--confirmed"></span>
           <span class="adm-name">${escapeHtml(booking.full_name)}</span>
-          <span class="adm-badge adm-badge--confirmed">Confirmed</span>
         </div>
-        <div class="adm-card-header-right">
+        <div class="adm-card-header-meta">
+          <span class="adm-badge adm-badge--confirmed">Confirmed</span>
           ${paymentBadgeHtml(booking)}
           <span class="adm-amount-badge">₹${advanceFormatted} paid</span>
           <span class="adm-timestamp" title="${new Date(booking.created_at).toLocaleString()}">${timeAgo}</span>

@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.53.0",
+    "@vercel/speed-insights": "^2.0.0",
     "posthog-js": "^1.257.1",
     "vite": "^7.0.6"
   },
