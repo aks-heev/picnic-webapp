@@ -3262,6 +3262,337 @@ async function loadMenuLinks() {
 }
 
 // Render queries (unconfirmed bookings) with confirm functionality
+// ── Query lead-pipeline status ───────────────────────────────
+// Ordered top→bottom: actionable leads float up, lost sinks to the bottom.
+const QUERY_STATUSES = ['new', 'in_talk', 'quoted', 'no_reply', 'lost']
+const QUERY_STATUS_META = {
+  new:      { label: 'New',      cls: 'adm-qs--new' },
+  in_talk:  { label: 'In talk',  cls: 'adm-qs--in_talk' },
+  quoted:   { label: 'Quoted',   cls: 'adm-qs--quoted' },
+  no_reply: { label: 'No reply', cls: 'adm-qs--no_reply' },
+  lost:     { label: 'Lost',     cls: 'adm-qs--lost' },
+}
+const QUERY_STATUS_ORDER = QUERY_STATUSES.reduce((m, s, i) => { m[s] = i; return m }, {})
+let adminQueryStatusFilter = null   // null = all | one of QUERY_STATUSES
+
+function normalizedQueryStatus(q) {
+  return QUERY_STATUS_META[q && q.query_status] ? q.query_status : 'new'
+}
+
+function setQueryStatusFilter(status, btn) {
+  adminQueryStatusFilter = status || null
+  document.querySelectorAll('.adm-status-filter-pill').forEach(p => p.classList.remove('active'))
+  if (btn) btn.classList.add('active')
+  renderQueries(loadedQueries)
+}
+window.setQueryStatusFilter = setQueryStatusFilter
+
+function queryStatusSelectHtml(query) {
+  const cur  = normalizedQueryStatus(query)
+  const opts = QUERY_STATUSES
+    .map(s => `<option value="${s}"${s === cur ? ' selected' : ''}>${QUERY_STATUS_META[s].label}</option>`)
+    .join('')
+  return `<select class="adm-status-select ${QUERY_STATUS_META[cur].cls}" data-id="${escapeHtml(String(query.id))}" onchange="updateQueryStatus('${escapeHtml(String(query.id))}', this.value)" aria-label="Query status">${opts}</select>`
+}
+
+async function updateQueryStatus(id, status) {
+  if (!QUERY_STATUS_META[status]) return
+  try {
+    const { error } = await supabase.from('bookings').update({ query_status: status }).eq('id', id)
+    if (error) throw error
+    const q = (loadedQueries || []).find(x => String(x.id) === String(id))
+    if (q) q.query_status = status
+    showToast(`Status → ${QUERY_STATUS_META[status].label}`, 'success')
+    renderQueries(loadedQueries)
+  } catch (err) {
+    console.error(err)
+    showToast('Failed to update status', 'error')
+  }
+}
+window.updateQueryStatus = updateQueryStatus
+
+// ── Admin: edit a query ──────────────────────────────────────
+// Holds the add-on catalog + currently-attached set between open and save,
+// so saveQueryEdit can diff without a second round-trip.
+let queryEditState = null
+
+async function openQueryEdit(id) {
+  const query = (loadedQueries || []).find(x => String(x.id) === String(id))
+  if (!query) return showToast('Query not found — reloading', 'error')
+
+  const vtype   = query.venues?.type || ''
+  const isCafe  = vtype === 'cafe'
+  const isStay  = vtype === 'self_managed' || vtype === 'partner_bnb' || vtype === 'combo' || !!query.checkout_date
+
+  // Pull the venue add-on catalog + this booking's attached add-ons in parallel.
+  let catalog = []
+  let attached = []
+  try {
+    const [cat, att] = await Promise.all([
+      query.venue_id ? loadVenueAddOns(query.venue_id) : Promise.resolve([]),
+      supabase.from('booking_add_ons').select('id, addon_id, price_at_booking, name').eq('booking_id', id),
+    ])
+    catalog  = cat || []
+    attached = (att && att.data) || []
+  } catch (err) {
+    console.error('edit: add-on load failed', err)
+  }
+
+  // Union: catalog add-ons + any attached add-on not in the catalog (so it can be unchecked).
+  const byAddonId = new Map()
+  catalog.forEach(a => byAddonId.set(a.id, { id: a.id, name: a.name, price: a.price, requires_confirmation: a.requires_confirmation }))
+  attached.forEach(a => {
+    if (a.addon_id != null && !byAddonId.has(a.addon_id)) {
+      byAddonId.set(a.addon_id, { id: a.addon_id, name: a.name || 'Add-on', price: Number(a.price_at_booking || 0), requires_confirmation: false })
+    }
+  })
+  const attachedIds = new Set(attached.map(a => a.addon_id).filter(v => v != null))
+  const addonOptions = [...byAddonId.values()]
+
+  queryEditState = {
+    id,
+    attached,                          // [{ id, addon_id, price_at_booking, name }]
+    catalogById: byAddonId,            // addon_id → { id, name, price, requires_confirmation }
+  }
+
+  const slotOptions = ['', ...CAFE_SLOTS.map(s => s.key)]
+    .map(k => {
+      if (!k) return `<option value=""${query.time_slot ? '' : ' selected'}>— none —</option>`
+      const s = CAFE_SLOTS.find(sl => sl.key === k)
+      return `<option value="${escapeHtml(k)}"${query.time_slot === k ? ' selected' : ''}>${escapeHtml(s ? s.label + ' · ' + s.time : k)}</option>`
+    }).join('')
+
+  const addonsHtml = query.venue_id
+    ? `<div class="qedit-field qedit-field--full">
+         <span>Add-ons</span>
+         <div class="qe-addon-list">
+           ${addonOptions.length
+             ? addonOptions.map(a => `
+               <label class="qe-addon">
+                 <input type="checkbox" class="qe-addon-cb" value="${escapeHtml(String(a.id))}"${attachedIds.has(a.id) ? ' checked' : ''}>
+                 <span>${escapeHtml(a.name)} <em class="qe-addon-price">+₹${Number(a.price || 0).toLocaleString('en-IN')}</em></span>
+               </label>`).join('')
+             : '<p class="qe-addon-empty">No add-ons available for this venue.</p>'}
+         </div>
+       </div>`
+    : ''
+
+  // Occasion: preset dropdown + free-text "Other" fallback (mirrors the storefront form)
+  const OCCASIONS = ['Birthday', 'Anniversary', 'Proposal', 'Baby Shower', 'Bridal Shower', 'Date Night', 'Graduation', 'Just Because']
+  const curOcc      = query.occasion || ''
+  const occIsPreset = OCCASIONS.includes(curOcc)
+  const occOptions  = ['<option value="">Select an occasion (optional)</option>']
+    .concat(OCCASIONS.map(o => `<option value="${escapeHtml(o)}"${o === curOcc ? ' selected' : ''}>${escapeHtml(o)}</option>`))
+    .concat([`<option value="Other"${(!occIsPreset && curOcc) ? ' selected' : ''}>Other…</option>`])
+    .join('')
+  const occOtherVal   = (!occIsPreset && curOcc) ? curOcc : ''
+  const occOtherStyle = (!occIsPreset && curOcc) ? '' : 'display:none;'
+
+  // Celebration board: type + message (stored as jsonb { type, message })
+  const board       = query.board || {}
+  const boardType   = board.type || ''
+  const boardMsg    = board.message || ''
+  const boardOptions = [['', 'No board'], ['black', 'Black chalkboard'], ['white', 'White wooden arch board']]
+    .map(([v, l]) => `<option value="${v}"${v === boardType ? ' selected' : ''}>${l}</option>`).join('')
+  const boardMsgStyle = boardType ? '' : 'display:none;'
+
+  const overlay = document.createElement('div')
+  overlay.className = 'qedit-overlay'
+  overlay.id = 'qedit-overlay'
+  overlay.innerHTML = `
+    <div class="qedit-modal" role="dialog" aria-modal="true" aria-label="Edit query">
+      <div class="qedit-head">
+        <h3>Edit query · ${escapeHtml(query.full_name || '')}</h3>
+        <button class="qedit-close" type="button" onclick="closeQueryEdit()" aria-label="Close">×</button>
+      </div>
+      <div class="qedit-body">
+        <label class="qedit-field qedit-field--full"><span>Full name</span>
+          <input id="qe-name" type="text" value="${escapeHtml(query.full_name || '')}"></label>
+        <div class="qedit-row">
+          <label class="qedit-field"><span>Mobile</span>
+            <input id="qe-mobile" type="tel" inputmode="numeric" maxlength="10" value="${escapeHtml(query.mobile_number || '')}"></label>
+          <label class="qedit-field"><span>Email</span>
+            <input id="qe-email" type="email" value="${escapeHtml(query.email_address || '')}"></label>
+        </div>
+        <div class="qedit-row">
+          <label class="qedit-field"><span>Guests</span>
+            <input id="qe-guests" type="number" min="1" value="${escapeHtml(String(query.guest_count ?? ''))}"></label>
+          <label class="qedit-field"><span>Children</span>
+            <input id="qe-children" type="number" min="0" value="${escapeHtml(String(query.children_count ?? 0))}"></label>
+        </div>
+        <div class="qedit-row">
+          <label class="qedit-field"><span>${isStay ? 'Check-in date' : 'Date'}</span>
+            <input id="qe-date" type="date" value="${escapeHtml(query.preferred_date || '')}"></label>
+          ${isStay ? `<label class="qedit-field"><span>Check-out date</span>
+            <input id="qe-checkout" type="date" value="${escapeHtml(query.checkout_date || '')}"></label>` : ''}
+          ${isCafe ? `<label class="qedit-field"><span>Time slot</span>
+            <select id="qe-slot">${slotOptions}</select></label>` : ''}
+        </div>
+        <div class="qedit-field qedit-field--full">
+          <span>Occasion</span>
+          <select id="qe-occasion" onchange="document.getElementById('qe-occasion-other-wrap').style.display = this.value === 'Other' ? '' : 'none'">${occOptions}</select>
+          <div id="qe-occasion-other-wrap" style="${occOtherStyle} margin-top:6px;">
+            <input id="qe-occasion-other" type="text" placeholder="Tell us the occasion" value="${escapeHtml(occOtherVal)}">
+          </div>
+        </div>
+        <div class="qedit-field qedit-field--full">
+          <span>Celebration board</span>
+          <select id="qe-board-type" onchange="document.getElementById('qe-board-msg-wrap').style.display = this.value ? '' : 'none'">${boardOptions}</select>
+          <div id="qe-board-msg-wrap" style="${boardMsgStyle} margin-top:6px;">
+            <input id="qe-board-msg" type="text" maxlength="60" placeholder="Short one-liner — e.g. Happy Birthday Aanya!" value="${escapeHtml(boardMsg)}">
+          </div>
+        </div>
+        <label class="qedit-field qedit-field--full"><span>Special requirements</span>
+          <textarea id="qe-notes" rows="2">${escapeHtml(query.special_requirements || '')}</textarea></label>
+        ${addonsHtml}
+      </div>
+      <div class="qedit-foot">
+        <button class="qedit-cancel" type="button" onclick="closeQueryEdit()">Cancel</button>
+        <button class="qedit-save" type="button" onclick="saveQueryEdit('${escapeHtml(String(id))}')">Save changes</button>
+      </div>
+    </div>`
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeQueryEdit() })
+  document.body.appendChild(overlay)
+  // Numeric-only guard on mobile
+  const mob = document.getElementById('qe-mobile')
+  if (mob) mob.addEventListener('input', () => { mob.value = mob.value.replace(/\D/g, '').slice(0, 10) })
+}
+window.openQueryEdit = openQueryEdit
+
+function closeQueryEdit() {
+  document.getElementById('qedit-overlay')?.remove()
+  queryEditState = null
+}
+window.closeQueryEdit = closeQueryEdit
+
+async function saveQueryEdit(id) {
+  if (!queryEditState || String(queryEditState.id) !== String(id)) return
+  const val = sel => document.getElementById(sel)?.value?.trim() ?? ''
+
+  const name   = val('qe-name')
+  const mobile = val('qe-mobile')
+  const email  = val('qe-email')
+  const guests = parseInt(val('qe-guests'), 10)
+  const children = parseInt(val('qe-children') || '0', 10)
+  const date   = val('qe-date')
+  const checkoutEl = document.getElementById('qe-checkout')
+  const slotEl = document.getElementById('qe-slot')
+
+  // Validation
+  if (!name) return showToast('Name is required', 'error')
+  if (!/^\d{10}$/.test(mobile)) return showToast('Mobile must be 10 digits', 'error')
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showToast('Enter a valid email', 'error')
+  if (!Number.isFinite(guests) || guests < 1) return showToast('Guests must be at least 1', 'error')
+  if (!date) return showToast('Date is required', 'error')
+  if (checkoutEl && checkoutEl.value && checkoutEl.value <= date)
+    return showToast('Check-out must be after check-in', 'error')
+
+  const patch = {
+    full_name:     name,
+    mobile_number: mobile,
+    email_address: email,
+    guest_count:   guests,
+    children_count: Number.isFinite(children) && children >= 0 ? children : 0,
+    preferred_date: date,
+    special_requirements: val('qe-notes') || null,
+  }
+
+  // Occasion: dropdown value, or the free-text "Other" entry when selected
+  const occSel   = document.getElementById('qe-occasion')?.value || ''
+  const occOther = document.getElementById('qe-occasion-other')?.value?.trim() || ''
+  patch.occasion = (occSel === 'Other' ? occOther : occSel) || null
+
+  // Celebration board: only stored when a type is chosen
+  const bType = document.getElementById('qe-board-type')?.value || ''
+  const bMsg  = document.getElementById('qe-board-msg')?.value?.trim() || ''
+  patch.board = bType ? { type: bType, message: bMsg } : null
+  if (checkoutEl) patch.checkout_date = checkoutEl.value || null
+  if (slotEl)     patch.time_slot     = slotEl.value || null
+
+  // Final add-on set after this edit (checked boxes; falls back to current set when no catalog is rendered)
+  const addonListEl   = document.querySelector('.qe-addon-list')
+  const finalAddonIds = addonListEl
+    ? [...document.querySelectorAll('.qe-addon-cb:checked')].map(cb => parseInt(cb.value, 10))
+    : queryEditState.attached.map(a => a.addon_id).filter(v => v != null)
+
+  // Inputs for server-authoritative pricing (mirrors submit_booking_intent: billing guests exclude children)
+  const qRow          = (loadedQueries || []).find(x => String(x.id) === String(id))
+  const venueId       = qRow?.venue_id ?? null
+  const billingGuests = Math.max(guests - (Number.isFinite(children) && children > 0 ? children : 0), 0)
+  const nights        = (checkoutEl && checkoutEl.value && date)
+    ? Math.max(Math.round((new Date(checkoutEl.value) - new Date(date)) / 86400000), 0)
+    : 0
+  const slotForCalc   = slotEl ? (slotEl.value || null) : (qRow?.time_slot || null)
+
+  const saveBtn = document.querySelector('.qedit-save')
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…' }
+
+  try {
+    // 1. Diff add-ons (only when the venue has a catalog rendered)
+    if (addonListEl) {
+      const checkedIds = new Set(finalAddonIds)
+      const current    = queryEditState.attached      // [{ id (row id), addon_id }]
+      const currentIds = new Set(current.map(a => a.addon_id).filter(v => v != null))
+
+      const removeRowIds = current.filter(a => a.addon_id != null && !checkedIds.has(a.addon_id)).map(a => a.id)
+      const addAddonIds  = [...checkedIds].filter(aid => !currentIds.has(aid))
+
+      if (removeRowIds.length) {
+        const { error: dErr } = await supabase.from('booking_add_ons').delete().in('id', removeRowIds)
+        if (dErr) throw dErr
+      }
+      if (addAddonIds.length) {
+        const rows = addAddonIds.map(aid => {
+          const meta = queryEditState.catalogById.get(aid) || {}
+          return {
+            booking_id: id,
+            addon_id: aid,
+            price_at_booking: Number(meta.price || 0),
+            name: meta.name || 'Add-on',
+            requires_confirmation: !!meta.requires_confirmation,
+          }
+        })
+        const { error: iErr } = await supabase.from('booking_add_ons').insert(rows)
+        if (iErr) throw iErr
+      }
+    }
+
+    // 2. Recompute server-authoritative total + 50% advance so the card stays in sync with the
+    //    edited guests / dates / slot / add-ons. compute_booking_total returns 0 for combo/partner/custom.
+    try {
+      const { data: t, error: tErr } = await supabase.rpc('compute_booking_total', {
+        p_venue_id:       venueId,
+        p_billing_guests: billingGuests,
+        p_nights:         nights,
+        p_addon_ids:      finalAddonIds.length ? finalAddonIds : null,
+        p_time_slot:      slotForCalc,
+      })
+      if (!tErr) {
+        const total = Number(t) || 0
+        patch.total_amount   = total
+        patch.advance_amount = Math.round(total * 0.5)
+      } else {
+        console.warn('price recompute failed', tErr)
+      }
+    } catch (priceErr) {
+      console.warn('price recompute skipped', priceErr)
+    }
+
+    // 3. Single UPDATE on the booking (scalar fields + recomputed pricing)
+    const { error: uErr } = await supabase.from('bookings').update(patch).eq('id', id)
+    if (uErr) throw uErr
+
+    showToast('Query updated', 'success')
+    closeQueryEdit()
+    loadQueries()
+  } catch (err) {
+    console.error('saveQueryEdit failed', err)
+    showToast('Failed to save changes', 'error')
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save changes' }
+  }
+}
+window.saveQueryEdit = saveQueryEdit
+
 function renderQueries(queries) {
   const container = document.getElementById('queries-container')
   if (!container) return
@@ -3270,21 +3601,34 @@ function renderQueries(queries) {
   const teamIdForFilter = adminTeamFilter
     ? (appState.teams.find(t => t.city === adminTeamFilter)?.id ?? null)
     : null
-  const filtered = teamIdForFilter !== null
+  const teamFiltered = teamIdForFilter !== null
     ? (queries || []).filter(q => q.venues?.team_id === teamIdForFilter)
     : (queries || [])
 
-  if (!filtered.length) {
+  // Status filter (null = all)
+  const filtered = adminQueryStatusFilter
+    ? teamFiltered.filter(q => normalizedQueryStatus(q) === adminQueryStatusFilter)
+    : teamFiltered
+
+  // Sort: status priority (actionable on top, lost at bottom), then newest-first.
+  const sorted = [...filtered].sort((a, b) => {
+    const oa = QUERY_STATUS_ORDER[normalizedQueryStatus(a)]
+    const ob = QUERY_STATUS_ORDER[normalizedQueryStatus(b)]
+    if (oa !== ob) return oa - ob
+    return new Date(b.created_at) - new Date(a.created_at)
+  })
+
+  if (!sorted.length) {
     container.innerHTML = `
       <div class="adm-empty">
         <div class="adm-empty-icon">📭</div>
-        <h3>No queries yet</h3>
-        <p>New customer queries will appear here.</p>
+        <h3>${adminQueryStatusFilter ? 'No queries with this status' : 'No queries yet'}</h3>
+        <p>${adminQueryStatusFilter ? 'Try a different status filter.' : 'New customer queries will appear here.'}</p>
       </div>`
     return
   }
 
-  container.innerHTML = filtered.map(query => {
+  container.innerHTML = sorted.map(query => {
     // Venue chip
     let venueChip = ''
     if (query.venues) {
@@ -3307,6 +3651,15 @@ function renderQueries(queries) {
 
     const timeAgo = formatTimeAgo(new Date(query.created_at))
 
+    // Auto-computed pricing (set at submit). Shown as a guide; admin still
+    // types the final advance at confirm. Custom/query-only leads are 0 → hidden.
+    const qTotal = Number(query.total_amount || 0)
+    const qAdv   = Number(query.advance_amount || 0)
+    const priceBadges = qTotal > 0
+      ? `<span class="adm-price-badge adm-price-badge--total" title="Auto-calculated total">Total ₹${qTotal.toLocaleString('en-IN')}</span>
+         <span class="adm-price-badge adm-price-badge--adv" title="Suggested 50% advance">Advance ₹${qAdv.toLocaleString('en-IN')}</span>`
+      : ''
+
     // Hold state (combo / whole-floor only)
     const isCombo = query.venues?.type === 'combo'
     const isHeld  = !!query.held_at
@@ -3320,12 +3673,14 @@ function renderQueries(queries) {
     <div class="adm-card adm-card--query" data-id="${escapeHtml(query.id)}">
       <div class="adm-card-header">
         <div class="adm-card-header-left">
-          <span class="adm-status-dot adm-status-dot--new"></span>
+          ${queryStatusSelectHtml(query)}
           <span class="adm-name">${escapeHtml(query.full_name)}</span>
-          <span class="adm-badge adm-badge--new">New</span>
           ${paymentBadgeHtml(query)}
         </div>
-        <span class="adm-timestamp" title="${new Date(query.created_at).toLocaleString()}">${timeAgo}</span>
+        <div class="adm-card-header-right">
+          ${priceBadges}
+          <span class="adm-timestamp" title="${new Date(query.created_at).toLocaleString()}">${timeAgo}</span>
+        </div>
       </div>
 
       <div class="adm-chips">
@@ -3376,6 +3731,10 @@ function renderQueries(queries) {
           </div>` : ''}` : ''}
 
       <div class="adm-card-footer">
+        <button class="adm-edit-btn" type="button" onclick="openQueryEdit('${escapeHtml(String(query.id))}')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Edit
+        </button>
         ${isCombo && !isHeld ? `
           <button class="hold-booking-btn adm-hold-btn"
             data-id="${escapeHtml(query.id)}"

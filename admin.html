@@ -96,6 +96,14 @@
                     <button class="adm-team-pill" onclick="setAdminTeamFilter('jaipur', this)">Jaipur</button>
                     <button class="adm-team-pill" onclick="setAdminTeamFilter('gurugram', this)">Gurugram</button>
                 </div>
+                <div class="adm-status-filters" role="group" aria-label="Filter by status">
+                    <button class="adm-status-filter-pill active" onclick="setQueryStatusFilter(null, this)">All</button>
+                    <button class="adm-status-filter-pill" onclick="setQueryStatusFilter('new', this)">New</button>
+                    <button class="adm-status-filter-pill" onclick="setQueryStatusFilter('in_talk', this)">In talk</button>
+                    <button class="adm-status-filter-pill" onclick="setQueryStatusFilter('quoted', this)">Quoted</button>
+                    <button class="adm-status-filter-pill" onclick="setQueryStatusFilter('no_reply', this)">No reply</button>
+                    <button class="adm-status-filter-pill" onclick="setQueryStatusFilter('lost', this)">Lost</button>
+                </div>
                 <div id="queries-container" class="data-container">
                     <!-- Queries will be populated here by JavaScript -->
                 </div>

@@ -7443,6 +7443,29 @@ body.menu-viewer-open {
   border-radius: var(--radius-full);
 }
 
+/* Query pricing badges (auto-calculated total + suggested advance) */
+.adm-price-badge {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+.adm-price-badge--total {
+  color: var(--boho-text-dark, #3a2f2a);
+  background: rgba(168, 77, 102, 0.10);
+  border: 1px solid rgba(168, 77, 102, 0.22);
+}
+.adm-price-badge--adv {
+  color: var(--boho-accent-rose);
+  background: rgba(var(--color-success-rgb), 0.10);
+  border: 1px solid rgba(var(--color-success-rgb), 0.22);
+}
+/* Shown on every screen; header-right wraps under the name on narrow viewports */
+@media (max-width: 640px) {
+  .adm-price-badge { font-size: 11px; padding: 2px 8px; }
+}
+
 /* Timestamp */
 .adm-timestamp {
   font-size: var(--font-size-sm);
@@ -8350,6 +8373,148 @@ body.menu-viewer-open {
   border-color: var(--boho-accent-rose);
   color: #fff;
 }
+
+/* ── Query status filter pills ─────────────────────────── */
+.adm-status-filters {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.adm-status-filter-pill {
+  padding: 4px 13px;
+  border-radius: 20px;
+  border: 1.5px solid var(--boho-border);
+  background: transparent;
+  color: var(--boho-text-medium);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+  font-family: inherit;
+}
+.adm-status-filter-pill:hover { border-color: var(--boho-accent-rose); color: var(--boho-accent-rose); }
+.adm-status-filter-pill.active {
+  background: var(--boho-text-dark, #3a2f2a);
+  border-color: var(--boho-text-dark, #3a2f2a);
+  color: #fff;
+}
+
+/* ── Inline query status selector (card header) ────────── */
+.adm-status-select {
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  border: 1.5px solid transparent;
+  border-radius: 6px;
+  padding: 3px 6px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-repeat: no-repeat;
+  background-position: right 5px center;
+  padding-right: 18px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='3'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+}
+.adm-qs--new      { background-color: rgba(var(--color-warning-rgb), 0.15); color: #9a6b00; border-color: rgba(var(--color-warning-rgb), 0.4); }
+.adm-qs--in_talk  { background-color: rgba(96, 125, 196, 0.15);            color: #3a52a0; border-color: rgba(96, 125, 196, 0.4); }
+.adm-qs--quoted   { background-color: rgba(150, 96, 196, 0.15);            color: #6b3a9a; border-color: rgba(150, 96, 196, 0.4); }
+.adm-qs--no_reply { background-color: rgba(120, 120, 120, 0.15);           color: #555;    border-color: rgba(120, 120, 120, 0.4); }
+.adm-qs--lost     { background-color: rgba(var(--color-error-rgb), 0.12);  color: #a23b3b; border-color: rgba(var(--color-error-rgb), 0.35); }
+
+/* ── Edit query button ─────────────────────────────────── */
+.adm-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1.5px solid var(--boho-border);
+  background: transparent;
+  color: var(--boho-text-medium);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .15s;
+}
+.adm-edit-btn:hover { border-color: var(--boho-accent-rose); color: var(--boho-accent-rose); }
+
+/* ── Edit query modal ──────────────────────────────────── */
+.qedit-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(40, 30, 26, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 16px;
+  overflow-y: auto;
+  backdrop-filter: blur(2px);
+}
+.qedit-modal {
+  background: var(--boho-cream, #fff);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 540px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  overflow: hidden;
+  animation: qeditIn .18s ease;
+}
+@keyframes qeditIn { from { opacity: 0; transform: translateY(-8px) } to { opacity: 1; transform: none } }
+.qedit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--boho-border);
+}
+.qedit-head h3 { margin: 0; font-size: 16px; color: var(--boho-text-dark, #3a2f2a); }
+.qedit-close {
+  border: none; background: transparent; cursor: pointer;
+  font-size: 24px; line-height: 1; color: var(--boho-text-medium); padding: 0 4px;
+}
+.qedit-body { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+.qedit-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.qedit-field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 160px; }
+.qedit-field--full { flex-basis: 100%; }
+.qedit-field span { font-size: 12px; font-weight: 600; color: var(--boho-text-medium); }
+.qedit-field input,
+.qedit-field textarea,
+.qedit-field select {
+  font-family: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+  border: 1.5px solid var(--boho-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--boho-text-dark, #3a2f2a);
+  width: 100%;
+}
+.qedit-field input:focus,
+.qedit-field textarea:focus,
+.qedit-field select:focus { outline: none; border-color: var(--boho-accent-rose); }
+.qe-addon-list {
+  display: flex; flex-direction: column; gap: 6px;
+  max-height: 180px; overflow-y: auto;
+  border: 1.5px solid var(--boho-border); border-radius: 8px; padding: 8px 10px;
+}
+.qe-addon { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.qe-addon input { width: auto; }
+.qe-addon-price { color: var(--boho-accent-rose); font-style: normal; font-weight: 600; }
+.qe-addon-empty { margin: 0; font-size: 12.5px; color: var(--boho-text-medium); }
+.qedit-foot {
+  display: flex; justify-content: flex-end; gap: 10px;
+  padding: 14px 20px; border-top: 1px solid var(--boho-border);
+}
+.qedit-cancel, .qedit-save {
+  padding: 9px 18px; border-radius: 9px; font-size: 14px; font-weight: 600;
+  cursor: pointer; font-family: inherit; border: 1.5px solid var(--boho-border);
+}
+.qedit-cancel { background: transparent; color: var(--boho-text-medium); }
+.qedit-save { background: var(--boho-accent-rose); border-color: var(--boho-accent-rose); color: #fff; }
+.qedit-save:disabled { opacity: .6; cursor: default; }
 
 /* ═══════════════════════════════════════════════════════
    ADMIN — teams manager cards
