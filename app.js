@@ -2671,6 +2671,7 @@ function finishBookingFlow(bookingRow, venue, confirmed) {
   if (bv) bv.style.display = 'none'
 
   renderSuccessPage({ booking: bookingRow, venueName, venueTeamId, confirmed })
+  history.pushState({}, 'Booking Confirmed — The Picnic Stories', '/booking-confirmed')
   showPage('query-success-page')
 }
 
@@ -6932,7 +6933,9 @@ function initMenuSelectionPage() {
 
 // ── Restore venue detail page on browser back/forward ────────
 window.addEventListener('popstate', (event) => {
-  const m = window.location.pathname.match(/^\/venues\/([^/]+)\/?$/)
+  const path = window.location.pathname
+  if (path === '/booking-confirmed') { document.title = 'The Picnic Stories'; showPage('home-page'); return }
+  const m = path.match(/^\/venues\/([^/]+)\/?$/)
   const v = m ? appState.venues.find(x => x.slug === decodeURIComponent(m[1])) : null
   if (event.state?.venueId) {
     showVenuePage(event.state.venueId, false)
