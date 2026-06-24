@@ -5082,7 +5082,7 @@ body.menu-viewer-open {
     flex-wrap: nowrap;
     overflow-x: auto;
     padding-right: 2px;
-    scroll-snap-type: x mandatory;
+    scroll-snap-type: x proximity;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
   }
@@ -5100,12 +5100,9 @@ body.menu-viewer-open {
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s;
 }
 
-/* Mobile: narrower cards for scroll-peek effect */
+/* Mobile: vw-based card width so 2+ items always overflow regardless of viewport size */
 @media (max-width: 768px) {
-  .vd-addon-card { flex: 0 0 148px; }
-}
-@media (max-width: 480px) {
-  .vd-addon-card { flex: 0 0 58vw; }
+  .vd-addon-card { flex: 0 0 55vw; }
 }
 .vd-addon-card:hover {
   transform: translateY(-2px);
