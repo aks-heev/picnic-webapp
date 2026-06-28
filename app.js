@@ -345,6 +345,24 @@ function updateTabCounters() {
 // VENUE GALLERY + DETAIL
 // ----------------------------------------------------------------
 
+// Meta Pixel — ViewContent: observe venue cards entering viewport (fires once per card)
+function setupVenueCardViewContentObserver() {
+  if (typeof fbq !== 'function' || typeof IntersectionObserver === 'undefined') return
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return
+      const el = entry.target
+      fbq('track', 'ViewContent', {
+        content_ids:  [el.dataset.venueId],
+        content_name: el.dataset.venueName || '',
+        content_type: 'venue',
+      })
+      observer.unobserve(el)
+    })
+  }, { threshold: 0.5 })
+  document.querySelectorAll('.venue-card').forEach(card => observer.observe(card))
+}
+
 // Load all active venues from Supabase and render the gallery
 async function loadVenues() {
   try {
@@ -359,6 +377,7 @@ async function loadVenues() {
     appState.venues = data || []
     renderVenueGallery(data || [])
     renderCityPills(data || [])
+    setupVenueCardViewContentObserver()
   } catch (error) {
     console.error('Failed to load venues:', error)
     const grid = document.getElementById('venues-grid')
@@ -506,7 +525,8 @@ function venueCardHtml(venue) {
 
   return `
     <a class="venue-card" href="/venues/${escapeHtml(venue.slug || '')}"
-       data-venue-id="${venue.id}" aria-label="View ${escapeHtml(venue.name)}">
+       data-venue-id="${venue.id}" data-venue-name="${escapeHtml(venue.name)}"
+       aria-label="View ${escapeHtml(venue.name)}">
       <div class="venue-card-image">
         ${hasImage
           ? `<img src="${escapeHtml(primaryImage.url)}" alt="${escapeHtml(primaryImage.alt || venue.name)}" loading="lazy">`
@@ -2662,6 +2682,16 @@ function finishBookingFlow(bookingRow, venue, confirmed) {
     guests:      bookingRow?.guest_count,
     advance_amount: bookingRow?.advance_amount,
   })
+
+  // Meta Pixel — Lead event (every completed enquiry or confirmed booking)
+  if (typeof fbq === 'function') {
+    fbq('track', 'Lead', {
+      content_category: bookingRow?.occasion || '',
+      content_name:     venue?.city || '',
+      num_items:        bookingRow?.guest_count || 0,
+      currency:         'INR',
+    })
+  }
 
   appState.currentBooking      = null
   appState.currentVenue        = null
@@ -7199,6 +7229,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isNaN(venueId)) return
     const venue = appState.venues.find(v => v.id === venueId)
     if (venue) {
+      // Meta Pixel — InitiateCheckout event (user taps an enabled Book Now button)
+      if (typeof fbq === 'function') {
+        fbq('track', 'InitiateCheckout', {
+          content_name: venue.name,
+          content_ids:  [String(venueId)],
+          currency:     'INR',
+        })
+      }
       if (appState.bookingStep === 'guests') {
         if (appState.changeMode === 'intent' && appState.changeModeData) {
           // Fast-resume: update date/slot on saved lead, skip the form entirely
@@ -7224,6 +7262,13 @@ document.addEventListener('DOMContentLoaded', () => {
         showGuestSelector(venue)
       }
     }
+  })
+
+  // Meta Pixel — Contact event (any WhatsApp link tap, including header, footer, floating btn)
+  document.addEventListener('click', (e) => {
+    const waLink = e.target.closest('a[href*="wa.me"]')
+    if (!waLink) return
+    if (typeof fbq === 'function') fbq('track', 'Contact')
   })
 
   loadVenues()
