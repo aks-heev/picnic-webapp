@@ -2201,7 +2201,7 @@ function buildIntentSummaryHTML() {
       const name = appState.currentVenueAddOns?.find(a => a.id === ao.addon_id)?.name || 'Add-on'
       rows += `<div class="vd-bv-price-row"><span>${escapeHtml(name)}</span><span>+₹${Number(ao.price_at_booking).toLocaleString('en-IN')}</span></div>`
     }
-    const fullTotal = lead.advance_amount * 2
+    const fullTotal = Math.round(lead.advance_amount / 0.3)
     priceSection = `
       <div class="vd-bv-price-table">
         ${rows}
@@ -2211,12 +2211,12 @@ function buildIntentSummaryHTML() {
           <span>₹${fullTotal.toLocaleString('en-IN')}</span>
         </div>
         <div class="vd-bv-price-row vd-bv-price-row--advance">
-          <span>Advance due now <span class="vd-bv-price-tag">50%</span></span>
+          <span>Advance due now <span class="vd-bv-price-tag">30%</span></span>
           <span>₹${lead.advance_amount.toLocaleString('en-IN')}</span>
         </div>
         <div class="vd-bv-price-row vd-bv-price-row--remaining">
           <span>Remaining due on the day</span>
-          <span>₹${lead.advance_amount.toLocaleString('en-IN')}</span>
+          <span>₹${(fullTotal - lead.advance_amount).toLocaleString('en-IN')}</span>
         </div>
       </div>`
   }
@@ -2248,6 +2248,9 @@ function buildIntentSummaryHTML() {
 // Shared intent screen HTML builder — used by both inline and modal booking paths
 function buildIntentScreenHTML(lead, { containerClass = 'vd-intent-wrap container' } = {}) {
   const totalFmt = lead.advance_amount.toLocaleString('en-IN')
+  const remainingFmt = lead.advance_amount > 0
+    ? (Math.round(lead.advance_amount / 0.3) - lead.advance_amount).toLocaleString('en-IN')
+    : '0'
   // Whole-floor (combo) is request-only: it can't be instant-locked by the
   // customer. A combo booking must route through admin Hold → Confirm, where
   // the child-blocking fanout and the Airbnb sync buffer run. So we hide the
@@ -2275,7 +2278,7 @@ function buildIntentScreenHTML(lead, { containerClass = 'vd-intent-wrap containe
               <span class="vd-intent-btn-icon">🔒</span>
               <span class="vd-intent-btn-text">
                 <span class="vd-intent-btn-title">${lead.advance_amount > 0 ? `Pay advance &amp; lock my date — ₹${totalFmt}` : 'Lock my date'}</span>
-                <span class="vd-intent-btn-desc">${lead.advance_amount > 0 ? `Remaining ₹${totalFmt} due on the day · spot is reserved once payment clears` : 'Your spot is reserved the moment payment goes through'}</span>
+                <span class="vd-intent-btn-desc">${lead.advance_amount > 0 ? `Remaining ₹${remainingFmt} due on the day · spot is reserved once payment clears` : 'Your spot is reserved the moment payment goes through'}</span>
               </span>
             </button>
             <div class="vd-intent-divider">or</div>`}
@@ -2340,13 +2343,13 @@ function handleInlineBookingSubmit(event) {
   if (venue.type !== 'custom') lead.venue_id = venue.id
   if (venue.type === 'cafe' && appState.selectedTimeSlot) {
     lead.time_slot      = appState.selectedTimeSlot
-    lead.advance_amount = Math.round((picnicPrice + addonSum) * 0.5)
+    lead.advance_amount = Math.round((picnicPrice + addonSum) * 0.3)
   }
   if (venue.type === 'self_managed' && appState.checkinDate && appState.checkoutDate) {
     lead.checkout_date  = appState.checkoutDate
     lead.preferred_date = appState.checkinDate
     const nights        = calcNights(appState.checkinDate, appState.checkoutDate)
-    lead.advance_amount = Math.round((nights * (Number(venue.metadata?.stay_price_per_night) || 0) + picnicPrice + addonSum) * 0.5)
+    lead.advance_amount = Math.round((nights * (Number(venue.metadata?.stay_price_per_night) || 0) + picnicPrice + addonSum) * 0.3)
   }
 
   // Snapshot selected add-ons (checkboxes disappear when we replace the view)
@@ -3590,7 +3593,7 @@ async function saveQueryEdit(id) {
       }
     }
 
-    // 2. Recompute server-authoritative total + 50% advance so the card stays in sync with the
+    // 2. Recompute server-authoritative total + 30% advance so the card stays in sync with the
     //    edited guests / dates / slot / add-ons. compute_booking_total returns 0 for combo/partner/custom.
     try {
       const { data: t, error: tErr } = await supabase.rpc('compute_booking_total', {
@@ -3603,7 +3606,7 @@ async function saveQueryEdit(id) {
       if (!tErr) {
         const total = Number(t) || 0
         patch.total_amount   = total
-        patch.advance_amount = Math.round(total * 0.5)
+        patch.advance_amount = Math.round(total * 0.3)
       } else {
         console.warn('price recompute failed', tErr)
       }
@@ -3690,7 +3693,7 @@ function renderQueries(queries) {
     const qAdv   = Number(query.advance_amount || 0)
     const priceBadges = qTotal > 0
       ? `<span class="adm-price-badge adm-price-badge--total" title="Auto-calculated total">Total ₹${qTotal.toLocaleString('en-IN')}</span>
-         <span class="adm-price-badge adm-price-badge--adv" title="Suggested 50% advance">Advance ₹${qAdv.toLocaleString('en-IN')}</span>`
+         <span class="adm-price-badge adm-price-badge--adv" title="Suggested 30% advance">Advance ₹${qAdv.toLocaleString('en-IN')}</span>`
       : ''
 
     // Hold state (combo / whole-floor only)
