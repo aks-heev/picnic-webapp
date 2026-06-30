@@ -187,7 +187,7 @@ function buildGuestHtml(
 
   const pageTitle    = isLock ? "You're almost booked" : "We've received your request"
   const heroSub      = isLock
-    ? `${firstName}, you're almost booked. Pay the advance below to confirm your date instantly — pay soon to avoid losing your slot.`
+    ? `${firstName}, you're almost booked. Your date isn't reserved until payment is complete — pay the advance below to secure it now.`
     : `${firstName}, we've received your picnic request and we're already looking forward to it. We'll confirm your date shortly — hold tight.`
   const detailsTitle = isLock ? "Your Booking" : "Your Request"
   const stepsHtml    = isLock
@@ -200,7 +200,7 @@ function buildGuestHtml(
                   <p style="margin: 0 0 12px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 16px; color: #5c4a3a; line-height: 1.7;">2 · You'll hear from us shortly to confirm — usually within a few hours.</p>
                   <p style="margin: 0; font-family: Garamond, 'Times New Roman', serif; font-size: 16px; color: #5c4a3a; line-height: 1.7;">${showPay ? "3 · Use the button below to pay the advance and lock your date instantly." : "3 · Pay the advance to lock in your date, and we'll handle the rest."}</p>`
   const payCaption   = isLock
-    ? "Pay soon to avoid losing your slot — unpaid dates may be released to other guests."
+    ? "Your date isn't held until payment is complete. Pay now to lock it in before someone else does."
     : "You can also pay later, after we confirm your date."
 
   return `<!DOCTYPE html>

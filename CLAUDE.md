@@ -162,7 +162,12 @@
 
 • **Commit status**: `docs/SPEC_occasion_packages.md` is new/untracked. Add to next commit alongside other pending local files.
 
-## Session Handoff — 2026-06-30 (lock-but-unpaid email format — DEPLOYED v26)
+## Session Handoff — 2026-06-30 (lock-but-unpaid email format — DEPLOYED v27)
+
+• **Copy correction (v27)**: investigated whether an unpaid `lock` blocks the date — it does NOT. `get_booked_dates` and the submit-time freshness check both filter `confirmed = true` only; `confirmed` flips true only on payment (verify-payment / razorpay-webhook `payment.captured`) or admin confirm. So payment IS the lock — the system already only reserves on paid. The earlier lock-email lines implied a hold-that-gets-released (false). Fixed the two lock-variant lines to state the real rule: heroSub → "your date isn't reserved until payment is complete — pay the advance below to secure it now"; payCaption → "Your date isn't held until payment is complete. Pay now to lock it in before someone else does." (Honest + real first-to-pay-wins urgency.) DECISION: do NOT build a real hold/expiry — it would reserve dates for non-payers (the risk we were avoiding). Current no-hold-until-paid behavior is correct.
+• **PARKED bug**: payment confirm (verify-payment / webhook) flips `confirmed=true` WITHOUT re-checking availability → two guests could both pay the same date = double-booking. Rare at current volume; real risk, separate from copy.
+
+
 
 • **Problem**: a lock-intent lead that hasn't paid (`customer_intent='lock' && confirmed=false`, e.g. booking #14 Samradh Sharma) got the generic QUERY guest email, and the admin email labelled it `New 🔒 Booking` — looked confirmed though unpaid. Fixed by adding a dedicated lock-but-unpaid format for both guest + admin.
 
