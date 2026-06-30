@@ -161,28 +161,54 @@ function extrasSection(addons: AddOn[]): string {
               </tr>`
 }
 
-function buildQueryHtml(
+// Guest acknowledgement email.
+// variant "query" — soft enquiry ack (we'll confirm, then you pay).
+// variant "lock"  — lock-but-unpaid: guest chose to lock the date but hasn't paid;
+//                   lead with "almost there, pay to confirm now" + a soft urgency line.
+function buildGuestHtml(
   record: Record<string, unknown>,
   venueLabel: string | null,
   inclusionText: string,
   addons: AddOn[],
+  variant: "query" | "lock" = "query",
 ): string {
+  const isLock     = variant === "lock"
   const firstName  = String(record.full_name ?? "").split(" ")[0] || "there"
   const date       = formatDate(record.preferred_date as string)
   const location   = venueLabel ?? (record.venue_address as string | null) ?? "To be confirmed"
   const kidsCount  = Number(record.children_count || 0)
   const guestCount = Number(record.guest_count || 0)
   const adults     = guestCount - kidsCount
+  const advance    = Number(record.advance_amount || 0)
+  const showPay    = advance > 0
   const guests     = kidsCount
     ? `${adults} Adults · ${kidsCount} Child${kidsCount !== 1 ? "ren" : ""} (free)`
     : `${guestCount} ${guestCount === 1 ? "Person" : "Persons"}`
+
+  const pageTitle    = isLock ? "You're almost booked" : "We've received your request"
+  const heroSub      = isLock
+    ? `${firstName}, you're almost booked. Pay the advance below to confirm your date instantly — pay soon to avoid losing your slot.`
+    : `${firstName}, we've received your picnic request and we're already looking forward to it. We'll confirm your date shortly — hold tight.`
+  const detailsTitle = isLock ? "Your Booking" : "Your Request"
+  const stepsHtml    = isLock
+    ? `
+                  <p style="margin: 0 0 12px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 16px; color: #5c4a3a; line-height: 1.7;">1 · Pay the advance below to confirm your date instantly.</p>
+                  <p style="margin: 0 0 12px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 16px; color: #5c4a3a; line-height: 1.7;">2 · We'll prepare everything and reach out with the final details.</p>
+                  <p style="margin: 0; font-family: Garamond, 'Times New Roman', serif; font-size: 16px; color: #5c4a3a; line-height: 1.7;">3 · Show up and enjoy — the balance is due on the day.</p>`
+    : `
+                  <p style="margin: 0 0 12px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 16px; color: #5c4a3a; line-height: 1.7;">1 · We review your request and check availability for your date.</p>
+                  <p style="margin: 0 0 12px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 16px; color: #5c4a3a; line-height: 1.7;">2 · You'll hear from us shortly to confirm — usually within a few hours.</p>
+                  <p style="margin: 0; font-family: Garamond, 'Times New Roman', serif; font-size: 16px; color: #5c4a3a; line-height: 1.7;">${showPay ? "3 · Use the button below to pay the advance and lock your date instantly." : "3 · Pay the advance to lock in your date, and we'll handle the rest."}</p>`
+  const payCaption   = isLock
+    ? "Pay soon to avoid losing your slot — unpaid dates may be released to other guests."
+    : "You can also pay later, after we confirm your date."
 
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta content="text/html; charset=utf-8"/>
   <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-  <title>We've received your request</title>
+  <title>${pageTitle}</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #FFF8F5; text-size-adjust: 100%;">
   <table bgcolor="#FFF8F5" border="0" cellpadding="0" cellspacing="0" style="table-layout: fixed;" width="100%">
@@ -216,7 +242,7 @@ function buildQueryHtml(
                 <td align="center" style="padding: 32px; word-wrap: break-word; overflow-wrap: break-word;">
                   <h2 style="margin: 0; font-family: Garamond, 'Times New Roman', serif; font-size: 48px; color: #2D1F14; font-weight: normal; line-height: 1.1; text-transform: uppercase;">${queryHeading(record.occasion)}</h2>
                   <p style="margin: 20px 0 0 0; font-family: Garamond, 'Times New Roman', serif; font-size: 20px; color: #c4607a; line-height: 1.4;">
-                    ${firstName}, we've received your picnic request and we're already looking forward to it. We'll confirm your date shortly — hold tight.
+                    ${heroSub}
                   </p>
                 </td>
               </tr>
@@ -232,7 +258,7 @@ function buildQueryHtml(
               <!-- REQUEST DETAILS -->
               <tr>
                 <td align="left" style="padding: 32px; word-wrap: break-word; overflow-wrap: break-word;">
-                  <h3 style="margin: 0 0 24px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 28px; color: #2D1F14; font-weight: normal; text-transform: uppercase;">Your Request</h3>
+                  <h3 style="margin: 0 0 24px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 28px; color: #2D1F14; font-weight: normal; text-transform: uppercase;">${detailsTitle}</h3>
                   <table border="0" cellpadding="0" cellspacing="0" width="100%">
                     <tbody>
                       ${reservationRow("DATE", date)}
@@ -260,12 +286,32 @@ function buildQueryHtml(
               </tr>
               <tr>
                 <td align="left" style="padding: 8px 32px 32px; word-wrap: break-word; overflow-wrap: break-word;">
-                  <h3 style="margin: 0 0 20px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 20px; color: #2D1F14; font-weight: normal; text-transform: uppercase; letter-spacing: 2px;">What Happens Next</h3>
-                  <p style="margin: 0 0 12px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 16px; color: #5c4a3a; line-height: 1.7;">1 · We review your request and check availability for your date.</p>
-                  <p style="margin: 0 0 12px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 16px; color: #5c4a3a; line-height: 1.7;">2 · You'll hear from us shortly to confirm — usually within a few hours.</p>
-                  <p style="margin: 0; font-family: Garamond, 'Times New Roman', serif; font-size: 16px; color: #5c4a3a; line-height: 1.7;">3 · Pay the advance to lock in your date, and we'll handle the rest.</p>
+                  <h3 style="margin: 0 0 20px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 20px; color: #2D1F14; font-weight: normal; text-transform: uppercase; letter-spacing: 2px;">What Happens Next</h3>${stepsHtml}
                 </td>
               </tr>
+
+              ${showPay ? `
+              <!-- PAY ADVANCE BUTTON -->
+              <tr>
+                <td align="center" style="padding: 8px 32px 32px; word-wrap: break-word; overflow-wrap: break-word;">
+                  <table border="0" cellpadding="0" cellspacing="0">
+                    <tbody>
+                      <tr>
+                        <td align="center">
+                          <a href="${APP_URL}/?pay=${record.id}"
+                             style="display: inline-block; padding: 16px 36px; background-color: #c4607a; color: #ffffff; font-family: Garamond, 'Times New Roman', serif; font-size: 15px; text-decoration: none; text-transform: uppercase; letter-spacing: 2px; border-radius: 8px;"
+                             target="_blank">Pay Advance &middot; ${inr(advance)}</a>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td align="center" style="padding-top: 12px;">
+                          <p style="margin: 0; font-family: Garamond, 'Times New Roman', serif; font-size: 13px; color: ${isLock ? "#c4607a" : "#aaa"}; font-style: italic;">${payCaption}</p>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </td>
+              </tr>` : ""}
 
               <!-- CONTACT -->
               <tr>
@@ -321,7 +367,15 @@ function buildQueryHtml(
 Deno.serve(async (req) => {
   try {
     const { record } = await req.json()
-    const kind = record.customer_intent === "lock" ? "booking" : "query"
+    // Three states at INSERT:
+    //   confirmed              → paid booking (admin notice only; guest gets the confirmation email elsewhere)
+    //   lock_unpaid            → guest chose to lock the date but hasn't paid yet — chase payment
+    //   query                  → soft enquiry
+    const isLock = record.customer_intent === "lock"
+    const adminState: "booking" | "lock_unpaid" | "query" =
+      record.confirmed ? "booking" : isLock ? "lock_unpaid" : "query"
+    const advance = Number(record.advance_amount || 0)
+    const advanceStr = advance.toLocaleString("en-IN")
     const { label: venueLabel, teamEmail } = await getVenueInfo(record.venue_id, record.venue_address)
     const addons = await getAddOns(record.id)
 
@@ -332,25 +386,47 @@ Deno.serve(async (req) => {
       : `${record.guest_count} guest${Number(record.guest_count) !== 1 ? "s" : ""}`
     const inclusionText = await getInclusionText(record.venue_id, adults)
 
-    // T1: Customer acknowledgement — only for unconfirmed queries.
-    // Lock requests (confirmed=true) get the confirmation email (T3) instead.
+    // T1: Customer acknowledgement — only for unconfirmed records.
+    // Confirmed bookings get the confirmation email (T3) from notify-booking-confirmed instead.
     if (!record.confirmed) {
       await sendEmail({
         to: record.email_address,
-        subject: "We've received your picnic request! 🧺",
-        html: buildQueryHtml(record, venueLabel, inclusionText, addons),
+        subject: isLock
+          ? "You're almost booked — pay to confirm 🧺"
+          : "We've received your picnic request! 🧺",
+        html: buildGuestHtml(record, venueLabel, inclusionText, addons, isLock ? "lock" : "query"),
       })
     }
 
-    // T2: Admin alert (plain functional, unchanged)
+    // T2: Admin alert (plain functional)
     const adminTo = teamEmail ? [teamEmail, "team@picnicstories.com"] : "team@picnicstories.com"
+
+    const adminSubject =
+      adminState === "booking"
+        ? `New Booking (paid) from ${record.full_name} — ${record.preferred_date}`
+        : adminState === "lock_unpaid"
+        ? `⚠️ Unpaid lock from ${record.full_name} — ${record.preferred_date} · ₹${advanceStr} pending`
+        : `New Query from ${record.full_name} — ${record.preferred_date}`
+
+    const adminHeading =
+      adminState === "booking"
+        ? `🔒 Booking (paid) #${record.id}`
+        : adminState === "lock_unpaid"
+        ? `⏳ Lock — PAYMENT PENDING #${record.id}`
+        : `📋 Query #${record.id}`
+
+    const adminBanner =
+      adminState === "lock_unpaid"
+        ? `<div style="background:#fff3cd;border:1px solid #ffe69c;color:#856404;padding:12px 16px;border-radius:6px;margin:0 0 16px;font-weight:bold;">⏳ Guest chose to lock this date but hasn't paid the advance (₹${advanceStr}). Follow up to secure payment — the slot is NOT held until paid.</div>`
+        : ""
 
     await sendEmail({
       to: adminTo,
-      subject: `New ${kind === "booking" ? "Booking" : "Query"} from ${record.full_name} — ${record.preferred_date}`,
+      subject: adminSubject,
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-          <h2>New ${kind === "booking" ? "🔒 Booking" : "📋 Query"} #${record.id}</h2>
+          ${adminBanner}
+          <h2>${adminHeading}</h2>
           <table style="border-collapse: collapse; width: 100%;">
             <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Name</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${record.full_name}</td></tr>
             <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Email</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${record.email_address}</td></tr>

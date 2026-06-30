@@ -36,32 +36,6 @@
   ```
   Never `git add -A`. Never commit without explicit user go-ahead.
 
-## Session Handoff — 2026-06-13 (UI/UX batch: overnight stays, menu viewer, booking UX — COMMITTED)
-
-• **All changes committed and pushed** — Vercel auto-deploying. Committed files: `app.js`, `style.css`, `index.html`, `admin.html`, `homepage-preview.html`, `docs/venue-booking-flow-spec.md`, `supabase/migrations/20260525_*.sql` + `20260526_venues.sql`, deleted `"The Picnic Story - Web Application Analysis.md"`.
-
-• **What shipped**: Services grid → Overnight Stays as twin primary card alongside Romantic Picnics; `goToVenueSection('outdoor'|'indoor')` scrolls to `#outdoor-venues`/`#indoor-venues`. Menu viewer: `.vd-menu-thumb*` thumbnails (120×160px) + full `.menu-viewer` lightbox CSS (was entirely missing). Change-mode pattern: `appState.changeMode`/`appState.changeModeData` — `goBackToVenueDetail('intent')` fast-resumes from intent screen, `goBackToVenueDetail('form')` saves DOM values and pre-fills form on return. What's Included: type-aware (cafes get Food & Beverages, stays don't), SVG tent icon. Phone field: numeric-only 10-digit (triple guard). Intent card: chips-wrap flex row (`justify-content:space-between`) so "Change date & time" sits right of chips; advance amount uses `var(--boho-accent-pink)` (was `--boho-rose` = near-white = invisible); price badge `var(--boho-accent-rose, #a84d66)` + `rgba(196,96,122,0.15)` bg.
-
-• **Remaining known issues**: The Nook (id=16) + The Reunion (id=17) have no photos (empty beige boxes). Legal pages (privacy/terms/cancellation/disclaimer.html) untracked, 12 unfilled `legal-placeholder` spans, not in `vite.config.mjs` `rollupOptions.input` → will 404 in prod. `sync-ical` function still has old sender `"The Picnic Story <onboarding@resend.dev>"`. `"Stories's"` → `"Stories'"` typo ×3 still in `docs/venue-booking-flow-spec.md`.
-
-• **CRITICAL — file editing rule**: `app.js` is 6,100+ lines. Never edit via bash — file tools only. Edge-fn source of truth = deployed; always `get_edge_function` before editing. Never commit without explicit user go-ahead.
-
-## Session Handoff — 2026-06-14 (Razorpay Standard Checkout — LIVE, working, uncommitted)
-
-• **Working end-to-end, verified with a real test payment.** Stack: Vite vanilla-JS frontend + Supabase Edge Functions (Deno) backend (no Node/Express). Two new functions deployed ACTIVE on `evmftrogyzoudiccqkya`, both `verify_jwt=true` and both `.trim()` their env secrets: `create-order` (v5) and `verify-payment` (v4). DB migration + functions are LIVE; all frontend/source files are LOCAL only (need commit+push for Vercel).
-
-• **Flow**: lock button → `submitBookingIntent(true)` now inserts booking `p_confirmed=false` (pending lead, was `true`) → `startRazorpayCheckout(bookingRow, lead, venue)` calls `create-order` (amount paise ≥100, receipt `booking_<id>`) → Razorpay modal (`window.Razorpay`, key from `order.key_id || RAZORPAY_KEY_ID`) → on success `verifyAndFinish()` calls `verify-payment` → server recomputes `HMAC-SHA256(order_id+"|"+payment_id, KEY_SECRET)`, on match PATCHes booking `confirmed=true, payment_status=paid` + razorpay ids via service role (guarded `&confirmed=eq.false`). This UPDATE fires existing `on_booking_confirmed_notify` trigger (same path as admin confirm). `confirmed` NEVER trusted from client. Modal dismiss / `payment.failed` → `finishBookingFlow(..., false)` leaves an unconfirmed query lead. New fns live just above `renderSuccessPage` in `app.js` (~line 2419); `submitBookingIntent` tail rewritten (~2380-2401).
-
-• **DB**: migration `add_razorpay_payment_columns_to_bookings` added `razorpay_order_id, razorpay_payment_id, razorpay_signature` (text) + `payment_status` (text, default `'pending'`, check `pending|paid|failed`) to `bookings`. RPC `submit_booking_intent` unchanged (still inserts; verify-payment does the confirm UPDATE).
-
-• **Two gotchas fixed**: (1) `RAZORPAY_KEY_ID` secret stored with a trailing newline (raw 24 vs trimmed 23 chars) → Razorpay rejected Basic auth with 401 → fixed via `.trim()` in both fns (advise re-set cleanly with `printf %s`). (2) Test card `4111 1111 1111 1111` is INTERNATIONAL and the Razorpay account is domestic-only → instant decline, no Success/Failure simulator. Working test inputs: domestic card `5267 3181 8797 5449` (or `4718 6091 0820 4366`), any future expiry/CVV → click Success; or UPI VPA `success@razorpay` / `failure@razorpay`. Diagnosed via `GET api.razorpay.com/v1/payments` `error_description`.
-
-• **Files changed, NOT committed**: `app.js`, `index.html` (CSP: added `https://*.razorpay.com` to script/connect/frame-src + `checkout.razorpay.com` script tag), `.env.local` (+`VITE_RAZORPAY_KEY_ID=rzp_test_T1P6C79C72D0P3`), new `.env.example`, new `supabase/functions/{create-order,verify-payment}/index.ts`. `.gitignore` already excludes `.env.local`. **KEY_SECRET only in Supabase fn secrets, never frontend.**
-
-• **Env caveat (recurring)**: bash sandbox served torn/truncated copies of `app.js` + `index.html` this session (frozen mtime, `node --check` hit phantom EOF) — could NOT run `vite build`. Verified instead via live edge-fn HTTP smoke tests (create-order → 200 + order_id), HMAC parity (webcrypto == node ref), `node --check` on isolated new code. **Run `npm run build` locally before deploying.**
-
-• **Next (optional, offered)**: Razorpay webhook (`payment.captured` → confirm booking) as backstop for tab-close-before-verify; surface `payment_status` in admin bookings list. Then commit all local changes on user go-ahead.
-
 ## Session Handoff — 2026-06-14 (Razorpay webhook backstop + admin payment status — webhook LIVE & verified, frontend uncommitted)
 
 • **Feature shipped & VERIFIED LIVE: server-to-server `payment.captured` backstop** so booking confirmation no longer depends on the customer's browser. Proof → booking **id=106**: `confirmed=true, payment_status=paid, razorpay_order_id/payment_id set, razorpay_signature=NULL`. The null signature is the tell — `verify-payment` always writes the signature, the webhook can't — so the webhook confirmed it after the user closed the tab mid-success. Logs: `razorpay-webhook 200` → `notify-booking-confirmed 200` ~1.5s later (trigger fired, one email, no duplicate). (Booking 104 = earlier normal completion, HAS signature; booking 105 = abandoned lead, correctly left unconfirmed.)
@@ -170,3 +144,37 @@
   - Fix 7 — Bundle size 525KB (Month 2).
 
 • **LOCAL uncommitted** — `scripts/prerender-venues.mjs`, `docs/SEO_FIX_PLAN.md`. Fixes 1 + 4 + 6 can all ride the same commit as the city pages. Standing rules: never `git add -A`; run git from Windows terminal; never commit without explicit user go-ahead.
+
+## Session Handoff — 2026-06-29 (packages spec — SPEC_occasion_packages.md created, not yet implemented)
+
+• **`docs/SPEC_occasion_packages.md` created** — two-part spec: (1) homepage package tiers from dev Google Doc (https://docs.google.com/document/d/1evdirE6EPEbGczo4GHhdhP1aH-NkUsA4FQnK3ubaujk); (2) occasion-based add-on pre-fill (Proposal/Birthday) from historical session analysis. NEITHER feature is built yet. Key insight from historical data: ₹180k+ of extras sold offline last year — this is a capture problem, not a demand problem.
+
+• **Three homepage package tiers — flat rate up to 6 guests, +₹1,500/person from 7th:**
+  - The Setting: setup only (teepee/flowers/candles/speaker/board/cutlery), ₹8,900, pre-fill `[]`
+  - The Moment ⭐ (default): + Bouquet(22) + Cake(24) + Prints(17), ₹12,900, pre-fill `[22, 24, 17]`
+  - The Story: + Photographer(19) + Skyshots(27) + Cold Pyros(23) + Bouquet + Cake + Prints, ₹24,900, pre-fill `[19, 27, 23, 22, 24, 17]` — all instant-confirm
+
+• **UI (from dev spec)**: new "Our Packages" section on homepage between "Choose Your Venue" and "Make it Yours"; 3 horizontal cards → single column mobile; The Moment gets 2px accent-blue border + "Most popular" badge; single "Book Now →" CTA opens booking form with package pre-fill via `PACKAGE_PREFILL` JS map
+
+• **Booking form**: `PACKAGE_PREFILL = { setting: [], moment: [22,24,17], story: [19,27,23,22,24,17] }` → `applyPackagePrefill(packageKey)` pre-ticks add-ons; occasion pre-fill runs after and can override; `compute_booking_total` RPC needs no changes. Never auto-select IDs 29/30/32 (requires_confirmation=true).
+
+• **Open question before build**: package flat pricing (₹8,900/12,900/24,900) vs existing per-guest `compute_booking_total` model — need to decide how to reconcile. Photographer (id:19) is `requires_confirmation=false` in DB — verify operationally before The Story goes live as instantly confirmed.
+
+• **Commit status**: `docs/SPEC_occasion_packages.md` is new/untracked. Add to next commit alongside other pending local files.
+
+## Session Handoff — 2026-06-30 (lock-but-unpaid email format — DEPLOYED v26)
+
+• **Problem**: a lock-intent lead that hasn't paid (`customer_intent='lock' && confirmed=false`, e.g. booking #14 Samradh Sharma) got the generic QUERY guest email, and the admin email labelled it `New 🔒 Booking` — looked confirmed though unpaid. Fixed by adding a dedicated lock-but-unpaid format for both guest + admin.
+
+• **`notify-booking-received` → v26 DEPLOYED LIVE** (`verify_jwt=false` preserved; webhook-triggered). Source of truth = deployed; local `supabase/functions/notify-booking-received/index.ts` matches (uncommitted). Changes:
+  - Three-way state at INSERT: `adminState = confirmed ? 'booking' : isLock ? 'lock_unpaid' : 'query'`.
+  - Guest email: old `buildQueryHtml` → parametrized `buildGuestHtml(record, …, variant)`. `variant='lock'` → subject "You're almost booked — pay to confirm 🧺", hero "you're almost booked… pay soon to avoid losing your slot", heading "Your Booking", pay-first "What happens next" steps, pay button caption in accent rose with soft-urgency line. `variant='query'` = unchanged enquiry ack (keeps the earlier optional pay button when advance>0). Pay button shows when `advance>0` (was the prior uncommitted edit, now folded in).
+  - Admin email: `lock_unpaid` → amber banner ("Guest chose to lock this date but hasn't paid… slot is NOT held until paid"), heading "⏳ Lock — PAYMENT PENDING #id", subject "⚠️ Unpaid lock from NAME — date · ₹X pending". `booking` (paid) → "🔒 Booking (paid)". `query` → "📋 Query". 
+
+• **User-chosen copy**: framing = "almost there, pay to confirm now" (no claim the date is held); soft urgency "pay soon to avoid losing your slot" (no hard 24h deadline).
+
+• **Validation**: bash mount serves a TORN/truncated copy of this file (stops ~line 419) → `deno check` over the mount falsely reports "Unexpected eof". Real file (file tool) is 455 lines & complete. Validated by reconstructing in `/tmp/fn/` (head -419 of mount + verified tail + the 3 `_shared` deps) → `deno check` clean, no smart-quote delimiters. Deployed bytes re-fetched & confirmed correct.
+
+• **Commit (user go-ahead given)** — run from Windows terminal, never `git add -A`:
+  `git add supabase/functions/notify-booking-received/index.ts CLAUDE.md && git commit -m "feat: lock-but-unpaid email format (guest + admin) in notify-booking-received" && git push`
+  ⚠️ `index.ts` was already modified pre-session (the pay-button edit) — it's all in this one file now, so this commit captures both. `supabase/functions/` is largely untracked (verify-payment, `_shared`, notify-* never committed) — the scoped path above only stages this one file.
