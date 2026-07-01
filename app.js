@@ -77,11 +77,13 @@ const appState = {
   selectedPackage: null,     // packages: { occasion, tierKey, addonIds } once a tier is chosen
 }
 
-// Packages (Phase 1) feature flag. Default OFF so the live booking flow is
-// unchanged on deploy; flip PACKAGES_FLAG_DEFAULT to true to launch. Per-session
-// override for testing: ?packages=1 enables, ?packages=0 disables (sticky).
-const PACKAGES_FLAG_DEFAULT = false
-function packagesEnabled() {
+// Packages (Phase 1). Real production toggle is per-venue: venues.packages_enabled
+// (admin-editable, cafe venues only — see the "Packages" field in the venue
+// admin form). ?packages=1|0 is a per-session QA override on top of that —
+// lets you preview a venue's tiers before flipping it live, or force-hide it
+// on a live venue to compare. Returns null when no override is active, so the
+// venue's real DB field decides.
+function packagesOverride() {
   try {
     const u = new URLSearchParams(location.search).get('packages')
     if (u === '1') { localStorage.setItem('ps_packages', '1'); return true }
@@ -89,16 +91,19 @@ function packagesEnabled() {
     const s = localStorage.getItem('ps_packages')
     if (s === '1') return true
     if (s === '0') return false
-  } catch (e) { /* localStorage blocked — fall through to default */ }
-  return PACKAGES_FLAG_DEFAULT
+  } catch (e) { /* localStorage blocked — no override */ }
+  return null
 }
 
-// True for the whole cafe + packages-flag flow (calendar → guests → tiers).
-// The sidebar's running "starting price" is hidden across all of it — the real
+// True for the whole cafe + packages flow (calendar → guests → tiers). The
+// sidebar's running "starting price" is hidden across all of it — the real
 // price only settles once a tier is chosen, and the booking form has its own
 // price breakdown, so nothing needs it restored downstream.
 function packageFlowActive(venue) {
-  return packagesEnabled() && venue?.type === 'cafe'
+  if (venue?.type !== 'cafe') return false
+  const override = packagesOverride()
+  if (override !== null) return override
+  return !!venue.packages_enabled
 }
 
 // Admin team filter state — persists across loadQueries/loadBookings calls
@@ -549,6 +554,10 @@ function venueCardHtml(venue) {
     ? `${venue.capacity_min}–${venue.capacity_max} guests`
     : `${venue.capacity_min}+ guests`
   const priceText = venue.base_price ? `From ${formatPrice(venue.base_price)}` : 'Get a quote'
+  // Only cafe venues get the tier-card packages flow, and only while the
+  // flag is on — showing this badge for anything else would point people at
+  // a flow they'll never reach. See packageFlowActive().
+  const showPkgBadge = packageFlowActive(venue)
 
   return `
     <a class="venue-card" href="/venues/${escapeHtml(venue.slug || '')}"
@@ -559,6 +568,7 @@ function venueCardHtml(venue) {
           ? `<img src="${escapeHtml(primaryImage.url)}" alt="${escapeHtml(primaryImage.alt || venue.name)}" loading="lazy">`
           : `<div class="venue-card-placeholder"><span>${escapeHtml(venue.name)}</span></div>`}
         <span class="venue-type-badge ${venueTypeBadgeClass(venue.type)}">${escapeHtml(formatVenueType(venue.type))}</span>
+        ${showPkgBadge ? '<span class="venue-card-pkg-badge">🧺 Packages available</span>' : ''}
       </div>
       <div class="venue-card-body">
         <h3 class="venue-card-name">${escapeHtml(venue.name)}</h3>
@@ -5536,6 +5546,7 @@ function clearVenueForm() {
   document.getElementById('vf-ideal-for').value = ''
   document.getElementById('vf-active').checked = true
   document.getElementById('vf-requires-confirmation').checked = false
+  document.getElementById('vf-packages-enabled').checked = false
   const teamSelClear = document.getElementById('vf-team')
   if (teamSelClear && appState.teams.length) teamSelClear.value = appState.teams[0].id
   renderVfImages([])
@@ -5561,6 +5572,7 @@ function populateVenueForm(venue) {
   document.getElementById('vf-max-setups').value = venue.max_concurrent_setups ?? 1
   document.getElementById('vf-active').checked = venue.is_active !== false
   document.getElementById('vf-requires-confirmation').checked = !!venue.requires_confirmation
+  document.getElementById('vf-packages-enabled').checked = !!venue.packages_enabled
 
   const meta = venue.metadata || {}
   renderVfImages(Array.isArray(venue.images) ? venue.images : (venue.images ? JSON.parse(venue.images) : []))
@@ -5585,10 +5597,12 @@ function populateVenueForm(venue) {
 
 function updateVfTypeVisibility(type) {
   const partnerOnly = document.querySelectorAll('.vf-partner-only')
+  const cafeOnly = document.querySelectorAll('.vf-cafe-only')
   const bnbSection = document.getElementById('vf-bnb-section')
   const icalSection = document.getElementById('vf-ical-section')
   const icalComboHint = document.getElementById('vf-ical-combo-hint')
   partnerOnly.forEach(el => { el.style.display = type === 'partner_bnb' ? '' : 'none' })
+  cafeOnly.forEach(el => { el.style.display = type === 'cafe' ? '' : 'none' })
   if (bnbSection) bnbSection.style.display = type === 'self_managed' ? '' : 'none'
   // iCal sync applies to self_managed (each floor has its own Airbnb listing)
   // AND combo (the whole-property listing is a separate listing on Airbnb).
@@ -6042,6 +6056,7 @@ async function handleVenueFormSubmit(event) {
     airbnb_ical_url: document.getElementById('vf-airbnb-ical-url').value.trim() || null,
     is_active: document.getElementById('vf-active').checked,
     requires_confirmation: document.getElementById('vf-requires-confirmation').checked,
+    packages_enabled: document.getElementById('vf-packages-enabled').checked,
     max_concurrent_setups: parseInt(document.getElementById('vf-max-setups').value, 10) || 1,
     team_id: parseInt(document.getElementById('vf-team')?.value, 10) || null,
     images: images,
@@ -7788,7 +7803,7 @@ document.addEventListener('DOMContentLoaded', () => {
             bookView.style.display = ''
             bookView.innerHTML = buildIntentScreenHTML(lead, { containerClass: 'vd-intent-wrap container' })
           }
-        } else if (packagesEnabled() && venue.type === 'cafe') {
+        } else if (packageFlowActive(venue)) {
           // Packages flow: insert the tier step between guests and the form.
           showPackageStep(venue)
         } else {

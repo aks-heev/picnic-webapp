@@ -1,5 +1,19 @@
 # The Picnic Stories — Claude Working Notes
 
+## Session Handoff — 2026-07-01 (packages: per-venue DB toggle replaces session flag)
+
+• **Discoverability gap closed properly.** After a first pass added a venue-card badge, user corrected the actual ask: a real `venues.packages_enabled` DB column, admin-editable, as the production source of truth — not a URL/session flag. Implemented as directed; `?packages=1|0` kept as a QA override layered on top (per user's explicit choice), not removed.
+
+• **DB migration `add_packages_enabled_to_venues` APPLIED LIVE**: `venues.packages_enabled boolean NOT NULL DEFAULT false`. RLS checked first (`admin_update_venues` is row-level only, gated by `auth.email()='aksh.eeev@gmail.com'`, no column restrictions) — no policy changes needed. `get_advisors` (security) run post-migration: zero new findings, all warnings pre-existing.
+
+• **`app.js` flag mechanism replaced**: old `packagesEnabled()`/`PACKAGES_FLAG_DEFAULT` removed entirely (verified via grep, no remaining refs). New `packagesOverride()` reads `?packages=1|0` → persists sticky `localStorage['ps_packages']`, returns `true`/`false`/`null`. New `packageFlowActive(venue)` = `venue.type==='cafe'` gate → override if set → else `!!venue.packages_enabled`. All call sites updated (click-delegation routing handler, venue card badge, etc.) to call `packageFlowActive(venue)` instead of the old global check.
+
+• **Admin form wired end-to-end**: `admin.html` — new `.vf-toggle-label.vf-cafe-only` checkbox `#vf-packages-enabled` next to the existing Active/Requires-confirmation toggles (hidden by default, same pattern as `.vf-partner-only`). `app.js`: `updateVfTypeVisibility()` now toggles `.vf-cafe-only` (visible only when `type==='cafe'`); `clearVenueForm()` resets it to unchecked; `populateVenueForm()` sets it from `!!venue.packages_enabled`; `handleVenueFormSubmit()` payload adds `packages_enabled` as a **top-level column** (not inside `metadata`, per user's explicit choice over the alternative of a metadata key).
+
+• **`loadVenues()` confirmed** already `select('*')` — new column reaches the storefront/`packageFlowActive()` with no further changes needed.
+
+• **Uncommitted this session** (rides with all prior-session local `app.js`/`style.css` packages work, see 2026-07-01 Phase 1 entry below): `app.js`, `admin.html`. Not yet browser-verified (no working sandbox browser render — see standing limitation below). Standing rules unchanged: never `git add -A`; no commit without explicit go-ahead; build/commit on Windows terminal.
+
 ## Session Handoff — 2026-06-23 (admin query pipeline: status + filter/sort + edit modal)
 
 • **Goal**: tame the cluttered admin queries list + stop leads getting lost. Shipped admin-side lead pipeline. Customer self-confirm/self-edit was explicitly CUT (out of scope, all the risk lived there). DB migration LIVE; `app.js`/`admin.html`/`style.css` LOCAL, uncommitted.
@@ -35,74 +49,6 @@
   git add index.html scripts/prerender-venues.mjs docs/SEO_FIX_PLAN.md && git commit -m "feat: city landing pages + SEO fixes (www canonical, LocalBusiness schema)" && git push
   ```
   Never `git add -A`. Never commit without explicit user go-ahead.
-
-## Session Handoff — 2026-06-14 (Razorpay webhook backstop + admin payment status — webhook LIVE & verified, frontend uncommitted)
-
-• **Feature shipped & VERIFIED LIVE: server-to-server `payment.captured` backstop** so booking confirmation no longer depends on the customer's browser. Proof → booking **id=106**: `confirmed=true, payment_status=paid, razorpay_order_id/payment_id set, razorpay_signature=NULL`. The null signature is the tell — `verify-payment` always writes the signature, the webhook can't — so the webhook confirmed it after the user closed the tab mid-success. Logs: `razorpay-webhook 200` → `notify-booking-confirmed 200` ~1.5s later (trigger fired, one email, no duplicate). (Booking 104 = earlier normal completion, HAS signature; booking 105 = abandoned lead, correctly left unconfirmed.)
-
-• **Edge fns DEPLOYED** (`evmftrogyzoudiccqkya`): `create-order` → **v6** (`verify_jwt=true`) now derives `bookingId = receipt.slice("booking_".length)` and sends `notes:{booking_id}` on the order so the payment entity carries it (response shape unchanged, no frontend change). `razorpay-webhook` → **v1, `verify_jwt=false`** (NEW, source at `supabase/functions/razorpay-webhook/index.ts`): reads RAW body, `HMAC-SHA256(rawBody, RAZORPAY_WEBHOOK_SECRET)` vs `x-razorpay-signature` (timing-safe, helpers copied from verify-payment); on `payment.captured` PATCHes `bookings?id=eq.<entity.notes.booking_id>&confirmed=eq.false` → `{confirmed:true, payment_status:'paid', razorpay_order_id, razorpay_payment_id}` (no signature — acceptable); `payment.failed` → `{payment_status:'failed'}`; returns 200 for authed no-ops, 400 bad sig, 500 if secret unset. `&confirmed=eq.false` guard makes it idempotent vs client `verify-payment` — whoever arrives first flips the row, second no-ops, order irrelevant.
-
-• **User config DONE** (webhook returned 200 not 400 ⇒ secret + dashboard are correct): `RAZORPAY_WEBHOOK_SECRET` set as Supabase fn secret; webhook added in Razorpay dashboard → URL `https://evmftrogyzoudiccqkya.supabase.co/functions/v1/razorpay-webhook`, events `payment.captured` + `payment.failed`.
-
-• **Feature A — admin payment badges (frontend, LOCAL/uncommitted)**: new `paymentBadgeHtml(b)` helper in `app.js` just above `occasionBoardHtml` (~3238) → Paid/Pending/Failed pills + optional `razorpay_payment_id` `<code>` chip; rendered in `renderQueries` header-left (after "New" badge) and `renderBookings` header-right (before `adm-amount-badge`). `style.css`: `.adm-pay-badge` + `.adm-pay--paid/pending/failed` (reuse `--color-success/warning/error-rgb`) + `.adm-pay-id`, inserted just before `.adm-amount-badge`. `node --check` clean on app.js.
-
-• **Commit status — NOT committed (user reviewing /git-commands)**. Recommended scoped commit: `git add app.js style.css supabase/functions/create-order supabase/functions/razorpay-webhook`. ⚠️ `app.js`/`style.css`/`index.html` carry MULTIPLE prior sessions' uncommitted work (app.js diff 156/172 lines) → committing drags it all along (unavoidable w/o `git add -p`). Entire `supabase/functions/` tree is untracked (verify-payment, `_shared`, notify-* never committed). JUNK — never `git add -A`: `index.html.bak`, `logo.png.png`, `logo3.png`, `~/`, `supabase/.temp/`, `.claude/settings.local.json`. `.env.example` is clean (placeholders only); `.env.local` correctly gitignored.
-
-• **Caveats / standing rules**: `notes.booking_id` only rides orders created AFTER create-order v6 — a pre-v6 order captured later hits the webhook with no booking_id → logged & ignored (200), won't retro-confirm. Secrets need `.trim()` (trailing newline 401'd KEY_ID historically; set with `printf %s`). Bash sandbox serves TORN copies of `app.js`/`index.html` → `npm run build` fails on phantom EOF; **run build LOCALLY before deploy**. Edit `app.js` (6,200 lines) via file tools only, never bash. Edge-fn source of truth = deployed (`get_edge_function` before editing). Never commit/push without explicit user go-ahead.
-
-## Session Handoff — 2026-06-15 (admin venue form fixes, multi-upload, menu strip)
-
-• **All changes LOCAL, uncommitted** — `git add app.js admin.html style.css && git commit && git push` covers everything from today. Razorpay already committed (`cfe0d34`, `0f8f351`) — confirmed via `git log`.
-
-• **Bug fixed — venue edit wiped fields**: `loadVenueManager()` `.select()` was missing `maps_url, setting, requires_confirmation, team_id` → they came back `undefined` → form cleared them → save wrote `null`. Fixed at `app.js` line ~4291.
-
-• **Admin venue form additions**: Copy button on maps URL field (`admin.html` + `.vf-copy-btn`/`.vf-input-row` in `style.css`); shows ✓ for 1.2s on click.
-
-• **Multi-file image upload** (`app.js`): "Add Images" / "Add Menu Pages" buttons are now `<label>` wrapping `<input type="file" multiple>` (`admin.html`). Handler `addVfImagesMulti(input, type)` pre-renders placeholder rows for all files then uploads in parallel via `Promise.all`. `{ url, alt, name }` — `name` field added to image objects, stored in `.vf-img-name` hidden input, shown below thumbnail as `.vf-img-filename` (10px muted, truncated, 64px wide). Filename written by multi-add and single-replace handlers; preserved through drag-reorder. Existing images without `name` show no label.
-
-• **Menu section redesign** (`app.js` ~line 760): venue page now shows 3 preview thumbs in `.vd-menu-strip` (no wrap) + optional `+N more` tile (dashed rose border) → opens lightbox at page 4 + `"View full menu · N pages →"` text link below. Heading changed to "Our menu", subhead "Browse before you book · N pages". `style.css`: `.vd-menu-strip`, `.vd-menu-view-all`, `.vd-menu-thumb-more`, `.vd-menu-more-count/label` added; `flex-shrink:0` added to `.vd-menu-thumb`.
-
-• **Bash sandbox stale-mount (standing caveat)**: `git diff` in sandbox shows phantom large deletions (truncated file view). Actual Windows files are intact — verified via Read tool. Always run git in Windows terminal, never bash sandbox. Edit `app.js` (6,378 lines) via file tools only.
-
-## Session Handoff — 2026-06-15 (Terracottage venue rename)
-
-• **Rename COMPLETE — DB live, code + docs updated**: The Gathering (id=15) → Terracottage Umber, The Nook (id=16) → Terracottage Ochre, The Reunion (id=17) → Terracottage Sienna. Terra cotta-themed stays branding; Ochre/Sienna/Umber chosen as coherent artist-pigment trio over Olla/Tinaja/Silt.
-
-• **DB**: `UPDATE venues SET name = CASE id WHEN 15 THEN 'Terracottage Umber' WHEN 16 THEN 'Terracottage Ochre' WHEN 17 THEN 'Terracottage Sienna' END WHERE id IN (15,16,17)` — confirmed live.
-
-• **Code**: `app.js:3196` combo floor note → "Terracottage Ochre + Terracottage Umber"; `supabase/functions/_shared/venue.ts:9` comment example updated.
-
-• **Docs**: all old names replaced (replace_all) in `SPEC_parent_child_listings.md`, `SPEC_hold_action_and_admin_ui.md`, `LINKED_LISTING_PLAN.md`, `PLAN.md`, `STAGE0_ICAL_ROUNDTRIP.md`.
-
-• **All changes LOCAL, uncommitted** — git commit block generated (covers 5+ sessions of accumulated work). ⚠️ Run from Windows terminal only — bash stale-mount shows phantom truncations in app.js/admin.html. Never `git add -A`; exclude: `~/`, `index.html.bak`, `logo.png.png`, `logo3.png`, `"ChatGPT Image..."`, `picnic-reel-gathering-15s.mp4`, `supabase/.temp/`, `.agents/`, `.claude/settings.local.json`.
-
-## Session Handoff — 2026-06-20 (UX fixes + DB corrections)
-
-• **Gurugram team filter (DB fix, live)** — all venues still had `team_id=1` (Jaipur) despite 06-13 handoff claiming it was fixed. Corrected: `UPDATE venues SET team_id = 2 WHERE id IN (14,15,16,17,18)` (Beige Cafe, Terracottage Umber/Ochre/Sienna, The Sunroom).
-
-• **Cafe food/drink multipliers (DB fix, live)** — 6 cafe venues (IDs 14,18,19,20,21,24) had no `food_multiplier`/`drink_multiplier` in metadata → inclusion banner showed nothing. Fixed: `metadata || '{"food_multiplier":1.5,"drink_multiplier":1}'` for all cafe venues where missing. Formula: food = ceil(guests × 1.5), drinks = guests × 1.
-
-• **`app.js` changes (LOCAL, commit prepared)**: (1) `renderSuccessPage` — success page contact number was hardcoded `+91 99999-99999`; now resolves via `venueTeamId` → `appState.teams.find(t => t.id === venueTeamId)?.phone`, fallback Jaipur `+91 92669-64666`. (2) My Bookings `💰` advance line — was showing on all bookings including unconfirmed queries; now conditional: `b.confirmed && b.advance_amount > 0` only. (3) Venue detail section order — "What's included" moved above "Our menu" (was below "The Property").
-
-• **`index.html` (LOCAL, commit prepared)** — OG/Twitter share image updated from Unsplash stock (`photo-1530103862676`) to actual hero: `https://evmftrogyzoudiccqkya.supabase.co/storage/v1/object/public/site-images/hero/main.jpg`. Removed explicit `og:image:width/height`. WhatsApp caches aggressively — use Facebook Sharing Debugger to force refresh after push.
-
-• **Commit prepared, not yet pushed**: `git add app.js index.html CLAUDE.md package-lock.json` — run from Windows terminal only.
-
-## Session Handoff — 2026-06-20 (booking-log workbooks + Supabase→Sheets sync + total_amount backend)
-
-• **Deliverables live in Cowork outputs, NOT the repo**: two location-scoped manual booking workbooks `The Picnic Stories - Jaipur.xlsx` + `The Picnic Stories - Gurugram & Delhi.xlsx` (tabs: Guide/Dashboard/Picnic Bookings/Airbnb Bookings/Expenses/Partner Ledger/hidden Lists), plus `BookingSync.gs` (Google Apps Script sync), `SETUP_google_sheet_sync.md`, `SCOPE_totals_and_addons_sync.md`. Generators: `outputs/build_final.py` (workbooks) → `outputs/post_fix.py` (Google-Sheets-safe add-on formula). Purpose: log direct/phone bookings manually + auto-pull website bookings. Bash sandbox FREEZES a .py mount after run+edit (serves torn/truncated copy) → always write a NEW filename for fresh reads.
-
-• **Backend "Option B" SHIPPED LIVE** (migration `add_total_amount_and_pricing_total`): added `bookings.total_amount numeric` (nullable). New `compute_booking_total(p_venue_id,p_billing_guests,p_nights,p_addon_ids,p_time_slot)` returns full price (unrounded). `compute_booking_advance` REFACTORED to thin wrapper `round(coalesce(compute_booking_total(...),0)*0.5)` — advance output verified byte-identical to pre-change baseline across 15 bookings (live pricing unaffected). RPC `submit_booking_intent` now computes `v_total` + inserts `total_amount`. Backfilled `total_amount = advance_amount*2` for cafe/self_managed = 88/95 rows, 0 mismatch; 7 left null (5 query-leads adv=0, 2 legacy null-venue id 47/48) — correct.
-
-• **Pricing/add-on facts**: advance = exactly half total for `cafe`(with time_slot) and `self_managed`(with nights); returns 0 for combo/partner_bnb/custom (manual query leads). Add-ons were ALREADY persisted in `booking_add_ons` (addon_id, price_at_booking) — never a gap (earlier "not stored" claim was wrong). Active add-on catalog has duplicate inactive ids; `BookingSync.gs ADDON_COL` maps BOTH old+new ids → the 16 picnic tick-columns.
-
-• **Routing source of truth = `venues.city` + `venues.type`** (NOT the teams join — `venues.team_id=1` for ALL venues currently, observed live, contradicts 06-20 UX-fixes handoff above). city: Jaipur→jaipur sheet, Delhi/Gurugram/Noida/Faridabad→ncr sheet. type: cafe/custom=picnic tab; self_managed/partner_bnb/combo=stay tab; any `checkout_date`=stay. Active venues seeded in each Lists tab: JAI picnic=Castle Valley/House of Amer/Om Niwas Suite Hotel/Once Upon A Time At The Bagh/Your Own Space, JAI stays=House of Amer(Stay)/Om Niwas Stay; NCR picnic=Beige Cafe/The Sunroom, NCR(Gurugram) stays=Terracottage Umber/Ochre/Sienna+Countryside Offgrid. (Many old Jaipur venues are `is_active=false`.)
-
-• **Sync mechanics** (`BookingSync.gs`): one-way Apps Script timer pull, confirmed/paid only (`or=(confirmed.eq.true,payment_status.eq.paid)`), per-sheet `LOCATION='jaipur'|'ncr'`. Writes INPUT cols only — sheet formulas compute Booking ID (`CODE-001` per venue via VLOOKUP Lists code table + COUNTIF), totals, balances, margin. Picnic: Base Package=total−addons + ticks add-on cols; Stay: Nightly Rate=round(total/nights). Dedup via hidden `_bkid` col the script self-creates. service_role key in Script Properties (`SUPABASE_SERVICE_KEY`).
-
-• **Google-Sheets conversion gotcha (current blocker)**: an uploaded .xlsx opened in Drive Office-compat mode shows cached blank formula values and won't recalc on edit → user MUST do **File ▸ Save as Google Sheets** and work in the converted copy. Add-on total formula was changed from inline array constant `{500,500,…}` to price-range `Lists!$T$2:$AI$2` (16 prices written to Lists T2:AI2) for conversion safety. Grey/formula columns trigger on Customer Name (picnic) / Guest Name (stay) in col E. User had filled rows in the UN-converted file → those won't carry into the converted copy; offered to load their rows into the workbook before they convert.
-
-• **Next**: user picks — re-enter rows in converted Sheet, or send filled rows/file for me to load pre-conversion. Then Google-side setup (import each workbook → convert → paste `BookingSync.gs` → set `LOCATION` → add service_role key → 15-min trigger). Optional follow-ons: surface `total_amount` in admin booking list + confirmation email; dry-run sync validation against real bookings (e.g. id 120/121).
 
 ## Session Handoff — 2026-06-22 (route-based /venues/<slug> URLs for SEO + deep links)
 
@@ -162,6 +108,18 @@
 
 • **Commit status**: `docs/SPEC_occasion_packages.md` is new/untracked. Add to next commit alongside other pending local files.
 
+## Session Handoff — 2026-06-30 (packages feature — design locked: universal tiers + venue-page pricing; nothing built)
+
+• **Goal = raise AOV.** Decided: packages are a **front door on the existing booking engine**, NOT a pipeline replacement (user floated ditching the pipeline; rejected — would discard availability logic, Razorpay+webhook, SEO `/venues/<slug>` pages, admin tooling to solve a curation/attach problem). Top AOV lever = defaulting **Photographer (id 19, ₹6,000)** ON for proposals (sold 11× offline, ~never online, 4× next add-on; proposals = 28% of bookings).
+
+• **Pricing RESOLVED — no price matrix.** A tier = a curated add-on preset; per-combo price = existing `compute_booking_total(p_venue_id,p_billing_guests,p_nights,p_addon_ids,p_time_slot)` which already returns a unique price per venue+add-on set. "From ₹X" = min across venues at base guests. Spec's flat ₹8,900/12,900/24,900 are **fictional** — ₹8,900 is below the real ₹9,900 floor (cheapest venue base @2 guests: Beige(14)/Castle Valley(19)/House of Amer(24)). Live cafe/self_managed bases: Beige 9900, Sunroom(18) 13900, Om Niwas(20) 12900, Once Upon A Time(21) 15900, TerraCottage Umber(15) 10900/Ochre(16) 7900; per-guest `metadata.tiers`.
+
+• **Tier model RESOLVED → fixed universal `Setting/Moment/Story`** (NOT bespoke per-occasion Capture/Party). Forced by deciding to **show tier prices on the venue detail page**: prices are stable only if tier contents are occasion-independent. Sets: `setting:[]`, `moment:[22,24,17]`, `story:[19,27,23,22,24,17]`. Corrected "from": Setting ₹9,900 · Moment ~₹13,500 · Story ~₹26,000 (@2 guests; firm up after guest selection like the existing "starting price"). Occasion demoted to a **default-biasing nudge** (Proposal→default Story/ensure Photographer; Birthday→default Moment), not a tier system. Tradeoff accepted: loses bespoke curation story for stable pricing + one vocabulary + path consistency.
+
+• **Two converging paths.** Home: "Our Venues" + "Our Packages". Packages-first: occasion → tier(from ₹X) → venue(price firms) → form. Venue-first: venue page shows 3 tiers w/ this-venue prices → tier → form. **Keystone:** `appState.selectedPackage = {occasion,tierKey,addonIds}`; booking form reads ONLY this; both paths write it (prevents drift). Add-ons venue-scoped (`loadVenueAddOns`) → pre-tick = tier IDs ∩ venue's available add-ons. All universal-tier IDs verified `requires_confirmation=false`; never pre-fill 29/30/32.
+
+• **Hardened plan (plan-optimizer 87/100, `64→78→85→87→87`). NOTHING BUILT.** Phase 1 = venue-first tier selector in booking form (occasion `<select>` at app.js ~L2008 currently only toggles "Other" → upgrade to render tier cards + pre-fill via `.bv-addon-check[data-addon-id]`, `updateBookingSummaryPrice()`); reuses live form+RPC, no new nav, ships AOV lever fastest. Phase 2 = "Our Packages" front door (index.html between "Choose Your Venue" L223 and addons-strip L241; CSS `pkg-` prefix vs SPA collision). Phase 3 = verify + PostHog (`package_tier_selected`,`addon_attach`,`zero_addon_booking`). Standing rules: never `git add -A`; build on Windows (sandbox esbuild crash/torn mounts); U+2018/U+2019 as string delimiters crash app.js (recurring); edit app.js via file tools only. **NEXT:** get explicit go-ahead to lock universal tiers + venue-page pricing, update `docs/SPEC_occasion_packages.md`, start Phase 1.
+
 ## Session Handoff — 2026-06-30 (lock-but-unpaid email format — DEPLOYED v27)
 
 • **Copy correction (v27)**: investigated whether an unpaid `lock` blocks the date — it does NOT. `get_booked_dates` and the submit-time freshness check both filter `confirmed = true` only; `confirmed` flips true only on payment (verify-payment / razorpay-webhook `payment.captured`) or admin confirm. So payment IS the lock — the system already only reserves on paid. The earlier lock-email lines implied a hold-that-gets-released (false). Fixed the two lock-variant lines to state the real rule: heroSub → "your date isn't reserved until payment is complete — pay the advance below to secure it now"; payCaption → "Your date isn't held until payment is complete. Pay now to lock it in before someone else does." (Honest + real first-to-pay-wins urgency.) DECISION: do NOT build a real hold/expiry — it would reserve dates for non-payers (the risk we were avoiding). Current no-hold-until-paid behavior is correct.
@@ -183,3 +141,32 @@
 • **Commit (user go-ahead given)** — run from Windows terminal, never `git add -A`:
   `git add supabase/functions/notify-booking-received/index.ts CLAUDE.md && git commit -m "feat: lock-but-unpaid email format (guest + admin) in notify-booking-received" && git push`
   ⚠️ `index.ts` was already modified pre-session (the pay-button edit) — it's all in this one file now, so this commit captures both. `supabase/functions/` is largely untracked (verify-payment, `_shared`, notify-* never committed) — the scoped path above only stages this one file.
+
+## Session Handoff — 2026-06-30 (packages plan from scratch + Phase 0 pricing/food groundwork)
+
+• **Packages re-planned from scratch** (user: "truly start over"). Grounding reality from live DB: only 12 leads / 1 confirmed sale over 7 days → AOV lift is an explicit faith bet, NOT data-proven (the old `SPEC_occasion_packages.md` leaned on offline numbers + fictional flat pricing — both contradicted by live data). New spec: `docs/SPEC_packages_mvp.md` (LOCAL, untracked; supersedes the old one). Plan-optimizer hardened `64→78→85→87`.
+
+• **Locked design:** themed tiers `setting:[]` / `moment:[22,24,17]` / `story:[19,27,23,22,24,17]` (occasion = label + default-nudge: Proposal/Anniversary→story, Birthday/DateNight→moment, else setting). Cafe-only scope (kills cross-type + cafe-only-add-on breakage; cafe-only add-ons = 23,25,26,27,30,32). Locked bundles (booking form: drop occasion field, show package summary, hide included add-ons, show only remaining). ALL add-ons allowed, no approval (gated 29/30/32 still auto-confirm; admin gets a loud flag). BOTH flows Phase 1: venue-first AND homepage packages-first, both reordered → venue+occasion+guests known → tier(priced) → form. Deep-link/SEO entries (`/venues/<slug>`, `?venue=ID`) fall back to The Setting/no occasion + venue page surfaces tiers.
+
+• **Pricing model decided (NOT applied — user's MANUAL admin task):** setup-only base flat for 1–6 guests (Beige=₹8,900 confirmed; others per-venue, differ), +₹3,000 per 3 beyond 6 (flat across venues), food/drinks removed→offline. DATA-ONLY: `compute_booking_total` prices entirely off `metadata.tiers` (food_multiplier doesn't affect price). Per-venue runbook in spec: base_price=BASE, tier rows `6→BASE, 9→+3000, 12→+6000, 15→+9000, 18→+12000`, overage `1000`. Active cafe venues: 14,18,19,20,21,24. ⚠️ re-prices live bookings instantly per venue on save; reversible by re-entering old tiers. After user enters a venue → verify `compute_booking_total(id,2/6/7/9/12,0,'{}','<slot>')`.
+
+• **3 fixes DONE this session — app.js LOCAL/uncommitted + 1 SQL LIVE; `node --check` clean:**
+  - `getInclusions` (~169): added `if (m?.food_offline) return null` — hides inclusion banner reversibly, multipliers retained.
+  - `handleVenueFormSubmit` (~5623): `const originalMeta = (id ? venueManagerState.venues.find(v=>v.id===parseInt(id,10))?.metadata : null) || {}; let metadata = {...originalMeta, tiers, overage_per_person:overage, includes:splitCsv('vf-includes')}` — admin save now MERGES (was destructive replace that wiped unmanaged metadata keys; latent bug, now fixed). Preserves food_multiplier/drink_multiplier/food_offline across admin saves.
+  - SQL LIVE: `food_offline:true` set on venues 14,18,19,20,21,24 (food_mult 1.5 / drink 1 retained — user wants re-enable-later).
+
+• **Live-state caveat:** `food_offline` flag is LIVE in DB but the banner-hide code is LOCAL → inclusion banner still shows on the live site until build+deploy. No breakage in between. Uncommitted files this session: `app.js`, `docs/SPEC_packages_mvp.md`. Standing rules unchanged: never `git add -A`; build/commit on Windows (sandbox esbuild crash/torn mounts); no commit without go-ahead; U+2018/U+2019 as string delimiters crash app.js; project `evmftrogyzoudiccqkya`. **NEXT:** user enters tier rows/base prices in admin → I verify; Phase 1 build starts by verifying app.js anchors (occasion select, `.bv-addon-check[data-addon-id]`, `updateBookingSummaryPrice`, `showVenuePage`, `venueCardHtml`).
+
+## Session Handoff — 2026-07-01 (packages Phase 1 venue-first slice — BUILT + browser-verified, uncommitted)
+
+• **Phase 1 venue-first packages BUILT + browser-verified** working on localhost (The Sunroom). LOCAL/uncommitted: `app.js`, `style.css` (+ prior-session uncommitted `app.js`/`docs` rides along). Scope decided this session with user: **venue-first ONLY, behind a flag** (NOT both flows — 12 leads/1 sale = unproven bet, keep live-flow change minimal). Also decided: build UI now; prices self-correct once Phase 0 pricing entered.
+
+• **Flow (cafe + flag only):** venue → calendar (date+slot) → guest step (NEW occasion `<select>` → `window.setBookingOccasion` → `appState.bookingOccasion`) → `showPackageStep` (3 priced tier cards) → `showBookingForm` (locked bundle). Non-cafe / flag-off = existing flow untouched. **Packages are NOT on the venue landing** (user's "I don't see packages" = they appear only after 2× Book Now). Routing hook = click handler guests-branch: `if (packagesEnabled() && venue.type==='cafe') showPackageStep(venue) else showBookingForm(venue)`.
+
+• **Feature flag:** `PACKAGES_FLAG_DEFAULT=false` (live unchanged on deploy). `packagesEnabled()` reads `?packages=1|0` → persists `localStorage['ps_packages']`, sticky. Test `…/venues/<slug>?packages=1`. Config block placed BEFORE `CAFE_SLOTS`: `PACKAGE_TIERS {setting:[], moment:[22,24,17], story:[19,27,23,22,24,17]}`, `PACKAGE_TIER_ORDER`, `OCCASION_DEFAULT_TIER` (Proposal/Anniversary→story; Birthday/DateNight/Bridal/Baby→moment; else setting), `defaultTierForOccasion()`.
+
+• **Load-bearing impl (regression ≈ zero):** tier's included add-ons render as REAL `checked` `.bv-addon-check` inputs (CSS-hidden `.pkg-locked-check`, shown read-only in `.pkg-included-*` section) → existing `updateBookingSummaryPrice` + `handleInlineBookingSubmit` count/persist them with ZERO logic change. Occasion → `<input type=hidden name=occasion>` when package (submit path unchanged). Accordion filters out `lockedIds`. `appState.selectedPackage={occasion,tierKey,addonIds}` + `bookingOccasion`; reset in `showVenuePage`. Window exposures: `setBookingOccasion`, `showPackageBack`, `selectPackageTier`. ⚠️ `appState` NOT on window (ES module) — inline handlers MUST call window fns. Tier card price computed CLIENT-SIDE = `getPicnicPrice(adults) + Σ tier add-on catalog prices` (matches form total exactly; RPC not used for display).
+
+• **Pricing verified live:** `compute_booking_total(venue,billing_guests,nights,addon_ids[],slot)` returns 0 unless slot ∈ {morning,afternoon,evening}; Beige(14)/Castle(19) @2/4/6 = 9900/12900/15900, Moment +3100, Story +16100 (flat across guests). ⚠️ **Phase 0 pricing NOT applied** — tiers still food-inflated stepping (every 2g +3000, cap 6–8g); `food_offline:true` set on 14,18,19,20,21,24 but base tiers unchanged. Cards show current prices, self-correct after user's manual admin Phase-0 entry. Browser-verified on The Sunroom: cards ₹13,900/17,000/30,000, badges (Most picked / Suggested), occasion capture, locked total ₹17,000, +Photographer extra=₹23,000. `node --check` clean, no U+2018/U+2019 delimiters. Fixed sidebar 3-across overflow → `.pkg-cards` single column.
+
+• **NOT built (deferred):** homepage packages-first entry; admin loud-flag for gated add-ons 29/30/32; surfacing tiers on venue detail page for deep-links. **CONTINUE FROM:** slice done+verified, flag OFF, nothing committed — user decides: commit `app.js`+`style.css` (+pending prior files, never `git add -A`, Windows terminal, go-ahead required), OR add prominence (tiers on venue detail page / full-width), OR do Phase 0 manual admin pricing then re-verify `compute_booking_total`.

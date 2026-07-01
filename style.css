@@ -3286,6 +3286,30 @@ body {
   transform: scale(1.04);
 }
 
+/* Packages indicator — self-contained absolute overlay (doesn't touch
+   .venue-type-badge's own positioning/background, which is shared with
+   non-overlay contexts like the venue hero and booking summary row, so
+   changing it there risks side effects outside this card). */
+.venue-card-pkg-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(2px);
+  color: var(--boho-accent-pink);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
 /* Placeholder when no image */
 .venue-card-placeholder {
   width: 100%;
