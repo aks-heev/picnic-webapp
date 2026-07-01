@@ -79,6 +79,7 @@
                 <button class="tab-btn" data-tab="availability" role="tab" aria-selected="false">Availability</button>
                 <button class="tab-btn" data-tab="menu-link" role="tab" aria-selected="false">Menu Link Generator</button>
                 <button class="tab-btn" data-tab="add-ons" role="tab" aria-selected="false">Add-ons</button>
+                <button class="tab-btn" data-tab="packages" role="tab" aria-selected="false">Packages</button>
                 <button class="tab-btn" data-tab="hero-image" role="tab" aria-selected="false">Hero Image</button>
                 <button class="tab-btn" data-tab="teams" role="tab" aria-selected="false">Teams</button>
             </div>
@@ -254,16 +255,32 @@
                             <input type="text" id="vf-includes" class="vf-input" placeholder="e.g. Full picnic setup, Curated menu, Setup &amp; cleanup" />
                         </div>
 
-                        <!-- Pricing Tiers -->
-                        <div class="vf-section">
-                            <div class="vf-section-title">Pricing Tiers</div>
+                        <!-- Simple pricing: flat base price through N guests, then overage.
+                             All venue types except partner_bnb (see vf-not-partner-only). -->
+                        <div class="vf-section vf-not-partner-only">
+                            <div class="vf-section-title">Pricing</div>
+                            <div class="vf-row">
+                                <div class="vf-field">
+                                    <label class="vf-label">Free guests up to <span class="vf-hint">(base price is flat through this many guests)</span></label>
+                                    <input type="number" id="vf-free-guests-upto" class="vf-input" min="1" step="1" value="6" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Pricing Tiers: genuine stepped guest pricing. partner_bnb (BnB
+                             stays) only — these venues' price increases in multiple real
+                             steps (e.g. catering scaling) that the flat+overage model above
+                             can't represent without changing their actual prices. -->
+                        <div class="vf-section vf-partner-only" style="display:none">
+                            <div class="vf-section-title">Pricing Tiers <span class="vf-hint">(stepped guest pricing)</span></div>
                             <div id="vf-tiers-list" class="vf-tiers-list"></div>
                             <button type="button" id="vf-add-tier" class="vf-add-btn" onclick="addVfTier()">+ Add Tier</button>
-                            <div class="vf-row" style="margin-top:10px">
-                                <div class="vf-field">
-                                    <label class="vf-label">Overage per person (₹)</label>
-                                    <input type="number" id="vf-overage" class="vf-input" min="0" step="100" value="2000" />
-                                </div>
+                        </div>
+
+                        <div class="vf-row" style="margin-top:10px">
+                            <div class="vf-field">
+                                <label class="vf-label">Overage per person (₹)</label>
+                                <input type="number" id="vf-overage" class="vf-input" min="0" step="100" value="2000" />
                             </div>
                         </div>
 
@@ -406,6 +423,17 @@
                     <button class="btn btn--primary" onclick="openAddOnForm()">+ New Add-on</button>
                 </div>
                 <div id="addons-manager-container">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- Packages Tab -->
+            <div id="packages-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="tab-header">
+                    <h3>Packages</h3>
+                    <p class="vf-hint">Setting / Moment / Story tiers used in the venue-first packages flow (cafe venues). Price shown per venue is derived live from base price + this tier's add-ons — it is never typed in directly. Food-included reflects each venue's own setting and can't be overridden here.</p>
+                </div>
+                <div id="packages-manager-container">
                     <!-- Populated by JS -->
                 </div>
             </div>

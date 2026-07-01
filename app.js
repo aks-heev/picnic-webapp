@@ -223,19 +223,39 @@ function inclusionBannerHtml(venue, adults) {
     <span class="vd-inclusion-note">Based on the number of adults. Children are welcome — order anything extra à la carte.</span>`
 }
 
-// Tiered price for a venue given billing guest count.
-// Tiers are stored in venue.metadata.tiers as [{up_to, price}, ...] sorted ascending.
-// Guests beyond the last tier: lastTier.price + overage_per_person × (guests − lastTier.up_to)
-// Falls back to venue.base_price if no tiers defined.
+// Price for a venue given billing guest count.
+//
+// Two models, in priority order:
+//  1. venue.free_guests_upto set → flat base_price through that many guests,
+//     then base_price + overage_per_person × (guests − free_guests_upto).
+//     This is the admin-editable model (venue form: base price, free guests
+//     up to, overage per person). Populated only for venues whose legacy
+//     tiers array already reduced to this losslessly — verified against
+//     every active venue's historical price grid before migrating (see
+//     migration add_pricing_columns_and_packages_tables).
+//  2. Legacy fallback: venue.metadata.tiers as [{up_to, price}, ...] sorted
+//     ascending, overage beyond the last tier. Still authoritative for
+//     venues with genuine multi-step guest pricing (partner_bnb stays —
+//     Countryside Offgrid, House of Amer, Om Niwas Stay) that a single
+//     flat+linear model can't represent without changing their real prices.
+//     Falls back to plain base_price if no tiers defined either.
 function getVenuePrice(venue, billingGuests) {
+  const base = Number(venue?.base_price) || 0
+
+  if (venue?.free_guests_upto != null) {
+    const overage = Number(venue.overage_per_person) || 0
+    return billingGuests <= venue.free_guests_upto
+      ? base
+      : base + overage * (billingGuests - venue.free_guests_upto)
+  }
+
   const m = venue?.metadata
   if (!m || !Array.isArray(m.tiers) || m.tiers.length === 0) {
-    return venue?.base_price ?? 0
+    return base
   }
   const tiers = m.tiers
   const match = tiers.find(t => billingGuests <= t.up_to)
   if (match) return match.price
-  // Beyond last tier — overage
   const last = tiers[tiers.length - 1]
   const overage = billingGuests - last.up_to
   return last.price + overage * (Number(m.overage_per_person) || 0)
@@ -1284,12 +1304,186 @@ function renderVenueDetail(venue, addOns = []) {
 // just a preset of add-on IDs; the per-combo price always comes from the
 // compute_booking_total RPC (the source of truth) — never hardcoded here.
 // Cafe (picnic) venues only. See docs/SPEC_packages_mvp.md.
-const PACKAGE_TIERS = {
+//
+// Tier definitions (name/tagline/add-ons/featured) live in the `packages` /
+// `package_add_ons` tables — admin-editable via the Packages panel.
+// loadPackages() overwrites the literals below at bootstrap; they're only a
+// fail-safe fallback if that fetch fails, and must stay in sync with the DB
+// seed in migration add_pricing_columns_and_packages_tables.
+let PACKAGE_TIERS = {
   setting: { key: 'setting', name: 'The Setting', addons: [],                          tagline: 'The signature setup, beautifully done.' },
   moment:  { key: 'moment',  name: 'The Moment',  addons: [22, 24, 17], featured: true, tagline: 'Bouquet, cake and printed memories.' },
   story:   { key: 'story',   name: 'The Story',   addons: [19, 27, 23, 22, 24, 17],     tagline: 'The full production — photographer and more.' },
 }
-const PACKAGE_TIER_ORDER = ['setting', 'moment', 'story']
+let PACKAGE_TIER_ORDER = ['setting', 'moment', 'story']
+
+// Loads package tier definitions from the DB, replacing the hardcoded
+// fallback above. Falls back silently to the hardcoded defaults on error so a
+// DB hiccup never breaks the booking flow. Called once at bootstrap
+// (DOMContentLoaded) alongside loadTeams(), on both admin.html and the
+// public site.
+async function loadPackages() {
+  try {
+    const { data, error } = await supabase
+      .from('packages')
+      .select('*, package_add_ons(addon_id, sort_order)')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+    if (error) throw error
+    if (!data || data.length === 0) return
+    const tiers = {}
+    const order = []
+    data.forEach(pkg => {
+      const addons = (pkg.package_add_ons || [])
+        .slice()
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .map(pa => pa.addon_id)
+      tiers[pkg.key] = { key: pkg.key, name: pkg.name, tagline: pkg.tagline || '', addons, featured: !!pkg.is_featured }
+      order.push(pkg.key)
+    })
+    PACKAGE_TIERS = tiers
+    PACKAGE_TIER_ORDER = order
+  } catch (err) {
+    console.error('Failed to load packages, using fallback tier definitions:', err)
+  }
+}
+
+// ── Packages admin panel ───────────────────────────────────────────────────
+// Package composition (which add-ons belong to each tier) is admin-editable
+// here. Tier price is always DERIVED (base_price + sum of the tier's add-on
+// catalog prices) and shown read-only — never a typed-in number — so it
+// can't drift from the add-on catalog the way base_price and the old tiers
+// array once did (see the base_price/metadata.tiers desync found and fixed
+// this session). Food-included is shown read-only from each venue's own
+// food_offline setting, not editable per-package, for the same reason.
+let packagesManagerState = { packages: [], addons: [], venues: [] }
+
+async function loadPackagesManager() {
+  const container = document.getElementById('packages-manager-container')
+  if (!container) return
+  container.innerHTML = '<p class="admin-loading">Loading packages…</p>'
+  try {
+    const [pkgRes, addonRes, venueRes] = await Promise.all([
+      supabase.from('packages').select('*, package_add_ons(addon_id, sort_order)').order('sort_order', { ascending: true }),
+      supabase.from('add_ons').select('id, name, price').eq('is_active', true).order('sort_order', { ascending: true }),
+      supabase.from('venues').select('id, name, type, packages_enabled, base_price, metadata, venue_add_ons(addon_id)')
+        .eq('type', 'cafe').eq('is_active', true).order('id', { ascending: true }),
+    ])
+    if (pkgRes.error) throw pkgRes.error
+    if (addonRes.error) throw addonRes.error
+    if (venueRes.error) throw venueRes.error
+    packagesManagerState = {
+      packages: pkgRes.data || [],
+      addons: addonRes.data || [],
+      venues: venueRes.data || [],
+    }
+    renderPackagesManager()
+  } catch (err) {
+    console.error('Failed to load packages manager:', err)
+    container.innerHTML = '<p class="venues-error">Unable to load packages.</p>'
+  }
+}
+
+function renderPackagesManager() {
+  const container = document.getElementById('packages-manager-container')
+  if (!container) return
+  const { packages, addons, venues } = packagesManagerState
+
+  if (!packages.length) {
+    container.innerHTML = '<p class="venues-error">No packages found.</p>'
+    return
+  }
+
+  container.innerHTML = packages.map(pkg => {
+    const addonIds = (pkg.package_add_ons || []).slice().sort((a, b) => a.sort_order - b.sort_order).map(pa => pa.addon_id)
+
+    const checklist = addons.map(a => `
+      <label class="pkg-adm-addon">
+        <input type="checkbox" class="pkg-adm-addon-cb" value="${a.id}" ${addonIds.includes(a.id) ? 'checked' : ''} />
+        ${escapeHtml(a.name)} <span class="vf-hint">₹${Number(a.price).toLocaleString('en-IN')}</span>
+      </label>`).join('')
+
+    const rows = venues.map(v => {
+      const venueAddonIds = (v.venue_add_ons || []).map(x => x.addon_id)
+      const missingIds = addonIds.filter(id => !venueAddonIds.includes(id))
+      const addonSum = addonIds
+        .filter(id => venueAddonIds.includes(id))
+        .reduce((sum, id) => sum + (addons.find(a => a.id === id)?.price || 0), 0)
+      const price = (Number(v.base_price) || 0) + addonSum
+      const foodIncluded = !v.metadata?.food_offline
+      const missingNames = missingIds.map(id => addons.find(a => a.id === id)?.name || `#${id}`).join(', ')
+      return `
+        <tr class="${missingIds.length ? 'pkg-adm-row--warn' : ''}">
+          <td>${escapeHtml(v.name)}${v.packages_enabled ? '' : ' <span class="vf-hint">(packages off)</span>'}</td>
+          <td>₹${price.toLocaleString('en-IN')}</td>
+          <td>${foodIncluded ? 'Yes' : 'No — self-sourced'}</td>
+          <td>${missingIds.length ? `⚠ Missing ${missingIds.length} of ${addonIds.length}: ${escapeHtml(missingNames)}` : '—'}</td>
+        </tr>`
+    }).join('')
+
+    return `
+      <div class="pkg-adm-card" data-pkg-id="${pkg.id}">
+        <div class="vf-row">
+          <div class="vf-field">
+            <label class="vf-label">Name</label>
+            <input type="text" class="vf-input pkg-adm-name" value="${escapeHtml(pkg.name)}" />
+          </div>
+          <div class="vf-field">
+            <label class="vf-label">Tagline</label>
+            <input type="text" class="vf-input pkg-adm-tagline" value="${escapeHtml(pkg.tagline || '')}" />
+          </div>
+          <div class="vf-field vf-field--checkbox">
+            <label class="vf-toggle-label"><input type="checkbox" class="pkg-adm-featured" ${pkg.is_featured ? 'checked' : ''} /> Featured ("Most picked")</label>
+          </div>
+        </div>
+        <div class="vf-section-title">Add-ons in this package</div>
+        <div class="pkg-adm-addons">${checklist}</div>
+        <button type="button" class="btn btn--primary" onclick="savePackageCard(${pkg.id})">Save ${escapeHtml(pkg.name)}</button>
+        ${addonIds.length === 0 ? '<p class="vf-hint" style="margin-top:8px">No add-ons selected — price is just the venue base price.</p>' : ''}
+        <div class="vf-section-title" style="margin-top:16px">Price by venue (cafe, 2 guests, live)</div>
+        <table class="pkg-adm-table">
+          <thead><tr><th>Venue</th><th>Price</th><th>Food included</th><th>Add-on gaps</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`
+  }).join('')
+}
+
+// Persists name/tagline/featured + the add-on checklist for one package card.
+// Price is never written here — it's always recomputed live from base_price
+// + the catalog prices of whatever add-ons end up checked.
+async function savePackageCard(pkgId) {
+  if (!appState.session) return showToast('Admin login required', 'error')
+  const card = document.querySelector(`.pkg-adm-card[data-pkg-id="${pkgId}"]`)
+  if (!card) return
+  const name = card.querySelector('.pkg-adm-name').value.trim()
+  const tagline = card.querySelector('.pkg-adm-tagline').value.trim()
+  const isFeatured = card.querySelector('.pkg-adm-featured').checked
+  const addonIds = Array.from(card.querySelectorAll('.pkg-adm-addon-cb:checked')).map(cb => parseInt(cb.value, 10))
+
+  try {
+    const { error: updErr } = await supabase
+      .from('packages')
+      .update({ name, tagline, is_featured: isFeatured, updated_at: new Date().toISOString() })
+      .eq('id', pkgId)
+    if (updErr) throw updErr
+
+    const { error: delErr } = await supabase.from('package_add_ons').delete().eq('package_id', pkgId)
+    if (delErr) throw delErr
+    if (addonIds.length) {
+      const rows = addonIds.map((addon_id, i) => ({ package_id: pkgId, addon_id, sort_order: i }))
+      const { error: insErr } = await supabase.from('package_add_ons').insert(rows)
+      if (insErr) throw insErr
+    }
+    showToast('Package saved!', 'success')
+    await loadPackages()        // refresh PACKAGE_TIERS used by the live storefront
+    await loadPackagesManager() // refresh this admin view (recomputed prices/gaps)
+  } catch (err) {
+    console.error(err)
+    showToast('Failed to save package: ' + err.message, 'error')
+  }
+}
+window.savePackageCard = savePackageCard
 
 // Setup/decor items included in every cafe booking (Food & Beverages left out
 // — food is arranged separately, not part of the online package price).
@@ -4948,6 +5142,8 @@ function switchTab(tabName) {
     initAvailabilityTab()
   } else if (tabName === 'add-ons') {
     loadAddOnsManager()
+  } else if (tabName === 'packages') {
+    loadPackagesManager()
   } else if (tabName === 'hero-image') {
     loadHeroImageAdminPreview()
   } else if (tabName === 'teams') {
@@ -5537,6 +5733,7 @@ function clearVenueForm() {
   document.getElementById('vf-maps-url').value = ''
   document.getElementById('vf-max-setups').value = 1
   document.getElementById('vf-overage').value = 2000
+  document.getElementById('vf-free-guests-upto').value = 6
   document.getElementById('vf-rooms').value = 2
   document.getElementById('vf-bathrooms').value = 2
   document.getElementById('vf-stay-price').value = 0
@@ -5578,7 +5775,8 @@ function populateVenueForm(venue) {
   renderVfImages(Array.isArray(venue.images) ? venue.images : (venue.images ? JSON.parse(venue.images) : []))
   renderVfMenuPages(Array.isArray(venue.menu_pages) ? venue.menu_pages : (venue.menu_pages ? JSON.parse(venue.menu_pages) : []))
   renderVfTiers(meta.tiers || [])
-  document.getElementById('vf-overage').value = meta.overage_per_person || 2000
+  document.getElementById('vf-overage').value = venue.overage_per_person ?? meta.overage_per_person ?? 2000
+  document.getElementById('vf-free-guests-upto').value = venue.free_guests_upto ?? 6
 
   // BnB fields
   document.getElementById('vf-rooms').value = meta.rooms || 2
@@ -5597,11 +5795,15 @@ function populateVenueForm(venue) {
 
 function updateVfTypeVisibility(type) {
   const partnerOnly = document.querySelectorAll('.vf-partner-only')
+  const notPartnerOnly = document.querySelectorAll('.vf-not-partner-only')
   const cafeOnly = document.querySelectorAll('.vf-cafe-only')
   const bnbSection = document.getElementById('vf-bnb-section')
   const icalSection = document.getElementById('vf-ical-section')
   const icalComboHint = document.getElementById('vf-ical-combo-hint')
   partnerOnly.forEach(el => { el.style.display = type === 'partner_bnb' ? '' : 'none' })
+  // partner_bnb (BnB stays) keeps the legacy stepped-tiers pricing model;
+  // every other type uses the simpler free_guests_upto + overage model.
+  notPartnerOnly.forEach(el => { el.style.display = type === 'partner_bnb' ? 'none' : '' })
   cafeOnly.forEach(el => { el.style.display = type === 'cafe' ? '' : 'none' })
   if (bnbSection) bnbSection.style.display = type === 'self_managed' ? '' : 'none'
   // iCal sync applies to self_managed (each floor has its own Airbnb listing)
@@ -6017,16 +6219,30 @@ async function handleVenueFormSubmit(event) {
   if (!appState.session) return showToast('Admin login required', 'error')
   const id = document.getElementById('vf-id').value
   const type = document.getElementById('vf-type').value
+  const isPartnerTiered = type === 'partner_bnb'
 
   const images = readVfImages().filter(img => img.url)
   const menuPages = readVfMenuPages().filter(p => p.url)
-  const tiers = readVfTiers().sort((a, b) => a.up_to - b.up_to) // ensure ascending order for getVenuePrice()
   const overage = parseInt(document.getElementById('vf-overage').value, 10) || 2000
 
   const splitCsv = id => document.getElementById(id).value.split(',').map(s => s.trim()).filter(Boolean)
   // Preserve metadata keys the form doesn't manage (e.g. food_multiplier, drink_multiplier,
   // food_offline) by merging into the existing venue's metadata instead of replacing it.
   const originalMeta = (id ? venueManagerState.venues.find(v => v.id === parseInt(id, 10))?.metadata : null) || {}
+
+  // Pricing model: partner_bnb (BnB stays) keeps the legacy stepped-tiers
+  // array (genuine multi-step guest pricing) — read live from the form.
+  // Every other type uses the simpler flat + overage model; leave the
+  // legacy `tiers` field in metadata untouched (dead but harmless — kept as
+  // a rollback source, see migration add_pricing_columns_and_packages_tables)
+  // rather than overwriting it with stale hidden-form-row data.
+  const tiers = isPartnerTiered
+    ? readVfTiers().sort((a, b) => a.up_to - b.up_to) // ascending order for getVenuePrice() legacy path
+    : (originalMeta.tiers || [])
+  const freeGuestsUpto = isPartnerTiered
+    ? null
+    : (parseInt(document.getElementById('vf-free-guests-upto').value, 10) || null)
+
   let metadata = { ...originalMeta, tiers, overage_per_person: overage, includes: splitCsv('vf-includes') }
 
   if (type === 'self_managed') {
@@ -6051,6 +6267,8 @@ async function handleVenueFormSubmit(event) {
     capacity_min: parseInt(document.getElementById('vf-cap-min').value, 10),
     capacity_max: parseInt(document.getElementById('vf-cap-max').value, 10),
     base_price: parseFloat(document.getElementById('vf-base-price').value) || 0,
+    free_guests_upto: freeGuestsUpto,
+    overage_per_person: overage,
     external_url: document.getElementById('vf-external-url').value.trim() || null,
     maps_url: document.getElementById('vf-maps-url').value.trim() || null,
     airbnb_ical_url: document.getElementById('vf-airbnb-ical-url').value.trim() || null,
@@ -7658,6 +7876,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Teams data is needed on both admin and public (footer + admin filter)
   loadTeams()
+
+  // Package tier definitions (Setting/Moment/Story) — needed on the public
+  // site for tier cards and on admin for the Packages panel.
+  loadPackages()
 
   // Custom picnic modal
   const cpmModal   = document.getElementById('custom-picnic-modal')
