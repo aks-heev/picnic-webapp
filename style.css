@@ -9150,16 +9150,30 @@ body.menu-viewer-open {
 .vd-layout--pkg-active {
   grid-template-columns: 1fr;
   grid-template-areas:
+    "facts"
     "main"
     "sidebar"
     "addons";
 }
 .vd-layout--pkg-active .vd-sidebar {
   position: static;
+  width: 100%;
+  justify-self: stretch;
 }
 .vd-layout--pkg-active .vd-booking-card {
-  max-width: 960px;
+  max-width: none;
+  width: 100%;
   margin: 0 auto;
+  box-sizing: border-box;
+}
+/* The booking card's own width is only half the story — its ancestor
+   .vd-body.container is capped at --container-xl (1280px) with min-width:1280px
+   screens, which is what made the package step read as "half the viewport"
+   on wide monitors. Drop that cap while the package step is active so the
+   card above can reach true full viewport width (minus the container's
+   16px gutter), not just fill an already-capped column. */
+.vd-body.container:has(.vd-layout--pkg-active) {
+  max-width: none;
 }
 @media (min-width: 769px) {
   .vd-layout--pkg-active .pkg-step-title {
