@@ -296,9 +296,16 @@
                                 <label class="vf-label">Ideal For <span class="vf-hint">(comma-separated)</span></label>
                                 <input type="text" id="vf-ideal-for" class="vf-input" placeholder="Couples, Families, Honeymoon" />
                             </div>
+                        </div>
+
+                        <!-- Airbnb iCal sync (self_managed + combo — a combo venue may have its own
+                             whole-property Airbnb listing distinct from each child floor's listing) -->
+                        <div id="vf-ical-section" class="vf-section vf-ical-only" style="display:none">
+                            <div class="vf-section-title">Airbnb Calendar Sync</div>
                             <div class="vf-field">
                                 <label class="vf-label">Airbnb iCal Import URL <span class="vf-hint">(Airbnb → Listing → Availability → Connect/Export Calendar → copy the .ics link; leaving this blank disables import for this venue)</span></label>
                                 <input type="url" id="vf-airbnb-ical-url" class="vf-input" placeholder="https://www.airbnb.com/calendar/ical/12345.ics?s=..." />
+                                <p class="vf-hint" id="vf-ical-combo-hint" style="display:none">For a combo listing, imported dates also block both child floors so they can't be booked individually while the whole cottage is reserved on Airbnb.</p>
                             </div>
                         </div>
 

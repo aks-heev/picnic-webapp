@@ -72,7 +72,33 @@ const appState = {
   checkoutDate: null,        // bnb: checkout date
   adults: 2,                 // guest selector: adult count
   children: 0,               // guest selector: child count (under 10, free — no price/inclusion impact)
-  bookingStep: 'calendar',   // 'calendar' | 'guests'
+  bookingStep: 'calendar',   // 'calendar' | 'guests' | 'package' | 'booking'
+  bookingOccasion: '',       // packages: occasion captured at the guest step
+  selectedPackage: null,     // packages: { occasion, tierKey, addonIds } once a tier is chosen
+}
+
+// Packages (Phase 1) feature flag. Default OFF so the live booking flow is
+// unchanged on deploy; flip PACKAGES_FLAG_DEFAULT to true to launch. Per-session
+// override for testing: ?packages=1 enables, ?packages=0 disables (sticky).
+const PACKAGES_FLAG_DEFAULT = false
+function packagesEnabled() {
+  try {
+    const u = new URLSearchParams(location.search).get('packages')
+    if (u === '1') { localStorage.setItem('ps_packages', '1'); return true }
+    if (u === '0') { localStorage.setItem('ps_packages', '0'); return false }
+    const s = localStorage.getItem('ps_packages')
+    if (s === '1') return true
+    if (s === '0') return false
+  } catch (e) { /* localStorage blocked — fall through to default */ }
+  return PACKAGES_FLAG_DEFAULT
+}
+
+// True for the whole cafe + packages-flag flow (calendar → guests → tiers).
+// The sidebar's running "starting price" is hidden across all of it — the real
+// price only settles once a tier is chosen, and the booking form has its own
+// price breakdown, so nothing needs it restored downstream.
+function packageFlowActive(venue) {
+  return packagesEnabled() && venue?.type === 'cafe'
 }
 
 // Admin team filter state — persists across loadQueries/loadBookings calls
@@ -167,6 +193,7 @@ function getPicnicPrice(venue, adults) {
 // Returns null when the venue has no multipliers (non-cafe venues show nothing).
 function getInclusions(venue, adults) {
   const m = venue?.metadata
+  if (m?.food_offline) return null
   const foodMult  = Number(m?.food_multiplier)
   const drinkMult = Number(m?.drink_multiplier)
   if (!foodMult && !drinkMult) return null
@@ -624,6 +651,8 @@ async function showVenuePage(venueId, pushState = true) {
   appState.adults           = 2
   appState.children         = 0
   appState.bookingStep      = 'calendar'
+  appState.bookingOccasion  = ''
+  appState.selectedPackage  = null
 
   const needsCalendar = true
   const [addOns, bookedData] = await Promise.all([
@@ -1008,6 +1037,7 @@ function renderVenueDetail(venue, addOns = []) {
           <!-- Sticky booking sidebar -->
           <aside class="vd-sidebar">
             <div class="vd-booking-card">
+              <div id="vd-price-block"${packageFlowActive(venue) ? ' style="display:none"' : ''}>
               ${venue.base_price ? `
               <div class="vd-price-row">
                 <span class="vd-price-amount" id="sidebar-price-amount">${escapeHtml(formatPrice(venue.base_price))}</span>
@@ -1018,6 +1048,7 @@ function renderVenueDetail(venue, addOns = []) {
                 <span class="vd-price-label" id="sidebar-price-label">pricing on request</span>
               </div>`}
               <p class="vd-price-note">Final price confirmed after we review your requirements.</p>
+              </div>
               <div class="vd-card-divider"></div>
               ${ctaBlock}
               <ul class="vd-reassure">
@@ -1234,6 +1265,28 @@ function renderVenueDetail(venue, addOns = []) {
 // ----------------------------------------------------------------
 // AVAILABILITY CALENDAR
 // ----------------------------------------------------------------
+
+// ── Packages (Phase 1) ────────────────────────────────────────────────────
+// Curated add-on tiers layered on top of the existing booking engine. A tier is
+// just a preset of add-on IDs; the per-combo price always comes from the
+// compute_booking_total RPC (the source of truth) — never hardcoded here.
+// Cafe (picnic) venues only. See docs/SPEC_packages_mvp.md.
+const PACKAGE_TIERS = {
+  setting: { key: 'setting', name: 'The Setting', addons: [],                          tagline: 'The signature setup, beautifully done.' },
+  moment:  { key: 'moment',  name: 'The Moment',  addons: [22, 24, 17], featured: true, tagline: 'Bouquet, cake and printed memories.' },
+  story:   { key: 'story',   name: 'The Story',   addons: [19, 27, 23, 22, 24, 17],     tagline: 'The full production — photographer and more.' },
+}
+const PACKAGE_TIER_ORDER = ['setting', 'moment', 'story']
+
+// Occasion -> default tier. This is the AOV lever; the customer can still switch.
+const OCCASION_DEFAULT_TIER = {
+  'Proposal': 'story', 'Anniversary': 'story',
+  'Birthday': 'moment', 'Date Night': 'moment', 'Bridal Shower': 'moment', 'Baby Shower': 'moment',
+  'Just Because': 'setting',
+}
+function defaultTierForOccasion(occasion) {
+  return OCCASION_DEFAULT_TIER[occasion] || 'setting'
+}
 
 const CAFE_SLOTS = [
   { key: 'morning',   label: 'Morning',   time: '9 AM – 12 PM',  icon: '🌅' },
@@ -1720,6 +1773,10 @@ function showGuestSelector(venue) {
   const widget = document.getElementById('avail-calendar-widget')
   if (!widget) return
 
+  // Defensive: guest selector always renders in the normal narrow sidebar.
+  const layout = document.querySelector('.vd-layout')
+  if (layout) layout.classList.remove('vd-layout--pkg-active')
+
   // Date summary for the back button label
   let dateSummary = ''
   if (venue.type === 'self_managed' && appState.checkinDate && appState.checkoutDate) {
@@ -1732,6 +1789,27 @@ function showGuestSelector(venue) {
 
   const totalGuests = appState.adults + appState.children
   const maxGuests   = venue.capacity_max || 20
+
+  // Packages: capture occasion here so the tier step can pre-select a default tier.
+  const showPackageOccasion = packageFlowActive(venue)
+
+  // Package flow hides the running "starting price" across every step (each
+  // tier card on the next step shows its own price instead).
+  const priceBlock = document.getElementById('vd-price-block')
+  if (priceBlock) priceBlock.style.display = showPackageOccasion ? 'none' : ''
+
+  const occPresets = ['Birthday', 'Anniversary', 'Proposal', 'Date Night', 'Bridal Shower', 'Baby Shower', 'Graduation', 'Just Because']
+  const occHtml = showPackageOccasion ? `
+      <div class="vd-guest-row vd-guest-row--occasion">
+        <div class="vd-guest-label">
+          <span class="vd-guest-type">Occasion</span>
+          <span class="vd-guest-sublabel">Optional — helps us suggest a package</span>
+        </div>
+        <select class="vd-occasion-select" onchange="setBookingOccasion(this.value)">
+          <option value="">Select…</option>
+          ${occPresets.map(o => `<option value="${escapeHtml(o)}"${appState.bookingOccasion === o ? ' selected' : ''}>${escapeHtml(o)}</option>`).join('')}
+        </select>
+      </div>` : ''
 
   widget.innerHTML = `
     <div class="vd-guest-selector">
@@ -1763,14 +1841,15 @@ function showGuestSelector(venue) {
           </div>
         </div>
       </div>
+      ${occHtml}
       <div class="vd-inclusion" id="vd-inclusion-line">${inclusionBannerHtml(venue, appState.adults)}</div>
     </div>
   `
 
   const sidebarBtn = document.getElementById('sidebar-book-btn')
   const mobileBtn  = document.getElementById('mobile-bar-book-btn')
-  if (sidebarBtn) { sidebarBtn.disabled = false; sidebarBtn.textContent = 'Book Now' }
-  if (mobileBtn)  { mobileBtn.disabled  = false; mobileBtn.textContent  = 'Book Now' }
+  if (sidebarBtn) { sidebarBtn.disabled = false; sidebarBtn.textContent = 'Book Now'; sidebarBtn.style.display = '' }
+  if (mobileBtn)  { mobileBtn.disabled  = false; mobileBtn.textContent  = 'Book Now'; mobileBtn.style.display  = '' }
 
   updateGuestPrice(venue)
 }
@@ -1781,6 +1860,10 @@ function showCalendarStep() {
   const venue  = appState.currentVenue
   const widget = document.getElementById('avail-calendar-widget')
   if (!widget || !venue) return
+
+  // Package flow hides the running "starting price" across every step.
+  const priceBlock = document.getElementById('vd-price-block')
+  if (priceBlock) priceBlock.style.display = packageFlowActive(venue) ? 'none' : ''
 
   // _calDraw is stored by renderAvailabilityCalendar — just call it
   if (typeof widget._calDraw === 'function') {
@@ -1864,9 +1947,119 @@ function updateGuestCount(type, delta) {
 // BOOKING VIEW (inline — replaces vd-body, no modal)
 // ----------------------------------------------------------------
 
+// ── Packages: occasion setter (called from the guest-step select) ──────────
+function setBookingOccasion(value) {
+  appState.bookingOccasion = value || ''
+}
+
+// Price a tier for this venue = base picnic price (current adults) + the tier's
+// add-on prices from this venue's catalog. Matches the booking-form total exactly
+// (the form sums the same base + the same add-on checkboxes), so the card price
+// equals the form total when the customer adds no extras.
+function packageTierPrice(venue, tier, catalog) {
+  const base = getPicnicPrice(venue, appState.adults)
+  const addonSum = (tier.addons || []).reduce((s, id) => {
+    const a = catalog.find(x => x.id === id)
+    return s + (a ? Number(a.price) : 0)
+  }, 0)
+  return base + addonSum
+}
+
+// ── Packages: tier selection step (cafe + flag only) ──────────────────────
+function showPackageStep(venue) {
+  appState.bookingStep  = 'package'
+  appState.currentVenue = venue
+  const widget = document.getElementById('avail-calendar-widget')
+  if (!widget) return
+
+  // Each tier card shows its own price — keep the generic starting price hidden
+  // here too (already hidden by showGuestSelector, this covers direct entries).
+  const priceBlock = document.getElementById('vd-price-block')
+  if (priceBlock) priceBlock.style.display = 'none'
+
+  // Desktop only: break the booking card out of the narrow 360px sidebar so
+  // the 3 tier cards can sit side-by-side instead of stacking in a cramped
+  // column. Reverted in showPackageBack() / showBookingForm().
+  const layout = document.querySelector('.vd-layout')
+  if (layout) layout.classList.add('vd-layout--pkg-active')
+
+  const catalog    = appState.currentVenueAddOns || []
+  const defaultKey = defaultTierForOccasion(appState.bookingOccasion)
+
+  const cards = PACKAGE_TIER_ORDER.map(key => {
+    const tier  = PACKAGE_TIERS[key]
+    const price = packageTierPrice(venue, tier, catalog)
+    const incl  = (tier.addons || []).map(id => catalog.find(x => x.id === id)).filter(Boolean)
+    const inclList = incl.length
+      ? `<ul class="pkg-card-incl">${incl.map(a => `<li>${escapeHtml(a.name)}</li>`).join('')}</ul>`
+      : `<p class="pkg-card-incl pkg-card-incl--bare">Just the signature picnic setup.</p>`
+    const badge = tier.featured
+      ? '<span class="pkg-card-badge">Most picked</span>'
+      : (key === defaultKey ? '<span class="pkg-card-badge pkg-card-badge--suggested">Suggested</span>' : '')
+    return `
+        <div class="pkg-card${tier.featured ? ' pkg-card--featured' : ''}${key === defaultKey ? ' pkg-card--suggested' : ''}">
+          ${badge}
+          <h4 class="pkg-card-name">${escapeHtml(tier.name)}</h4>
+          <p class="pkg-card-tagline">${escapeHtml(tier.tagline)}</p>
+          <div class="pkg-card-price">₹${price.toLocaleString('en-IN')}</div>
+          <div class="pkg-card-price-note">for ${appState.adults} adult${appState.adults !== 1 ? 's' : ''}</div>
+          ${inclList}
+          <button type="button" class="btn ${tier.featured ? 'btn--venue-primary' : 'btn--venue-secondary'} pkg-card-cta" onclick="selectPackageTier('${key}')">Choose ${escapeHtml(tier.name)}</button>
+        </div>`
+  }).join('')
+
+  widget.innerHTML = `
+    <div class="pkg-step">
+      <button class="vd-guest-back" onclick="showPackageBack()" aria-label="Back to guest count">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+        <span class="vd-guest-back-label">Back to guests</span>
+      </button>
+      <h3 class="pkg-step-title">Choose your package</h3>
+      <p class="pkg-step-sub">Curated for the occasion — you can add more on the next step.</p>
+      <div class="pkg-cards">${cards}</div>
+    </div>
+  `
+
+  // Cards are the only CTA here — hide the sidebar/mobile "Book Now" buttons.
+  const sidebarBtn = document.getElementById('sidebar-book-btn')
+  const mobileBtn  = document.getElementById('mobile-bar-book-btn')
+  if (sidebarBtn) sidebarBtn.style.display = 'none'
+  if (mobileBtn)  mobileBtn.style.display  = 'none'
+
+  track('package_step_viewed', {
+    venue_id: venue.id, venue_name: venue.name,
+    occasion: appState.bookingOccasion || null, guests: appState.adults + appState.children,
+  })
+}
+
+// Back from the tier step to the guest selector.
+function showPackageBack() {
+  const layout = document.querySelector('.vd-layout')
+  if (layout) layout.classList.remove('vd-layout--pkg-active')
+  if (appState.currentVenue) showGuestSelector(appState.currentVenue)
+}
+
+// Choose a tier → lock its (available) add-ons and go to the booking form.
+function selectPackageTier(key) {
+  const tier  = PACKAGE_TIERS[key]
+  const venue = appState.currentVenue
+  if (!tier || !venue) return
+  const catalog  = appState.currentVenueAddOns || []
+  const addonIds = (tier.addons || []).filter(id => catalog.some(a => a.id === id))
+  appState.selectedPackage = { occasion: appState.bookingOccasion || null, tierKey: key, addonIds }
+  track('package_tier_selected', {
+    venue_id: venue.id, venue_name: venue.name, tier: key,
+    occasion: appState.bookingOccasion || null, guests: appState.adults + appState.children,
+  })
+  showBookingForm(venue)
+}
+
 async function showBookingForm(venue) {
   appState.bookingStep  = 'booking'
   appState.currentVenue = venue
+  // Undo the package step's full-width takeover, if it was engaged.
+  const pkgLayout = document.querySelector('.vd-layout')
+  if (pkgLayout) pkgLayout.classList.remove('vd-layout--pkg-active')
   const body      = document.getElementById('vd-body')
   const bookView  = document.getElementById('vd-booking-view')
   const mobileBar = document.querySelector('.vd-mobile-book-bar')
@@ -1883,6 +2076,13 @@ async function showBookingForm(venue) {
     appState.currentVenueAddOns = addOns
   }
   const picnicPrice = getPicnicPrice(venue, appState.adults)
+
+  // Packages: when a tier was chosen, its add-ons are locked (included) — shown
+  // read-only in their own section and excluded from the editable accordion.
+  const pkg          = (appState.selectedPackage && venue.type === 'cafe') ? appState.selectedPackage : null
+  const pkgTier      = pkg ? PACKAGE_TIERS[pkg.tierKey] : null
+  const lockedIds    = pkg ? (pkg.addonIds || []) : []
+  const lockedAddons = lockedIds.map(id => addOns.find(a => a.id === id)).filter(Boolean)
 
   // Date chips
   let dateChips = ''
@@ -1915,12 +2115,38 @@ async function showBookingForm(venue) {
 
   // Add-ons — grouped by category, each in a collapsible accordion
   const addonsByCategory = ADDON_CATEGORIES
-    .map(cat => ({ cat, label: ADDON_CATEGORY_LABELS[cat], items: addOns.filter(a => a.category === cat) }))
+    .map(cat => ({ cat, label: ADDON_CATEGORY_LABELS[cat], items: addOns.filter(a => a.category === cat && !lockedIds.includes(a.id)) }))
     .filter(g => g.items.length)
+
+  // Locked "included in your package" section — real checked .bv-addon-check inputs
+  // (hidden via CSS) so the existing price + submit logic counts them automatically;
+  // the visible row carries the name for the price-breakdown lookup.
+  const lockedHtml = lockedAddons.length ? `
+    <div class="vd-bf-section pkg-included-section">
+      <h3 class="vd-bf-section-title">Included in ${escapeHtml(pkgTier?.name || 'your package')}</h3>
+      <div class="pkg-included-list">
+        ${lockedAddons.map(a => `
+        <label class="vd-bf-addon-row pkg-included-row">
+          <div class="vd-bf-addon-info">
+            <span class="vd-bf-addon-name">${escapeHtml(a.name)}</span>
+            ${a.description ? `<span class="vd-bf-addon-desc">${escapeHtml(a.description)}</span>` : ''}
+          </div>
+          <div class="vd-bf-addon-right">
+            <span class="pkg-included-tick" aria-hidden="true">✓</span>
+            <input type="checkbox" class="bv-addon-check pkg-locked-check" checked
+                   data-addon-id="${a.id}"
+                   data-addon-name="${escapeHtml(a.name)}"
+                   data-addon-price="${a.price}"
+                   data-addon-confirm="${a.requires_confirmation || false}"
+                   onclick="return false" tabindex="-1" aria-label="Included add-on (locked)">
+          </div>
+        </label>`).join('')}
+      </div>
+    </div>` : ''
 
   const addOnsHtml = addonsByCategory.length ? `
     <div class="vd-bf-section">
-      <h3 class="vd-bf-section-title">Add to your experience</h3>
+      <h3 class="vd-bf-section-title">${pkg ? 'Add more to your experience' : 'Add to your experience'}</h3>
       <div class="vd-bf-addon-cats">
         ${addonsByCategory.map(({ cat, label, items }) => `
         <div class="vd-bf-cat" data-cat="${cat}">
@@ -1971,6 +2197,7 @@ async function showBookingForm(venue) {
               Change date &amp; time
             </button>
           </div>
+          ${pkgTier ? `<div class="pkg-summary-badge">${escapeHtml(pkgTier.name)} package</div>` : ''}
           ${inclusionBannerHtml(venue, appState.adults) ? `<div class="vd-inclusion vd-inclusion--summary">${inclusionBannerHtml(venue, appState.adults)}</div>` : ''}
           <div class="vd-bv-price-table">
             ${priceRows}
@@ -1985,6 +2212,7 @@ async function showBookingForm(venue) {
 
         <!-- Right: add-ons + contact form -->
         <div class="vd-bv-form-col">
+          ${lockedHtml}
           ${addOnsHtml}
           <div class="vd-bf-section">
             <h3 class="vd-bf-section-title">Your details</h3>
@@ -2003,7 +2231,15 @@ async function showBookingForm(venue) {
                   <input class="vd-bf-input" type="tel" name="mobile-number" placeholder="10-digit mobile number" required inputmode="numeric" maxlength="10" pattern="[0-9]{10}" onkeydown="if(!/[0-9]/.test(event.key)&&!['Backspace','Delete','ArrowLeft','ArrowRight','Tab'].includes(event.key))event.preventDefault()" onpaste="setTimeout(()=>{this.value=this.value.replace(/\D/g,'').slice(0,10)},0)" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)">
                 </div>
               </div>
-              <div class="vd-bf-field">
+              ${pkg
+                ? (pkg.occasion
+                    ? `<div class="vd-bf-field">
+                <label class="vd-bf-label">Occasion</label>
+                <div class="pkg-occasion-chip">${escapeHtml(pkg.occasion)}</div>
+                <input type="hidden" name="occasion" value="${escapeHtml(pkg.occasion)}">
+              </div>`
+                    : `<input type="hidden" name="occasion" value="">`)
+                : `<div class="vd-bf-field">
                 <label class="vd-bf-label">Occasion</label>
                 <select class="vd-bf-input vd-bf-select" name="occasion"
                         onchange="document.getElementById('occasion-other-wrap').style.display = this.value === 'Other' ? '' : 'none'">
@@ -2021,7 +2257,7 @@ async function showBookingForm(venue) {
                 <div id="occasion-other-wrap" style="display:none; margin-top:8px;">
                   <input class="vd-bf-input" type="text" name="occasion-other" placeholder="Tell us the occasion">
                 </div>
-              </div>
+              </div>`}
               <div class="vd-bf-field">
                 <label class="vd-bf-label">Celebration board <span style="font-weight:400; opacity:0.6;">(optional)</span></label>
                 <select class="vd-bf-input vd-bf-select" name="board-type"
@@ -2080,6 +2316,10 @@ async function showBookingForm(venue) {
     appState.changeMode     = null
     appState.changeModeData = null
   }
+
+  // Packages: the locked add-ons are pre-checked — recompute so the total and
+  // price breakdown include them on first render.
+  if (pkg) updateBookingSummaryPrice()
 }
 
 // Restore venue body — undo showBookingForm
@@ -2670,6 +2910,134 @@ async function verifyAndFinish(resp, bookingRow, venue) {
       'error',
     )
     finishBookingFlow(bookingRow, venue, false)
+  }
+}
+
+// ── Email pay-link flow: ?pay=<bookingId> ──────────────────────────────────────
+// Customer lands here by clicking "Pay Advance" in the booking query email.
+// We open Razorpay directly — no booking form needed.
+async function handleEmailPayLink(bookingId) {
+  if (!bookingId || isNaN(bookingId)) return
+
+  const logoUrl = 'https://cdn-reach.hostinger.com/settings/0a27628d960484a8a3d2b3e50518a32b/307542/logo_1780982818.png'
+
+  const overlay = document.createElement('div')
+  overlay.id = 'ep-overlay'
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#FFF8F5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px;text-align:center;'
+
+  function showMsg(title, body, cta = null) {
+    overlay.innerHTML = `
+      <img src="${logoUrl}" width="64" height="64" alt="The Picnic Stories" style="border-radius:50%;margin-bottom:8px;">
+      <p style="margin:0;font-family:Garamond,'Times New Roman',serif;font-size:22px;color:#2D1F14;font-weight:normal;">${title}</p>
+      <p style="margin:0;font-family:Garamond,'Times New Roman',serif;font-size:16px;color:#5c4a3a;max-width:360px;line-height:1.6;">${body}</p>
+      ${cta ? `<a href="${cta.href}" style="margin-top:8px;display:inline-block;padding:14px 28px;border:1px solid #c4607a;color:#c4607a;font-family:Garamond,'Times New Roman',serif;font-size:14px;text-decoration:none;border-radius:8px;text-transform:uppercase;letter-spacing:2px;">${cta.label}</a>` : ''}
+    `
+  }
+
+  showMsg('Opening payment…', 'The Picnic Stories')
+  document.body.appendChild(overlay)
+
+  try {
+    if (typeof window.Razorpay === 'undefined') {
+      showMsg(
+        'Payment couldn’t load',
+        'Your booking request is still saved — please contact us to pay the advance.',
+        { href: 'mailto:team@picnicstories.com', label: 'Contact Us' }
+      )
+      return
+    }
+
+    const { data: order, error: orderErr } = await supabase.functions.invoke('create-order', {
+      body: { booking_id: bookingId },
+    })
+
+    if (orderErr || !order?.order_id) {
+      const msg = (order?.error || orderErr?.message || '').toLowerCase()
+      if (msg.includes('already paid') || msg.includes('already')) {
+        showMsg(
+          'Already confirmed!',
+          'This booking has already been paid. Check your email for your confirmation.',
+          { href: 'mailto:team@picnicstories.com', label: 'Contact Us' }
+        )
+      } else if (msg.includes('no payable')) {
+        showMsg(
+          'Nothing to pay yet',
+          'This booking doesn’t have a payment amount set — we’ll reach out shortly.',
+          { href: 'mailto:team@picnicstories.com', label: 'Contact Us' }
+        )
+      } else {
+        showMsg(
+          'Something went wrong',
+          'We couldn’t start the payment. Please try again or contact us.',
+          { href: 'mailto:team@picnicstories.com', label: 'Contact Us' }
+        )
+      }
+      return
+    }
+
+    overlay.style.display = 'none'
+
+    const rzp = new window.Razorpay({
+      key:         order.key_id || RAZORPAY_KEY_ID,
+      order_id:    order.order_id,
+      amount:      order.amount,
+      currency:    order.currency || 'INR',
+      name:        'The Picnic Stories',
+      description: 'Advance payment — lock your date',
+      theme:       { color: '#c4607a' },
+      handler: async (resp) => {
+        overlay.style.display = 'flex'
+        showMsg('Confirming your booking…', 'Just a moment while we verify your payment.')
+        try {
+          await supabase.functions.invoke('verify-payment', {
+            body: {
+              booking_id:          bookingId,
+              razorpay_order_id:   resp.razorpay_order_id,
+              razorpay_payment_id: resp.razorpay_payment_id,
+              razorpay_signature:  resp.razorpay_signature,
+            },
+          })
+          showMsg(
+            'Your date is locked! 🎉',
+            'Payment received — you’ll get a confirmation email shortly. See you soon!',
+            { href: '/', label: 'Back to The Picnic Stories' }
+          )
+          history.replaceState({}, 'The Picnic Stories', '/')
+          track('email_payment_confirmed', { booking_id: bookingId })
+        } catch (err) {
+          console.error('handleEmailPayLink verify:', err)
+          showMsg(
+            'Payment received — verifying…',
+            'We’ve received your payment and will confirm your booking shortly. Check your email.',
+            { href: '/', label: 'Back to Home' }
+          )
+        }
+      },
+      modal: {
+        ondismiss: () => {
+          overlay.remove()
+          history.replaceState({}, 'The Picnic Stories', '/')
+        },
+      },
+    })
+    rzp.on('payment.failed', (resp) => {
+      overlay.style.display = 'flex'
+      showMsg(
+        'Payment didn’t go through',
+        resp?.error?.description || 'Please try again or contact us.',
+        { href: 'mailto:team@picnicstories.com', label: 'Contact Us' }
+      )
+      track('email_payment_failed', { booking_id: bookingId, reason: resp?.error?.description })
+    })
+    track('email_payment_initiated', { booking_id: bookingId })
+    rzp.open()
+  } catch (err) {
+    console.error('handleEmailPayLink:', err)
+    showMsg(
+      'Something went wrong',
+      'Please try again or contact us at team@picnicstories.com.',
+      { href: 'mailto:team@picnicstories.com', label: 'Contact Us' }
+    )
   }
 }
 
@@ -5074,8 +5442,14 @@ function populateVenueForm(venue) {
 function updateVfTypeVisibility(type) {
   const partnerOnly = document.querySelectorAll('.vf-partner-only')
   const bnbSection = document.getElementById('vf-bnb-section')
+  const icalSection = document.getElementById('vf-ical-section')
+  const icalComboHint = document.getElementById('vf-ical-combo-hint')
   partnerOnly.forEach(el => { el.style.display = type === 'partner_bnb' ? '' : 'none' })
   if (bnbSection) bnbSection.style.display = type === 'self_managed' ? '' : 'none'
+  // iCal sync applies to self_managed (each floor has its own Airbnb listing)
+  // AND combo (the whole-property listing is a separate listing on Airbnb).
+  if (icalSection) icalSection.style.display = (type === 'self_managed' || type === 'combo') ? '' : 'none'
+  if (icalComboHint) icalComboHint.style.display = type === 'combo' ? '' : 'none'
 }
 
 // ── Per-venue add-on mapping (venue_add_ons) ───────────────────────────
@@ -5492,7 +5866,10 @@ async function handleVenueFormSubmit(event) {
   const overage = parseInt(document.getElementById('vf-overage').value, 10) || 2000
 
   const splitCsv = id => document.getElementById(id).value.split(',').map(s => s.trim()).filter(Boolean)
-  let metadata = { tiers, overage_per_person: overage, includes: splitCsv('vf-includes') }
+  // Preserve metadata keys the form doesn't manage (e.g. food_multiplier, drink_multiplier,
+  // food_offline) by merging into the existing venue's metadata instead of replacing it.
+  const originalMeta = (id ? venueManagerState.venues.find(v => v.id === parseInt(id, 10))?.metadata : null) || {}
+  let metadata = { ...originalMeta, tiers, overage_per_person: overage, includes: splitCsv('vf-includes') }
 
   if (type === 'self_managed') {
     metadata = {
@@ -5834,12 +6211,15 @@ function renderAvailCalendarGrid() {
   // No listener added here — the single persistent listener lives in initAvailabilityTab.
 }
 
-// Render the Airbnb iCal sync panel (self_managed venues only): a copyable
+// Render the Airbnb iCal sync panel (self_managed + combo venues): a copyable
 // export URL to paste into Airbnb, last-sync status, and a manual "Sync now".
+// Combo venues (e.g. a whole-cottage listing distinct from each child floor's
+// own listing) sync their own feed here too — see sync-ical, which propagates
+// combo-imported dates onto the child floors as well.
 function renderAvailIcalPanel(venue) {
   const panel = document.getElementById('avail-ical-panel')
   if (!panel) return
-  if (!venue || venue.type !== 'self_managed') { panel.hidden = true; panel.innerHTML = ''; return }
+  if (!venue || (venue.type !== 'self_managed' && venue.type !== 'combo')) { panel.hidden = true; panel.innerHTML = ''; return }
 
   const venueId   = availState.venueId
   const exportUrl = `${SUPABASE_URL}/functions/v1/export-ical?venue_id=${venueId}`
@@ -6820,6 +7200,9 @@ window.selectTimeSlot             = selectTimeSlot
 window.showCalendarStep           = showCalendarStep
 window.updateGuestCount           = updateGuestCount
 window.showVenueBodyStep          = showVenueBodyStep
+window.setBookingOccasion         = setBookingOccasion
+window.showPackageBack            = showPackageBack
+window.selectPackageTier          = selectPackageTier
 window.updateBookingSummaryPrice  = updateBookingSummaryPrice
 window.handleInlineBookingSubmit  = handleInlineBookingSubmit
 window.submitBookingIntent        = submitBookingIntent
@@ -7145,9 +7528,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const bookingId = urlParams.get('booking')
   const venueId   = urlParams.get('venue')
   const view      = urlParams.get('view')
+  const payId     = urlParams.get('pay')
   const venuePath = window.location.pathname.match(/^\/venues\/([^/]+)\/?$/)
 
-  if (menuToken) {
+  if (payId) {
+    handleEmailPayLink(parseInt(payId, 10))
+  } else if (menuToken) {
     showPage('menu-selection-page')
     loadMenuSelection(menuToken)
     if (bookingId) appState.currentBooking = { id: parseInt(bookingId, 10) }
@@ -7258,6 +7644,9 @@ document.addEventListener('DOMContentLoaded', () => {
             bookView.style.display = ''
             bookView.innerHTML = buildIntentScreenHTML(lead, { containerClass: 'vd-intent-wrap container' })
           }
+        } else if (packagesEnabled() && venue.type === 'cafe') {
+          // Packages flow: insert the tier step between guests and the form.
+          showPackageStep(venue)
         } else {
           showBookingForm(venue)
         }
