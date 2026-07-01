@@ -5571,7 +5571,7 @@ async function loadVenueManager() {
   try {
     const { data, error } = await supabase
       .from('venues')
-      .select('id, name, type, setting, area, city, capacity_min, capacity_max, base_price, is_active, requires_confirmation, images, menu_pages, external_url, maps_url, metadata, description, max_concurrent_setups, airbnb_ical_url, last_ical_sync_at, last_ical_sync_status, sort_order, team_id')
+      .select('id, name, type, setting, area, city, capacity_min, capacity_max, base_price, is_active, requires_confirmation, packages_enabled, free_guests_upto, overage_per_person, images, menu_pages, external_url, maps_url, metadata, description, max_concurrent_setups, airbnb_ical_url, last_ical_sync_at, last_ical_sync_status, sort_order, team_id')
       .order('sort_order', { ascending: true, nullsFirst: false })
       .order('id', { ascending: true })
     if (error) throw error
@@ -5686,6 +5686,18 @@ async function openVenueForm(venueId) {
   // Load the add-on catalogue before rendering the checklist.
   await loadVfAddOns()
 
+  // Populate team select from loaded teams BEFORE populateVenueForm/clearVenueForm
+  // try to set its value below — rebuilding <option> innerHTML resets the
+  // select to its first option, so this must run first or whatever value
+  // gets set next is immediately wiped out (this was the cause of the team
+  // field always reverting to the first team in the list on reopen).
+  const teamSel = document.getElementById('vf-team')
+  if (teamSel && appState.teams.length) {
+    teamSel.innerHTML = appState.teams.map(t =>
+      `<option value="${t.id}">${escapeHtml(t.name)}</option>`
+    ).join('')
+  }
+
   if (venueId) {
     const venue = venueManagerState.venues.find(v => v.id === venueId)
     if (!venue) return
@@ -5698,14 +5710,6 @@ async function openVenueForm(venueId) {
     venueManagerState.editingId = null
     title.textContent = 'Add Venue'
     clearVenueForm()
-  }
-
-  // Populate team select from loaded teams
-  const teamSel = document.getElementById('vf-team')
-  if (teamSel && appState.teams.length) {
-    teamSel.innerHTML = appState.teams.map(t =>
-      `<option value="${t.id}">${escapeHtml(t.name)}</option>`
-    ).join('')
   }
 
   panel.classList.remove('hidden')
@@ -5744,6 +5748,7 @@ function clearVenueForm() {
   document.getElementById('vf-active').checked = true
   document.getElementById('vf-requires-confirmation').checked = false
   document.getElementById('vf-packages-enabled').checked = false
+  document.getElementById('vf-food-offline').checked = false
   const teamSelClear = document.getElementById('vf-team')
   if (teamSelClear && appState.teams.length) teamSelClear.value = appState.teams[0].id
   renderVfImages([])
@@ -5770,6 +5775,7 @@ function populateVenueForm(venue) {
   document.getElementById('vf-active').checked = venue.is_active !== false
   document.getElementById('vf-requires-confirmation').checked = !!venue.requires_confirmation
   document.getElementById('vf-packages-enabled').checked = !!venue.packages_enabled
+  document.getElementById('vf-food-offline').checked = !!venue.metadata?.food_offline
 
   const meta = venue.metadata || {}
   renderVfImages(Array.isArray(venue.images) ? venue.images : (venue.images ? JSON.parse(venue.images) : []))
@@ -6243,7 +6249,11 @@ async function handleVenueFormSubmit(event) {
     ? null
     : (parseInt(document.getElementById('vf-free-guests-upto').value, 10) || null)
 
-  let metadata = { ...originalMeta, tiers, overage_per_person: overage, includes: splitCsv('vf-includes') }
+  // food_offline: whether food is arranged offline/self-sourced (true) vs.
+  // included in the online price (false/absent). Editable via the venue form
+  // now — previously only settable by direct SQL, invisible in admin.
+  const foodOffline = document.getElementById('vf-food-offline').checked
+  let metadata = { ...originalMeta, tiers, overage_per_person: overage, food_offline: foodOffline, includes: splitCsv('vf-includes') }
 
   if (type === 'self_managed') {
     metadata = {
