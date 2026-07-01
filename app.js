@@ -825,10 +825,11 @@ function renderVenueDetail(venue, addOns = []) {
       <div class="vd-body container" id="vd-body">
         <div class="vd-layout">
 
-          <!-- Main content -->
-          <div class="vd-main">
-
-            <!-- Quick facts -->
+          <!-- Quick facts — own grid area (shares "main" with .vd-main, so
+               desktop is unaffected) purely so it can be reordered ahead of
+               the booking card on mobile, independent of the long-form
+               content below it. -->
+          <div class="vd-facts-outer">
             <div class="vd-facts">
               <div class="vd-fact">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -853,25 +854,27 @@ function renderVenueDetail(venue, addOns = []) {
                 </div>
               </div>
             </div>
-
             <hr class="vd-divider">
+          </div>
 
-            <div class="vd-mobile-select-dates">
-              <button class="btn btn--venue-primary vd-mobile-select-dates-btn"
-                      onclick="document.getElementById('avail-calendar-widget')?.scrollIntoView({ behavior: 'smooth', block: 'center' })">
-                Select Dates
-              </button>
-            </div>
+          <!-- Main content -->
+          <div class="vd-main">
 
             ${venue.description ? `
-            <div class="vd-section">
-              <h2 class="vd-section-title">About this venue</h2>
-              <p class="vd-description">${escapeHtml(venue.description)}</p>
+            <div class="vd-section vd-about">
+              <button type="button" class="vd-about-header" onclick="toggleVdAccordion(this)" aria-expanded="false">
+                <h2 class="vd-section-title">About this venue</h2>
+                <svg class="vd-about-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <div class="vd-about-body" hidden>
+                <p class="vd-description">${escapeHtml(venue.description)}</p>
+              </div>
             </div>
             <hr class="vd-divider">` : ''}
 
-            <!-- What's included -->
-            ${(() => {
+            <!-- What's included — in the packages flow this moves into The
+                 Setting package card instead (see showPackageStep). -->
+            ${packageFlowActive(venue) ? '' : (() => {
               const meta = venue.metadata || {}
               const svgWrap = paths => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`
               const checkSvg   = svgWrap('<polyline points="20 6 9 17 4 12"/>')
@@ -1049,7 +1052,7 @@ function renderVenueDetail(venue, addOns = []) {
               </div>`}
               <p class="vd-price-note">Final price confirmed after we review your requirements.</p>
               </div>
-              <div class="vd-card-divider"></div>
+              ${packageFlowActive(venue) ? '' : '<div class="vd-card-divider"></div>'}
               ${ctaBlock}
               <ul class="vd-reassure">
                 <li>
@@ -1277,6 +1280,21 @@ const PACKAGE_TIERS = {
   story:   { key: 'story',   name: 'The Story',   addons: [19, 27, 23, 22, 24, 17],     tagline: 'The full production — photographer and more.' },
 }
 const PACKAGE_TIER_ORDER = ['setting', 'moment', 'story']
+
+// Setup/decor items included in every cafe booking (Food & Beverages left out
+// — food is arranged separately, not part of the online package price).
+// Feeds The Setting package card's checklist, replacing the venue page's
+// "What's included" section for the packages flow (see renderVenueDetail).
+// Mirrors the "sharedSetup" list there — keep both in sync if it changes.
+function venueSetupLabels(venue) {
+  const meta = venue?.metadata || {}
+  const sharedSetup = [
+    'Fresh Fruits', 'Fresh Flowers', 'Wax Candles', 'Electric Candles',
+    'Macrame Tent', 'Macrame Umbrella', 'Portable Speaker',
+    'Board with Message', 'Cutlery & Essentials',
+  ]
+  return [...sharedSetup, 'Setup & cleanup', 'Dedicated host support', ...(meta.includes || [])]
+}
 
 // Occasion -> default tier. This is the AOV lever; the customer can still switch.
 const OCCASION_DEFAULT_TIER = {
@@ -1528,6 +1546,7 @@ function renderAvailabilityCalendar(containerId, bookedData) {
     const isMinMonth = year === now.getFullYear() && month <= now.getMonth()
     container.innerHTML = `
       <div class="avail-calendar">
+        <h3 class="avail-cal-title">Check Availability</h3>
         <div class="avail-cal-header">
           <button class="avail-cal-nav" id="avail-cal-prev" aria-label="Previous month" ${isMinMonth ? 'disabled' : ''}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
@@ -1986,12 +2005,27 @@ function showPackageStep(venue) {
   const catalog    = appState.currentVenueAddOns || []
   const defaultKey = defaultTierForOccasion(appState.bookingOccasion)
 
-  const cards = PACKAGE_TIER_ORDER.map(key => {
-    const tier  = PACKAGE_TIERS[key]
-    const price = packageTierPrice(venue, tier, catalog)
-    const incl  = (tier.addons || []).map(id => catalog.find(x => x.id === id)).filter(Boolean)
-    const inclList = incl.length
-      ? `<ul class="pkg-card-incl">${incl.map(a => `<li>${escapeHtml(a.name)}</li>`).join('')}</ul>`
+  const cards = PACKAGE_TIER_ORDER.map((key, idx) => {
+    const tier     = PACKAGE_TIERS[key]
+    const price    = packageTierPrice(venue, tier, catalog)
+    const prevKey  = PACKAGE_TIER_ORDER[idx - 1]
+    const prevTier = prevKey ? PACKAGE_TIERS[prevKey] : null
+
+    // The Setting IS the base setup — its checklist is what the venue page's
+    // "What's included" section used to show (now hidden in this flow, see
+    // renderVenueDetail). Moment/Story are additive: "Everything in <prev>,
+    // plus:" the add-ons that tier introduces on top of the one before it.
+    let inclLead  = ''
+    let inclItems = []
+    if (!prevTier) {
+      inclItems = venueSetupLabels(venue)
+    } else {
+      inclLead = `Everything in <strong class="pkg-card-incl-lead-name">${escapeHtml(prevTier.name)}</strong>, plus:`
+      const newAddonIds = (tier.addons || []).filter(id => !(prevTier.addons || []).includes(id))
+      inclItems = newAddonIds.map(id => catalog.find(a => a.id === id)).filter(Boolean).map(a => a.name)
+    }
+    const inclList = inclItems.length
+      ? `${inclLead ? `<p class="pkg-card-incl-lead">${inclLead}</p>` : ''}<ul class="pkg-card-incl">${inclItems.map(label => `<li>${escapeHtml(label)}</li>`).join('')}</ul>`
       : `<p class="pkg-card-incl pkg-card-incl--bare">Just the signature picnic setup.</p>`
     const badge = tier.featured
       ? '<span class="pkg-card-badge">Most picked</span>'
@@ -2051,7 +2085,52 @@ function selectPackageTier(key) {
     venue_id: venue.id, venue_name: venue.name, tier: key,
     occasion: appState.bookingOccasion || null, guests: appState.adults + appState.children,
   })
+
+  // Changing package from the intent/confirmation screen ("Change package" →
+  // changePackageFromIntent) fast-resumes straight back there with the new
+  // tier's price, instead of re-showing the full contact-details form —
+  // name/email/mobile/etc. are already saved in changeModeData.
+  if (appState.changeMode === 'intent-package' && appState.changeModeData) {
+    const picnicPrice = getPicnicPrice(venue, appState.adults)
+    const addonObjs = addonIds.map(id => catalog.find(a => a.id === id)).filter(Boolean)
+    const addonSum  = addonObjs.reduce((s, a) => s + Number(a.price), 0)
+    const lead = {
+      ...appState.changeModeData,
+      advance_amount: Math.round((picnicPrice + addonSum) * 0.3),
+    }
+    appState.pendingLead   = lead
+    appState.pendingAddOns = addonObjs.map(a => ({
+      addon_id: a.id, name: a.name, price_at_booking: a.price, requires_confirmation: a.requires_confirmation || false,
+    }))
+    appState.changeMode     = null
+    appState.changeModeData = null
+
+    const body     = document.getElementById('vd-body')
+    const bookView = document.getElementById('vd-booking-view')
+    if (body)     body.style.display = 'none'
+    if (bookView) {
+      bookView.style.display = ''
+      bookView.innerHTML = buildIntentScreenHTML(lead, { containerClass: 'vd-intent-wrap container' })
+    }
+    return
+  }
+
   showBookingForm(venue)
+}
+
+// "Change package" from the intent/confirmation screen ("You're almost
+// there!"). Saves the pending lead the same way goBackToVenueDetail('intent')
+// does for date changes, then jumps straight to the tier step (date/guests/
+// occasion are unchanged, so no need to go through the calendar again).
+window.changePackageFromIntent = function() {
+  const venue = appState.currentVenue
+  if (!venue || !appState.pendingLead) return
+  appState.changeMode     = 'intent-package'
+  appState.changeModeData = { ...appState.pendingLead }
+  appState.pendingLead    = null
+  appState.pendingAddOns  = null
+  showVenueBodyStep()
+  showPackageStep(venue)
 }
 
 async function showBookingForm(venue) {
@@ -2110,7 +2189,15 @@ async function showBookingForm(venue) {
     baseTotal += nights * (Number(venue.metadata?.stay_price_per_night) || 0)
     hasStay = true
   }
-  priceRows += `<div class="vd-bv-price-row"><span>${hasStay ? 'Stay + Picnic setup' : 'Picnic setup'}</span><span>₹${baseTotal.toLocaleString('en-IN')}</span></div>`
+  // Packages: fold the setup + its locked add-ons into a single line (their
+  // individual prices are already shown per-tier on the previous step) —
+  // only add-ons chosen beyond the package get itemized below.
+  if (pkg && pkgTier) {
+    const lockedSum = lockedAddons.reduce((s, a) => s + Number(a.price || 0), 0)
+    priceRows += `<div class="vd-bv-price-row vd-bv-price-row--package"><span>${escapeHtml(pkgTier.name)} package</span><span>₹${(baseTotal + lockedSum).toLocaleString('en-IN')}</span></div>`
+  } else {
+    priceRows += `<div class="vd-bv-price-row"><span>${hasStay ? 'Stay + Picnic setup' : 'Picnic setup'}</span><span>₹${baseTotal.toLocaleString('en-IN')}</span></div>`
+  }
   priceRows += `<div id="bv-addon-price-rows"></div>`
 
   // Add-ons — grouped by category, each in a collapsible accordion
@@ -2188,7 +2275,6 @@ async function showBookingForm(venue) {
         <div class="vd-bv-summary">
           <div class="vd-bv-venue-row">
             <span class="vd-bv-venue-name">${escapeHtml(venue.name)}</span>
-            <span class="venue-type-badge ${venueTypeBadgeClass(venue.type)}">${escapeHtml(formatVenueType(venue.type))}</span>
           </div>
           <div class="vd-bv-chips-wrap">
             <div class="vd-bv-chips">${dateChips}${guestChips}</div>
@@ -2197,7 +2283,14 @@ async function showBookingForm(venue) {
               Change date &amp; time
             </button>
           </div>
-          ${pkgTier ? `<div class="pkg-summary-badge">${escapeHtml(pkgTier.name)} package</div>` : ''}
+          ${pkgTier ? `
+          <div class="vd-bv-pkg-row">
+            <div class="pkg-summary-badge">${escapeHtml(pkgTier.name)} package</div>
+            <button class="vd-bv-change-btn" onclick="changePackage()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Change package
+            </button>
+          </div>` : ''}
           ${inclusionBannerHtml(venue, appState.adults) ? `<div class="vd-inclusion vd-inclusion--summary">${inclusionBannerHtml(venue, appState.adults)}</div>` : ''}
           <div class="vd-bv-price-table">
             ${priceRows}
@@ -2340,8 +2433,30 @@ function showVenueBodyStep() {
   }
 }
 
+// "Change package" from the booking form — lighter than "Change date & time"
+// (goBackToVenueDetail), which rebuilds the whole venue page from scratch and
+// wipes date/guests/package. This just reveals the venue body and re-opens
+// the tier step; date, slot, guest count, and occasion are all untouched in
+// appState, so the tier cards re-render with the same context.
+window.changePackage = function() {
+  const venue = appState.currentVenue
+  if (!venue) return
+  showVenueBodyStep()
+  showPackageStep(venue)
+}
+
 // Recompute price total when add-ons are toggled in the booking view
 window.toggleAddonCat = function(btn) {
+  const body = btn.nextElementSibling
+  const open = btn.getAttribute('aria-expanded') === 'true'
+  btn.setAttribute('aria-expanded', !open)
+  body.hidden = open
+}
+
+// Generic collapse/expand for section-level accordions (e.g. "About this
+// venue") — same mechanic as toggleAddonCat, kept separate since it's a
+// different visual scale/context.
+window.toggleVdAccordion = function(btn) {
   const body = btn.nextElementSibling
   const open = btn.getAttribute('aria-expanded') === 'true'
   btn.setAttribute('aria-expanded', !open)
@@ -2382,10 +2497,13 @@ function updateBookingSummaryPrice() {
   if (totalEl)   totalEl.textContent   = `₹${total.toLocaleString('en-IN')}`
   if (submitBtn) submitBtn.textContent = `Continue →`
 
-  // Update add-on rows in the price breakdown
+  // Update add-on rows in the price breakdown. Package add-ons
+  // (.pkg-locked-check) are already folded into the package price row built
+  // in showBookingForm — only itemize add-ons chosen beyond the package,
+  // otherwise this re-lists Bouquet/Cake/etc. as if they were separate.
   const addonRowsEl = document.getElementById('bv-addon-price-rows')
   if (addonRowsEl) {
-    addonRowsEl.innerHTML = Array.from(document.querySelectorAll('.bv-addon-check:checked')).map(cb => {
+    addonRowsEl.innerHTML = Array.from(document.querySelectorAll('.bv-addon-check:checked:not(.pkg-locked-check)')).map(cb => {
       const name  = cb.closest('.vd-bf-addon-row')?.querySelector('.vd-bf-addon-name')?.textContent || 'Add-on'
       return `<div class="vd-bv-price-row"><span>${escapeHtml(name)}</span><span>+₹${Number(cb.dataset.addonPrice).toLocaleString('en-IN')}</span></div>`
     }).join('')
@@ -2398,6 +2516,14 @@ function buildIntentSummaryHTML() {
   const venue = appState.currentVenue
   const addOns = appState.pendingAddOns || []
   if (!lead) return ''
+
+  // Packages: appState.selectedPackage survives from the form submit through
+  // to this intent screen (only showVenuePage clears it), so this mirrors
+  // what the customer actually picked. Computed up top since it's needed both
+  // for the price collapsing below and the "Change package" link.
+  const pkg       = (appState.selectedPackage && venue?.type === 'cafe') ? appState.selectedPackage : null
+  const pkgTier   = pkg ? PACKAGE_TIERS[pkg.tierKey] : null
+  const lockedIds = pkg ? (pkg.addonIds || []) : []
 
   // Date / slot chips
   const chips = []
@@ -2434,10 +2560,20 @@ function buildIntentSummaryHTML() {
       setupBase += nights * (Number(venue.metadata?.stay_price_per_night) || 0)
       hasStay = true
     }
-    if (setupBase) {
+
+    // Packages: same collapsing as the booking form (showBookingForm) — fold
+    // the setup + its locked add-ons into one line, only itemize add-ons
+    // chosen beyond the package.
+    const lockedAddOns = lockedIds.length ? addOns.filter(ao => lockedIds.includes(ao.addon_id)) : []
+    const extraAddOns  = lockedIds.length ? addOns.filter(ao => !lockedIds.includes(ao.addon_id)) : addOns
+
+    if (pkgTier) {
+      const lockedSum = lockedAddOns.reduce((s, ao) => s + Number(ao.price_at_booking || 0), 0)
+      rows += `<div class="vd-bv-price-row vd-bv-price-row--package"><span>${escapeHtml(pkgTier.name)} package</span><span>₹${(setupBase + lockedSum).toLocaleString('en-IN')}</span></div>`
+    } else if (setupBase) {
       rows += `<div class="vd-bv-price-row"><span>${hasStay ? 'Stay + Picnic setup' : 'Picnic setup'}</span><span>₹${setupBase.toLocaleString('en-IN')}</span></div>`
     }
-    for (const ao of addOns) {
+    for (const ao of extraAddOns) {
       const name = appState.currentVenueAddOns?.find(a => a.id === ao.addon_id)?.name || 'Add-on'
       rows += `<div class="vd-bv-price-row"><span>${escapeHtml(name)}</span><span>+₹${Number(ao.price_at_booking).toLocaleString('en-IN')}</span></div>`
     }
@@ -2480,6 +2616,14 @@ function buildIntentSummaryHTML() {
           Change date &amp; time
         </button>
       </div>
+      ${pkgTier ? `
+      <div class="vd-bv-pkg-row">
+        <div class="pkg-summary-badge">${escapeHtml(pkgTier.name)} package</div>
+        <button class="vd-bv-change-btn" onclick="changePackageFromIntent()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Change package
+        </button>
+      </div>` : ''}
       ${priceSection}
     </div>`
 }

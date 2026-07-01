@@ -3750,11 +3750,13 @@ body {
   display: grid;
   grid-template-columns: 1fr 360px;
   grid-template-areas:
+    "facts   sidebar"
     "main    sidebar"
     "addons  sidebar";
   gap: 64px;
   align-items: start;
 }
+.vd-facts-outer  { grid-area: facts; }
 .vd-main         { grid-area: main; }
 .vd-sidebar      { grid-area: sidebar; }
 .vd-addons-outer { grid-area: addons; min-width: 0; }
@@ -4033,11 +4035,12 @@ body.menu-viewer-open {
 
 .vd-section-title {
   font-family: var(--font-serif);
-  font-size: 1.35rem;
-  font-weight: 500;
+  font-size: 1.55rem;
+  font-weight: 600;
   color: var(--boho-text-dark);
   margin: 0 0 16px;
   letter-spacing: -0.01em;
+  line-height: 1.25;
 }
 
 .vd-description {
@@ -4047,6 +4050,38 @@ body.menu-viewer-open {
   color: var(--boho-text-medium);
   margin: 0;
 }
+
+/* "About this venue" — collapsed by default so a long description doesn't
+   push the rest of the page (calendar, menu, reviews) further down. Tapping
+   the header (title + chevron) toggles it; no separate "read more" link. */
+.vd-about {
+  border: 1px solid var(--boho-border);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--boho-white);
+}
+.vd-about-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 20px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 150ms ease;
+}
+.vd-about-header:hover { background: var(--boho-cream, #fff8f5); }
+.vd-about-header .vd-section-title { margin: 0; }
+.vd-about-chevron {
+  flex-shrink: 0;
+  color: var(--boho-text-medium);
+  transition: transform 200ms cubic-bezier(0.22,1,0.36,1);
+}
+.vd-about-header[aria-expanded="true"] .vd-about-chevron { transform: rotate(180deg); }
+.vd-about-body { padding: 0 20px 20px; }
 
 /* What's included grid */
 .vd-includes {
@@ -4102,9 +4137,10 @@ body.menu-viewer-open {
 
 .vd-bv-venue-name {
   font-family: var(--font-serif);
-  font-size: 1.2rem;
-  font-weight: 500;
+  font-size: 1.65rem;
+  font-weight: 700;
   color: var(--boho-text-dark);
+  letter-spacing: -0.01em;
 }
 
 .vd-bv-chips-wrap {
@@ -4118,6 +4154,19 @@ body.menu-viewer-open {
 .vd-bv-chips-wrap .vd-bv-chips {
   margin-bottom: 0;
   flex: 1;
+}
+
+/* Package badge + "Change package" — deliberately its own class rather than
+   reusing .vd-bv-chips-wrap: that class stacks to a column with the button
+   flex-end below on narrow screens (fine for wrapping chips, but for a single
+   short badge + link it just left a big disconnected gap between them). This
+   stays a row at every width. */
+.vd-bv-pkg-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
 .vd-bv-change-btn {
@@ -4179,6 +4228,10 @@ body.menu-viewer-open {
 
 .vd-bv-price-row--total {
   font-size: 15px;
+  font-weight: 700;
+  color: var(--boho-text-dark);
+}
+.vd-bv-price-row--package span:first-child {
   font-weight: 700;
   color: var(--boho-text-dark);
 }
@@ -5366,7 +5419,7 @@ body.menu-viewer-open {
     gap: 16px;
   }
   .vd-section-title {
-    font-size: 1.1rem;
+    font-size: 1.3rem;
   }
 
   /* Venue detail — includes: 2-col → 1-col */
@@ -5375,12 +5428,13 @@ body.menu-viewer-open {
     gap: 10px;
   }
 
-  /* Venue detail — sidebar: un-sticky, move below main content */
+  /* Venue detail — sidebar: un-sticky (it's reordered to the top of the
+     stack on mobile — see the vd-layout order rule below — so sticky
+     positioning doesn't apply) */
   .vd-sidebar {
     position: static;
   }
 
-  /* Booking card — order matters on mobile (card below content) */
   .vd-booking-card {
     padding: 20px;
   }
@@ -5498,26 +5552,7 @@ body.menu-viewer-open {
   display: none;
 }
 
-.vd-mobile-select-dates {
-  display: none;
-}
-
 @media (max-width: 768px) {
-
-  .vd-mobile-select-dates {
-    display: block;
-    padding: 4px 0 8px;
-  }
-
-  .vd-mobile-select-dates-btn {
-    width: 100%;
-    text-align: center;
-  }
-
-  /* Hide the hr immediately before the Select Dates button — redundant on mobile */
-  .vd-divider:has(+ .vd-mobile-select-dates) {
-    display: none;
-  }
 
   /* Show the sticky bar */
   .vd-mobile-book-bar {
@@ -5592,18 +5627,35 @@ body.menu-viewer-open {
     min-width: 0;
   }
 
-  /* vd-layout: single column; DOM order = main → sidebar (calendar) → add-ons */
+  /* vd-layout: single column. DOM order is still facts → main → sidebar →
+     add-ons, but visually reordered to facts → booking card (price +
+     calendar) → main (about/what's-included/menu/reviews) → add-ons —
+     visitors shouldn't have to scroll past all that long-form content to
+     find the calendar, but quick facts still read first. Purely visual: JS
+     selectors and desktop's grid layout are untouched. */
   .vd-layout {
     display: flex;
     flex-direction: column;
+    /* The 64px "gap" above is the desktop grid's column gutter between main
+       and sidebar. In flex mode it applies as a vertical gap between every
+       item instead — on top of each section's own margin, which is what was
+       producing the huge dead space between cards on mobile. Spacing here is
+       controlled per-element below instead. */
+    gap: 0;
+  }
+
+  .vd-facts-outer {
+    order: -2;
   }
 
   .vd-sidebar {
-    margin-top: 32px;
+    order: -1;
+    margin-top: 0;
+    margin-bottom: 28px;
   }
 
   .vd-addons-outer {
-    margin-top: 0;
+    margin-top: 28px;
   }
 
   /* Gallery strip — ensure it scrolls */
@@ -5641,6 +5693,15 @@ body.menu-viewer-open {
   border-radius: 12px;
   padding: 14px 12px 10px;
   font-family: var(--font-sans, sans-serif);
+}
+
+.avail-cal-title {
+  font-family: var(--font-serif);
+  font-size: 1.45rem;
+  font-weight: 500;
+  color: var(--boho-accent-pink);
+  margin: 2px 0 14px;
+  letter-spacing: -0.01em;
 }
 
 /* Header: prev / month label / next */
@@ -8860,4 +8921,273 @@ body.menu-viewer-open {
 .tm-actions {
   display: flex;
   justify-content: flex-end;
+}
+
+/* ── Packages (Phase 1) ──────────────────────────────────────────────────── */
+
+/* Occasion select on the guest step */
+.vd-guest-row--occasion { align-items: center; }
+.vd-occasion-select {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  color: var(--boho-text-dark);
+  background: var(--boho-white);
+  border: 1px solid var(--boho-border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  min-width: 160px;
+  cursor: pointer;
+}
+.vd-occasion-select:focus { outline: none; border-color: var(--boho-accent-pink); }
+
+/* Tier step */
+.pkg-step { padding: 4px 0 8px; }
+.pkg-step-title {
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: var(--boho-text-dark);
+  margin: 14px 0 4px;
+}
+.pkg-step-sub {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--boho-text-medium);
+  margin: 0 0 18px;
+}
+.pkg-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+.pkg-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--boho-white);
+  border: 1px solid var(--boho-border);
+  border-radius: 16px;
+  padding: 22px 18px 20px;
+  box-shadow: 0 2px 12px rgba(45,31,20,0.06);
+  opacity: 0;
+  transform: translateY(10px);
+  animation: pkg-card-in 320ms cubic-bezier(0.22,1,0.36,1) forwards;
+}
+.pkg-cards .pkg-card:nth-child(1) { animation-delay: 0ms; }
+.pkg-cards .pkg-card:nth-child(2) { animation-delay: 50ms; }
+.pkg-cards .pkg-card:nth-child(3) { animation-delay: 100ms; }
+@keyframes pkg-card-in {
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (hover: hover) and (pointer: fine) {
+  .pkg-card {
+    transition: transform 200ms cubic-bezier(0.22,1,0.36,1),
+                box-shadow 200ms cubic-bezier(0.22,1,0.36,1),
+                border-color 200ms ease;
+  }
+  .pkg-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 26px rgba(45,31,20,0.1);
+    border-color: rgba(196,96,122,0.35);
+  }
+  .pkg-card--featured:hover {
+    box-shadow: 0 14px 32px rgba(196,96,122,0.22);
+  }
+}
+.pkg-card--featured {
+  border-color: var(--boho-accent-pink);
+  border-width: 2px;
+  padding-top: 26px;
+  box-shadow: 0 8px 24px rgba(196,96,122,0.14);
+}
+.pkg-card-badge {
+  position: absolute;
+  top: -11px;
+  left: 18px;
+  background: var(--boho-accent-pink);
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 4px 11px;
+  border-radius: 99px;
+  box-shadow: 0 3px 8px rgba(196,96,122,0.35);
+}
+.pkg-card-badge--suggested { background: var(--boho-accent-sage); box-shadow: 0 3px 8px rgba(85,99,67,0.3); }
+.pkg-card-name {
+  font-family: var(--font-serif);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--boho-text-dark);
+  margin: 4px 0 4px;
+  letter-spacing: -0.01em;
+}
+.pkg-card--featured .pkg-card-name { color: var(--boho-accent-pink); }
+.pkg-card-tagline {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--boho-text-medium);
+  margin: 0 0 14px;
+  min-height: 34px;
+  line-height: 1.45;
+}
+.pkg-card-price {
+  font-family: var(--font-serif);
+  font-size: 1.55rem;
+  font-weight: 600;
+  color: var(--boho-text-dark);
+  letter-spacing: -0.01em;
+}
+.pkg-card--featured .pkg-card-price { color: var(--boho-accent-pink); }
+.pkg-card-price-note {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--boho-text-light);
+  margin: 2px 0 16px;
+}
+.pkg-card-incl-lead {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--boho-text-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 0 0 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--boho-border);
+}
+.pkg-card-incl-lead-name {
+  color: var(--boho-text-dark);
+  font-weight: 800;
+}
+.pkg-card-incl-lead + .pkg-card-incl {
+  border-top: none;
+  padding-top: 0;
+}
+.pkg-card-incl {
+  list-style: none;
+  margin: 0 0 18px;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--boho-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+.pkg-card-incl li {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--boho-text-dark);
+  padding-left: 20px;
+  position: relative;
+  line-height: 1.4;
+}
+.pkg-card-incl li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--boho-accent-sage);
+  font-weight: 700;
+}
+.pkg-card-incl--bare {
+  font-style: italic;
+  color: var(--boho-text-light);
+  padding-left: 0;
+  border-top: 1px solid var(--boho-border);
+  padding-top: 14px;
+  margin-top: 0;
+}
+.pkg-card-cta { width: 100%; padding: 12px 18px; font-size: 14px; }
+.pkg-card-cta:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(196,96,122,0.35);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pkg-card {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .pkg-card, .pkg-card:hover, .pkg-card--featured:hover {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* Package step: full-width takeover (desktop only). Breaks the booking
+   card out of the 360px sticky sidebar so 3 tier cards sit side-by-side
+   instead of stacking in a cramped column. Toggled by showPackageStep()/
+   showPackageBack()/showBookingForm() in app.js. Below 768px .vd-layout is
+   already display:flex (see the 768px media query), so these grid overrides
+   are inert there and mobile keeps its normal stacked flow. */
+.vd-layout--pkg-active {
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "main"
+    "sidebar"
+    "addons";
+}
+.vd-layout--pkg-active .vd-sidebar {
+  position: static;
+}
+.vd-layout--pkg-active .vd-booking-card {
+  max-width: 960px;
+  margin: 0 auto;
+}
+@media (min-width: 769px) {
+  .vd-layout--pkg-active .pkg-step-title {
+    text-align: center;
+    font-size: 1.5rem;
+    margin-top: 6px;
+  }
+  .vd-layout--pkg-active .pkg-step-sub {
+    text-align: center;
+    margin-bottom: 26px;
+  }
+  .vd-layout--pkg-active .pkg-cards {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 22px;
+  }
+  .vd-layout--pkg-active .pkg-card-tagline {
+    min-height: 0;
+  }
+  .vd-layout--pkg-active .pkg-card--featured {
+    margin-top: -10px;
+    padding-top: 34px;
+    padding-bottom: 28px;
+  }
+}
+
+/* Package summary badge + locked add-ons on the booking form */
+.pkg-summary-badge {
+  display: inline-block;
+  align-self: flex-start;
+  background: var(--boho-light-pink);
+  color: var(--boho-accent-rose);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 7px 14px;
+  border-radius: 99px;
+}
+.pkg-included-section .vd-bf-section-title { margin-bottom: 10px; }
+.pkg-included-row { cursor: default; }
+.pkg-included-tick { color: var(--boho-accent-sage); font-weight: 700; font-size: 16px; }
+.pkg-locked-check { display: none; }
+.pkg-occasion-chip {
+  display: inline-block;
+  background: var(--boho-rose);
+  color: var(--boho-text-dark);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  padding: 9px 14px;
+  border-radius: 12px;
+}
+
+@media (max-width: 720px) {
+  .pkg-cards { grid-template-columns: 1fr; }
+  .pkg-card-tagline { min-height: 0; }
 }
