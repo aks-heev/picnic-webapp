@@ -143,7 +143,8 @@
                     <p class="hero-description">Boho-chic picnic arrangements with curated decor, ambient lighting, and gourmet food &mdash; across Jaipur and Gurugram's most stunning locations.</p>
                     <div class="hero-actions">
                         <button class="btn btn--primary btn--lg" onclick="document.getElementById('venues-section').scrollIntoView({behavior:'smooth'})">Book Now</button>
-                        <a class="btn btn--ghost btn--lg" href="https://wa.me/919773703982" target="_blank" rel="noopener noreferrer">Contact Us</a>
+                        <!-- Hidden until venues load AND >=1 venue has packages enabled — revealed by loadVenues(). Contact Us removed: the floating WhatsApp button covers it. -->
+                        <a class="btn btn--ghost btn--lg" href="/packages" id="hero-packages-cta" style="display:none" onclick="event.preventDefault(); showPackagesPage()">View Packages</a>
                     </div>
                     <div class="hero-stats">
                         <div class="hero-stat">
@@ -340,6 +341,11 @@
     <!-- My Bookings Page -->
     <div id="my-bookings-page" class="page">
         <div id="my-bookings-content"></div>
+    </div>
+
+    <!-- Packages-first entry, /packages route — populated by showPackagesPage() -->
+    <div id="packages-page" class="page">
+        <div id="packages-content"></div>
     </div>
 
     <!-- Venue Detail Page (dynamically populated) -->

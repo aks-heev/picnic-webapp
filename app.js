@@ -75,6 +75,9 @@ const appState = {
   bookingStep: 'calendar',   // 'calendar' | 'guests' | 'package' | 'booking'
   bookingOccasion: '',       // packages: occasion captured at the guest step
   selectedPackage: null,     // packages: { occasion, tierKey, addonIds } once a tier is chosen
+  pendingPackage: null,      // packages-first (/packages page): { occasion, tierKey, venueId } handoff,
+                             // consumed after the guest step via selectPackageTier() — see docs/PHASE2_PACKAGES_FIRST_PLAN.md
+  venueCatalogCache: null,   // Map<venueId, addon[]> — batched catalogs loaded by loadCatalogsForVenues()
 }
 
 // Packages (Phase 1). Real production toggle is per-venue: venues.packages_enabled
@@ -430,6 +433,7 @@ async function loadVenues() {
     renderVenueGallery(data || [])
     renderCityPills(data || [])
     setupVenueCardViewContentObserver()
+    revealPackagesEntryPoints()
   } catch (error) {
     console.error('Failed to load venues:', error)
     const grid = document.getElementById('venues-grid')
@@ -567,13 +571,15 @@ function venueSetting(venue) {
 }
 
 // Build a single venue card (non-custom)
-function venueCardHtml(venue) {
+// opts.priceHtml (trusted, pre-escaped) overrides the default base-price line —
+// the /packages venue picker uses it to show the chosen tier's firm price.
+function venueCardHtml(venue, opts = {}) {
   const primaryImage = venue.images?.[0]
   const hasImage = primaryImage?.url
   const capacityText = venue.capacity_max
     ? `${venue.capacity_min}–${venue.capacity_max} guests`
     : `${venue.capacity_min}+ guests`
-  const priceText = venue.base_price ? `From ${formatPrice(venue.base_price)}` : 'Get a quote'
+  const priceText = opts.priceHtml || (venue.base_price ? `From ${formatPrice(venue.base_price)}` : 'Get a quote')
   // Only cafe venues get the tier-card packages flow, and only while the
   // flag is on — showing this badge for anything else would point people at
   // a flow they'll never reach. See packageFlowActive().
@@ -681,7 +687,13 @@ async function showVenuePage(venueId, pushState = true) {
   appState.adults           = 2
   appState.children         = 0
   appState.bookingStep      = 'calendar'
-  appState.bookingOccasion  = ''
+  // Packages-first handoff: a pending tier survives navigation to ITS venue
+  // only — an organic visit to any other venue clears it (+ its session mirror).
+  if (appState.pendingPackage && appState.pendingPackage.venueId !== venueId) {
+    appState.pendingPackage = null
+    try { sessionStorage.removeItem('ps_pending_pkg') } catch (err) { /* ignore */ }
+  }
+  appState.bookingOccasion  = appState.pendingPackage?.occasion || ''
   appState.selectedPackage  = null
 
   const needsCalendar = true
@@ -1316,6 +1328,7 @@ let PACKAGE_TIERS = {
   story:   { key: 'story',   name: 'The Story',   addons: [19, 27, 23, 22, 24, 17],     tagline: 'The full production — photographer and more.' },
 }
 let PACKAGE_TIER_ORDER = ['setting', 'moment', 'story']
+let packagesLoaded = false // set once loadPackages() has real DB rows
 
 // Loads package tier definitions from the DB, replacing the hardcoded
 // fallback above. Falls back silently to the hardcoded defaults on error so a
@@ -1338,11 +1351,15 @@ async function loadPackages() {
         .slice()
         .sort((a, b) => a.sort_order - b.sort_order)
         .map(pa => pa.addon_id)
-      tiers[pkg.key] = { key: pkg.key, name: pkg.name, tagline: pkg.tagline || '', addons, featured: !!pkg.is_featured }
+      // occasion: NULL/absent = universal (shown for every occasion). The
+      // column lands in Phase 2.5 (occasion-specific packages) — carrying it
+      // through now means the visiblePackagesFor() filter needs no change then.
+      tiers[pkg.key] = { key: pkg.key, name: pkg.name, tagline: pkg.tagline || '', addons, featured: !!pkg.is_featured, occasion: pkg.occasion || null }
       order.push(pkg.key)
     })
     PACKAGE_TIERS = tiers
     PACKAGE_TIER_ORDER = order
+    packagesLoaded = true
   } catch (err) {
     console.error('Failed to load packages, using fallback tier definitions:', err)
   }
@@ -1490,14 +1507,35 @@ window.savePackageCard = savePackageCard
 // Feeds The Setting package card's checklist, replacing the venue page's
 // "What's included" section for the packages flow (see renderVenueDetail).
 // Mirrors the "sharedSetup" list there — keep both in sync if it changes.
+// The setup every venue gets — also shown venue-independently on the
+// /packages page's Setting card. Venue-specific extras (metadata.includes)
+// are appended by venueSetupLabels() once a venue is in play.
+const SHARED_SETUP_LABELS = [
+  'Fresh Fruits', 'Fresh Flowers', 'Wax Candles', 'Electric Candles',
+  'Macrame Tent', 'Macrame Umbrella', 'Portable Speaker',
+  'Board with Message', 'Cutlery & Essentials',
+  'Setup & cleanup', 'Dedicated host support',
+]
 function venueSetupLabels(venue) {
   const meta = venue?.metadata || {}
-  const sharedSetup = [
-    'Fresh Fruits', 'Fresh Flowers', 'Wax Candles', 'Electric Candles',
-    'Macrame Tent', 'Macrame Umbrella', 'Portable Speaker',
-    'Board with Message', 'Cutlery & Essentials',
-  ]
-  return [...sharedSetup, 'Setup & cleanup', 'Dedicated host support', ...(meta.includes || [])]
+  return [...SHARED_SETUP_LABELS, ...(meta.includes || [])]
+}
+
+// Canonical occasion list — single source for the /packages page chips, the
+// venue guest-step select, and the admin edit modal (and later for
+// packages.occasion values — Phase 2.5). Do NOT fork copies of this list:
+// occasion matching is string-equality across all three surfaces.
+const OCCASIONS = ['Birthday', 'Anniversary', 'Proposal', 'Date Night', 'Bridal Shower', 'Baby Shower', 'Graduation', 'Just Because']
+
+// Packages visible for an occasion. Universal packages (no .occasion) always
+// show; occasion-specific ones (Phase 2.5 — none exist yet) only for theirs.
+// Called by BOTH the /packages page and the venue-first tier step
+// (showPackageStep) so the two surfaces can never drift.
+function visiblePackagesFor(occasion) {
+  return PACKAGE_TIER_ORDER.filter(key => {
+    const occ = PACKAGE_TIERS[key]?.occasion
+    return !occ || occ === occasion
+  })
 }
 
 // Occasion -> default tier. This is the AOV lever; the customer can still switch.
@@ -1508,6 +1546,227 @@ const OCCASION_DEFAULT_TIER = {
 }
 function defaultTierForOccasion(occasion) {
   return OCCASION_DEFAULT_TIER[occasion] || 'setting'
+}
+
+// ── Packages-first entry: the /packages page (Phase 2) ─────────────────────
+// docs/PHASE2_PACKAGES_FIRST_PLAN.md. Occasion → tier → venue, then hands off
+// to the regular venue page via appState.pendingPackage. The pending tier is
+// consumed AFTER the guest step through the exact same selectPackageTier()
+// call the venue-first flow uses — one code path, so the two entry points
+// can't drift.
+const PKG_PAGE_BASE_ADULTS = 2 // "From ₹X" baseline; real price re-firms at the guest step
+let pkgPageState = { occasion: '', tierKey: null }
+
+// Venues that can actually serve the packages flow right now (cafe +
+// packages_enabled, or QA override — packageFlowActive decides).
+function pkgEnabledVenues() {
+  return (appState.venues || []).filter(v => packageFlowActive(v))
+}
+
+function venueCatalog(venueId) {
+  return (appState.venueCatalogCache && appState.venueCatalogCache.get(venueId)) || []
+}
+
+// Batched add-on catalogs for many venues in ONE query (never per-venue N+1).
+// Same row shape as loadVenueAddOns(); cached in appState.venueCatalogCache.
+async function loadCatalogsForVenues(venueIds) {
+  if (!appState.venueCatalogCache) appState.venueCatalogCache = new Map()
+  const missing = venueIds.filter(id => !appState.venueCatalogCache.has(id))
+  if (!missing.length) return appState.venueCatalogCache
+  try {
+    const { data, error } = await supabase
+      .from('add_ons')
+      .select('*, venue_add_ons!inner(venue_id)')
+      .eq('is_active', true)
+      .in('venue_add_ons.venue_id', missing)
+      .order('sort_order')
+    if (error) throw error
+    missing.forEach(id => appState.venueCatalogCache.set(id, []))
+    const rows = data || []
+    rows.forEach(row => {
+      const { venue_add_ons, ...addon } = row
+      const junctions = venue_add_ons || []
+      junctions.forEach(j => {
+        const list = appState.venueCatalogCache.get(j.venue_id)
+        if (list) list.push(addon)
+      })
+    })
+  } catch (err) {
+    console.error('loadCatalogsForVenues:', err)
+  }
+  return appState.venueCatalogCache
+}
+
+async function showPackagesPage(push = true, opts = {}) {
+  showPage('packages-page')
+  document.title = 'Picnic Packages — The Picnic Stories'
+  if (push) history.pushState({ page: 'packages' }, document.title, '/packages')
+  pkgPageState = { occasion: opts.occasion || '', tierKey: opts.tierKey || null }
+  const el = document.getElementById('packages-content')
+  if (!el) return
+  el.innerHTML = '<div class="pkgp-loading">Loading packages…</div>'
+  if (!packagesLoaded) await loadPackages()
+  if (!(appState.venues || []).length) await loadVenues()
+  const venues = pkgEnabledVenues()
+  await loadCatalogsForVenues(venues.map(v => v.id))
+  renderPackagesPage()
+  track('packages_page_viewed', {
+    occasion: pkgPageState.occasion || null,
+    tier: pkgPageState.tierKey || null,
+    venues_available: venues.length,
+  })
+}
+
+function renderPackagesPage() {
+  const el = document.getElementById('packages-content')
+  if (!el) return
+  const venues = pkgEnabledVenues()
+
+  if (!venues.length) {
+    el.innerHTML = `
+      <div class="pkgp-wrap">
+        <h1 class="pkgp-title">Picnic Packages</h1>
+        <p class="pkgp-sub">Packages are coming soon — every picnic can still be booked from its venue page.</p>
+        <a class="btn btn--venue-primary pkgp-fallback-btn" href="/#venues-section">Browse venues</a>
+      </div>`
+    return
+  }
+
+  const occasion  = pkgPageState.occasion || null
+  const visible   = visiblePackagesFor(occasion)
+  const suggested = occasion ? defaultTierForOccasion(occasion) : null
+
+  const chips = OCCASIONS.map(o =>
+    `<button type="button" class="pkgp-chip${pkgPageState.occasion === o ? ' pkgp-chip--active' : ''}" onclick="pkgPageSelectOccasion('${escapeHtml(o)}')">${escapeHtml(o)}</button>`
+  ).join('')
+
+  // Merged add-on lookup — names are global (add_ons table), catalogs per-venue.
+  const addonById = new Map()
+  venues.forEach(v => venueCatalog(v.id).forEach(a => addonById.set(a.id, a)))
+
+  const cards = visible.map((key, idx) => {
+    const tier = PACKAGE_TIERS[key]
+    const isUniversal = !tier.occasion
+    const prevKey  = isUniversal ? visible.slice(0, idx).reverse().find(k => !PACKAGE_TIERS[k]?.occasion) : null
+    const prevTier = prevKey ? PACKAGE_TIERS[prevKey] : null
+    const prices = venues.map(v => packageTierPriceAt(v, tier, venueCatalog(v.id), PKG_PAGE_BASE_ADULTS))
+    const from = Math.min(...prices)
+    let incl
+    if (!prevTier) {
+      // Venue-independent: the shared setup only (venue-specific extras show
+      // once a venue is picked — mirrors the venue-first tier step's list).
+      const lead = isUniversal ? '' : '<p class="pkg-card-incl-lead">The signature setup, plus:</p>'
+      const items = isUniversal
+        ? `<ul class="pkg-card-incl">${SHARED_SETUP_LABELS.map(n => `<li>${escapeHtml(n)}</li>`).join('')}</ul>`
+        : `<ul class="pkg-card-incl">${(tier.addons || []).map(id => addonById.get(id)?.name).filter(Boolean).map(n => `<li>${escapeHtml(n)}</li>`).join('')}</ul>`
+      incl = lead + items
+    } else {
+      const newIds = (tier.addons || []).filter(id => !(prevTier.addons || []).includes(id))
+      const names = newIds.map(id => addonById.get(id)?.name).filter(Boolean)
+      incl = `
+        <p class="pkg-card-incl-lead">Everything in <strong class="pkg-card-incl-lead-name">${escapeHtml(prevTier.name)}</strong>, plus:</p>
+        <ul class="pkg-card-incl">${names.map(n => `<li>${escapeHtml(n)}</li>`).join('')}</ul>`
+    }
+    const badge = tier.featured
+      ? '<span class="pkg-card-badge">Most picked</span>'
+      : (key === suggested ? '<span class="pkg-card-badge pkg-card-badge--suggested">Suggested</span>' : '')
+    const active = pkgPageState.tierKey === key
+    return `
+      <div class="pkg-card${tier.featured ? ' pkg-card--featured' : ''}${active ? ' pkg-card--active' : ''}">
+        ${badge}
+        <h4 class="pkg-card-name">${escapeHtml(tier.name)}</h4>
+        <p class="pkg-card-tagline">${escapeHtml(tier.tagline)}</p>
+        <div class="pkg-card-price">${venues.length > 1 ? 'From ' : ''}₹${from.toLocaleString('en-IN')}</div>
+        <div class="pkg-card-price-note">for ${PKG_PAGE_BASE_ADULTS} adults</div>
+        ${incl}
+        <button type="button" class="btn ${tier.featured ? 'btn--venue-primary' : 'btn--venue-secondary'} pkg-card-cta" onclick="pkgPageSelectTier('${escapeHtml(key)}')">${active ? '✓ Selected' : `Choose ${escapeHtml(tier.name)}`}</button>
+      </div>`
+  }).join('')
+
+  el.innerHTML = `
+    <div class="pkgp-wrap">
+      <h1 class="pkgp-title">Picnic Packages</h1>
+      <p class="pkgp-sub">Pick a package, then choose where to have it — date, time and guests come after.</p>
+      <div class="pkgp-occasions">
+        <p class="pkgp-step-label">What's the occasion? <span class="pkgp-optional">optional</span></p>
+        <div class="pkgp-chips">${chips}</div>
+      </div>
+      <div class="pkgp-tiers">
+        <p class="pkgp-step-label">Choose your package</p>
+        <div class="pkg-cards pkg-cards--page">${cards}</div>
+      </div>
+      ${pkgPageState.tierKey ? renderPkgVenuePicker(venues) : ''}
+    </div>`
+
+  const grid = document.getElementById('pkgp-venue-grid')
+  if (grid) grid.addEventListener('click', onPkgVenueGridClick)
+}
+
+function renderPkgVenuePicker(venues) {
+  const tier = PACKAGE_TIERS[pkgPageState.tierKey]
+  if (!tier) return ''
+  // Same cards as the homepage grid (venueCardHtml) — only the price line
+  // differs: it shows THIS tier's firm price at the venue.
+  const cards = venues.map(v => {
+    const price = packageTierPriceAt(v, tier, venueCatalog(v.id), PKG_PAGE_BASE_ADULTS)
+    const priceHtml = `₹${price.toLocaleString('en-IN')} <span class="venue-card-price-sub">for ${PKG_PAGE_BASE_ADULTS} adults</span>`
+    return venueCardHtml(v, { priceHtml })
+  }).join('')
+  return `
+    <div class="pkgp-venues" id="pkgp-venues">
+      <p class="pkgp-step-label">Where would you like your ${escapeHtml(tier.name)}?</p>
+      <div class="venue-grid pkgp-venue-grid" id="pkgp-venue-grid">${cards}</div>
+      <p class="pkgp-venues-note">Prices shown for ${PKG_PAGE_BASE_ADULTS} adults — you'll pick date, time and guests next.</p>
+    </div>`
+}
+
+// Card clicks continue the packages flow in-app (mirrors the venues-grid
+// delegation): plain left-click → pkgPageSelectVenue; modifier/middle clicks
+// fall through to the browser (new tab opens the venue page organically,
+// without the package preselected — by design, state doesn't cross tabs).
+function onPkgVenueGridClick(e) {
+  const card = e.target.closest('[data-venue-id]')
+  if (!card) return
+  if (e.defaultPrevented || e.button === 1 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+  e.preventDefault()
+  pkgPageSelectVenue(parseInt(card.dataset.venueId, 10))
+}
+
+function pkgPageSelectOccasion(occ) {
+  pkgPageState.occasion = pkgPageState.occasion === occ ? '' : occ
+  // Keep the chosen tier only if it's still visible under the new occasion.
+  if (pkgPageState.tierKey && !visiblePackagesFor(pkgPageState.occasion || null).includes(pkgPageState.tierKey)) {
+    pkgPageState.tierKey = null
+  }
+  renderPackagesPage()
+  track('packages_occasion_selected', { occasion: pkgPageState.occasion || null })
+}
+
+function pkgPageSelectTier(key) {
+  if (!PACKAGE_TIERS[key]) return
+  pkgPageState.tierKey = key
+  renderPackagesPage()
+  const target = document.getElementById('pkgp-venues')
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  track('packages_tier_selected', { tier: key, occasion: pkgPageState.occasion || null })
+}
+
+// Reveal homepage packages entry points (hero CTA now; Phase B section later)
+// only when at least one venue can actually serve the flow — no dead links.
+// Called from loadVenues() once appState.venues is populated.
+function revealPackagesEntryPoints() {
+  const show = pkgEnabledVenues().length > 0
+  const heroCta = document.getElementById('hero-packages-cta')
+  if (heroCta) heroCta.style.display = show ? '' : 'none'
+}
+
+function pkgPageSelectVenue(venueId) {
+  if (!pkgPageState.tierKey) return
+  const pending = { occasion: pkgPageState.occasion || null, tierKey: pkgPageState.tierKey, venueId }
+  appState.pendingPackage = pending
+  try { sessionStorage.setItem('ps_pending_pkg', JSON.stringify(pending)) } catch (err) { /* private mode */ }
+  track('packages_venue_selected', { venue_id: venueId, tier: pending.tierKey, occasion: pending.occasion })
+  showVenuePage(venueId)
 }
 
 const CAFE_SLOTS = [
@@ -2014,19 +2273,29 @@ function showGuestSelector(venue) {
   const maxGuests   = venue.capacity_max || 20
 
   // Packages: capture occasion here so the tier step can pre-select a default tier.
-  const showPackageOccasion = packageFlowActive(venue)
+  const pkgFlow = packageFlowActive(venue)
+
+  // Packages-first (/packages) arrival: if the occasion was already chosen
+  // there, don't re-ask at the guest step — it's prefilled into
+  // appState.bookingOccasion and the tier is already locked. If it was
+  // SKIPPED there (the chips are optional), still ask: occasion matters to
+  // ops (setup prep, board message), not just package suggestion — but with
+  // copy that doesn't promise a suggestion for an already-chosen package.
+  const pendingPkg = (appState.pendingPackage && appState.pendingPackage.venueId === venue.id) ? appState.pendingPackage : null
+  const showOccasionSelect = pkgFlow && !(pendingPkg && pendingPkg.occasion)
+  const occSublabel = pendingPkg ? 'Optional — helps us prep your setup' : 'Optional — helps us suggest a package'
 
   // Package flow hides the running "starting price" across every step (each
   // tier card on the next step shows its own price instead).
   const priceBlock = document.getElementById('vd-price-block')
-  if (priceBlock) priceBlock.style.display = showPackageOccasion ? 'none' : ''
+  if (priceBlock) priceBlock.style.display = pkgFlow ? 'none' : ''
 
-  const occPresets = ['Birthday', 'Anniversary', 'Proposal', 'Date Night', 'Bridal Shower', 'Baby Shower', 'Graduation', 'Just Because']
-  const occHtml = showPackageOccasion ? `
+  const occPresets = OCCASIONS // shared canonical list — see its definition
+  const occHtml = showOccasionSelect ? `
       <div class="vd-guest-row vd-guest-row--occasion">
         <div class="vd-guest-label">
           <span class="vd-guest-type">Occasion</span>
-          <span class="vd-guest-sublabel">Optional — helps us suggest a package</span>
+          <span class="vd-guest-sublabel">${occSublabel}</span>
         </div>
         <select class="vd-occasion-select" onchange="setBookingOccasion(this.value)">
           <option value="">Select…</option>
@@ -2179,13 +2448,19 @@ function setBookingOccasion(value) {
 // add-on prices from this venue's catalog. Matches the booking-form total exactly
 // (the form sums the same base + the same add-on checkboxes), so the card price
 // equals the form total when the customer adds no extras.
-function packageTierPrice(venue, tier, catalog) {
-  const base = getPicnicPrice(venue, appState.adults)
+function packageTierPriceAt(venue, tier, catalog, adults) {
+  const base = getPicnicPrice(venue, adults)
   const addonSum = (tier.addons || []).reduce((s, id) => {
     const a = catalog.find(x => x.id === id)
     return s + (a ? Number(a.price) : 0)
   }, 0)
   return base + addonSum
+}
+// Current-booking flavour: prices at whatever guest count the flow has.
+// The /packages page uses packageTierPriceAt directly with a fixed baseline
+// (PKG_PAGE_BASE_ADULTS) so a leftover appState.adults never skews "From" prices.
+function packageTierPrice(venue, tier, catalog) {
+  return packageTierPriceAt(venue, tier, catalog, appState.adults)
 }
 
 // ── Packages: tier selection step (cafe + flag only) ──────────────────────
@@ -2209,10 +2484,13 @@ function showPackageStep(venue) {
   const catalog    = appState.currentVenueAddOns || []
   const defaultKey = defaultTierForOccasion(appState.bookingOccasion)
 
-  const cards = PACKAGE_TIER_ORDER.map((key, idx) => {
+  const visibleKeys = visiblePackagesFor(appState.bookingOccasion || null)
+  const cards = visibleKeys.map((key, idx) => {
     const tier     = PACKAGE_TIERS[key]
     const price    = packageTierPrice(venue, tier, catalog)
-    const prevKey  = PACKAGE_TIER_ORDER[idx - 1]
+    // Ladder copy ("Everything in <prev>, plus:") only chains within the
+    // universal packages — occasion-specific ones (Phase 2.5) stand alone.
+    const prevKey  = tier.occasion ? null : visibleKeys.slice(0, idx).reverse().find(k => !PACKAGE_TIERS[k]?.occasion)
     const prevTier = prevKey ? PACKAGE_TIERS[prevKey] : null
 
     // The Setting IS the base setup — its checklist is what the venue page's
@@ -2221,7 +2499,11 @@ function showPackageStep(venue) {
     // plus:" the add-ons that tier introduces on top of the one before it.
     let inclLead  = ''
     let inclItems = []
-    if (!prevTier) {
+    if (tier.occasion) {
+      // Occasion-specific package (Phase 2.5): standalone inclusion list.
+      inclLead  = 'The signature setup, plus:'
+      inclItems = (tier.addons || []).map(id => catalog.find(a => a.id === id)).filter(Boolean).map(a => a.name)
+    } else if (!prevTier) {
       inclItems = venueSetupLabels(venue)
     } else {
       inclLead = `Everything in <strong class="pkg-card-incl-lead-name">${escapeHtml(prevTier.name)}</strong>, plus:`
@@ -4130,7 +4412,7 @@ async function openQueryEdit(id) {
     : ''
 
   // Occasion: preset dropdown + free-text "Other" fallback (mirrors the storefront form)
-  const OCCASIONS = ['Birthday', 'Anniversary', 'Proposal', 'Baby Shower', 'Bridal Shower', 'Date Night', 'Graduation', 'Just Because']
+  // Uses the shared module-level OCCASIONS constant (single canonical list).
   const curOcc      = query.occasion || ''
   const occIsPreset = OCCASIONS.includes(curOcc)
   const occOptions  = ['<option value="">Select an occasion (optional)</option>']
@@ -7588,6 +7870,10 @@ window.showCalendarStep           = showCalendarStep
 window.updateGuestCount           = updateGuestCount
 window.showVenueBodyStep          = showVenueBodyStep
 window.setBookingOccasion         = setBookingOccasion
+window.showPackagesPage           = showPackagesPage
+window.pkgPageSelectOccasion      = pkgPageSelectOccasion
+window.pkgPageSelectTier          = pkgPageSelectTier
+window.pkgPageSelectVenue         = pkgPageSelectVenue
 window.showPackageBack            = showPackageBack
 window.selectPackageTier          = selectPackageTier
 window.updateBookingSummaryPrice  = updateBookingSummaryPrice
@@ -7741,6 +8027,7 @@ function initMenuSelectionPage() {
 window.addEventListener('popstate', (event) => {
   const path = window.location.pathname
   if (path === '/booking-confirmed') { document.title = 'The Picnic Stories'; showPage('home-page'); return }
+  if (/^\/packages\/?$/.test(path)) { showPackagesPage(false); return }
   const m = path.match(/^\/venues\/([^/]+)\/?$/)
   const v = m ? appState.venues.find(x => x.slug === decodeURIComponent(m[1])) : null
   if (event.state?.venueId) {
@@ -7921,6 +8208,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const view      = urlParams.get('view')
   const payId     = urlParams.get('pay')
   const venuePath = window.location.pathname.match(/^\/venues\/([^/]+)\/?$/)
+  const packagesPath = /^\/packages\/?$/.test(window.location.pathname)
+
+  // Packages-first handoff surviving a hard refresh mid-flow (Phase 2).
+  try {
+    const rawPending = sessionStorage.getItem('ps_pending_pkg')
+    if (rawPending && !appState.pendingPackage) appState.pendingPackage = JSON.parse(rawPending)
+  } catch (err) { /* ignore */ }
 
   if (payId) {
     handleEmailPayLink(parseInt(payId, 10))
@@ -7934,6 +8228,16 @@ document.addEventListener('DOMContentLoaded', () => {
       const v = appState.venues.find(x => x.slug === slug)
       if (v) showVenuePage(v.id, false)
       else showPage('home-page')
+    })
+  } else if (packagesPath) {
+    // /packages entry — ?tier= and ?occasion= deep links (homepage cards, ads).
+    // Unknown values are ignored gracefully. PACKAGE_TIERS may still be the
+    // hardcoded fallback at this instant; showPackagesPage awaits the DB load.
+    const qsTier = urlParams.get('tier')
+    const qsOcc  = urlParams.get('occasion')
+    showPackagesPage(false, {
+      tierKey:  qsTier && PACKAGE_TIERS[qsTier] ? qsTier : null,
+      occasion: OCCASIONS.includes(qsOcc) ? qsOcc : '',
     })
   } else if (venueId) {
     // Legacy ?venue=ID deep links → resolve, then swap the URL to the slug form
@@ -8036,8 +8340,21 @@ document.addEventListener('DOMContentLoaded', () => {
             bookView.innerHTML = buildIntentScreenHTML(lead, { containerClass: 'vd-intent-wrap container' })
           }
         } else if (packageFlowActive(venue)) {
-          // Packages flow: insert the tier step between guests and the form.
-          showPackageStep(venue)
+          const pending = appState.pendingPackage
+          if (pending?.tierKey && pending.venueId === venue.id && PACKAGE_TIERS[pending.tierKey]) {
+            // Packages-first entry: tier already chosen on /packages. Consume
+            // it via the SAME selectPackageTier() path the venue-first tier
+            // step uses (one code path — docs/PHASE2_PACKAGES_FIRST_PLAN.md),
+            // skipping the tier step. Occasion was pre-filled at venue entry
+            // and stays user-editable; "Change package" on the intent screen
+            // remains the escape hatch.
+            appState.pendingPackage = null
+            try { sessionStorage.removeItem('ps_pending_pkg') } catch (err) { /* ignore */ }
+            selectPackageTier(pending.tierKey)
+          } else {
+            // Packages flow: insert the tier step between guests and the form.
+            showPackageStep(venue)
+          }
         } else {
           showBookingForm(venue)
         }

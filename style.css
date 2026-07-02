@@ -9285,3 +9285,108 @@ body.menu-viewer-open {
   .pkg-cards { grid-template-columns: 1fr; }
   .pkg-card-tagline { min-height: 0; }
 }
+
+/* ================================================================
+   PACKAGES-FIRST ENTRY — /packages page (Phase 2)
+   Tier cards reuse .pkg-card* styles above; .pkgp-* is page chrome.
+   ================================================================ */
+.pkgp-wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 116px 20px 80px;
+}
+.pkgp-loading {
+  padding: 160px 20px;
+  text-align: center;
+  font-family: var(--font-sans);
+  color: var(--boho-text-medium);
+}
+.pkgp-title {
+  font-family: var(--font-serif);
+  font-size: clamp(2rem, 4vw, 2.8rem);
+  color: var(--boho-text-dark);
+  margin: 0 0 8px;
+  text-align: center;
+}
+.pkgp-sub {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  color: var(--boho-text-medium);
+  text-align: center;
+  margin: 0 0 36px;
+}
+.pkgp-step-label {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--boho-text-medium);
+  margin: 0 0 12px;
+}
+.pkgp-optional {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--boho-text-medium);
+  opacity: 0.75;
+}
+.pkgp-occasions { margin-bottom: 32px; }
+.pkgp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pkgp-chip {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  padding: 8px 16px;
+  border-radius: 99px;
+  border: 1px solid var(--boho-border);
+  background: var(--boho-white);
+  color: var(--boho-text-dark);
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+.pkgp-chip:hover { border-color: var(--boho-accent-pink); }
+.pkgp-chip--active {
+  background: var(--boho-accent-pink);
+  border-color: var(--boho-accent-pink);
+  color: #fff;
+  font-weight: 600;
+}
+.pkgp-tiers { margin-bottom: 40px; }
+@media (min-width: 769px) {
+  .pkg-cards--page {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 22px;
+  }
+  .pkg-cards--page .pkg-card-tagline { min-height: 0; }
+}
+.pkg-card--active {
+  border-color: var(--boho-accent-pink);
+  border-width: 2px;
+  box-shadow: 0 8px 24px rgba(196,96,122,0.18);
+}
+.pkgp-venues { margin-bottom: 8px; }
+/* The picker reuses the homepage .venues-grid/.venue-card styles wholesale.
+   Every card here is package-enabled by definition — the badge is noise. */
+.pkgp-venue-grid .venue-card-pkg-badge { display: none; }
+.venue-card-price-sub {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--boho-text-medium);
+}
+.pkgp-venues-note {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: var(--boho-text-medium);
+  margin: 12px 0 0;
+}
+.pkgp-fallback-btn {
+  display: inline-block;
+  margin: 8px auto 0;
+}
+@media (max-width: 720px) {
+  .pkgp-wrap { padding: 96px 16px 60px; }
+}
