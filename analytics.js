@@ -19,7 +19,7 @@ let initialised = false
 if (KEY) {
   posthog.init(KEY, {
     api_host:              HOST,
-    capture_pageview:      false,  // We fire page_viewed manually (SPA)
+    capture_pageview:      'history_change',  // SPA-aware $pageview on route changes (needed for Web Analytics / bounce rate)
     capture_pageleave:     true,
     autocapture:           false,  // Explicit events only — avoids noise
     session_recording:     { maskAllInputs: true },
