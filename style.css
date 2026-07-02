@@ -4901,6 +4901,17 @@ body.menu-viewer-open {
   border-radius: 20px;
   padding: 28px;
   box-shadow: 0 8px 32px rgba(196,96,122,0.1), 0 2px 8px rgba(0,0,0,0.04);
+  /* Taller-than-viewport guard: once a date is picked the card (calendar +
+     slot picker + guest form + Book Now) outgrows the viewport, and because
+     the sidebar is sticky the bottom half was unreachable until the user
+     scrolled through most of the page. Cap the card to the sticky window
+     (88px header offset + 16px breathing room) and scroll it internally.
+     The scroll container is the card itself — not .vd-sidebar — so the
+     card's own box-shadow isn't clipped. Reset on mobile + package step. */
+  max-height: calc(100vh - 104px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 .vd-price-row {
@@ -5461,6 +5472,9 @@ body.menu-viewer-open {
 
   .vd-booking-card {
     padding: 20px;
+    /* Sidebar is static + stacked on mobile — no sticky window to fit into */
+    max-height: none;
+    overflow-y: visible;
   }
   .vd-price-amount {
     font-size: 1.8rem;
@@ -9204,6 +9218,9 @@ body.menu-viewer-open {
   width: 100%;
   margin: 0 auto;
   box-sizing: border-box;
+  /* Package step: sidebar is static/full-width — let the card grow freely */
+  max-height: none;
+  overflow-y: visible;
 }
 /* The booking card's own width is only half the story — its ancestor
    .vd-body.container is capped at --container-xl (1280px) with min-width:1280px
