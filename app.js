@@ -574,8 +574,6 @@ function venueSetting(venue) {
 // opts.priceHtml (trusted, pre-escaped) overrides the default base-price line —
 // the /packages venue picker uses it to show the chosen tier's firm price.
 function venueCardHtml(venue, opts = {}) {
-  const primaryImage = venue.images?.[0]
-  const hasImage = primaryImage?.url
   const capacityText = venue.capacity_max
     ? `${venue.capacity_min}–${venue.capacity_max} guests`
     : `${venue.capacity_min}+ guests`
@@ -590,9 +588,7 @@ function venueCardHtml(venue, opts = {}) {
        data-venue-id="${venue.id}" data-venue-name="${escapeHtml(venue.name)}"
        aria-label="View ${escapeHtml(venue.name)}">
       <div class="venue-card-image">
-        ${hasImage
-          ? `<img src="${escapeHtml(primaryImage.url)}" alt="${escapeHtml(primaryImage.alt || venue.name)}" loading="lazy">`
-          : `<div class="venue-card-placeholder"><span>${escapeHtml(venue.name)}</span></div>`}
+        ${venueCardMediaHtml(venue.images, venue.name)}
         <span class="venue-type-badge ${venueTypeBadgeClass(venue.type)}">${escapeHtml(formatVenueType(venue.type))}</span>
         ${showPkgBadge ? '<span class="venue-card-pkg-badge">🧺 Packages available</span>' : ''}
       </div>
@@ -609,6 +605,106 @@ function venueCardHtml(venue, opts = {}) {
       </div>
     </a>
   `
+}
+
+// Image carousel for the top of a .venue-card (venues.images, same
+// [{url,alt,name}] shape as packages.images). Zero images → the existing
+// text placeholder, unchanged. A single image renders as a static photo, no
+// controls. Multiple images get dots + arrows AND auto-advance — deliberately
+// different from the .pkg-card-media carousel's manual-only nav (that was
+// the user's explicit call for package tiers; venue cards are photo-forward
+// browsing, not a decision list, so auto-scroll reads better here). Shared
+// across every venueCardHtml call site (home gallery, /packages venue
+// picker, venue-first tier step) so none of them can drift from the others —
+// same reasoning as pkgCardMediaHtml.
+function venueCardMediaHtml(images, name) {
+  const imgs = (images || []).filter(img => img?.url)
+  if (!imgs.length) return `<div class="venue-card-placeholder"><span>${escapeHtml(name)}</span></div>`
+  const slides = imgs.map(img =>
+    `<img src="${escapeHtml(img.url)}" alt="${escapeHtml(img.alt || name || '')}" loading="lazy">`
+  ).join('')
+  const controls = imgs.length > 1 ? `
+      <button type="button" class="venue-card-media-arrow venue-card-media-arrow--prev" aria-label="Previous photo">&lsaquo;</button>
+      <button type="button" class="venue-card-media-arrow venue-card-media-arrow--next" aria-label="Next photo">&rsaquo;</button>
+      <div class="venue-card-media-dots">
+        ${imgs.map((_, i) => `<button type="button" class="venue-card-media-dot${i === 0 ? ' venue-card-media-dot--active' : ''}" data-index="${i}" aria-label="Photo ${i + 1}"></button>`).join('')}
+      </div>` : ''
+  return `
+    <div class="venue-card-media" data-index="0">
+      <div class="venue-card-media-track">${slides}</div>
+      ${controls}
+    </div>`
+}
+
+function venueCarouselGoTo(mediaEl, index) {
+  const track = mediaEl.querySelector('.venue-card-media-track')
+  const total = track?.children.length || 0
+  if (!track || !total) return
+  const clamped = Math.max(0, Math.min(index, total - 1))
+  mediaEl.dataset.index = String(clamped)
+  track.style.transform = `translateX(-${clamped * 100}%)`
+  mediaEl.querySelectorAll('.venue-card-media-dot').forEach((dot, i) => {
+    dot.classList.toggle('venue-card-media-dot--active', i === clamped)
+  })
+}
+
+function venueCarouselNav(mediaEl, delta) {
+  const current = parseInt(mediaEl.dataset.index || '0', 10)
+  const total = mediaEl.querySelector('.venue-card-media-track')?.children.length || 1
+  venueCarouselGoTo(mediaEl, (current + delta + total) % total)
+}
+
+// Registered once at bootstrap. The whole card is an <a> (unlike .pkg-card,
+// which isn't a link), so every control click MUST stopPropagation/preventDefault
+// or a tap on a dot/arrow would navigate to the venue page instead of just
+// changing the photo.
+function setupVenueCarouselDelegation() {
+  document.addEventListener('click', e => {
+    const control = e.target.closest('.venue-card-media-arrow, .venue-card-media-dot')
+    if (!control) return
+    const mediaEl = control.closest('.venue-card-media')
+    if (!mediaEl) return
+    e.preventDefault()
+    e.stopPropagation()
+    if (control.classList.contains('venue-card-media-dot')) {
+      venueCarouselGoTo(mediaEl, parseInt(control.dataset.index, 10))
+    } else {
+      venueCarouselNav(mediaEl, control.classList.contains('venue-card-media-arrow--prev') ? -1 : 1)
+    }
+  })
+
+  let touchStartX = null
+  let touchMediaEl = null
+  document.addEventListener('touchstart', e => {
+    touchMediaEl = e.target.closest('.venue-card-media')
+    touchStartX = touchMediaEl ? e.touches[0].clientX : null
+  }, { passive: true })
+  document.addEventListener('touchend', e => {
+    if (!touchMediaEl || touchStartX === null) return
+    const dx = e.changedTouches[0].clientX - touchStartX
+    if (Math.abs(dx) > 40) {
+      // A real swipe was a deliberate photo-browse gesture, not a tap-through
+      // to the venue page — stop it from also firing the <a>'s navigation.
+      e.preventDefault()
+      venueCarouselNav(touchMediaEl, dx < 0 ? 1 : -1)
+    }
+    touchMediaEl = null
+    touchStartX = null
+  })
+
+  // Auto-advance every multi-photo venue card currently in the DOM. Re-queries
+  // each tick (no per-card timers) so it survives cards being torn down/rebuilt
+  // on re-render (city filter, occasion gate, etc.). Skips single-photo cards
+  // and anything currently hovered, so a deliberate look isn't yanked forward.
+  setInterval(() => {
+    document.querySelectorAll('.venue-card-media').forEach(mediaEl => {
+      const total = mediaEl.querySelector('.venue-card-media-track')?.children.length || 0
+      if (total < 2) return
+      if (typeof mediaEl.matches === 'function' && mediaEl.matches(':hover')) return
+      const current = parseInt(mediaEl.dataset.index || '0', 10)
+      venueCarouselGoTo(mediaEl, (current + 1) % total)
+    })
+  }, 4500)
 }
 
 // Render the venue gallery, grouped into Outdoor / Indoor sections, with a
@@ -8849,6 +8945,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderAddonsStrip()
   initMenuSelectionPage()
   setupPkgCarouselDelegation() // once for all .pkg-card-media instances, across all 3 render sites
+  setupVenueCarouselDelegation() // once for all .venue-card-media instances (home gallery, /packages venue picker, venue-first tier step)
 
   // URL routing — path-based /venues/<slug> plus legacy query params
   const urlParams = new URLSearchParams(window.location.search)
