@@ -9199,6 +9199,39 @@ body.menu-viewer-open {
   background: #fff;
   transform: scale(1.3);
 }
+/* Photo-less fallback (2026-07-03 design-critique): same full-bleed geometry
+   as the photo carousel — negative margins, 4/3 aspect, rounded top — but a
+   soft boho tint with the tier's doodle icon centered large. Keeps occasion
+   packages (which launched without images) the same card silhouette as photo
+   cards instead of a bare 44px corner icon over white. Rendered by
+   pkgCardTopHtml in app.js when packages.images is empty. */
+.pkg-card-media--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(120% 90% at 20% 0%, rgba(196,96,122,0.14), transparent 60%),
+    radial-gradient(110% 85% at 85% 100%, rgba(85,99,67,0.12), transparent 62%),
+    var(--boho-cream, #fff8f5);
+}
+.pkg-card-media-ph-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.75);
+  box-shadow: 0 2px 10px rgba(45,31,20,0.08);
+  color: var(--boho-accent-pink);
+}
+/* The doodle SVGs carry width/height="22" attributes (sized for the old 44px
+   corner slot) — CSS wins over presentation attributes, scale them up here. */
+.pkg-card-media-ph-icon svg {
+  width: 34px;
+  height: 34px;
+}
+
 /* Badge floats above the card's own top edge (top:-11px) into the space the
    media block now occupies — keep it painting above the photo, not under. */
 .pkg-card-badge { z-index: 3; }
@@ -9304,6 +9337,24 @@ body.menu-viewer-open {
   margin-top: 0;
 }
 .pkg-card-cta { width: 100%; padding: 12px 18px; font-size: 14px; }
+/* Strengthen the non-featured (ghost) card CTAs — scoped to package cards so
+   the global .btn--venue-secondary look elsewhere is untouched. The bare
+   ghost style (pink 14px on white, ~3.8:1) failed AA and read as *disabled*
+   next to the featured card's filled CTA (2026-07-03 design-critique; user
+   had flagged the same weakness earlier). Tint + stronger border + darker
+   text keep it clearly secondary but clearly alive; hover fills fully. */
+.pkg-card-cta.btn--venue-secondary {
+  background: rgba(196,96,122,0.07);
+  border-color: rgba(196,96,122,0.5);
+  color: #a84e66;
+  font-weight: 600;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+.pkg-card-cta.btn--venue-secondary:hover {
+  background: var(--boho-accent-pink);
+  border-color: var(--boho-accent-pink);
+  color: #fff;
+}
 .pkg-card-cta:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px rgba(196,96,122,0.35);
@@ -9426,7 +9477,11 @@ body.menu-viewer-open {
 .pkgp-wrap {
   max-width: 1080px;
   margin: 0 auto;
-  padding: 116px 20px 80px;
+  /* Top padding trimmed 116→88 (2026-07-03 design-critique): combined with
+     the hero/section spacing trims below, this pulls the first package card
+     above the fold on a ~800px-tall laptop viewport — previously the fold
+     showed only hero+chips with no package or price visible at all. */
+  padding: 88px 20px 80px;
   /* Soft boho color wash bleeding in from the top corners — decorative only,
      no images needed. Painted on the wrap so it never fights child content. */
   background:
@@ -9445,7 +9500,82 @@ body.menu-viewer-open {
   position: relative;
   overflow: hidden;
   border-radius: 20px;
-  padding: 32px 20px 8px;
+  padding: 20px 20px 4px;
+}
+/* Arch hero (2026-07-03, brainstorm direction A): copy left, sharp photos in
+   tall boho arch masks right. .pkgp-hero--split is only applied when at least
+   one photo exists (renderPackagesPage), so the plain centered hero below
+   stays the no-photo fallback with zero extra rules. */
+.pkgp-hero--split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 36px;
+  align-items: center;
+  overflow: visible;
+  padding: 12px 8px 18px;
+  margin-bottom: 10px;
+}
+.pkgp-hero-copy { position: relative; z-index: 2; }
+.pkgp-hero--split .pkgp-eyebrow,
+.pkgp-hero--split .pkgp-title { text-align: left; }
+.pkgp-hero--split .pkgp-sub {
+  text-align: left;
+  margin: 0 0 4px;
+  max-width: 520px;
+}
+.pkgp-hero-arches {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding-right: 8px;
+}
+.pkgp-arch {
+  position: relative;
+  overflow: hidden;
+  border-radius: 999px 999px 14px 14px;
+  background: var(--boho-cream, #fff8f5);
+  border: 5px solid rgba(255,255,255,0.92);
+  box-shadow: 0 0 0 1px var(--boho-border), 0 14px 30px rgba(45,31,20,0.14);
+}
+.pkgp-arch--main { width: 225px; height: 265px; }
+.pkgp-arch--side { width: 145px; height: 185px; }
+.pkgp-arch img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* Hand-drawn doodle garnish — same stroke language as the chips/tier icons.
+   Deliberately two of them, low opacity, never interactive. */
+.pkgp-doodle {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.4;
+}
+.pkgp-doodle--sun { top: 2px; right: 14px; width: 56px; height: 56px; color: var(--boho-accent-pink); }
+.pkgp-hero--split .pkgp-doodle--sun { right: 42%; top: 0; }
+.pkgp-doodle--sprig { bottom: 0; left: 10px; width: 64px; height: 64px; color: var(--boho-accent-sage, #556343); }
+@media (max-width: 860px) {
+  /* Photo-first on mobile (2026-07-03, per Aksheev — the text-then-arch stack
+     read as an afterthought): the arch leads, big enough to carry the vibe,
+     copy follows centered. Side arch stays hidden — two arches crowd a
+     phone-width column. */
+  .pkgp-hero--split { grid-template-columns: 1fr; gap: 18px; padding: 8px 8px 8px; }
+  .pkgp-hero-arches { order: -1; justify-content: center; padding-right: 0; }
+  .pkgp-arch--main { width: min(64vw, 250px); height: min(78vw, 300px); }
+  .pkgp-arch--side { display: none; }
+  .pkgp-hero--split .pkgp-eyebrow,
+  .pkgp-hero--split .pkgp-title { text-align: center; }
+  .pkgp-hero--split .pkgp-sub { text-align: center; margin: 0 auto; }
+  .pkgp-hero--split .pkgp-doodle--sun {
+    top: 6px;
+    right: calc(50% - min(32vw, 125px) - 52px);
+    width: 44px;
+    height: 44px;
+  }
+  .pkgp-doodle--sprig { display: none; }
 }
 /* Hero backdrop prototype (brainstorm option #3): the featured tier's own
    photo, blurred into ambient texture rather than shown as a sharp "hero
@@ -9481,13 +9611,13 @@ body.menu-viewer-open {
   position: relative;
   z-index: 2;
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--boho-accent-pink);
   text-align: center;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 .pkgp-title {
   position: relative;
@@ -9505,13 +9635,17 @@ body.menu-viewer-open {
   font-size: 15px;
   color: var(--boho-text-medium);
   text-align: center;
-  margin: 0 0 36px;
+  /* Cap the measure — uncapped, this line ran ~1180px wide at desktop width,
+     roughly double a comfortable 60-75ch reading length. */
+  max-width: 600px;
+  line-height: 1.6;
+  margin: 0 auto 28px;
 }
 .pkgp-divider {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin: 4px 0 36px;
+  margin: 4px 0 28px;
 }
 .pkgp-divider::before,
 .pkgp-divider::after {
@@ -9542,11 +9676,30 @@ body.menu-viewer-open {
   color: var(--boho-text-medium);
   opacity: 0.75;
 }
-.pkgp-occasions { margin-bottom: 32px; }
+.pkgp-occasions { margin-bottom: 24px; }
+/* Pre-occasion state (occasion-first flow): shown instead of the tier ladder
+   until a chip is picked. */
+.pkgp-pick-hint {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  color: var(--boho-text-medium);
+  text-align: center;
+  padding: 28px 20px 48px;
+  margin: 0;
+}
+/* City pills above the /packages venue grid — reuses the homepage .city-pill
+   look, this wrapper only handles layout within the venue step. */
+.pkgp-city-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 18px;
+}
 /* Circular doodle-icon chips (2026-07-03 redesign, replacing plain-emoji
-   pills). Single scrollable row at every viewport width — same fix as an
-   Airbnb-style category bar — so this never wraps into a multi-row wall on
-   mobile the way the old flex-wrap pill row did. */
+   pills). Desktop: single scrollable row (Airbnb-style category bar).
+   Mobile (≤768px): fixed 4-column grid — 2 rows for the 8 chips — per
+   Aksheev's direction (2026-07-03), replacing the horizontal scroll that
+   cut off the 4th chip mid-circle on phones. */
 .pkgp-chips {
   display: flex;
   gap: 20px;
@@ -9598,6 +9751,21 @@ body.menu-viewer-open {
   color: var(--boho-text-dark);
   font-weight: 700;
 }
+@media (max-width: 768px) {
+  /* 4-across × 2-rows grid — all 8 chips visible at once, no scroll.
+     Chips go fluid (width:auto) so 4 columns fit down to ~320px; label
+     drops to 11px so "Anniversary" doesn't overflow its column. */
+  .pkgp-chips {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 18px 8px;
+    overflow: visible;
+    scroll-snap-type: none;
+    padding: 4px 0 12px;
+  }
+  .pkgp-chip { width: auto; }
+  .pkgp-chip-label { font-size: 11px; }
+}
 .pkgp-tiers { margin-bottom: 40px; }
 @media (min-width: 769px) {
   /* Same auto-fit fix as .vd-layout--pkg-active .pkg-cards above — keeps
@@ -9638,7 +9806,7 @@ body.menu-viewer-open {
   margin: 8px auto 0;
 }
 @media (max-width: 720px) {
-  .pkgp-wrap { padding: 96px 16px 60px; }
+  .pkgp-wrap { padding: 80px 16px 60px; }
 }
 
 /* ================================================================

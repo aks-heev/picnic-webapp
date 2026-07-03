@@ -1808,11 +1808,22 @@ function pkgCardMediaHtml(images, name) {
     </div>`
 }
 
-// Media if there are photos, otherwise the decorative tier icon — never both,
-// never neither. Use this (not pkgTierIconHtml directly) at the top of every
-// .pkg-card so all three render sites degrade the same way.
+// Media if there are photos, otherwise a full-bleed tinted placeholder band
+// with the tier's doodle icon centered large — never both, never neither.
+// The placeholder deliberately shares .pkg-card-media's geometry (same
+// negative-margin bleed, same aspect ratio) so photo-less cards — notably the
+// occasion packages (Date Night/Movie Night), which launched without images —
+// keep the same silhouette as photo cards instead of collapsing to a bare
+// 44px corner icon over a white void (2026-07-03 design-critique fix). Use
+// this (not pkgTierIconHtml directly) at the top of every .pkg-card so all
+// three render sites degrade the same way.
 function pkgCardTopHtml(tier, key) {
-  return pkgCardMediaHtml(tier.images, tier.name) || pkgTierIconHtml(key)
+  const media = pkgCardMediaHtml(tier.images, tier.name)
+  if (media) return media
+  return `
+    <div class="pkg-card-media pkg-card-media--placeholder" aria-hidden="true">
+      <div class="pkg-card-media-ph-icon">${PKG_TIER_ICON_SVG[key] || PKG_TIER_ICON_FALLBACK}</div>
+    </div>`
 }
 
 function pkgCarouselGoTo(mediaEl, index) {
@@ -1917,7 +1928,7 @@ function defaultTierForOccasion(occasion) {
 // call the venue-first flow uses — one code path, so the two entry points
 // can't drift.
 const PKG_PAGE_BASE_ADULTS = 2 // "From ₹X" baseline; real price re-firms at the guest step
-let pkgPageState = { occasion: '', tierKey: null }
+let pkgPageState = { occasion: '', tierKey: null, city: '' }
 
 // Venues that can actually serve the packages flow right now (cafe +
 // packages_enabled, or QA override — packageFlowActive decides).
@@ -1963,7 +1974,7 @@ async function showPackagesPage(push = true, opts = {}) {
   showPage('packages-page')
   document.title = 'Picnic Packages — The Picnic Stories'
   if (push) history.pushState({ page: 'packages' }, document.title, '/packages')
-  pkgPageState = { occasion: opts.occasion || '', tierKey: opts.tierKey || null }
+  pkgPageState = { occasion: opts.occasion || '', tierKey: opts.tierKey || null, city: '' }
   const el = document.getElementById('packages-content')
   if (!el) return
   el.innerHTML = '<div class="pkgp-loading">Loading packages…</div>'
@@ -2017,6 +2028,12 @@ function renderPackagesPage() {
   const occasion  = pkgPageState.occasion || null
   const visible   = visiblePackagesFor(occasion)
   const suggested = occasion ? defaultTierForOccasion(occasion) : null
+  // Occasion-first (2026-07-03, per Aksheev): the tier ladder stays hidden
+  // until an occasion is picked. Exception: an explicit tier (deep link
+  // ?tier=..., or the homepage teaser CTAs) skips the gate — the visitor
+  // already chose a package, don't make them re-answer a question just to
+  // see it. Chips toggle off on re-click, which returns to the hint state.
+  const showTiers = !!(occasion || pkgPageState.tierKey)
 
   // Circular doodle-icon chips (2026-07-03 redesign), labeled "<Occasion>
   // Packages" per Aksheev's direction. "Just Because" is excluded from the
@@ -2086,43 +2103,55 @@ function renderPackagesPage() {
       </div>`
   }).join('')
 
-  // Hero backdrop (brainstorm option #3): a heavily blurred photo bled up
-  // behind the hero text, so it reads as ambient texture rather than a
-  // single photo trying to represent every package. Priority order:
+  // Arch hero (2026-07-03 redesign, brainstorm direction A — replaces the
+  // reverted blur-backdrop idea): SHARP photos in tall boho arch masks beside
+  // the hero copy. Blur was the wrong treatment — it hid the brand's best
+  // asset (the photos themselves) and fell apart on bokeh shots; a sharp
+  // arch crop sidesteps that failure mode entirely. Photo priority:
   // 1. Admin's explicit pick (site_settings.packages_hero_image_url, Hero
-  //    Image admin tab) — the deliberate choice, once someone's made one.
-  // 2. Auto-pick: the featured universal tier's own photo (stable across
-  //    occasion-chip clicks, since it doesn't depend on which tiers are
-  //    currently visible).
-  // 3. No backdrop — plain hero, today's look — if neither exists yet.
-  // Paused (2026-07-03): tried this live with a real uploaded photo and it
-  // didn't work — the photo had scattered point-light bokeh (string lights),
-  // which blurs into uneven blotches rather than a smooth wash at ANY blur
-  // radius (too sharp = busy/blotchy, too blurred = invisible muddy blob).
-  // Reverting to no backdrop until either a smoother/more solid-toned photo
-  // is tried, or a non-blur approach (color-tint extracted from the photo,
-  // no actual image blur) replaces this. Admin upload + auto-pick mechanism
-  // below is left intact — just not applied to the live hero right now.
-  const heroBackdropUrl = null
-  void packagesHeroImageUrl // silence unused-var lint until re-enabled above
+  //    Image admin tab — mechanism from the backdrop attempt, reused as-is).
+  // 2. Universal tiers' own carousel photos (featured tier first) — stable
+  //    across occasion-chip clicks since it ignores which tiers are visible.
+  // 3. Fewer than 1 photo → plain centered hero (the pre-arch look); the
+  //    side arch renders only when a 2nd distinct photo exists.
+  const tierHeroPhotos = PACKAGE_TIER_ORDER
+    .filter(k => !PACKAGE_TIERS[k]?.occasion)
+    .sort((a, b) => (PACKAGE_TIERS[b].featured ? 1 : 0) - (PACKAGE_TIERS[a].featured ? 1 : 0))
+    .flatMap(k => (PACKAGE_TIERS[k].images || []).map(img => img?.url).filter(Boolean))
+  const heroPhotos = [...new Set([packagesHeroImageUrl, ...tierHeroPhotos].filter(Boolean))].slice(0, 2)
+  const heroArches = heroPhotos.length ? `
+        <div class="pkgp-hero-arches" aria-hidden="true">
+          <div class="pkgp-arch pkgp-arch--main"><img src="${escapeHtml(heroPhotos[0])}" alt="" /></div>
+          ${heroPhotos[1] ? `<div class="pkgp-arch pkgp-arch--side"><img src="${escapeHtml(heroPhotos[1])}" alt="" loading="lazy" /></div>` : ''}
+        </div>` : ''
+  // Hand-drawn line doodles (same stroke language as the occasion chips /
+  // tier icons) — garnish only, deliberately capped at two.
+  const heroDoodles = `
+        <svg class="pkgp-doodle pkgp-doodle--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3.6"/><path d="M12 3.5v1.8M12 18.7v1.8M3.5 12h1.8M18.7 12h1.8M6 6l1.3 1.3M16.7 16.7 18 18M18 6l-1.3 1.3M7.3 16.7 6 18"/></svg>
+        <svg class="pkgp-doodle pkgp-doodle--sprig" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21c0-6 .2-10 .6-14"/><path d="M12.4 9C10.6 8.2 9 6.6 8.6 4.2c2.6.2 4.2 1.8 3.8 4.8Z"/><path d="M12.2 12.5c1.8-.8 3.4-2.4 3.8-4.8-2.6.2-4.2 1.8-3.8 4.8Z"/><path d="M12 16.5c-1.8-.8-3.6-1.5-4.6-3.8 2.4-.4 4.2.9 4.6 3.8Z"/></svg>`
 
   el.innerHTML = `
     <div class="pkgp-wrap">
-      <div class="pkgp-hero">
-        ${heroBackdropUrl ? `<div class="pkgp-hero-backdrop" style="background-image:url('${escapeHtml(heroBackdropUrl)}')"></div><div class="pkgp-hero-scrim"></div>` : ''}
-        <p class="pkgp-eyebrow">Curated Picnic Experiences</p>
-        <h1 class="pkgp-title">Picnic Packages</h1>
-        <p class="pkgp-sub">Bouquets at golden hour, bonfires under the stars, a screening just for two — pick the picnic that already feels like you, then choose where it happens.</p>
+      <div class="pkgp-hero${heroPhotos.length ? ' pkgp-hero--split' : ''}">
+        ${heroDoodles}
+        <div class="pkgp-hero-copy">
+          <p class="pkgp-eyebrow">Curated Picnic Experiences</p>
+          <h1 class="pkgp-title">Picnic Packages</h1>
+          <p class="pkgp-sub">Bouquets at golden hour, bonfires under the stars, a screening just for two — pick the picnic that already feels like you, then choose where it happens.</p>
+        </div>
+        ${heroArches}
       </div>
       <div class="pkgp-occasions">
-        <p class="pkgp-step-label">What's the occasion? <span class="pkgp-optional">optional</span></p>
+        <p class="pkgp-step-label">What's the occasion?</p>
         <div class="pkgp-chips">${chips}</div>
       </div>
+      ${showTiers ? `
       <div class="pkgp-divider" aria-hidden="true"><span>✦</span></div>
       <div class="pkgp-tiers">
         <p class="pkgp-step-label">Choose your package</p>
         <div class="pkg-cards pkg-cards--page">${cards}</div>
-      </div>
+      </div>` : `
+      <p class="pkgp-pick-hint">Pick an occasion above — we'll show you the packages made for it.</p>`}
       ${pkgPageState.tierKey ? renderPkgVenuePicker(venues) : ''}
     </div>`
 
@@ -2140,20 +2169,36 @@ function renderPkgVenuePicker(venues) {
   if (!serviceable.length) {
     return `
       <div class="pkgp-venues" id="pkgp-venues">
-        <p class="pkgp-step-label">Where would you like your ${escapeHtml(tier.name)}?</p>
+        <p class="pkgp-step-label">Where should ${escapeHtml(tier.name)} happen?</p>
         <p class="venues-error">Not currently available at any venue — check back soon, or choose a different package.</p>
       </div>`
   }
+  // City filter (2026-07-03, per Aksheev): the venue step is the natural home
+  // for it — occasion and package are city-agnostic decisions, the venue is
+  // the first city-bound one. Pills reuse the homepage .city-pill styling.
+  // Cities are derived from the SERVICEABLE list (not all venues), so a city
+  // whose venues can't serve this tier never appears as a dead filter. An
+  // invalid remembered city (e.g. tier changed underneath it) falls back to
+  // all — never an empty grid.
+  const cities = [...new Set(serviceable.map(v => v.city).filter(Boolean))].sort()
+  const activeCity = cities.includes(pkgPageState.city) ? pkgPageState.city : ''
+  const shown = activeCity ? serviceable.filter(v => v.city === activeCity) : serviceable
+  const cityPills = cities.length > 1 ? `
+      <div class="pkgp-city-filter" role="group" aria-label="Filter venues by city">
+        <button type="button" class="city-pill${!activeCity ? ' active' : ''}" onclick="pkgPageSelectCity('')">All cities</button>
+        ${cities.map(c => `<button type="button" class="city-pill${activeCity === c ? ' active' : ''}" onclick="pkgPageSelectCity('${escapeHtml(c)}')">📍 ${escapeHtml(c)}</button>`).join('')}
+      </div>` : ''
   // Same cards as the homepage grid (venueCardHtml) — only the price line
   // differs: it shows THIS tier's firm price at the venue.
-  const cards = serviceable.map(v => {
+  const cards = shown.map(v => {
     const price = packageTierPriceAt(v, tier, venueCatalog(v.id), PKG_PAGE_BASE_ADULTS)
     const priceHtml = `₹${price.toLocaleString('en-IN')} <span class="venue-card-price-sub">for ${PKG_PAGE_BASE_ADULTS} adults</span>`
     return venueCardHtml(v, { priceHtml })
   }).join('')
   return `
     <div class="pkgp-venues" id="pkgp-venues">
-      <p class="pkgp-step-label">Where would you like your ${escapeHtml(tier.name)}?</p>
+      <p class="pkgp-step-label">Where should ${escapeHtml(tier.name)} happen?</p>
+      ${cityPills}
       <div class="venue-grid pkgp-venue-grid" id="pkgp-venue-grid">${cards}</div>
       <p class="pkgp-venues-note">Prices shown for ${PKG_PAGE_BASE_ADULTS} adults — you'll pick date, time and guests next.</p>
     </div>`
@@ -2179,6 +2224,16 @@ function pkgPageSelectOccasion(occ) {
   }
   renderPackagesPage()
   track('packages_occasion_selected', { occasion: pkgPageState.occasion || null })
+}
+
+function pkgPageSelectCity(city) {
+  pkgPageState.city = city || ''
+  renderPackagesPage()
+  // Full re-render resets scroll context — bring the venue step back into
+  // view so the filter click doesn't appear to do nothing.
+  const target = document.getElementById('pkgp-venues')
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  track('packages_city_selected', { city: city || null, tier: pkgPageState.tierKey })
 }
 
 function pkgPageSelectTier(key) {
@@ -8452,6 +8507,7 @@ window.showPackagesPage           = showPackagesPage
 window.pkgPageSelectOccasion      = pkgPageSelectOccasion
 window.pkgPageSelectTier          = pkgPageSelectTier
 window.pkgPageSelectVenue         = pkgPageSelectVenue
+window.pkgPageSelectCity          = pkgPageSelectCity
 window.showPackageBack            = showPackageBack
 window.selectPackageTier          = selectPackageTier
 window.updateBookingSummaryPrice  = updateBookingSummaryPrice
