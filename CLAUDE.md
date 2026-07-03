@@ -1,5 +1,23 @@
 # The Picnic Stories — Claude Working Notes
 
+## Session Handoff — 2026-07-03 (COMPACT: /packages redesign session — critique polish + arch hero + occasion-first/city-filter/mobile — git block handed over)
+
+• **Session scope**: /packages redesign end-to-end, all in `app.js`/`style.css` (+ `CLAUDE.md`, `admin.html`, `scripts/prerender-venues.mjs` carried from earlier same-day work). Final single-commit git block handed to user staging exactly `CLAUDE.md admin.html app.js scripts/prerender-venues.mjs style.css` — **not confirmed run; verify against user's terminal before assuming pushed.**
+
+• **Critique pass (design:design-critique)** → fold fix (`.pkgp-wrap` 116→88 + hero/section spacing trims), venue-step copy "Where should ${tier.name} happen?" (×2 in `renderPkgVenuePicker`), `.pkgp-sub` max-width 600px, ghost-CTA override `.pkg-card-cta.btn--venue-secondary` (tint bg, #a84e66, hover fill — scoped, global class untouched), `pkgCardTopHtml` photo-less fallback `.pkg-card-media--placeholder` (full-bleed 4/3 tinted band, big doodle icon — fixes occasion-package cards' bare-icon void).
+
+• **Arch hero (brainstorm direction A — chosen over full-bleed banner and doodles-only)**: `.pkgp-hero--split` (copy left, 1–2 sharp arch-masked photos right, `border-radius:999px 999px 14px 14px`), photo priority `packagesHeroImageUrl` (admin → Hero Image tab → "Packages page hero" panel) → universal-tier carousel photos featured-first → none = plain centered hero auto-fallback (untested branch). 2 doodles only (`.pkgp-doodle--sun/--sprig`). Blur backdrop is DEAD — rejected on bokeh blotching; don't retry blur, the arch shows photos sharp instead.
+
+• **Occasion-first gate**: `showTiers = !!(occasion || pkgPageState.tierKey)` in `renderPackagesPage`; `.pkgp-pick-hint` replaces divider+cards until a chip is picked; "optional" removed from step label. Exemption: `?tier=` deep links + homepage CTAs skip the gate (flagged to user, no objection yet). Prerender SEO seed still shows ungated cards pre-hydration — accepted.
+
+• **City filter**: pills at the venue step (`renderPkgVenuePicker`, reuses homepage `.city-pill`), cities from SERVICEABLE venues only, state `pkgPageState.city` (reset in `showPackagesPage`), `pkgPageSelectCity` on window, `packages_city_selected` PostHog event. Verified live: Jaipur → 4/6 venues.
+
+• **Mobile hero**: photo-first (`.pkgp-hero-arches{order:-1}`), arch `min(64vw,250px)×min(78vw,300px)`, sun beside arch. **NOT visually verified** — no mobile-viewport tooling; user must eyeball on phone.
+
+• **Standing gotchas reconfirmed**: sandbox git shows 5 phantom deletions (`MY_BOOKINGS_PHONE_OTP.md`, `homepage-preview.html`, `logo2.png`, `schema.md`, `test_postcss.mjs`) + bogus diff stats — never `git add -A`, never trust bash reads of app.js/style.css; Chrome MCP screenshots freeze intermittently → open a fresh tab via `tabs_create_mcp`. **Still-open from pruned 07-01 entry**: Phase 0 flat tier-pricing for the remaining 5 cafes not done; venue-first tier step not re-verified after today's shared-CSS changes; `/packages` meta `<title>` in prerender script stale.
+
+CONTINUE FROM: confirm the git commands were run, then close the verification gaps — real-mobile hero check, no-photo hero fallback, venue-first tier step.
+
 ## Session Handoff — 2026-07-03 (Phase 2.5 occasion packages shipped + verified; /packages redesign in progress — hero backdrop tried & reverted, chip redesign done — ALL UNCOMMITTED)
 
 • Prior packages-first carousel work (image carousel, Phases A–D — see entries below) — **CONFIRMED PUSHED** this session, user ran the git commands handed over previously.
@@ -157,16 +175,3 @@
 
 • **Caveat to watch**: the SUMMARY-based filter trusts Airbnb's `Reserved` vs `Airbnb (Not available)` labeling. If Airbnb ever stops emitting SUMMARY, the fallback over-blocks (children get everything) — visible via the `(no SUMMARY in feed — propagated all)` suffix in the admin sync status.
 
-## Session Handoff — 2026-07-01 (package step full-width/left-align bug fixed; Phase 1 packages confirmed pushed)
-
-• **Phase 1 packages work is now committed + pushed** (the two 07-01 entries below this one) — confirmed via the user's own `git status` on Windows showing `app.js`/`admin.html` already clean. Only `CLAUDE.md` and `style.css` were outstanding this session; both committed with `git add CLAUDE.md style.css && git commit -m "fix: package step full-width layout on desktop..." && git push` (user confirmed pushed).
-
-• **Real bug found + fixed: package step rendered at ~half viewport width, pinned left, on desktop.** Root cause was NOT a simple max-width cap (that was a red herring fixed first but insufficient) — `.vd-layout--pkg-active`'s `grid-template-areas` (style.css ~L9150) was missing a `"facts"` row, while `.vd-facts-outer` still carried the unconditional base rule `grid-area: facts`. With no "facts" area defined in the active template, the browser auto-placed that element into a **phantom implicit 3rd grid column**, which silently corrupted the whole grid's column sizing (confirmed via `getComputedStyle`: `grid-template-columns` read `"656px 0px 448px"` instead of one full-width track) — squeezing the "Choose your package" card into the first column and leaving the rest as dead space on the right.
-
-• **Fix applied (style.css ~L9150-9176)**: added `"facts"` as its own row in `.vd-layout--pkg-active`'s `grid-template-areas`. Also (needed regardless, from the earlier width-cap investigation): `.vd-layout--pkg-active .vd-sidebar { width:100%; justify-self:stretch }`, `.vd-layout--pkg-active .vd-booking-card { max-width:none; width:100%; margin:0 auto; box-sizing:border-box }`, and `.vd-body.container:has(.vd-layout--pkg-active){ max-width:none }` to drop the outer `.container`'s 1280px cap specifically during the package step.
-
-• **Verified live on the user's own `localhost:5173`** (not just production) — Chrome MCP can reach the user's local dev server directly (`http://localhost:5173/venues/beige-cafe?packages=1`), which is faster than round-tripping screenshots for future CSS/layout debugging. Confirmed via `getComputedStyle`/`getBoundingClientRect` before/after: grid went from 3 implicit columns to 1 true full-width column; the tier-card panel now spans full width and reads centered.
-
-• 🔴 **Sandbox bash mount unreliability is broader than previously documented** — this session it didn't just truncate `app.js`/`style.css` contents, it showed a stale `git status` entirely: flagged `app.js`/`admin.html` as modified when the user's real Windows `git status` showed them already clean (committed/pushed in an earlier session). **Rule update: treat ALL bash-computed git state (status/diff/stat) in this sandbox as unreliable, not just file reads on app.js/style.css — cross-check important git decisions against the user's own terminal output before writing commit commands.**
-
-• **Two things found but NOT fixed this session (still open):** (1) the venue-page "Check Availability" sticky sidebar is taller than the desktop viewport, so the time-slot picker / guest form / Book Now button often sit below the fold and require scrolling through most of the page's content to reach — a real discoverability bug. (2) Phase 0 flat tier-pricing (manual admin entry) still not done — tier cards still price off food-inflated per-guest stepping, not the target flat anchors (~₹9,900/₹13,500/₹26,000 @2 guests) noted in the 06-30 design-lock entry below.

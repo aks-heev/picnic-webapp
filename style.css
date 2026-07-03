@@ -9128,7 +9128,7 @@ body.menu-viewer-open {
 .pkg-card-media {
   position: relative;
   margin: -22px -18px 16px;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 4 / 4.4;
   overflow: hidden;
   border-radius: 15px 15px 0 0;
   background: var(--boho-cream, #fff8f5);
@@ -9136,6 +9136,23 @@ body.menu-viewer-open {
 .pkg-card--featured .pkg-card-media {
   margin: -26px -18px 16px;
   border-radius: 14px 14px 0 0;
+}
+/* Soft fade at the bottom of the photo into the card body — the image dissolves
+   into the card's own white instead of ending on a hard edge, so the media and
+   the package details below read as one continuous surface. Sits above the img
+   (z-index 1) but below dots/arrows (z-index 2) so nav controls stay crisp;
+   pointer-events:none so it never eats a swipe or CTA click. Photo carousels
+   only — the tinted placeholder band keeps its own look. */
+.pkg-card-media:not(.pkg-card-media--placeholder)::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 42%;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.55) 55%, var(--boho-white) 100%);
 }
 .pkg-card-media-track {
   display: flex;
@@ -9240,7 +9257,7 @@ body.menu-viewer-open {
   font-family: var(--font-serif);
   font-size: 1.4rem;
   font-weight: 700;
-  color: var(--boho-text-dark);
+  color: var(--boho-accent-pink);
   margin: 4px 0 4px;
   letter-spacing: -0.01em;
 }
@@ -9257,7 +9274,7 @@ body.menu-viewer-open {
   font-family: var(--font-serif);
   font-size: 1.55rem;
   font-weight: 600;
-  color: var(--boho-text-dark);
+  color: var(--boho-accent-pink);
   letter-spacing: -0.01em;
 }
 .pkg-card--featured .pkg-card-price { color: var(--boho-accent-pink); }
@@ -9305,8 +9322,7 @@ body.menu-viewer-open {
 .pkg-card-incl {
   list-style: none;
   margin: 0 0 18px;
-  padding: 14px 0 0;
-  border-top: 1px solid var(--boho-border);
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -9332,8 +9348,6 @@ body.menu-viewer-open {
   font-style: italic;
   color: var(--boho-text-light);
   padding-left: 0;
-  border-top: 1px solid var(--boho-border);
-  padding-top: 14px;
   margin-top: 0;
 }
 .pkg-card-cta { width: 100%; padding: 12px 18px; font-size: 14px; }

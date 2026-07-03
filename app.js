@@ -1877,6 +1877,21 @@ function setupPkgCarouselDelegation() {
     touchMediaEl = null
     touchStartX = null
   }, { passive: true })
+
+  // Auto-advance every multi-photo carousel currently in the DOM. Re-queries
+  // each tick rather than holding per-card timers, so it survives the frequent
+  // teardown/rebuild of these cards (occasion/tier selection, page nav) with no
+  // lifecycle bookkeeping. Skips single-photo cards and any card the user is
+  // hovering, so a deliberate browse isn't yanked forward mid-look.
+  setInterval(() => {
+    document.querySelectorAll('.pkg-card-media').forEach(mediaEl => {
+      const total = mediaEl.querySelector('.pkg-card-media-track')?.children.length || 0
+      if (total < 2) return
+      if (typeof mediaEl.matches === 'function' && mediaEl.matches(':hover')) return
+      const current = parseInt(mediaEl.dataset.index || '0', 10)
+      pkgCarouselGoTo(mediaEl, (current + 1) % total)
+    })
+  }, 4500)
 }
 
 // Packages visible for an occasion. If the occasion has its own dedicated
@@ -2090,7 +2105,7 @@ function renderPackagesPage() {
     const active = pkgPageState.tierKey === key
     const priceHtml = from === null
       ? '<div class="pkg-card-price pkg-card-price--unavailable">Not available right now</div>'
-      : `<div class="pkg-card-price">${serviceableVenues.length > 1 ? 'From ' : ''}₹${from.toLocaleString('en-IN')}</div><div class="pkg-card-price-note">for ${PKG_PAGE_BASE_ADULTS} adults</div>`
+      : `<div class="pkg-card-price">${serviceableVenues.length > 1 ? 'From ' : ''}₹${from.toLocaleString('en-IN')}</div><div class="pkg-card-price-note">for upto 6 guests</div>`
     return `
       <div class="pkg-card${tier.featured ? ' pkg-card--featured' : ''}${active ? ' pkg-card--active' : ''}">
         ${badge}
@@ -2300,7 +2315,7 @@ async function renderHomePackagesSection() {
         <h4 class="pkg-card-name">${escapeHtml(tier.name)}</h4>
         <p class="pkg-card-tagline">${escapeHtml(tier.tagline)}</p>
         <div class="pkg-card-price">From ₹${from.toLocaleString('en-IN')}</div>
-        <div class="pkg-card-price-note">for ${PKG_PAGE_BASE_ADULTS} adults</div>
+        <div class="pkg-card-price-note">for upto 6 guests</div>
         ${occasionLine}
         <a class="btn ${tier.featured ? 'btn--venue-primary' : 'btn--venue-secondary'} pkg-card-cta" href="/packages?tier=${encodeURIComponent(key)}" onclick="event.preventDefault(); showPackagesPage(true, {tierKey:'${escapeHtml(key)}'})">Explore ${escapeHtml(tier.name)}</a>
       </div>`
