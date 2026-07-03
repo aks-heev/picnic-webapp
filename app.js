@@ -1420,6 +1420,11 @@ function renderPackagesManager() {
         ${escapeHtml(a.name)} <span class="vf-hint">₹${Number(a.price).toLocaleString('en-IN')}</span>
       </label>`).join('')
 
+    // Occasion packages (Phase 2.5) can't tolerate a missing add-on the way
+    // universal tiers do — the theme IS the add-on (Movie Night without
+    // Movie Screening isn't Movie Night). The live storefront already hides
+    // the package/venue combo in that case (packageServiceableAt) — this
+    // just labels it accurately instead of showing the generic "gap" warning.
     const rows = venues.map(v => {
       const venueAddonIds = (v.venue_add_ons || []).map(x => x.addon_id)
       const missingIds = addonIds.filter(id => !venueAddonIds.includes(id))
@@ -1429,14 +1434,22 @@ function renderPackagesManager() {
       const price = (Number(v.base_price) || 0) + addonSum
       const foodIncluded = !v.metadata?.food_offline
       const missingNames = missingIds.map(id => addons.find(a => a.id === id)?.name || `#${id}`).join(', ')
+      const gapHtml = !missingIds.length ? '—'
+        : pkg.occasion
+          ? `🚫 Not offerable here — missing ${escapeHtml(missingNames)} (package hidden at this venue)`
+          : `⚠ Missing ${missingIds.length} of ${addonIds.length}: ${escapeHtml(missingNames)}`
       return `
         <tr class="${missingIds.length ? 'pkg-adm-row--warn' : ''}">
           <td>${escapeHtml(v.name)}${v.packages_enabled ? '' : ' <span class="vf-hint">(packages off)</span>'}</td>
           <td>₹${price.toLocaleString('en-IN')}</td>
           <td>${foodIncluded ? 'Yes' : 'No — self-sourced'}</td>
-          <td>${missingIds.length ? `⚠ Missing ${missingIds.length} of ${addonIds.length}: ${escapeHtml(missingNames)}` : '—'}</td>
+          <td>${gapHtml}</td>
         </tr>`
     }).join('')
+
+    const occasionOptions = ['<option value="">Universal (all occasions)</option>']
+      .concat(OCCASIONS.map(o => `<option value="${escapeHtml(o)}" ${pkg.occasion === o ? 'selected' : ''}>${escapeHtml(o)}</option>`))
+      .join('')
 
     return `
       <div class="pkg-adm-card" data-pkg-id="${pkg.id}">
@@ -1451,6 +1464,12 @@ function renderPackagesManager() {
           </div>
           <div class="vf-field vf-field--checkbox">
             <label class="vf-toggle-label"><input type="checkbox" class="pkg-adm-featured" ${pkg.is_featured ? 'checked' : ''} /> Featured ("Most picked")</label>
+          </div>
+        </div>
+        <div class="vf-row">
+          <div class="vf-field">
+            <label class="vf-label">Occasion <span class="vf-hint">(Universal shows on /packages by default; an occasion REPLACES the universal tiers when that occasion is picked)</span></label>
+            <select class="vf-input pkg-adm-occasion">${occasionOptions}</select>
           </div>
         </div>
         <div class="vf-section-title">Add-ons in this package</div>
@@ -1488,6 +1507,7 @@ async function savePackageCard(pkgId) {
   const name = card.querySelector('.pkg-adm-name').value.trim()
   const tagline = card.querySelector('.pkg-adm-tagline').value.trim()
   const isFeatured = card.querySelector('.pkg-adm-featured').checked
+  const occasion = card.querySelector('.pkg-adm-occasion').value || null
   const addonIds = Array.from(card.querySelectorAll('.pkg-adm-addon-cb:checked')).map(cb => parseInt(cb.value, 10))
 
   const images = readPkgAdmImages(pkgId).filter(img => img.url) // drop empty rows (upload never finished)
@@ -1495,7 +1515,7 @@ async function savePackageCard(pkgId) {
   try {
     const { error: updErr } = await supabase
       .from('packages')
-      .update({ name, tagline, is_featured: isFeatured, images, updated_at: new Date().toISOString() })
+      .update({ name, tagline, is_featured: isFeatured, occasion, images, updated_at: new Date().toISOString() })
       .eq('id', pkgId)
     if (updErr) throw updErr
 
@@ -1702,12 +1722,12 @@ function venueSetupLabels(venue) {
 // venue guest-step select, and the admin edit modal (and later for
 // packages.occasion values — Phase 2.5). Do NOT fork copies of this list:
 // occasion matching is string-equality across all three surfaces.
-const OCCASIONS = ['Birthday', 'Anniversary', 'Proposal', 'Date Night', 'Bridal Shower', 'Baby Shower', 'Graduation', 'Just Because']
+const OCCASIONS = ['Birthday', 'Anniversary', 'Proposal', 'Date Night', 'Movie Night', 'Bridal Shower', 'Baby Shower', 'Graduation', 'Just Because']
 
 // Purely decorative — one emoji per occasion chip (/packages page). Missing
 // keys just render no emoji, never a crash.
 const OCCASION_EMOJI = {
-  'Birthday': '🎂', 'Anniversary': '💍', 'Proposal': '💐', 'Date Night': '🌙',
+  'Birthday': '🎂', 'Anniversary': '💍', 'Proposal': '💐', 'Date Night': '🌙', 'Movie Night': '🎬',
   'Bridal Shower': '👰', 'Baby Shower': '🍼', 'Graduation': '🎓', 'Just Because': '✨',
 }
 
@@ -1815,21 +1835,42 @@ function setupPkgCarouselDelegation() {
   }, { passive: true })
 }
 
-// Packages visible for an occasion. Universal packages (no .occasion) always
-// show; occasion-specific ones (Phase 2.5 — none exist yet) only for theirs.
-// Called by BOTH the /packages page and the venue-first tier step
-// (showPackageStep) so the two surfaces can never drift.
+// Packages visible for an occasion. If the occasion has its own dedicated
+// package(s) (Phase 2.5 — Date Night, Movie Night), those REPLACE the
+// universal Setting/Moment/Story ladder entirely, rather than augmenting it —
+// deliberate choice (docs/PHASE2_PACKAGES_FIRST_PLAN.md Phase 2.5 #2).
+// Occasions with no dedicated package (Birthday, Proposal, Anniversary, etc.)
+// keep seeing the universal three, unchanged. Called by BOTH the /packages
+// page and the venue-first tier step (showPackageStep) so the two surfaces
+// can never drift.
 function visiblePackagesFor(occasion) {
-  return PACKAGE_TIER_ORDER.filter(key => {
-    const occ = PACKAGE_TIERS[key]?.occasion
-    return !occ || occ === occasion
-  })
+  if (occasion) {
+    const specific = PACKAGE_TIER_ORDER.filter(key => PACKAGE_TIERS[key]?.occasion === occasion)
+    if (specific.length) return specific
+  }
+  return PACKAGE_TIER_ORDER.filter(key => !PACKAGE_TIERS[key]?.occasion)
+}
+
+// A package is "serviceable" at a venue if every add-on it needs is actually
+// in that venue's catalog. Universal tiers tolerate gaps (existing behavior —
+// selectPackageTier silently drops what's missing; fine for a nice-to-have
+// like Skyshots). Occasion-specific tiers cannot tolerate this: the whole
+// premise is the themed add-on (a Movie Night without Movie Screening isn't
+// Movie Night) — docs/PHASE2_PACKAGES_FIRST_PLAN.md Phase 2.5 #3. A package
+// that can't be served must be hidden, not silently downgraded.
+function packageServiceableAt(tier, catalog) {
+  if (!tier?.occasion) return true
+  return (tier.addons || []).every(id => catalog.some(a => a.id === id))
 }
 
 // Occasion -> default tier. This is the AOV lever; the customer can still switch.
+// Date Night / Movie Night point at their own occasion-specific "classic"
+// package (Phase 2.5) — visiblePackagesFor() replaces the universal ladder
+// with just that occasion's packages, so the default must live inside it.
 const OCCASION_DEFAULT_TIER = {
   'Proposal': 'story', 'Anniversary': 'story',
-  'Birthday': 'moment', 'Date Night': 'moment', 'Bridal Shower': 'moment', 'Baby Shower': 'moment',
+  'Birthday': 'moment', 'Bridal Shower': 'moment', 'Baby Shower': 'moment',
+  'Date Night': 'date_night_classic', 'Movie Night': 'movie_night_classic',
   'Just Because': 'setting',
 }
 function defaultTierForOccasion(occasion) {
@@ -1955,10 +1996,17 @@ function renderPackagesPage() {
   const cards = visible.map((key, idx) => {
     const tier = PACKAGE_TIERS[key]
     const isUniversal = !tier.occasion
-    const prevKey  = isUniversal ? visible.slice(0, idx).reverse().find(k => !PACKAGE_TIERS[k]?.occasion) : null
+    // Ladder copy chains within the tier's own group (universal, or one
+    // occasion's own tiers) — never across groups. See showPackageStep for
+    // the same logic on the venue-first surface.
+    const prevKey  = visible.slice(0, idx).reverse().find(k => (PACKAGE_TIERS[k]?.occasion || null) === (tier.occasion || null))
     const prevTier = prevKey ? PACKAGE_TIERS[prevKey] : null
-    const prices = venues.map(v => packageTierPriceAt(v, tier, venueCatalog(v.id), PKG_PAGE_BASE_ADULTS))
-    const from = Math.min(...prices)
+    // "From ₹X" only counts venues that can actually serve this package —
+    // required-addon rule (packageServiceableAt). Universal tiers are always
+    // serviceable, so this is a no-op for them.
+    const serviceableVenues = venues.filter(v => packageServiceableAt(tier, venueCatalog(v.id)))
+    const prices = serviceableVenues.map(v => packageTierPriceAt(v, tier, venueCatalog(v.id), PKG_PAGE_BASE_ADULTS))
+    const from = prices.length ? Math.min(...prices) : null
     let incl
     if (!prevTier) {
       // Venue-independent: the shared setup only (venue-specific extras show
@@ -1979,16 +2027,18 @@ function renderPackagesPage() {
       ? '<span class="pkg-card-badge">Most picked</span>'
       : (key === suggested ? '<span class="pkg-card-badge pkg-card-badge--suggested">Suggested</span>' : '')
     const active = pkgPageState.tierKey === key
+    const priceHtml = from === null
+      ? '<div class="pkg-card-price pkg-card-price--unavailable">Not available right now</div>'
+      : `<div class="pkg-card-price">${serviceableVenues.length > 1 ? 'From ' : ''}₹${from.toLocaleString('en-IN')}</div><div class="pkg-card-price-note">for ${PKG_PAGE_BASE_ADULTS} adults</div>`
     return `
       <div class="pkg-card${tier.featured ? ' pkg-card--featured' : ''}${active ? ' pkg-card--active' : ''}">
         ${badge}
         ${pkgCardTopHtml(tier, key)}
         <h4 class="pkg-card-name">${escapeHtml(tier.name)}</h4>
         <p class="pkg-card-tagline">${escapeHtml(tier.tagline)}</p>
-        <div class="pkg-card-price">${venues.length > 1 ? 'From ' : ''}₹${from.toLocaleString('en-IN')}</div>
-        <div class="pkg-card-price-note">for ${PKG_PAGE_BASE_ADULTS} adults</div>
+        ${priceHtml}
         ${incl}
-        <button type="button" class="btn ${tier.featured ? 'btn--venue-primary' : 'btn--venue-secondary'} pkg-card-cta" onclick="pkgPageSelectTier('${escapeHtml(key)}')">${active ? '✓ Selected' : `Choose ${escapeHtml(tier.name)}`}</button>
+        <button type="button" class="btn ${tier.featured ? 'btn--venue-primary' : 'btn--venue-secondary'} pkg-card-cta" ${from === null ? 'disabled' : ''} onclick="pkgPageSelectTier('${escapeHtml(key)}')">${active ? '✓ Selected' : (from === null ? 'Not available' : `Choose ${escapeHtml(tier.name)}`)}</button>
       </div>`
   }).join('')
 
@@ -2018,9 +2068,20 @@ function renderPackagesPage() {
 function renderPkgVenuePicker(venues) {
   const tier = PACKAGE_TIERS[pkgPageState.tierKey]
   if (!tier) return ''
+  // Required-addon rule: only venues that can actually serve this tier's
+  // add-ons are offered here (packageServiceableAt — no-op for universal
+  // tiers, which tolerate gaps).
+  const serviceable = venues.filter(v => packageServiceableAt(tier, venueCatalog(v.id)))
+  if (!serviceable.length) {
+    return `
+      <div class="pkgp-venues" id="pkgp-venues">
+        <p class="pkgp-step-label">Where would you like your ${escapeHtml(tier.name)}?</p>
+        <p class="venues-error">Not currently available at any venue — check back soon, or choose a different package.</p>
+      </div>`
+  }
   // Same cards as the homepage grid (venueCardHtml) — only the price line
   // differs: it shows THIS tier's firm price at the venue.
-  const cards = venues.map(v => {
+  const cards = serviceable.map(v => {
     const price = packageTierPriceAt(v, tier, venueCatalog(v.id), PKG_PAGE_BASE_ADULTS)
     const priceHtml = `₹${price.toLocaleString('en-IN')} <span class="venue-card-price-sub">for ${PKG_PAGE_BASE_ADULTS} adults</span>`
     return venueCardHtml(v, { priceHtml })
@@ -2852,27 +2913,38 @@ function showPackageStep(venue) {
   const catalog    = appState.currentVenueAddOns || []
   const defaultKey = defaultTierForOccasion(appState.bookingOccasion)
 
-  const visibleKeys = visiblePackagesFor(appState.bookingOccasion || null)
+  // Occasion-specific packages must actually be servable at THIS venue's
+  // catalog (required-addon rule — see packageServiceableAt). If the chosen
+  // occasion isn't servable here at all, fall back to the universal ladder
+  // rather than showing an empty tier step.
+  let visibleKeys = visiblePackagesFor(appState.bookingOccasion || null)
+    .filter(k => packageServiceableAt(PACKAGE_TIERS[k], catalog))
+  if (!visibleKeys.length) visibleKeys = PACKAGE_TIER_ORDER.filter(k => !PACKAGE_TIERS[k]?.occasion)
+
   const cards = visibleKeys.map((key, idx) => {
     const tier     = PACKAGE_TIERS[key]
     const price    = packageTierPrice(venue, tier, catalog)
-    // Ladder copy ("Everything in <prev>, plus:") only chains within the
-    // universal packages — occasion-specific ones (Phase 2.5) stand alone.
-    const prevKey  = tier.occasion ? null : visibleKeys.slice(0, idx).reverse().find(k => !PACKAGE_TIERS[k]?.occasion)
+    // Ladder copy ("Everything in <prev>, plus:") chains within whatever
+    // group this tier belongs to — the universal three, or one occasion's
+    // own tiers (e.g. Movie Night Deluxe chains off Movie Night, not off
+    // The Story) — never across groups.
+    const prevKey  = visibleKeys.slice(0, idx).reverse().find(k => (PACKAGE_TIERS[k]?.occasion || null) === (tier.occasion || null))
     const prevTier = prevKey ? PACKAGE_TIERS[prevKey] : null
 
     // The Setting IS the base setup — its checklist is what the venue page's
     // "What's included" section used to show (now hidden in this flow, see
-    // renderVenueDetail). Moment/Story are additive: "Everything in <prev>,
+    // renderVenueDetail). Every other first-of-group tier (Moment/Story, or
+    // an occasion's own first tier) is additive: "Everything in <prev>,
     // plus:" the add-ons that tier introduces on top of the one before it.
     let inclLead  = ''
     let inclItems = []
-    if (tier.occasion) {
-      // Occasion-specific package (Phase 2.5): standalone inclusion list.
-      inclLead  = 'The signature setup, plus:'
-      inclItems = (tier.addons || []).map(id => catalog.find(a => a.id === id)).filter(Boolean).map(a => a.name)
-    } else if (!prevTier) {
-      inclItems = venueSetupLabels(venue)
+    if (!prevTier) {
+      if (tier.occasion) {
+        inclLead  = 'The signature setup, plus:'
+        inclItems = (tier.addons || []).map(id => catalog.find(a => a.id === id)).filter(Boolean).map(a => a.name)
+      } else {
+        inclItems = venueSetupLabels(venue)
+      }
     } else {
       inclLead = `Everything in <strong class="pkg-card-incl-lead-name">${escapeHtml(prevTier.name)}</strong>, plus:`
       const newAddonIds = (tier.addons || []).filter(id => !(prevTier.addons || []).includes(id))

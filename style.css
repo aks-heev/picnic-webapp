@@ -9234,6 +9234,22 @@ body.menu-viewer-open {
   color: var(--boho-text-light);
   margin: 2px 0 16px;
 }
+/* Occasion package with no serviceable venue right now (required-addon rule
+   — see packageServiceableAt in app.js). Distinct from the normal price
+   styling so it doesn't read as a real ₹ figure. */
+.pkg-card-price--unavailable {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  font-style: italic;
+  color: var(--boho-text-light);
+  margin: 2px 0 16px;
+}
+.pkg-card-cta:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 .pkg-card-incl-lead {
   font-family: var(--font-sans);
   font-size: 12px;
