@@ -216,6 +216,21 @@
             </div>
         </section>
 
+        <!-- Our Packages Section (Phase 2B) -->
+        <!-- Hidden until packages + venues load AND >=1 venue has packages_enabled — toggled by renderHomePackagesSection() in app.js (called from revealPackagesEntryPoints, same gate as #hero-packages-cta). -->
+        <section class="packages-home-section" id="packages-section" style="display:none">
+            <div class="container">
+                <div class="phs-header">
+                    <span class="phs-eyebrow">Curated for you</span>
+                    <h2 class="phs-title">Our Packages</h2>
+                    <p class="phs-sub">Pick a package first, then choose where to have it — pricing shown for 2 adults.</p>
+                </div>
+                <div id="packages-home-grid" class="pkg-cards pkg-cards--page">
+                    <!-- Populated by renderHomePackagesSection() in app.js -->
+                </div>
+            </div>
+        </section>
+
         <!-- Venues Section -->
         <section class="venues-section" id="venues-section">
             <div class="container">

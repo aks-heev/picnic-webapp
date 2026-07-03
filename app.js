@@ -1354,7 +1354,7 @@ async function loadPackages() {
       // occasion: NULL/absent = universal (shown for every occasion). The
       // column lands in Phase 2.5 (occasion-specific packages) — carrying it
       // through now means the visiblePackagesFor() filter needs no change then.
-      tiers[pkg.key] = { key: pkg.key, name: pkg.name, tagline: pkg.tagline || '', addons, featured: !!pkg.is_featured, occasion: pkg.occasion || null }
+      tiers[pkg.key] = { key: pkg.key, name: pkg.name, tagline: pkg.tagline || '', addons, featured: !!pkg.is_featured, occasion: pkg.occasion || null, images: pkg.images || [] }
       order.push(pkg.key)
     })
     PACKAGE_TIERS = tiers
@@ -1455,7 +1455,14 @@ function renderPackagesManager() {
         </div>
         <div class="vf-section-title">Add-ons in this package</div>
         <div class="pkg-adm-addons">${checklist}</div>
-        <button type="button" class="btn btn--primary" onclick="savePackageCard(${pkg.id})">Save ${escapeHtml(pkg.name)}</button>
+        <div class="vf-section-title" style="margin-top:16px">Carousel images <span class="vf-hint">(shown at the top of the tier card on /packages, the homepage, and the venue-first flow)</span></div>
+        <div id="pkg-adm-images-${pkg.id}" class="vf-images-list"></div>
+        <label class="vf-img-upload-btn">
+          + Add Images
+          <input type="file" multiple accept="image/jpeg,image/png,image/webp"
+                 onchange="addPkgAdmImagesMulti(this, ${pkg.id})" style="display:none" />
+        </label>
+        <button type="button" class="btn btn--primary" style="margin-top:16px" onclick="savePackageCard(${pkg.id})">Save ${escapeHtml(pkg.name)}</button>
         ${addonIds.length === 0 ? '<p class="vf-hint" style="margin-top:8px">No add-ons selected — price is just the venue base price.</p>' : ''}
         <div class="vf-section-title" style="margin-top:16px">Price by venue (cafe, 2 guests, live)</div>
         <table class="pkg-adm-table">
@@ -1464,6 +1471,11 @@ function renderPackagesManager() {
         </table>
       </div>`
   }).join('')
+
+  // Image rows need real DOM to attach drag-reorder listeners to, so they're
+  // rendered as a second pass after the card markup above is in the document
+  // (same reason the venue form calls renderVfImages() after populating).
+  packages.forEach(pkg => renderPkgAdmImages(pkg.id, pkg.images || []))
 }
 
 // Persists name/tagline/featured + the add-on checklist for one package card.
@@ -1478,10 +1490,12 @@ async function savePackageCard(pkgId) {
   const isFeatured = card.querySelector('.pkg-adm-featured').checked
   const addonIds = Array.from(card.querySelectorAll('.pkg-adm-addon-cb:checked')).map(cb => parseInt(cb.value, 10))
 
+  const images = readPkgAdmImages(pkgId).filter(img => img.url) // drop empty rows (upload never finished)
+
   try {
     const { error: updErr } = await supabase
       .from('packages')
-      .update({ name, tagline, is_featured: isFeatured, updated_at: new Date().toISOString() })
+      .update({ name, tagline, is_featured: isFeatured, images, updated_at: new Date().toISOString() })
       .eq('id', pkgId)
     if (updErr) throw updErr
 
@@ -1501,6 +1515,169 @@ async function savePackageCard(pkgId) {
   }
 }
 window.savePackageCard = savePackageCard
+
+// ── Package carousel images (admin) ─────────────────────────────────────────
+// Mirrors the venue-images editor 1:1 (same .vf-image-row/.vf-img-* markup,
+// CSS, and drag-reorder logic — see renderVfImages/addVfImagesMulti) but
+// parameterized by pkgId: unlike the venue form (one modal open at a time,
+// so a single #vf-images-list works), the Packages tab renders all package
+// cards inline simultaneously, so each needs its own keyed list/read/render.
+// Images live in packages.images (jsonb array), same shape as venues.images:
+// [{url, alt, name}, ...], order = carousel order. Bucket: package-images.
+function renderPkgAdmImages(pkgId, images) {
+  const list = document.getElementById(`pkg-adm-images-${pkgId}`)
+  if (!list) return
+  list.innerHTML = images.map((img, i) => {
+    const filename = img.name || ''
+    return `
+    <div class="vf-image-row" data-index="${i}" draggable="true">
+      <div class="vf-img-drag-handle" title="Drag to reorder">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/>
+          <circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>
+          <circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/>
+        </svg>
+      </div>
+      <div class="vf-img-preview-wrap">
+        ${img.url
+          ? `<img class="vf-img-thumb" src="${escapeHtml(img.url)}" alt="${escapeHtml(img.alt || '')}" />`
+          : `<div class="vf-img-thumb-placeholder">🖼</div>`}
+        ${filename ? `<span class="vf-img-filename" title="${escapeHtml(filename)}">${escapeHtml(filename)}</span>` : ''}
+      </div>
+      <div class="vf-img-fields">
+        <label class="vf-img-upload-btn">
+          ${img.url ? '↺ Replace photo' : '↑ Upload photo'}
+          <input type="file" class="vf-img-file" accept="image/jpeg,image/png,image/webp"
+                 onchange="handlePkgAdmImageUpload(this, ${pkgId}, ${i})" style="display:none" />
+        </label>
+        <input type="hidden" class="vf-img-url" value="${escapeHtml(img.url || '')}" />
+        <input type="hidden" class="vf-img-name" value="${escapeHtml(filename)}" />
+        <input type="text" class="vf-input vf-img-alt" placeholder="Alt text / caption" value="${escapeHtml(img.alt || '')}" />
+      </div>
+      <button type="button" class="vf-remove-btn" onclick="removePkgAdmImage(${pkgId}, ${i})">✕</button>
+    </div>`
+  }).join('')
+
+  // Wire drag-to-reorder — identical logic to renderVfImages, scoped to this list.
+  let dragIndex = null
+  list.querySelectorAll('.vf-image-row').forEach(row => {
+    row.addEventListener('dragstart', e => {
+      dragIndex = parseInt(row.dataset.index)
+      e.dataTransfer.effectAllowed = 'move'
+      setTimeout(() => row.classList.add('vf-img-dragging'), 0)
+    })
+    row.addEventListener('dragend', () => {
+      dragIndex = null
+      list.querySelectorAll('.vf-image-row').forEach(r => r.classList.remove('vf-img-dragging', 'vf-img-drag-over'))
+    })
+    row.addEventListener('dragover', e => {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      list.querySelectorAll('.vf-image-row').forEach(r => r.classList.remove('vf-img-drag-over'))
+      if (parseInt(row.dataset.index) !== dragIndex) row.classList.add('vf-img-drag-over')
+    })
+    row.addEventListener('dragleave', () => row.classList.remove('vf-img-drag-over'))
+    row.addEventListener('drop', e => {
+      e.preventDefault()
+      const dropIndex = parseInt(row.dataset.index)
+      if (dragIndex === null || dragIndex === dropIndex) return
+      const imgs = readPkgAdmImages(pkgId)
+      const [moved] = imgs.splice(dragIndex, 1)
+      imgs.splice(dropIndex, 0, moved)
+      renderPkgAdmImages(pkgId, imgs)
+    })
+  })
+}
+
+function readPkgAdmImages(pkgId) {
+  const rows = document.querySelectorAll(`#pkg-adm-images-${pkgId} .vf-image-row`)
+  return Array.from(rows).map(row => ({
+    url: row.querySelector('.vf-img-url').value.trim(),
+    alt: row.querySelector('.vf-img-alt').value.trim(),
+    name: row.querySelector('.vf-img-name')?.value.trim() || '',
+  }))
+}
+
+window.handlePkgAdmImageUpload = async function(input, pkgId, index) {
+  const file = input.files[0]
+  if (!file) return
+  if (!appState.session) return showToast('Admin login required', 'error')
+
+  const ext  = file.name.split('.').pop()
+  const path = `pkg-${pkgId}-${Date.now()}-${index}.${ext}`
+
+  const row = input.closest('.vf-image-row')
+  const label = row.querySelector('.vf-img-upload-btn')
+  label.textContent = 'Uploading…'
+
+  try {
+    const { error: upErr } = await supabase.storage.from('package-images').upload(path, file, { upsert: true })
+    if (upErr) throw upErr
+    const { data: { publicUrl } } = supabase.storage.from('package-images').getPublicUrl(path)
+
+    row.querySelector('.vf-img-url').value = publicUrl
+    row.querySelector('.vf-img-name').value = file.name
+    row.querySelector('.vf-img-preview-wrap').innerHTML =
+      `<img class="vf-img-thumb" src="${publicUrl}" alt="" /><span class="vf-img-filename" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>`
+    label.textContent = '↺ Replace photo'
+    showToast('Photo uploaded', 'success')
+  } catch (err) {
+    console.error(err)
+    showToast('Upload failed: ' + err.message, 'error')
+    label.textContent = '↑ Upload photo'
+  }
+}
+
+// Multi-file upload — mirrors addVfImagesMulti's parallel-upload pattern.
+window.addPkgAdmImagesMulti = async function(input, pkgId) {
+  const files = Array.from(input.files)
+  input.value = '' // reset so the same files can be re-selected later
+  if (!files.length) return
+  if (!appState.session) return showToast('Admin login required', 'error')
+
+  const existing   = readPkgAdmImages(pkgId)
+  const startIndex = existing.length
+  const newEntries = files.map(f => ({ url: '', alt: '', name: f.name }))
+  renderPkgAdmImages(pkgId, [...existing, ...newEntries])
+
+  const list = document.getElementById(`pkg-adm-images-${pkgId}`)
+
+  await Promise.all(files.map(async (file, i) => {
+    const rowIndex = startIndex + i
+    const row   = list.querySelector(`.vf-image-row[data-index="${rowIndex}"]`)
+    const label = row?.querySelector('.vf-img-upload-btn')
+    if (label) label.textContent = 'Uploading…'
+
+    try {
+      const ext  = file.name.split('.').pop()
+      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const path = `pkg-${pkgId}-${Date.now()}-${i}-${safe}`
+
+      const { error: upErr } = await supabase.storage.from('package-images').upload(path, file, { upsert: true })
+      if (upErr) throw upErr
+      const { data: { publicUrl } } = supabase.storage.from('package-images').getPublicUrl(path)
+
+      if (row) {
+        row.querySelector('.vf-img-url').value  = publicUrl
+        row.querySelector('.vf-img-name').value = file.name
+        row.querySelector('.vf-img-preview-wrap').innerHTML =
+          `<img class="vf-img-thumb" src="${publicUrl}" alt="" /><span class="vf-img-filename" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>`
+        if (label) label.textContent = '↺ Replace photo'
+      }
+    } catch (err) {
+      console.error(err)
+      showToast(`Failed: ${file.name} — ${err.message}`, 'error')
+      if (label) label.textContent = '↑ Upload photo'
+    }
+  }))
+}
+
+function removePkgAdmImage(pkgId, index) {
+  const imgs = readPkgAdmImages(pkgId)
+  imgs.splice(index, 1)
+  renderPkgAdmImages(pkgId, imgs)
+}
+window.removePkgAdmImage = removePkgAdmImage
 
 // Setup/decor items included in every cafe booking (Food & Beverages left out
 // — food is arranged separately, not part of the online package price).
@@ -1526,6 +1703,117 @@ function venueSetupLabels(venue) {
 // packages.occasion values — Phase 2.5). Do NOT fork copies of this list:
 // occasion matching is string-equality across all three surfaces.
 const OCCASIONS = ['Birthday', 'Anniversary', 'Proposal', 'Date Night', 'Bridal Shower', 'Baby Shower', 'Graduation', 'Just Because']
+
+// Purely decorative — one emoji per occasion chip (/packages page). Missing
+// keys just render no emoji, never a crash.
+const OCCASION_EMOJI = {
+  'Birthday': '🎂', 'Anniversary': '💍', 'Proposal': '💐', 'Date Night': '🌙',
+  'Bridal Shower': '👰', 'Baby Shower': '🍼', 'Graduation': '🎓', 'Just Because': '✨',
+}
+
+// Small line icons for package tier cards (/packages, the homepage section,
+// and the venue-first tier step all share this) — matches the site's
+// .service-icon-wrap line-icon style. Keyed by tier.key; unknown/future keys
+// (Phase 2.5 occasion packages, or an admin-added tier) fall back to the
+// sparkle so a new tier never renders with a missing icon.
+const PKG_TIER_ICON_FALLBACK =
+  '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></svg>'
+const PKG_TIER_ICON_SVG = {
+  setting: PKG_TIER_ICON_FALLBACK,
+  moment: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="13" rx="1.5"/><path d="M3 12h18M12 8v13"/><path d="M12 8c-1.4-4-6.2-3.6-6-1 .1 1.6 2.3 1.3 6 1Z"/><path d="M12 8c1.4-4 6.2-3.6 6-1-.1 1.6-2.3 1.3-6 1Z"/></svg>',
+  story: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3.5l1.8-2.4A1 1 0 0 1 9.1 3h5.8a1 1 0 0 1 .8.6L17.5 6H21a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="3.6"/></svg>',
+}
+function pkgTierIconHtml(key) {
+  return `<div class="pkg-card-icon" aria-hidden="true">${PKG_TIER_ICON_SVG[key] || PKG_TIER_ICON_FALLBACK}</div>`
+}
+
+// Image carousel at the top of a .pkg-card, admin-managed via the Packages
+// panel (packages.images, same [{url,alt,name}] shape as venues.images).
+// Empty/missing images → '' so the caller falls back to pkgTierIconHtml —
+// every tier still renders fine before any photos are uploaded. A single
+// image renders as a static (non-interactive) photo; dots/arrows only appear
+// once there's something to navigate between. Nav is event-delegated (see
+// setupPkgCarouselDelegation, wired once at bootstrap) rather than
+// per-instance listeners, since cards on all three surfaces get torn down
+// and rebuilt on every re-render (occasion/tier selection, page nav).
+function pkgCardMediaHtml(images, name) {
+  const imgs = (images || []).filter(img => img?.url)
+  if (!imgs.length) return ''
+  const slides = imgs.map(img =>
+    `<img src="${escapeHtml(img.url)}" alt="${escapeHtml(img.alt || name || '')}" loading="lazy" />`
+  ).join('')
+  const controls = imgs.length > 1 ? `
+      <button type="button" class="pkg-card-media-arrow pkg-card-media-arrow--prev" aria-label="Previous photo">&lsaquo;</button>
+      <button type="button" class="pkg-card-media-arrow pkg-card-media-arrow--next" aria-label="Next photo">&rsaquo;</button>
+      <div class="pkg-card-media-dots">
+        ${imgs.map((_, i) => `<button type="button" class="pkg-card-media-dot${i === 0 ? ' pkg-card-media-dot--active' : ''}" data-index="${i}" aria-label="Photo ${i + 1}"></button>`).join('')}
+      </div>` : ''
+  return `
+    <div class="pkg-card-media" data-index="0">
+      <div class="pkg-card-media-track">${slides}</div>
+      ${controls}
+    </div>`
+}
+
+// Media if there are photos, otherwise the decorative tier icon — never both,
+// never neither. Use this (not pkgTierIconHtml directly) at the top of every
+// .pkg-card so all three render sites degrade the same way.
+function pkgCardTopHtml(tier, key) {
+  return pkgCardMediaHtml(tier.images, tier.name) || pkgTierIconHtml(key)
+}
+
+function pkgCarouselGoTo(mediaEl, index) {
+  const track = mediaEl.querySelector('.pkg-card-media-track')
+  const total = track?.children.length || 0
+  if (!track || !total) return
+  const clamped = Math.max(0, Math.min(index, total - 1))
+  mediaEl.dataset.index = String(clamped)
+  track.style.transform = `translateX(-${clamped * 100}%)`
+  mediaEl.querySelectorAll('.pkg-card-media-dot').forEach((dot, i) => {
+    dot.classList.toggle('pkg-card-media-dot--active', i === clamped)
+  })
+}
+
+function pkgCarouselNav(mediaEl, delta) {
+  const current = parseInt(mediaEl.dataset.index || '0', 10)
+  const total = mediaEl.querySelector('.pkg-card-media-track')?.children.length || 1
+  // Wrap around rather than stopping dead at the ends — nicer for a small
+  // 2-4 photo set browsed with repeated arrow taps.
+  pkgCarouselGoTo(mediaEl, (current + delta + total) % total)
+}
+
+// Registered once at bootstrap (not per-card): click delegation for
+// arrows/dots, plus a lightweight touch-swipe listener. Both scoped to
+// .pkg-card-media so they never interfere with the card's own CTA/link.
+function setupPkgCarouselDelegation() {
+  document.addEventListener('click', e => {
+    const control = e.target.closest('.pkg-card-media-arrow, .pkg-card-media-dot')
+    if (!control) return
+    const mediaEl = control.closest('.pkg-card-media')
+    if (!mediaEl) return
+    e.preventDefault()
+    e.stopPropagation() // don't let the click fall through to the card's own link/CTA
+    if (control.classList.contains('pkg-card-media-dot')) {
+      pkgCarouselGoTo(mediaEl, parseInt(control.dataset.index, 10))
+    } else {
+      pkgCarouselNav(mediaEl, control.classList.contains('pkg-card-media-arrow--prev') ? -1 : 1)
+    }
+  })
+
+  let touchStartX = null
+  let touchMediaEl = null
+  document.addEventListener('touchstart', e => {
+    touchMediaEl = e.target.closest('.pkg-card-media')
+    touchStartX = touchMediaEl ? e.touches[0].clientX : null
+  }, { passive: true })
+  document.addEventListener('touchend', e => {
+    if (!touchMediaEl || touchStartX === null) return
+    const dx = e.changedTouches[0].clientX - touchStartX
+    if (Math.abs(dx) > 40) pkgCarouselNav(touchMediaEl, dx < 0 ? 1 : -1)
+    touchMediaEl = null
+    touchStartX = null
+  }, { passive: true })
+}
 
 // Packages visible for an occasion. Universal packages (no .occasion) always
 // show; occasion-specific ones (Phase 2.5 — none exist yet) only for theirs.
@@ -1615,6 +1903,26 @@ async function showPackagesPage(push = true, opts = {}) {
     tier: pkgPageState.tierKey || null,
     venues_available: venues.length,
   })
+
+  // Meta Pixel — ViewContent (Phase 2D). Fires once per page view — this
+  // function only runs on initial load/SPA-nav into /packages, not on the
+  // occasion/tier re-renders that call renderPackagesPage() directly.
+  // Mirrors setupVenueCardViewContentObserver's event shape.
+  if (typeof fbq === 'function' && venues.length) {
+    const visible = visiblePackagesFor(null)
+    const prices = visible.flatMap(key => {
+      const tier = PACKAGE_TIERS[key]
+      return venues.map(v => packageTierPriceAt(v, tier, venueCatalog(v.id), PKG_PAGE_BASE_ADULTS))
+    })
+    const params = {
+      content_ids:  visible,
+      content_name: 'Picnic Packages',
+      content_type: 'product_group',
+      currency:     'INR',
+    }
+    if (prices.length) params.value = Math.min(...prices)
+    fbq('track', 'ViewContent', params)
+  }
 }
 
 function renderPackagesPage() {
@@ -1637,7 +1945,7 @@ function renderPackagesPage() {
   const suggested = occasion ? defaultTierForOccasion(occasion) : null
 
   const chips = OCCASIONS.map(o =>
-    `<button type="button" class="pkgp-chip${pkgPageState.occasion === o ? ' pkgp-chip--active' : ''}" onclick="pkgPageSelectOccasion('${escapeHtml(o)}')">${escapeHtml(o)}</button>`
+    `<button type="button" class="pkgp-chip${pkgPageState.occasion === o ? ' pkgp-chip--active' : ''}" onclick="pkgPageSelectOccasion('${escapeHtml(o)}')"><span class="pkgp-chip-emoji" aria-hidden="true">${OCCASION_EMOJI[o] || '✨'}</span>${escapeHtml(o)}</button>`
   ).join('')
 
   // Merged add-on lookup — names are global (add_ons table), catalogs per-venue.
@@ -1674,6 +1982,7 @@ function renderPackagesPage() {
     return `
       <div class="pkg-card${tier.featured ? ' pkg-card--featured' : ''}${active ? ' pkg-card--active' : ''}">
         ${badge}
+        ${pkgCardTopHtml(tier, key)}
         <h4 class="pkg-card-name">${escapeHtml(tier.name)}</h4>
         <p class="pkg-card-tagline">${escapeHtml(tier.tagline)}</p>
         <div class="pkg-card-price">${venues.length > 1 ? 'From ' : ''}₹${from.toLocaleString('en-IN')}</div>
@@ -1685,12 +1994,16 @@ function renderPackagesPage() {
 
   el.innerHTML = `
     <div class="pkgp-wrap">
-      <h1 class="pkgp-title">Picnic Packages</h1>
-      <p class="pkgp-sub">Pick a package, then choose where to have it — date, time and guests come after.</p>
+      <div class="pkgp-hero">
+        <p class="pkgp-eyebrow">Curated Picnic Experiences</p>
+        <h1 class="pkgp-title">Picnic Packages</h1>
+        <p class="pkgp-sub">Pick a package, then choose where to have it — date, time and guests come after.</p>
+      </div>
       <div class="pkgp-occasions">
         <p class="pkgp-step-label">What's the occasion? <span class="pkgp-optional">optional</span></p>
         <div class="pkgp-chips">${chips}</div>
       </div>
+      <div class="pkgp-divider" aria-hidden="true"><span>✦</span></div>
       <div class="pkgp-tiers">
         <p class="pkgp-step-label">Choose your package</p>
         <div class="pkg-cards pkg-cards--page">${cards}</div>
@@ -1751,13 +2064,68 @@ function pkgPageSelectTier(key) {
   track('packages_tier_selected', { tier: key, occasion: pkgPageState.occasion || null })
 }
 
-// Reveal homepage packages entry points (hero CTA now; Phase B section later)
-// only when at least one venue can actually serve the flow — no dead links.
-// Called from loadVenues() once appState.venues is populated.
+// Reveal homepage packages entry points (hero CTA + "Our Packages" section)
+// only when at least one venue can actually serve the flow — no dead links,
+// no CLS from a section that immediately hides. Called from loadVenues()
+// once appState.venues is populated.
 function revealPackagesEntryPoints() {
   const show = pkgEnabledVenues().length > 0
   const heroCta = document.getElementById('hero-packages-cta')
   if (heroCta) heroCta.style.display = show ? '' : 'none'
+  if (show) {
+    renderHomePackagesSection()
+  } else {
+    const section = document.getElementById('packages-section')
+    if (section) section.style.display = 'none'
+  }
+}
+
+// Homepage "Our Packages" section (Phase 2B, docs/PHASE2_PACKAGES_FIRST_PLAN.md).
+// Static hidden skeleton lives in index.html (#packages-section); this fills
+// it with the universal tiers' "From ₹X" prices (min across enabled venues,
+// 2 adults — same PKG_PAGE_BASE_ADULTS baseline as the /packages page, so the
+// two surfaces never show different numbers) and reveals the section. Awaits
+// its own data (packages + venue catalogs) rather than trusting call order
+// against the concurrent bootstrap loadPackages()/loadVenues() calls.
+async function renderHomePackagesSection() {
+  const section = document.getElementById('packages-section')
+  const grid = document.getElementById('packages-home-grid')
+  if (!section || !grid) return
+
+  const venues = pkgEnabledVenues()
+  if (!venues.length) { section.style.display = 'none'; return }
+
+  if (!packagesLoaded) await loadPackages()
+  await loadCatalogsForVenues(venues.map(v => v.id))
+
+  // Homepage teaser only shows universal tiers (no occasion context here —
+  // occasion-specific packages, once they exist, surface on /packages itself).
+  const visible = visiblePackagesFor(null)
+  if (!visible.length) { section.style.display = 'none'; return }
+
+  grid.innerHTML = visible.map(key => {
+    const tier = PACKAGE_TIERS[key]
+    const prices = venues.map(v => packageTierPriceAt(v, tier, venueCatalog(v.id), PKG_PAGE_BASE_ADULTS))
+    const from = Math.min(...prices)
+    const occasions = OCCASIONS.filter(o => defaultTierForOccasion(o) === key).slice(0, 3)
+    const occasionLine = occasions.length
+      ? `<p class="pkg-card-occasions">Perfect for ${occasions.map(o => escapeHtml(o)).join(', ')}</p>`
+      : ''
+    const badge = tier.featured ? '<span class="pkg-card-badge">Most picked</span>' : ''
+    return `
+      <div class="pkg-card${tier.featured ? ' pkg-card--featured' : ''}">
+        ${badge}
+        ${pkgCardTopHtml(tier, key)}
+        <h4 class="pkg-card-name">${escapeHtml(tier.name)}</h4>
+        <p class="pkg-card-tagline">${escapeHtml(tier.tagline)}</p>
+        <div class="pkg-card-price">From ₹${from.toLocaleString('en-IN')}</div>
+        <div class="pkg-card-price-note">for ${PKG_PAGE_BASE_ADULTS} adults</div>
+        ${occasionLine}
+        <a class="btn ${tier.featured ? 'btn--venue-primary' : 'btn--venue-secondary'} pkg-card-cta" href="/packages?tier=${encodeURIComponent(key)}" onclick="event.preventDefault(); showPackagesPage(true, {tierKey:'${escapeHtml(key)}'})">Explore ${escapeHtml(tier.name)}</a>
+      </div>`
+  }).join('')
+
+  section.style.display = ''
 }
 
 function pkgPageSelectVenue(venueId) {
@@ -2519,6 +2887,7 @@ function showPackageStep(venue) {
     return `
         <div class="pkg-card${tier.featured ? ' pkg-card--featured' : ''}${key === defaultKey ? ' pkg-card--suggested' : ''}">
           ${badge}
+          ${pkgCardTopHtml(tier, key)}
           <h4 class="pkg-card-name">${escapeHtml(tier.name)}</h4>
           <p class="pkg-card-tagline">${escapeHtml(tier.tagline)}</p>
           <div class="pkg-card-price">₹${price.toLocaleString('en-IN')}</div>
@@ -8199,6 +8568,7 @@ document.addEventListener('DOMContentLoaded', () => {
   handleMenuPreviewTabs()
   renderAddonsStrip()
   initMenuSelectionPage()
+  setupPkgCarouselDelegation() // once for all .pkg-card-media instances, across all 3 render sites
 
   // URL routing — path-based /venues/<slug> plus legacy query params
   const urlParams = new URLSearchParams(window.location.search)

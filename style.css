@@ -9041,7 +9041,13 @@ body.menu-viewer-open {
   position: relative;
   display: flex;
   flex-direction: column;
-  background: var(--boho-white);
+  /* Top accent bar painted as a background layer (not a separate ::before
+     box) so it's clipped by the card's own border-radius automatically —
+     a same-height pseudo-element with its own radius doesn't follow the
+     parent's curve at the corners and leaves a squared-off overhang. */
+  background:
+    linear-gradient(90deg, var(--boho-accent-sage), rgba(85,99,67,0.35)) top left / 100% 4px no-repeat,
+    var(--boho-white);
   border: 1px solid var(--boho-border);
   border-radius: 16px;
   padding: 22px 18px 20px;
@@ -9076,6 +9082,9 @@ body.menu-viewer-open {
   border-width: 2px;
   padding-top: 26px;
   box-shadow: 0 8px 24px rgba(196,96,122,0.14);
+  background:
+    linear-gradient(90deg, var(--boho-accent-pink), #e6a4b6) top left / 100% 4px no-repeat,
+    var(--boho-white);
 }
 .pkg-card-badge {
   position: absolute;
@@ -9093,6 +9102,107 @@ body.menu-viewer-open {
   box-shadow: 0 3px 8px rgba(196,96,122,0.35);
 }
 .pkg-card-badge--suggested { background: var(--boho-accent-sage); box-shadow: 0 3px 8px rgba(85,99,67,0.3); }
+.pkg-card-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(196,96,122,0.08);
+  color: var(--boho-accent-pink);
+  flex-shrink: 0;
+}
+.pkg-card--featured .pkg-card-icon {
+  background: rgba(196,96,122,0.15);
+}
+
+/* Top-of-card image carousel (admin-managed, packages.images). Bleeds to the
+   card's own edges via negative margins that exactly cancel .pkg-card's own
+   padding, then re-rounds its own top corners — safe here (unlike the 4px
+   accent bar) because the media block is much taller than the radius, so
+   CSS won't clamp it down to a near-square corner. When present, it visually
+   supersedes both the tier icon (see pkgCardTopHtml in app.js, which renders
+   one or the other, never both) and the top accent-bar background layer
+   (simply painted over, no extra code needed). */
+.pkg-card-media {
+  position: relative;
+  margin: -22px -18px 16px;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 15px 15px 0 0;
+  background: var(--boho-cream, #fff8f5);
+}
+.pkg-card--featured .pkg-card-media {
+  margin: -26px -18px 16px;
+  border-radius: 14px 14px 0 0;
+}
+.pkg-card-media-track {
+  display: flex;
+  height: 100%;
+  transition: transform 320ms cubic-bezier(0.22,1,0.36,1);
+}
+.pkg-card-media-track img {
+  flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.pkg-card-media-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,255,255,0.85);
+  color: var(--boho-text-dark);
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 160ms ease, background 160ms ease;
+  z-index: 2;
+}
+.pkg-card-media-arrow--prev { left: 8px; }
+.pkg-card-media-arrow--next { right: 8px; }
+@media (hover: hover) and (pointer: fine) {
+  .pkg-card-media:hover .pkg-card-media-arrow { opacity: 1; }
+  .pkg-card-media-arrow:hover { background: #fff; }
+}
+.pkg-card-media-dots {
+  position: absolute;
+  bottom: 10px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  z-index: 2;
+}
+.pkg-card-media-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,255,255,0.55);
+  padding: 0;
+  cursor: pointer;
+  transition: background 160ms ease, transform 160ms ease;
+}
+.pkg-card-media-dot--active {
+  background: #fff;
+  transform: scale(1.3);
+}
+/* Badge floats above the card's own top edge (top:-11px) into the space the
+   media block now occupies — keep it painting above the photo, not under. */
+.pkg-card-badge { z-index: 3; }
+
 .pkg-card-name {
   font-family: var(--font-serif);
   font-size: 1.4rem;
@@ -9294,12 +9404,30 @@ body.menu-viewer-open {
   max-width: 1080px;
   margin: 0 auto;
   padding: 116px 20px 80px;
+  /* Soft boho color wash bleeding in from the top corners — decorative only,
+     no images needed. Painted on the wrap so it never fights child content. */
+  background:
+    radial-gradient(560px 280px at 12% -8%, rgba(196,96,122,0.09), transparent 62%),
+    radial-gradient(480px 240px at 92% -4%, rgba(85,99,67,0.08), transparent 62%);
+  background-repeat: no-repeat;
 }
 .pkgp-loading {
   padding: 160px 20px;
   text-align: center;
   font-family: var(--font-sans);
   color: var(--boho-text-medium);
+}
+.pkgp-hero { margin-bottom: 4px; }
+.pkgp-eyebrow {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--boho-accent-pink);
+  text-align: center;
+  margin-bottom: 14px;
 }
 .pkgp-title {
   font-family: var(--font-serif);
@@ -9314,6 +9442,25 @@ body.menu-viewer-open {
   color: var(--boho-text-medium);
   text-align: center;
   margin: 0 0 36px;
+}
+.pkgp-divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 4px 0 36px;
+}
+.pkgp-divider::before,
+.pkgp-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(196,96,122,0.32));
+}
+.pkgp-divider::after { background: linear-gradient(90deg, rgba(196,96,122,0.32), transparent); }
+.pkgp-divider span {
+  color: var(--boho-accent-pink);
+  font-size: 13px;
+  flex-shrink: 0;
 }
 .pkgp-step-label {
   font-family: var(--font-sans);
@@ -9349,11 +9496,13 @@ body.menu-viewer-open {
   transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
 }
 .pkgp-chip:hover { border-color: var(--boho-accent-pink); }
+.pkgp-chip-emoji { margin-right: 6px; }
 .pkgp-chip--active {
   background: var(--boho-accent-pink);
   border-color: var(--boho-accent-pink);
   color: #fff;
   font-weight: 600;
+  box-shadow: 0 4px 12px rgba(196,96,122,0.3);
 }
 .pkgp-tiers { margin-bottom: 40px; }
 @media (min-width: 769px) {
@@ -9389,4 +9538,54 @@ body.menu-viewer-open {
 }
 @media (max-width: 720px) {
   .pkgp-wrap { padding: 96px 16px 60px; }
+}
+
+/* ================================================================
+   HOMEPAGE "OUR PACKAGES" SECTION (Phase 2B)
+   Tier cards reuse .pkg-card / .pkg-cards--page (defined above). Hidden by
+   default in index.html; shown by renderHomePackagesSection() in app.js
+   only once >=1 venue can actually serve the packages flow.
+   ================================================================ */
+.packages-home-section {
+  padding: 4rem 0 5rem;
+  background: var(--boho-cream, #fff8f5);
+  border-top: 1px solid rgba(196,96,122,0.06);
+}
+.phs-header {
+  text-align: center;
+  max-width: 640px;
+  margin: 0 auto 2.5rem;
+}
+.phs-eyebrow {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--boho-accent-pink);
+  margin-bottom: 12px;
+}
+.phs-title {
+  font-family: var(--font-serif);
+  font-size: clamp(1.9rem, 3vw, 2.6rem);
+  font-weight: 500;
+  color: var(--boho-text-dark);
+  margin: 0 0 10px;
+  letter-spacing: -0.015em;
+}
+.phs-sub {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  color: var(--boho-text-medium);
+  margin: 0;
+}
+.pkg-card-occasions {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--boho-text-light);
+  margin: -8px 0 16px;
+}
+@media (max-width: 768px) {
+  .packages-home-section { padding: 3rem 0 3.5rem; }
 }

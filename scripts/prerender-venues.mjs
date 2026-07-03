@@ -532,6 +532,207 @@ function buildCityPages(template, allVenues, urls) {
   return count
 }
 
+// Price a tier at a venue exactly like packageTierPriceAt() in app.js — kept
+// in sync manually (this script can't import app.js: it relies on
+// import.meta.env/DOM). PKG_PAGE_BASE_ADULTS mirrors the client constant so
+// build-time "From ₹X" matches the /packages page and homepage section.
+const PKG_PAGE_BASE_ADULTS = 2
+
+function getVenuePriceAt(venue, billingGuests) {
+  const base = Number(venue?.base_price) || 0
+  if (venue?.free_guests_upto != null) {
+    const overage = Number(venue.overage_per_person) || 0
+    return billingGuests <= venue.free_guests_upto
+      ? base
+      : base + overage * (billingGuests - venue.free_guests_upto)
+  }
+  const m = venue?.metadata
+  if (!m || !Array.isArray(m.tiers) || m.tiers.length === 0) return base
+  const tiers = m.tiers
+  const match = tiers.find(t => billingGuests <= t.up_to)
+  if (match) return match.price
+  const last = tiers[tiers.length - 1]
+  const overage = billingGuests - last.up_to
+  return last.price + overage * (Number(m.overage_per_person) || 0)
+}
+
+function tierPriceAtVenue(venue, tier, catalog) {
+  const base = getVenuePriceAt(venue, PKG_PAGE_BASE_ADULTS)
+  const addonSum = (tier.addons || []).reduce((s, id) => {
+    const a = catalog.find(x => x.id === id)
+    return s + (a ? Number(a.price) : 0)
+  }, 0)
+  return base + addonSum
+}
+
+function packagesJsonLd(pageUrl, tiers, fromPriceByTier) {
+  const ld = {
+    '@context': 'https://schema.org',
+    '@type': 'OfferCatalog',
+    name: 'Picnic Packages — The Picnic Stories',
+    url: pageUrl,
+    itemListElement: tiers.map((t, i) => ({
+      '@type': 'Offer',
+      position: i + 1,
+      itemOffered: { '@type': 'Service', name: t.name, description: clamp(t.tagline, 200) },
+      priceCurrency: 'INR',
+      price: String(Math.round(fromPriceByTier.get(t.key) ?? 0)),
+      availability: 'https://schema.org/InStock',
+      url: `${pageUrl}?tier=${encodeURIComponent(t.key)}`,
+    })),
+  }
+  return JSON.stringify(ld, null, 2).replaceAll('<', '\\u003c')
+}
+
+/** Generate the /packages landing page: SPA shell (like buildPage) with
+ * per-tier crawlable content, OfferCatalog JSON-LD, and the same #pr-loader
+ * hydration overlay. Build-time "From ₹X" prices are placeholders — the
+ * client's showPackagesPage() overwrites #packages-content with live prices
+ * the moment app.js hydrates (same mechanism as the venue pages). */
+async function buildPackagesPage(supabase, template) {
+  const [pkgRes, venueRes, addonRes] = await Promise.all([
+    supabase.from('packages').select('*, package_add_ons(addon_id, sort_order)')
+      .eq('is_active', true).order('sort_order', { ascending: true }),
+    supabase.from('venues').select('id, name, slug, base_price, free_guests_upto, overage_per_person, metadata, packages_enabled')
+      .eq('type', 'cafe').eq('is_active', true).eq('packages_enabled', true),
+    supabase.from('add_ons').select('*, venue_add_ons!inner(venue_id)').eq('is_active', true),
+  ])
+  if (pkgRes.error) { console.warn('[prerender] packages fetch failed, skipping /packages page:', pkgRes.error.message); return null }
+  if (venueRes.error) { console.warn('[prerender] venues fetch failed, skipping /packages page:', venueRes.error.message); return null }
+  if (addonRes.error) { console.warn('[prerender] add_ons fetch failed, skipping /packages page:', addonRes.error.message); return null }
+
+  const tiers = (pkgRes.data || []).map(pkg => ({
+    key: pkg.key,
+    name: pkg.name,
+    tagline: pkg.tagline || '',
+    featured: !!pkg.is_featured,
+    addons: (pkg.package_add_ons || []).slice().sort((a, b) => a.sort_order - b.sort_order).map(pa => pa.addon_id),
+  }))
+  if (!tiers.length) { console.warn('[prerender] no active packages — skipping /packages page'); return null }
+
+  const venues = venueRes.data || []
+  const catalogByVenue = new Map()
+  venues.forEach(v => catalogByVenue.set(v.id, []))
+  const addonNameById = new Map()
+  ;(addonRes.data || []).forEach(row => {
+    const { venue_add_ons, ...addon } = row
+    addonNameById.set(addon.id, addon.name)
+    ;(venue_add_ons || []).forEach(j => {
+      const list = catalogByVenue.get(j.venue_id)
+      if (list) list.push(addon)
+    })
+  })
+
+  const fromPriceByTier = new Map()
+  tiers.forEach(t => {
+    const prices = venues.map(v => tierPriceAtVenue(v, t, catalogByVenue.get(v.id) || []))
+    fromPriceByTier.set(t.key, prices.length ? Math.min(...prices) : 0)
+  })
+
+  const url = `${SITE}/packages`
+  const title = 'Picnic Packages — Setting, Moment & Story | The Picnic Stories'
+  const desc = clamp(
+    `Pick a curated picnic package — ${tiers.map(t => t.name).join(', ')} — then choose your venue. ` +
+    `Prices shown for 2 adults, firm price confirmed once you pick a venue.`
+  )
+  const img = HERO_FALLBACK
+
+  let html = swapHead(template, [
+    [/<title>[\s\S]*?<\/title>/, `<title>${esc(title)}</title>`],
+    [/<meta name="description"[^>]*>/, `<meta name="description" content="${esc(desc)}">`],
+    [/<link rel="canonical"[^>]*>/, `<link rel="canonical" href="${url}">`],
+    [/<meta property="og:title"[^>]*>/, `<meta property="og:title" content="${esc(title)}">`],
+    [/<meta property="og:description"[^>]*>/, `<meta property="og:description" content="${esc(desc)}">`],
+    [/<meta property="og:url"[^>]*>/, `<meta property="og:url" content="${url}">`],
+    [/<meta property="og:image"[^>]*>/, `<meta property="og:image" content="${esc(img)}">`],
+    [/<meta property="og:image:alt"[^>]*>/, `<meta property="og:image:alt" content="Picnic Packages">`],
+    [/<meta name="twitter:title"[^>]*>/, `<meta name="twitter:title" content="${esc(title)}">`],
+    [/<meta name="twitter:description"[^>]*>/, `<meta name="twitter:description" content="${esc(desc)}">`],
+    [/<meta name="twitter:image"[^>]*>/, `<meta name="twitter:image" content="${esc(img)}">`],
+    [/<script type="application\/ld\+json">[\s\S]*?<\/script>/,
+      `<script type="application/ld+json">\n${packagesJsonLd(url, tiers, fromPriceByTier)}\n</script>`],
+  ])
+
+  const cards = tiers.map(t => {
+    const from = fromPriceByTier.get(t.key) || 0
+    const inclNames = (t.addons || []).map(id => addonNameById.get(id)).filter(Boolean)
+    return `
+      <div class="pr-pkg-card">
+        <h2>${esc(t.name)}</h2>
+        <p>${esc(t.tagline)}</p>
+        <p><strong>${venues.length > 1 ? 'From ' : ''}₹${Math.round(from).toLocaleString('en-IN')}</strong> for ${PKG_PAGE_BASE_ADULTS} adults</p>
+        ${inclNames.length ? `<ul>${inclNames.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
+      </div>`
+  }).join('')
+
+  const venuesLine = venues.length
+    ? `<p>Available at: ${venues.map(v => `<a href="/venues/${esc(v.slug)}">${esc(v.name)}</a>`).join(', ')}</p>`
+    : `<p>Packages are coming soon — every picnic can still be booked from its venue page. <a href="/#venues-section">Browse venues</a></p>`
+
+  // Same crawlable-content + branded-loader pattern as buildPage(), just
+  // targeting #packages-page/#packages-content instead of the venue page.
+  // The class names below (pr-pkg-*) are unique to this static seed block —
+  // renderPackagesPage()'s real markup uses .pkgp-*/.pkg-card* classes, so
+  // the loader's MutationObserver (below) can't mistake this for hydration.
+  const seo = `
+      <nav class="prerender-crumb" aria-label="Breadcrumb"><a href="/">Home</a> &rsaquo; <span>Packages</span></nav>
+      <h1>Picnic Packages</h1>
+      <p>Pick a package, then choose where to have it — date, time and guests come after.</p>
+      <div class="pr-pkg-cards">${cards}</div>
+      ${venuesLine}`
+
+  const loader = `
+<div id="pr-loader" aria-hidden="true" style="position:fixed;inset:0;z-index:99999;background:#fdfaf7;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem">
+  <img src="/logo3.png" alt="" style="height:56px;width:auto" id="pr-logo">
+  <div style="width:40px;height:3px;border-radius:2px;background:#e8e0d8;overflow:hidden">
+    <div id="pr-bar" style="height:100%;width:0%;background:#a84d66;border-radius:2px;transition:width .1s linear"></div>
+  </div>
+</div>
+<style>
+  @keyframes pr-logo-pulse{0%,100%{opacity:.5}50%{opacity:1}}
+  #pr-logo{animation:pr-logo-pulse 1.4s ease-in-out infinite}
+</style>
+<script>
+(function(){
+  var lo=document.getElementById('pr-loader');
+  var bar=document.getElementById('pr-bar');
+  if(!lo)return;
+  var prog=0;
+  var fill=setInterval(function(){prog=Math.min(prog+2,88);if(bar)bar.style.width=prog+'%';},50);
+  var gone=false;
+  function rm(){
+    if(gone)return;gone=true;
+    clearInterval(fill);
+    if(bar)bar.style.width='100%';
+    setTimeout(function(){
+      lo.style.transition='opacity .28s';
+      lo.style.opacity='0';
+      setTimeout(function(){lo.parentNode&&lo.parentNode.removeChild(lo);},300);
+    },120);
+  }
+  // Primary: detect when app.js inserts the real .pkgp-wrap (interactive packages page ready)
+  if(window.MutationObserver){
+    var obs=new MutationObserver(function(){
+      if(document.querySelector('.pkgp-wrap')){obs.disconnect();rm();}
+    });
+    obs.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
+  }
+  // Fallback A: hide 300ms after all resources (including app.js) have loaded
+  window.addEventListener('load',function(){setTimeout(rm,300);});
+  // Fallback B: hard cap at 6s — never block the user forever
+  setTimeout(rm,6000);
+})();
+</script>`
+
+  html = html
+    .replace('<div id="home-page" class="page active">', '<div id="home-page" class="page">')
+    .replace('<div id="packages-page" class="page">', '<div id="packages-page" class="page active">')
+    .replace('<div id="packages-content"></div>', `<div id="packages-content">${seo}</div>`)
+    .replace('</body>', `${loader}\n</body>`)
+
+  return { url, html }
+}
+
 async function main() {
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   // Only public, browseable venues. `custom` (Your Own Space) has no detail page.
@@ -564,6 +765,13 @@ async function main() {
 
   const cityPageCount = buildCityPages(template, venues, urls)
 
+  const packagesPage = await buildPackagesPage(supabase, template)
+  if (packagesPage) {
+    writeFileSync(resolve(DIST, 'packages.html'), packagesPage.html)
+    urls.push(packagesPage.url)
+    console.log(`[prerender] packages page: /packages`)
+  }
+
   const lastmod = new Date().toISOString().slice(0, 10)
   const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
@@ -573,7 +781,7 @@ async function main() {
   writeFileSync(resolve(DIST, 'robots.txt'),
     `User-agent: *\nAllow: /\nDisallow: /admin\nSitemap: ${SITE}/sitemap.xml\n`)
 
-  console.log(`[prerender] wrote ${seen.size} venue pages + ${cityPageCount} city pages + sitemap (${urls.length} urls)`)
+  console.log(`[prerender] wrote ${seen.size} venue pages + ${cityPageCount} city pages + ${packagesPage ? 1 : 0} packages page + sitemap (${urls.length} urls)`)
 }
 
 main().catch((e) => { console.error('[prerender]', e); process.exit(1) })
