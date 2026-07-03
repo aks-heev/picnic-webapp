@@ -677,7 +677,7 @@ async function buildPackagesPage(supabase, template) {
   const seo = `
       <nav class="prerender-crumb" aria-label="Breadcrumb"><a href="/">Home</a> &rsaquo; <span>Packages</span></nav>
       <h1>Picnic Packages</h1>
-      <p>Pick a package, then choose where to have it — date, time and guests come after.</p>
+      <p>Bouquets at golden hour, bonfires under the stars, a screening just for two — pick the picnic that already feels like you, then choose where it happens.</p>
       <div class="pr-pkg-cards">${cards}</div>
       ${venuesLine}`
 

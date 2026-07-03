@@ -512,6 +512,25 @@
                         </div>
                     </div>
 
+                    <!-- /packages page hero backdrop -->
+                    <div class="hero-img-admin-panel">
+                        <div class="hero-img-panel-header">
+                            <span class="hero-img-panel-icon">🧺</span>
+                            <div>
+                                <p class="hero-img-admin-label">Packages page hero</p>
+                                <p class="hero-img-admin-hint">Shown heavily blurred behind the /packages title. If left unset, auto-picks the featured package's own photo.</p>
+                            </div>
+                        </div>
+                        <div id="hero-img-packages-preview" class="hero-img-admin-preview">
+                            <span class="hero-img-admin-empty">No image set</span>
+                        </div>
+                        <label class="vf-img-upload-btn hero-img-upload-btn" id="hero-upload-packages-label">
+                            ↑ Choose photo
+                            <input type="file" id="hero-img-packages-file" accept="image/jpeg,image/png,image/webp" onchange="handlePackagesHeroImageUpload(this)" style="display:none" />
+                        </label>
+                        <div id="hero-upload-packages-status"></div>
+                    </div>
+
                 </div>
             </div>
 

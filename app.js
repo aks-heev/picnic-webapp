@@ -1731,6 +1731,39 @@ const OCCASION_EMOJI = {
   'Bridal Shower': '👰', 'Baby Shower': '🍼', 'Graduation': '🎓', 'Just Because': '✨',
 }
 
+// Occasion chip redesign (2026-07-03): circular doodle icons replacing the
+// plain-emoji pills. Same stroke-based line-art language as PKG_TIER_ICON_SVG
+// below, just per-occasion instead of per-tier, so the whole page draws from
+// one consistent icon style rather than emoji + line-art mixed together.
+const OCCASION_ICON_FALLBACK =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.2 3.8L17 8l-3.8 1.2L12 13l-1.2-3.8L7 8l3.8-1.2Z"/></svg>'
+const OCCASION_ICON_SVG = {
+  'Birthday': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="1.5"/><path d="M4 15.5h16"/><path d="M12 11V6.5"/><path d="M12 6.5c-.9 0-1.6-.7-1.6-1.6 0-.9 1.6-2.4 1.6-2.4s1.6 1.5 1.6 2.4c0 .9-.7 1.6-1.6 1.6Z"/></svg>',
+  'Anniversary': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="15" r="4.3"/><circle cx="15" cy="15" r="4.3"/></svg>',
+  'Proposal': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="15.5" r="5"/><path d="M12 10.5 9.7 6.8 12 4l2.3 2.8Z"/></svg>',
+  'Date Night': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15.8 4.6a8 8 0 1 0 0 15.4 6.6 6.6 0 0 1 0-15.4Z"/><path d="M19 4.2l.55 1.5L21 6.3l-1.45.6L19 8.4l-.55-1.5L17 6.3l1.45-.6Z"/></svg>',
+  'Movie Night': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h16v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9Z"/><path d="M4 10l1.4-4h13.2l1.4 4"/><path d="M7.3 6l1.4 4M11.3 6l1.4 4M15.3 6l1.4 4"/></svg>',
+  'Bridal Shower': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 13.5v7"/><circle cx="12" cy="9.2" r="1.9"/><circle cx="8.8" cy="11" r="1.9"/><circle cx="15.2" cy="11" r="1.9"/><circle cx="10" cy="6.6" r="1.5"/><circle cx="14" cy="6.6" r="1.5"/></svg>',
+  'Baby Shower': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.5h4v3.2h1a1 1 0 0 1 1 1v11.3a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V7.7a1 1 0 0 1 1-1h1V3.5Z"/><path d="M8 12h8"/></svg>',
+  'Graduation': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6 2 10l10 4 10-4-10-4Z"/><path d="M6 12v4c0 1.4 2.7 2.8 6 2.8s6-1.4 6-2.8v-4"/><path d="M20 10.4V16"/></svg>',
+  'Just Because': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3l1.2 3.8L16 8l-3.8 1.2L11 13l-1.2-3.8L6 8l3.8-1.2Z"/><path d="M18 13.5l.6 1.9 1.9.6-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6Z"/></svg>',
+}
+function occasionIconHtml(o) {
+  return OCCASION_ICON_SVG[o] || OCCASION_ICON_FALLBACK
+}
+
+// Rotating tint pairs (background + icon color) for the chip circles — drawn
+// from the site's existing boho palette rather than new one-off colors, so
+// the chip row doesn't introduce a fifth accent scheme. Cycles by index
+// rather than a hand-picked color per occasion — simpler to maintain, and
+// Airbnb-style category rows don't rely on "meaningful" color either.
+const OCCASION_CHIP_TINTS = [
+  { bg: 'var(--boho-pink)', fg: 'var(--boho-accent-pink)' },
+  { bg: 'var(--boho-sage)', fg: 'var(--boho-accent-sage)' },
+  { bg: 'var(--boho-lavender)', fg: 'var(--boho-accent-lavender)' },
+  { bg: 'var(--boho-peach)', fg: 'var(--boho-accent-rose)' },
+]
+
 // Small line icons for package tier cards (/packages, the homepage section,
 // and the venue-first tier step all share this) — matches the site's
 // .service-icon-wrap line-icon style. Keyed by tier.key; unknown/future keys
@@ -1985,9 +2018,20 @@ function renderPackagesPage() {
   const visible   = visiblePackagesFor(occasion)
   const suggested = occasion ? defaultTierForOccasion(occasion) : null
 
-  const chips = OCCASIONS.map(o =>
-    `<button type="button" class="pkgp-chip${pkgPageState.occasion === o ? ' pkgp-chip--active' : ''}" onclick="pkgPageSelectOccasion('${escapeHtml(o)}')"><span class="pkgp-chip-emoji" aria-hidden="true">${OCCASION_EMOJI[o] || '✨'}</span>${escapeHtml(o)}</button>`
-  ).join('')
+  // Circular doodle-icon chips (2026-07-03 redesign), labeled "<Occasion>
+  // Packages" per Aksheev's direction. "Just Because" is excluded from the
+  // chip row (per Aksheev, 2026-07-03): "Just Because Packages" read oddly,
+  // and the no-occasion state already shows the universal ladder — the chip
+  // was redundant. It stays in OCCASIONS (booking dropdowns, admin, emails).
+  const chips = OCCASIONS.filter(o => o !== 'Just Because').map((o, i) => {
+    const tint = OCCASION_CHIP_TINTS[i % OCCASION_CHIP_TINTS.length]
+    const active = pkgPageState.occasion === o
+    return `
+      <button type="button" class="pkgp-chip${active ? ' pkgp-chip--active' : ''}" onclick="pkgPageSelectOccasion('${escapeHtml(o)}')">
+        <span class="pkgp-chip-circle" style="background:${tint.bg};color:${tint.fg}" aria-hidden="true">${occasionIconHtml(o)}</span>
+        <span class="pkgp-chip-label">${escapeHtml(o)} Packages</span>
+      </button>`
+  }).join('')
 
   // Merged add-on lookup — names are global (add_ons table), catalogs per-venue.
   const addonById = new Map()
@@ -2042,12 +2086,33 @@ function renderPackagesPage() {
       </div>`
   }).join('')
 
+  // Hero backdrop (brainstorm option #3): a heavily blurred photo bled up
+  // behind the hero text, so it reads as ambient texture rather than a
+  // single photo trying to represent every package. Priority order:
+  // 1. Admin's explicit pick (site_settings.packages_hero_image_url, Hero
+  //    Image admin tab) — the deliberate choice, once someone's made one.
+  // 2. Auto-pick: the featured universal tier's own photo (stable across
+  //    occasion-chip clicks, since it doesn't depend on which tiers are
+  //    currently visible).
+  // 3. No backdrop — plain hero, today's look — if neither exists yet.
+  // Paused (2026-07-03): tried this live with a real uploaded photo and it
+  // didn't work — the photo had scattered point-light bokeh (string lights),
+  // which blurs into uneven blotches rather than a smooth wash at ANY blur
+  // radius (too sharp = busy/blotchy, too blurred = invisible muddy blob).
+  // Reverting to no backdrop until either a smoother/more solid-toned photo
+  // is tried, or a non-blur approach (color-tint extracted from the photo,
+  // no actual image blur) replaces this. Admin upload + auto-pick mechanism
+  // below is left intact — just not applied to the live hero right now.
+  const heroBackdropUrl = null
+  void packagesHeroImageUrl // silence unused-var lint until re-enabled above
+
   el.innerHTML = `
     <div class="pkgp-wrap">
       <div class="pkgp-hero">
+        ${heroBackdropUrl ? `<div class="pkgp-hero-backdrop" style="background-image:url('${escapeHtml(heroBackdropUrl)}')"></div><div class="pkgp-hero-scrim"></div>` : ''}
         <p class="pkgp-eyebrow">Curated Picnic Experiences</p>
         <h1 class="pkgp-title">Picnic Packages</h1>
-        <p class="pkgp-sub">Pick a package, then choose where to have it — date, time and guests come after.</p>
+        <p class="pkgp-sub">Bouquets at golden hour, bonfires under the stars, a screening just for two — pick the picnic that already feels like you, then choose where it happens.</p>
       </div>
       <div class="pkgp-occasions">
         <p class="pkgp-step-label">What's the occasion? <span class="pkgp-optional">optional</span></p>
@@ -7976,13 +8041,20 @@ function updateNavbarState(pageId) {
   }
 }
 
+// Explicit admin pick for the /packages hero backdrop (site_settings key
+// 'packages_hero_image_url'). Populated by loadHeroImage() at bootstrap so
+// it's ready before any client-side nav into /packages. Falsy/'' means "not
+// set" — renderPackagesPage() then falls back to auto-picking the featured
+// tier's own image, and finally to no backdrop at all if neither exists.
+let packagesHeroImageUrl = null
+
 // ── Hero image: load from site_settings on startup ───────────
 async function loadHeroImage() {
   try {
     const { data } = await supabase
       .from('site_settings')
       .select('key, value')
-      .in('key', ['hero_image_url', 'hero_image_mobile_url', 'hero_image_mobile_position'])
+      .in('key', ['hero_image_url', 'hero_image_mobile_url', 'hero_image_mobile_position', 'packages_hero_image_url'])
 
     const settings = Object.fromEntries((data || []).map(r => [r.key, r.value]))
 
@@ -7999,6 +8071,8 @@ async function loadHeroImage() {
         img.src = desktopUrl
       }
     }
+
+    packagesHeroImageUrl = settings.packages_hero_image_url || null
 
     applyMobilePosition(mobilePos)
   } catch (err) {
@@ -8022,7 +8096,7 @@ async function loadHeroImageAdminPreview() {
     const { data } = await supabase
       .from('site_settings')
       .select('key, value')
-      .in('key', ['hero_image_url', 'hero_image_mobile_url', 'hero_image_mobile_position'])
+      .in('key', ['hero_image_url', 'hero_image_mobile_url', 'hero_image_mobile_position', 'packages_hero_image_url'])
 
     const settings = Object.fromEntries((data || []).map(r => [r.key, r.value]))
 
@@ -8050,6 +8124,19 @@ async function loadHeroImageAdminPreview() {
         const tn = lbl && Array.from(lbl.childNodes).find(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim())
         if (tn) tn.textContent = ' ↺ Replace photo '
         showMobilePositionAdminUI(mobileUrl, settings.hero_image_mobile_position)
+      }
+    }
+
+    const pkgPreview = document.getElementById('hero-img-packages-preview')
+    const pkgUrl = settings.packages_hero_image_url
+    if (pkgPreview) {
+      pkgPreview.innerHTML = pkgUrl
+        ? `<img src="${pkgUrl}" alt="Current /packages hero" class="hero-img-admin-thumb" />`
+        : '<span class="hero-img-admin-empty">No image set — auto-picks the featured package\'s own photo</span>'
+      if (pkgUrl) {
+        const lbl = document.getElementById('hero-upload-packages-label')
+        const tn = lbl && Array.from(lbl.childNodes).find(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim())
+        if (tn) tn.textContent = ' ↺ Replace photo '
       }
     }
   } catch (err) {
@@ -8183,6 +8270,56 @@ window.handleHeroImageUpload = async function(input, device = 'desktop') {
     if (status) status.innerHTML = `<span class="hero-upload-success">✓ ${isDesktop ? 'Desktop' : 'Mobile'} image updated</span>`
     if (labelTn) labelTn.textContent = ` ↺ Replace photo `
     showToast(`${isDesktop ? 'Desktop' : 'Mobile'} hero updated`, 'success')
+  } catch (err) {
+    console.error(err)
+    if (status) status.innerHTML = `<span class="hero-upload-error">Upload failed: ${err.message}</span>`
+    if (labelTn) labelTn.textContent = ' ↑ Choose photo '
+    showToast('Upload failed: ' + err.message, 'error')
+  }
+}
+
+// Explicit pick for the /packages hero backdrop — same upload pattern as
+// handleHeroImageUpload (stable storage path, upsert, cache-busting version
+// token) but simpler: one image, no mobile/position variant, since the
+// backdrop is heavily blurred (see .pkgp-hero-backdrop) and framing barely
+// matters at that blur radius.
+window.handlePackagesHeroImageUpload = async function(input) {
+  const file = input.files[0]
+  if (!file) return
+  if (!appState.session) return showToast('Admin login required', 'error')
+
+  const label  = document.getElementById('hero-upload-packages-label')
+  const status = document.getElementById('hero-upload-packages-status')
+  const storagePath = `hero/packages.${file.name.split('.').pop()}`
+
+  const labelTn = label && Array.from(label.childNodes).find(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim())
+  if (labelTn) labelTn.textContent = ' Uploading… '
+  if (status) status.innerHTML = ''
+
+  try {
+    const { error: upErr } = await supabase.storage
+      .from('site-images')
+      .upload(storagePath, file, { upsert: true })
+    if (upErr) throw upErr
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('site-images')
+      .getPublicUrl(storagePath)
+    const versionedUrl = publicUrl + '?v=' + Date.now()
+
+    const { error: dbErr } = await supabase
+      .from('site_settings')
+      .update({ value: versionedUrl, updated_at: new Date().toISOString() })
+      .eq('key', 'packages_hero_image_url')
+    if (dbErr) throw dbErr
+
+    packagesHeroImageUrl = versionedUrl
+    const preview = document.getElementById('hero-img-packages-preview')
+    if (preview) preview.innerHTML = `<img src="${versionedUrl}" alt="Current /packages hero" class="hero-img-admin-thumb" />`
+
+    if (status) status.innerHTML = '<span class="hero-upload-success">✓ Packages hero updated</span>'
+    if (labelTn) labelTn.textContent = ' ↺ Replace photo '
+    showToast('Packages hero updated', 'success')
   } catch (err) {
     console.error(err)
     if (status) status.innerHTML = `<span class="hero-upload-error">Upload failed: ${err.message}</span>`

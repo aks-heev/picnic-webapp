@@ -9367,8 +9367,15 @@ body.menu-viewer-open {
     text-align: center;
     margin-bottom: 26px;
   }
+  /* auto-fit + a calc'd max keeps card width identical to the old fixed
+     repeat(3, 1fr) when there are 3 cards, but lets 2-card occasion tiers
+     (Date Night, Movie Night — Phase 2.5) collapse their unused 3rd track
+     instead of leaving a visible empty slot. justify-content centers the
+     resulting row. 260px min stops auto-fit from ever creating more tracks
+     than 3 at realistic viewport widths. */
   .vd-layout--pkg-active .pkg-cards {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(260px, calc((100% - 44px) / 3)));
+    justify-content: center;
     gap: 22px;
   }
   .vd-layout--pkg-active .pkg-card-tagline {
@@ -9433,9 +9440,46 @@ body.menu-viewer-open {
   font-family: var(--font-sans);
   color: var(--boho-text-medium);
 }
-.pkgp-hero { margin-bottom: 4px; }
+.pkgp-hero {
+  margin-bottom: 4px;
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  padding: 32px 20px 8px;
+}
+/* Hero backdrop prototype (brainstorm option #3): the featured tier's own
+   photo, blurred into ambient texture rather than shown as a sharp "hero
+   shot" that would have to arbitrarily represent every package. Bleeds past
+   the hero's own edges (inset < 0) so the blur never shows a hard, cropped
+   border. Purely decorative — aria-hidden equivalent via empty content, no
+   alt text needed since pkgp-hero-scrim + real page copy carry the meaning. */
+.pkgp-hero-backdrop {
+  position: absolute;
+  inset: -25% -15%;
+  background-size: cover;
+  background-position: center 35%;
+  /* Tuned down from an earlier 48px/96%-scrim pass that flattened every
+     photo into an identical warm blob regardless of which image was
+     uploaded — confirmed live with a real uploaded photo before settling
+     here. This blur keeps the photo's own color/shape/light recognizable
+     (the point of picking a specific photo at all) while still reading as
+     ambient texture rather than a competing hero shot. */
+  filter: blur(22px) saturate(1.1);
+  opacity: 0.7;
+  z-index: 0;
+  pointer-events: none;
+}
+.pkgp-hero-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(253,250,247,0.25) 0%, rgba(253,250,247,0.55) 55%, rgba(253,250,247,0.88) 100%);
+  z-index: 1;
+  pointer-events: none;
+}
 .pkgp-eyebrow {
   display: block;
+  position: relative;
+  z-index: 2;
   font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 600;
@@ -9446,6 +9490,8 @@ body.menu-viewer-open {
   margin-bottom: 14px;
 }
 .pkgp-title {
+  position: relative;
+  z-index: 2;
   font-family: var(--font-serif);
   font-size: clamp(2rem, 4vw, 2.8rem);
   color: var(--boho-text-dark);
@@ -9453,6 +9499,8 @@ body.menu-viewer-open {
   text-align: center;
 }
 .pkgp-sub {
+  position: relative;
+  z-index: 2;
   font-family: var(--font-sans);
   font-size: 15px;
   color: var(--boho-text-medium);
@@ -9495,35 +9543,72 @@ body.menu-viewer-open {
   opacity: 0.75;
 }
 .pkgp-occasions { margin-bottom: 32px; }
+/* Circular doodle-icon chips (2026-07-03 redesign, replacing plain-emoji
+   pills). Single scrollable row at every viewport width — same fix as an
+   Airbnb-style category bar — so this never wraps into a multi-row wall on
+   mobile the way the old flex-wrap pill row did. */
 .pkgp-chips {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  gap: 20px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 2px 12px;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 .pkgp-chip {
-  font-family: var(--font-sans);
-  font-size: 13.5px;
-  padding: 8px 16px;
-  border-radius: 99px;
-  border: 1px solid var(--boho-border);
-  background: var(--boho-white);
-  color: var(--boho-text-dark);
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 84px;
+  background: none;
+  border: none;
+  padding: 0;
   cursor: pointer;
-  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+  scroll-snap-align: start;
 }
-.pkgp-chip:hover { border-color: var(--boho-accent-pink); }
-.pkgp-chip-emoji { margin-right: 6px; }
-.pkgp-chip--active {
-  background: var(--boho-accent-pink);
+.pkgp-chip-circle {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid transparent;
+  transition: border-color 160ms ease, transform 160ms ease;
+}
+.pkgp-chip-circle svg { width: 26px; height: 26px; }
+.pkgp-chip-label {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--boho-text-medium);
+  text-align: center;
+  transition: color 160ms ease, font-weight 160ms ease;
+}
+.pkgp-chip:hover .pkgp-chip-circle { transform: translateY(-2px); }
+.pkgp-chip--active .pkgp-chip-circle {
   border-color: var(--boho-accent-pink);
-  color: #fff;
-  font-weight: 600;
-  box-shadow: 0 4px 12px rgba(196,96,122,0.3);
+  box-shadow: 0 4px 12px rgba(196,96,122,0.25);
+}
+.pkgp-chip--active .pkgp-chip-label {
+  color: var(--boho-text-dark);
+  font-weight: 700;
 }
 .pkgp-tiers { margin-bottom: 40px; }
 @media (min-width: 769px) {
+  /* Same auto-fit fix as .vd-layout--pkg-active .pkg-cards above — keeps
+     card width unchanged for the 3-card universal ladder, but centers a
+     2-card occasion row (Date Night, Movie Night) instead of leaving a
+     phantom empty third column. This grid is shared by /packages AND the
+     homepage teaser (always 3 universal cards), so the 3-card math must
+     stay pixel-identical to before. */
   .pkg-cards--page {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(260px, calc((100% - 44px) / 3)));
+    justify-content: center;
     gap: 22px;
   }
   .pkg-cards--page .pkg-card-tagline { min-height: 0; }
