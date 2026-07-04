@@ -9330,6 +9330,49 @@ body.menu-viewer-open {
    media block now occupies — keep it painting above the photo, not under. */
 .pkg-card-badge { z-index: 3; }
 
+/* Homepage "Our Packages" skeleton (Phase 1 perf fix, 2026-07-04).
+   The section used to ship display:none and reveal after an async load, pushing
+   the whole page down (homepage CLS spiked 0 -> 1.38 on the Jul 3 deploy). These
+   placeholder cards reuse the real .pkg-card child classes so they reserve the
+   exact final height from first paint; renderHomePackagesSection() swaps in real
+   cards of the same height -> zero layout shift. */
+.pkg-card--skeleton { pointer-events: none; }
+.pkg-card--skeleton .pkg-card-media--placeholder { background: var(--boho-cream, #fff8f5); }
+.pkg-card--skeleton .pkg-card-badge,
+.pkg-card--skeleton .pkg-card-name,
+.pkg-card--skeleton .pkg-card-tagline,
+.pkg-card--skeleton .pkg-card-price,
+.pkg-card--skeleton .pkg-card-price-note,
+.pkg-card--skeleton .pkg-card-occasions,
+.pkg-card--skeleton .pkg-card-cta {
+  color: transparent;
+  border-color: transparent;
+  border-radius: 8px;
+  background-image: linear-gradient(90deg, rgba(45,31,20,0.06) 25%, rgba(45,31,20,0.11) 37%, rgba(45,31,20,0.06) 63%);
+  background-size: 400% 100%;
+  animation: pkg-skel-shimmer 1.4s ease-in-out infinite;
+}
+/* Trim the shimmer bars so they read as text lines, not full-width blocks.
+   Width only — never height — so the reserved card height stays identical. */
+.pkg-card--skeleton .pkg-card-name { width: 55%; }
+.pkg-card--skeleton .pkg-card-price { width: 42%; }
+.pkg-card--skeleton .pkg-card-price-note { width: 60%; }
+.pkg-card--skeleton .pkg-card-occasions { width: 85%; }
+.pkg-card--skeleton .pkg-card-badge { width: 84px; }
+@keyframes pkg-skel-shimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pkg-card--skeleton .pkg-card-badge,
+  .pkg-card--skeleton .pkg-card-name,
+  .pkg-card--skeleton .pkg-card-tagline,
+  .pkg-card--skeleton .pkg-card-price,
+  .pkg-card--skeleton .pkg-card-price-note,
+  .pkg-card--skeleton .pkg-card-occasions,
+  .pkg-card--skeleton .pkg-card-cta { animation: none; }
+}
+
 .pkg-card-name {
   font-family: var(--font-serif);
   font-size: 1.4rem;

@@ -2320,6 +2320,10 @@ function renderPkgVenuePicker(venues) {
 // fall through to the browser (new tab opens the venue page organically,
 // without the package preselected — by design, state doesn't cross tabs).
 function onPkgVenueGridClick(e) {
+  // Same ordering issue as the venuesGrid handler above: this listener is on
+  // a closer ancestor than the document-level carousel delegation, so it
+  // fires first and must ignore carousel-control clicks itself.
+  if (e.target.closest('.venue-card-media-arrow, .venue-card-media-dot')) return
   const card = e.target.closest('[data-venue-id]')
   if (!card) return
   if (e.defaultPrevented || e.button === 1 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
@@ -2373,10 +2377,13 @@ function revealPackagesEntryPoints() {
 }
 
 // Homepage "Our Packages" section (Phase 2B, docs/PHASE2_PACKAGES_FIRST_PLAN.md).
-// Static hidden skeleton lives in index.html (#packages-section); this fills
-// it with the universal tiers' "From ₹X" prices (min across enabled venues,
-// 2 adults — same PKG_PAGE_BASE_ADULTS baseline as the /packages page, so the
-// two surfaces never show different numbers) and reveals the section. Awaits
+// A matched-height skeleton lives in index.html (#packages-section, visible from
+// first paint so it reserves the final height and never causes CLS — see the
+// Jul-4 perf fix in docs/SPEED_REGRESSION_2026-07-04.md). This REPLACES the
+// skeleton cards with the universal tiers' "From ₹X" prices (min across enabled
+// venues, 2 adults — same PKG_PAGE_BASE_ADULTS baseline as the /packages page, so
+// the two surfaces never show different numbers), same height so nothing shifts.
+// Only hides the section outright if no venue serves packages (never in prod). Awaits
 // its own data (packages + venue catalogs) rather than trusting call order
 // against the concurrent bootstrap loadPackages()/loadVenues() calls.
 async function renderHomePackagesSection() {
@@ -9004,6 +9011,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const venuesGrid = document.getElementById('venues-grid')
   if (venuesGrid) {
     venuesGrid.addEventListener('click', (e) => {
+      // Carousel controls live inside the same [data-venue-id] anchor; this
+      // listener sits on a closer ancestor than the document-level carousel
+      // delegation (setupVenueCarouselDelegation), so it fires FIRST in the
+      // bubble phase — must bail out here or a next/prev/dot click navigates
+      // to the venue page before the carousel handler ever gets a chance to
+      // stopPropagation/preventDefault.
+      if (e.target.closest('.venue-card-media-arrow, .venue-card-media-dot')) return
       const card = e.target.closest('[data-venue-id]')
       if (!card) return
       if (e.defaultPrevented || e.button === 1 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
