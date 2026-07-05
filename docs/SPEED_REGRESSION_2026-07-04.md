@@ -48,12 +48,57 @@ Fixes homepage CLS 1.38 → ~0. This one change recovers most of the score.
 - First action: in `index.html` remove `style="display:none"` from `#packages-section` and give the container a reserved-height skeleton; adjust `renderHomePackagesSection` (app.js ~L2390) to replace skeleton content rather than toggling display.
 - Exit: PostHog home-bucket p75 CLS < 0.1 over the next day (or local Lighthouse mobile CLS < 0.1).
 
-## Phase 2 — Cut interaction latency (INP) (~half day)
-Fixes homepage INP 760ms → <200ms.
-- Replace the 3 independent `setInterval` carousels (L699, L1328, L1982) with a **single shared ticker**, and **pause auto-advance when off-screen** (IntersectionObserver) and when `prefers-reduced-motion` is set.
-- **Defer third-party scripts** off the critical path: initialize PostHog, GA4, and Meta Pixel via `requestIdleCallback`/after `load` instead of at bootstrap. Keep Razorpay lazy-loaded only on the booking step.
-- **Code-split admin out of the public bundle.** Admin logic (venue form, package manager, image uploads — the `app.js` L6300–8500 region) currently ships to every visitor. Move it to a separate Vite entry loaded only on `/admin`. Big parse/execute win.
-- Exit: home-bucket p75 INP < 200ms; public bundle transfer size measurably smaller (record before/after).
+## Phase 2 — Cut interaction latency (INP) (code-grounded, revised 2026-07-04)
+STATUS 2026-07-04: A + B + D′ IMPLEMENTED (analytics.js lazy-loads+samples PostHog; app.js gates
+carousels), verified on dev server (no console errors; posthog-js + rrweb recorder load AFTER the
+load event; carousels pause when tab hidden). UNCOMMITTED. C (Meta Pixel defer) NOT done — left
+until it can be watched in Meta Events Manager. Real `npm run build` not run in-session (sandbox
+mount staleness) — run it on Windows before deploy as the final gate.
+
+Target: homepage p75 INP < 200ms. NOTE: Phase 1 already moved homepage INP 760 → 340ms
+in the post-fix sample (removing the reflow helped), so the remaining gap is smaller than
+the original diagnosis implied. Ordered by ROI (impact ÷ risk).
+
+**A. Sample PostHog session replay — biggest lever, config-only, ~20 min.** `analytics.js`
+`posthog.init` runs `session_recording` (rrweb) — confirmed active via the `$snapshot`/rrweb
+properties in event data. rrweb serializes DOM mutations on the main thread continuously =
+the dominant hidden INP cost. `autocapture` is already `false` (not a factor). Decision:
+sample at ~20% (keeps a representative slice of replays; cuts the cost for 80% of sessions).
+Cleanest mechanism = PostHog project settings → Session Replay → sampling; confirm at build
+time. Reversible. Exit: homepage p75 INP < 200ms.
+
+**B. Gate the carousels — easy, low risk, ~30 min.** Three single global tickers (NOT per-card):
+venue-card `setInterval` (app.js L699, 4500ms), pkg-card (L1982, 4500ms), venue-hero slider
+(L1328, 4000ms). All run unconditionally, even when the tab is hidden or the carousel is
+off-screen. Pause on `document.hidden` (visibilitychange) + `IntersectionObserver`; skip
+auto-advance entirely under `prefers-reduced-motion`. Exit: no ticker work while
+backgrounded/off-screen.
+
+**C. Defer GA + Meta Pixel — moderate benefit, low-moderate risk, ~30 min.** In `index.html`,
+GA is already `async` but Meta Pixel injects `fbevents.js` and fires `init`+`PageView`
+synchronously in `<head>` (L86–97). Move both to `requestIdleCallback`/first-interaction; keep
+the Pixel `PageView` firing (a few seconds later is fine for attribution) and keep the noscript
+fallback. RISK: these events feed the Meta ad account — verify in Meta Events Manager after that
+PageView/ViewContent/Lead/InitiateCheckout still land. Exit: lower main-thread contention in the
+critical window, Pixel events confirmed intact.
+
+**D. Admin bundle split — MEASURED 2026-07-04 → SKIP for now.** Public bundle (esbuild, minified) =
+540KB min / 157KB gzip. Composition: posthog-js 211KB (39%), app code 211KB (39%), supabase-js
+115KB (21%), rest <1%. Admin-only code ≈ 99KB of 408KB app.js source (~24%) = ~50KB min / ~14KB
+gzip of the bundle. So the split saves only ~9% of the bundle (~14KB gzip), does NOT touch
+posthog/supabase (both surfaces need them), and is the highest-risk item (admin functions scattered
+across app.js: renderQueries, openQueryEdit, availability/iCal panels, handleVenueFormSubmit,
+*Manager, loadHeroImageAdminPreview, renderBookings, + `window`-attached handlers). VERDICT: not
+worth the risk now.
+
+**D′ (replaces D) — Lazy-load posthog-js: bigger + safer win.** posthog-js is 39% of the bundle
+(~55KB gzip), the single largest piece, fat because it bundles session replay/rrweb. Dynamic-import
+PostHog after first paint (analytics can wait a beat) and load replay only for sampled sessions
+(ties into Item A). Optionally dynamic-import supabase-js (21%) so it's a parallel chunk rather than
+blocking app-code parse. ~4× the payoff of the admin split at lower risk. Revisit the admin split
+only if app-code parse stays a bottleneck after A/B/C/D′.
+
+Sequence: A → B → C → D′, re-measure INP. A+B+C ≈ 1.5–2 hrs; D′ ≈ 1–2 hrs. Admin split shelved.
 
 ## Phase 3 — Fix image LCP (~half day)
 Fixes mobile venue LCP ~5.5s → <2.5s.

@@ -1,6 +1,21 @@
 import { createClient } from '@supabase/supabase-js'
 import { track, identifyUser } from './analytics.js'
 import { injectSpeedInsights } from '@vercel/speed-insights'
+
+// --- perf helpers (2026-07-04): gate auto-advancing carousels so they don't
+// burn the main thread / battery when nobody is looking. Function declarations
+// (hoisted) so the carousel tickers further down can call them. ---
+function prefersReducedMotion() {
+  return typeof window !== 'undefined' && !!window.matchMedia
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+function elInViewport(el) {
+  if (!el || typeof el.getBoundingClientRect !== 'function') return true
+  const r = el.getBoundingClientRect()
+  const vh = window.innerHeight || document.documentElement.clientHeight
+  const vw = window.innerWidth || document.documentElement.clientWidth
+  return r.bottom > 0 && r.top < vh && r.right > 0 && r.left < vw
+}
 injectSpeedInsights()
 
 // Initialize Supabase client
@@ -697,10 +712,12 @@ function setupVenueCarouselDelegation() {
   // on re-render (city filter, occasion gate, etc.). Skips single-photo cards
   // and anything currently hovered, so a deliberate look isn't yanked forward.
   setInterval(() => {
+    if (document.hidden || prefersReducedMotion()) return
     document.querySelectorAll('.venue-card-media').forEach(mediaEl => {
       const total = mediaEl.querySelector('.venue-card-media-track')?.children.length || 0
       if (total < 2) return
       if (typeof mediaEl.matches === 'function' && mediaEl.matches(':hover')) return
+      if (!elInViewport(mediaEl)) return
       const current = parseInt(mediaEl.dataset.index || '0', 10)
       venueCarouselGoTo(mediaEl, (current + 1) % total)
     })
@@ -1325,7 +1342,8 @@ function renderVenueDetail(venue, addOns = []) {
 
     function sliderStartAuto() {
       sliderStopAuto()
-      sliderTimer = setInterval(() => sliderGoTo(sliderIndex + 1), 4000)
+      if (prefersReducedMotion()) return
+      sliderTimer = setInterval(() => { if (!document.hidden) sliderGoTo(sliderIndex + 1) }, 4000)
     }
     function sliderStopAuto() {
       if (sliderTimer) { clearInterval(sliderTimer); sliderTimer = null }
@@ -1980,10 +1998,12 @@ function setupPkgCarouselDelegation() {
   // lifecycle bookkeeping. Skips single-photo cards and any card the user is
   // hovering, so a deliberate browse isn't yanked forward mid-look.
   setInterval(() => {
+    if (document.hidden || prefersReducedMotion()) return
     document.querySelectorAll('.pkg-card-media').forEach(mediaEl => {
       const total = mediaEl.querySelector('.pkg-card-media-track')?.children.length || 0
       if (total < 2) return
       if (typeof mediaEl.matches === 'function' && mediaEl.matches(':hover')) return
+      if (!elInViewport(mediaEl)) return
       const current = parseInt(mediaEl.dataset.index || '0', 10)
       pkgCarouselGoTo(mediaEl, (current + 1) % total)
     })
