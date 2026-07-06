@@ -82,16 +82,28 @@
       gtag('config', 'G-KNZCTW1KVH');
     </script>
 
-    <!-- Meta Pixel Code -->
+    <!-- Meta Pixel Code — deferred load (SPEED_REGRESSION_2026-07-04.md Phase 2C).
+         The fbq stub + event queue are still synchronous, so init/PageView here and
+         every fbq('track', ...) from app.js queue safely in order. Only the
+         fbevents.js SCRIPT download is deferred to first interaction or idle
+         (4s cap) — all queued events flush when it loads. Same events, same
+         parameters, delivered a moment later. Verify in Meta Events Manager
+         (Test Events) after deploy: PageView, ViewContent, Contact,
+         InitiateCheckout, Lead must all still land. -->
     <script>
-    !function(f,b,e,v,n,t,s)
-    {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+    !function(f,b){if(f.fbq)return;var n=f.fbq=function(){n.callMethod?
     n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-    if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-    n.queue=[];t=b.createElement(e);t.async=!0;
-    t.src=v;s=b.getElementsByTagName(e)[0];
-    s.parentNode.insertBefore(t,s)}(window, document,'script',
-    'https://connect.facebook.net/en_US/fbevents.js');
+    if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];
+    var done=false;
+    function load(){if(done)return;done=true;
+      var t=b.createElement('script');t.async=!0;
+      t.src='https://connect.facebook.net/en_US/fbevents.js';
+      var s=b.getElementsByTagName('script')[0];s.parentNode.insertBefore(t,s);}
+    ['pointerdown','keydown','touchstart','scroll'].forEach(function(e){
+      f.addEventListener(e,load,{once:true,passive:true});});
+    if('requestIdleCallback' in f){f.requestIdleCallback(load,{timeout:4000});}
+    else{setTimeout(load,3500);}
+    }(window,document);
     fbq('init', '1366746648648321');
     fbq('track', 'PageView');
     </script>
@@ -132,6 +144,8 @@
                 alt=""
                 class="hero-bg-img"
                 aria-hidden="true"
+                fetchpriority="high"
+                decoding="async"
             />
             <!-- Gradient overlay: cream on left fades to transparent on right -->
             <div class="hero-overlay" aria-hidden="true"></div>
@@ -278,11 +292,54 @@
                     </div>
                 </div>
                 <div id="venues-grid" class="venues-grid">
-                    <div class="venues-loading">
-                        <span class="venues-loading-dot"></span>
-                        <span class="venues-loading-dot"></span>
-                        <span class="venues-loading-dot"></span>
-                    </div>
+                    <!-- Matched-height skeleton (perf fix, 2026-07-06). #venues-grid used
+                         to hold only a tiny loading spinner (~0px tall), so the venue cards
+                         that renderVenueGallery() (app.js) injects after the async load
+                         pushed the whole page down ~2400px — desktop homepage CLS p75 spiked
+                         to 1.87 (≈ 2400 / 1280px viewport width; mobile scored lower only
+                         because its largest dimension is height). These skeleton sections
+                         reserve the gallery's real height from first paint using the exact
+                         .venue-section / .venue-grid / .venue-card classes, so the reserve
+                         scales correctly across the 3/2/1-column breakpoints. Counts (8
+                         outdoor + 4 indoor) mirror the live roster; renderVenueGallery()
+                         replaces this block wholesale. Keep counts roughly in step with the
+                         venue roster to stay shift-free. -->
+                    <section class="venue-section" aria-hidden="true">
+                        <div class="venue-section-head">
+                            <span class="venue-section-dot venue-section-dot--outdoor"></span>
+                            <h3 class="venue-section-title">Outdoor</h3>
+                        </div>
+                        <p class="venue-section-sub">Open-air settings, under the sky</p>
+                        <div class="venue-grid">
+                            <div class="venue-card venue-card--skeleton"><div class="venue-card-image"></div><div class="venue-card-body"><h3 class="venue-card-name">&nbsp;</h3><p class="venue-card-area">&nbsp;</p><div class="venue-card-footer"><span class="venue-card-capacity">&nbsp;</span><div class="venue-card-price-group"><span class="venue-card-price">&nbsp;</span></div></div></div></div>
+                            <div class="venue-card venue-card--skeleton"><div class="venue-card-image"></div><div class="venue-card-body"><h3 class="venue-card-name">&nbsp;</h3><p class="venue-card-area">&nbsp;</p><div class="venue-card-footer"><span class="venue-card-capacity">&nbsp;</span><div class="venue-card-price-group"><span class="venue-card-price">&nbsp;</span></div></div></div></div>
+                            <div class="venue-card venue-card--skeleton"><div class="venue-card-image"></div><div class="venue-card-body"><h3 class="venue-card-name">&nbsp;</h3><p class="venue-card-area">&nbsp;</p><div class="venue-card-footer"><span class="venue-card-capacity">&nbsp;</span><div class="venue-card-price-group"><span class="venue-card-price">&nbsp;</span></div></div></div></div>
+                            <div class="venue-card venue-card--skeleton"><div class="venue-card-image"></div><div class="venue-card-body"><h3 class="venue-card-name">&nbsp;</h3><p class="venue-card-area">&nbsp;</p><div class="venue-card-footer"><span class="venue-card-capacity">&nbsp;</span><div class="venue-card-price-group"><span class="venue-card-price">&nbsp;</span></div></div></div></div>
+                            <div class="venue-card venue-card--skeleton"><div class="venue-card-image"></div><div class="venue-card-body"><h3 class="venue-card-name">&nbsp;</h3><p class="venue-card-area">&nbsp;</p><div class="venue-card-footer"><span class="venue-card-capacity">&nbsp;</span><div class="venue-card-price-group"><span class="venue-card-price">&nbsp;</span></div></div></div></div>
+                            <div class="venue-card venue-card--skeleton"><div class="venue-card-image"></div><div class="venue-card-body"><h3 class="venue-card-name">&nbsp;</h3><p class="venue-card-area">&nbsp;</p><div class="venue-card-footer"><span class="venue-card-capacity">&nbsp;</span><div class="venue-card-price-group"><span class="venue-card-price">&nbsp;</span></div></div></div></div>
+                            <div class="venue-card venue-card--skeleton"><div class="venue-card-image"></div><div class="venue-card-body"><h3 class="venue-card-name">&nbsp;</h3><p class="venue-card-area">&nbsp;</p><div class="venue-card-footer"><span class="venue-card-capacity">&nbsp;</span><div class="venue-card-price-group"><span class="venue-card-price">&nbsp;</span></div></div></div></div>
+                            <div class="venue-card venue-card--skeleton"><div class="venue-card-image"></div><div class="venue-card-body"><h3 class="venue-card-name">&nbsp;</h3><p class="venue-card-area">&nbsp;</p><div class="venue-card-footer"><span class="venue-card-capacity">&nbsp;</span><div class="venue-card-price-group"><span class="venue-card-price">&nbsp;</span></div></div></div></div>
+                        </div>
+                    </section>
+                    <section class="venue-section" aria-hidden="true">
+                        <div class="venue-section-head">
+                            <span class="venue-section-dot venue-section-dot--indoor"></span>
+                            <h3 class="venue-section-title">Indoor</h3>
+                        </div>
+                        <p class="venue-section-sub">Cosy, weatherproof spaces for any season</p>
+                        <div class="venue-grid">
+                            <div class="venue-card venue-card--skeleton"><div class="venue-card-image"></div><div class="venue-card-body"><h3 class="venue-card-name">&nbsp;</h3><p class="venue-card-area">&nbsp;</p><div class="venue-card-footer"><span class="venue-card-capacity">&nbsp;</span><div class="venue-card-price-group"><span class="venue-card-price">&nbsp;</span></div></div></div></div>
+                            <div class="venue-card venue-card--skeleton"><div class="venue-card-image"></div><div class="venue-card-body"><h3 class="venue-card-name">&nbsp;</h3><p class="venue-card-area">&nbsp;</p><div class="venue-card-footer"><span class="venue-card-capacity">&nbsp;</span><div class="venue-card-price-group"><span class="venue-card-price">&nbsp;</span></div></div></div></div>
+                            <div class="venue-card venue-card--skeleton"><div class="venue-card-image"></div><div class="venue-card-body"><h3 class="venue-card-name">&nbsp;</h3><p class="venue-card-area">&nbsp;</p><div class="venue-card-footer"><span class="venue-card-capacity">&nbsp;</span><div class="venue-card-price-group"><span class="venue-card-price">&nbsp;</span></div></div></div></div>
+                            <div class="venue-card venue-card--skeleton"><div class="venue-card-image"></div><div class="venue-card-body"><h3 class="venue-card-name">&nbsp;</h3><p class="venue-card-area">&nbsp;</p><div class="venue-card-footer"><span class="venue-card-capacity">&nbsp;</span><div class="venue-card-price-group"><span class="venue-card-price">&nbsp;</span></div></div></div></div>
+                        </div>
+                    </section>
+                    <!-- Custom-picnic CTA placeholder: renderVenueGallery() appends this
+                         same banner after the sections, so reserve its height too. Real
+                         static copy (not a shimmer) reserves its exact height at every
+                         breakpoint; the live version (with the click handler + data-venue-id)
+                         replaces it on load. -->
+                    <div class="venue-custom-cta venue-custom-cta--skeleton" aria-hidden="true"><div class="venue-custom-cta-text"><p class="venue-custom-cta-title">Have your own spot in mind?</p><p class="venue-custom-cta-sub">A backyard, rooftop, or a place that means something — we'll bring the picnic to you.</p></div><span class="venue-custom-cta-btn">Plan a custom picnic</span></div>
                 </div>
             </div>
         </section>

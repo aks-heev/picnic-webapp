@@ -107,6 +107,28 @@ function venueJsonLd(v, url, image) {
   return JSON.stringify(ld, null, 2).replaceAll('<', '\\u003c')
 }
 
+/** Duplicate-content fix (SEO_GROWTH_PLAN Phase 1): prerendered non-home pages
+ * used to ship the FULL homepage markup (~90% shared text across all 13+ pages,
+ * hidden via .page CSS but fully indexable). Replace #home-page with an empty
+ * stub so each page's crawlable text is its own content. Safe for hydration:
+ * every app.js renderer that targets homepage elements is null-guarded
+ * (admin.html shares the same bundle and has none of them). SPA navigation
+ * back to home becomes a real page load via the window.__PR_SLIM__ guard in
+ * app.js showPage(). Fails safe: if the structural markers aren't found
+ * (index.html reorganised), the page keeps the old full-markup behaviour. */
+function slimHomeShell(html) {
+  const open = html.indexOf('<div id="home-page"')
+  const endMarker = '<!-- Menu Preview Page -->'
+  const end = html.indexOf(endMarker)
+  if (open === -1 || end === -1 || end <= open) {
+    console.warn('[prerender] slim-shell markers not found — leaving homepage markup in place')
+    return html
+  }
+  const stub = '<div id="home-page" class="page"></div>\n'
+    + '    <script>window.__PR_SLIM__=true</script>\n\n    '
+  return html.slice(0, open) + stub + html.slice(end)
+}
+
 function buildPage(template, v) {
   const slug = v.slug || slugify(v.name)
   const url = `${SITE}/venues/${slug}`
@@ -193,10 +215,10 @@ function buildPage(template, v) {
 })();
 </script>`
 
-  html = html
-    .replace('<div id="home-page" class="page active">', '<div id="home-page" class="page">')
+  html = slimHomeShell(html)
     .replace('<div id="venue-detail-page" class="page">', '<div id="venue-detail-page" class="page active">')
     .replace('<div id="venue-detail-content">', `<div id="venue-detail-content">${seo}`)
+    .replace('</head>', `  <link rel="preload" as="image" href="${esc(img)}" fetchpriority="high">\n</head>`)
     .replace('</body>', `${loader}\n</body>`)
 
   return { slug, url, html }
@@ -630,7 +652,7 @@ async function buildPackagesPage(supabase, template) {
   })
 
   const url = `${SITE}/packages`
-  const title = 'Picnic Packages — Setting, Moment & Story | The Picnic Stories'
+  const title = 'Picnic Packages — Date Night, Movie Night & More | The Picnic Stories'
   const desc = clamp(
     `Pick a curated picnic package — ${tiers.map(t => t.name).join(', ')} — then choose your venue. ` +
     `Prices shown for 2 adults, firm price confirmed once you pick a venue.`
@@ -724,8 +746,7 @@ async function buildPackagesPage(supabase, template) {
 })();
 </script>`
 
-  html = html
-    .replace('<div id="home-page" class="page active">', '<div id="home-page" class="page">')
+  html = slimHomeShell(html)
     .replace('<div id="packages-page" class="page">', '<div id="packages-page" class="page active">')
     .replace('<div id="packages-content"></div>', `<div id="packages-content">${seo}</div>`)
     .replace('</body>', `${loader}\n</body>`)

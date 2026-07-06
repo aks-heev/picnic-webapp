@@ -9373,6 +9373,43 @@ body.menu-viewer-open {
   .pkg-card--skeleton .pkg-card-cta { animation: none; }
 }
 
+/* Homepage venue-gallery skeleton (perf fix, 2026-07-06). Mirrors the packages
+   skeleton above: placeholder cards reuse the real .venue-card child classes so
+   #venues-grid reserves the gallery's height from first paint, killing the
+   ~2400px page shift when renderVenueGallery() injects the real cards (desktop
+   homepage CLS p75 1.87 -> ~0). .venue-card-image already owns aspect-ratio 4/3,
+   so each card's media height is reserved without an <img>. */
+.venue-card--skeleton { pointer-events: none; cursor: default; }
+.venue-card--skeleton .venue-card-image { background: #f0ebe5; }
+.venue-card--skeleton .venue-card-name,
+.venue-card--skeleton .venue-card-area,
+.venue-card--skeleton .venue-card-capacity,
+.venue-card--skeleton .venue-card-price {
+  color: transparent;
+  border-radius: 8px;
+  background-image: linear-gradient(90deg, rgba(45,31,20,0.06) 25%, rgba(45,31,20,0.11) 37%, rgba(45,31,20,0.06) 63%);
+  background-size: 400% 100%;
+  animation: pkg-skel-shimmer 1.4s ease-in-out infinite;
+}
+/* Keep name/area as block so their real vertical margins/line-heights — and thus
+   the card body height — are preserved. Using inline-block here collapses those
+   margins and under-reserves ~22px per card (worst-case CLS 0.07 -> 0.14). Only
+   the inline footer spans need inline-block for their shimmer width. */
+.venue-card--skeleton .venue-card-capacity,
+.venue-card--skeleton .venue-card-price { display: inline-block; }
+.venue-custom-cta--skeleton { pointer-events: none; }
+/* Width only — never height — so the reserved card height stays identical. */
+.venue-card--skeleton .venue-card-name { width: 72%; }
+.venue-card--skeleton .venue-card-area { width: 48%; }
+.venue-card--skeleton .venue-card-capacity { width: 40%; }
+.venue-card--skeleton .venue-card-price { width: 30%; }
+@media (prefers-reduced-motion: reduce) {
+  .venue-card--skeleton .venue-card-name,
+  .venue-card--skeleton .venue-card-area,
+  .venue-card--skeleton .venue-card-capacity,
+  .venue-card--skeleton .venue-card-price { animation: none; }
+}
+
 .pkg-card-name {
   font-family: var(--font-serif);
   font-size: 1.4rem;

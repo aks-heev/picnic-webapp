@@ -312,6 +312,15 @@ function hideModal(modalId) {
 
 // Helper: show/hide pages
 function showPage(pageId) {
+  // Prerendered slim-shell pages (/venues/<slug>, /packages) ship an EMPTY
+  // #home-page (duplicate-content SEO fix in scripts/prerender-venues.mjs) —
+  // "going home" there must be a real navigation, not a class flip to an
+  // empty div. Flag is only ever set by the prerender output, so the live
+  // homepage and dev server are unaffected.
+  if (pageId === 'home-page' && window.__PR_SLIM__) {
+    window.location.href = '/'
+    return
+  }
   // Hide all pages
   const allPages = document.querySelectorAll('.page')
   allPages.forEach(page => page.classList.remove('active'))
@@ -950,8 +959,8 @@ function renderVenueDetail(venue, addOns = []) {
       <div class="vd-hero" id="vd-hero-slider">
         ${heroImgUrl
           ? `<div class="vd-hero-blur-bg" style="background-image:url('${heroImgUrl}')"></div>
-             <img class="vd-hero-img vd-hero-img--a is-visible" src="${heroImgUrl}" alt="${escapeHtml(venue.name)}">
-             <img class="vd-hero-img vd-hero-img--b" alt="" aria-hidden="true">`
+             <img class="vd-hero-img vd-hero-img--a is-visible" src="${heroImgUrl}" alt="${escapeHtml(venue.name)}" fetchpriority="high" decoding="async">
+             <img class="vd-hero-img vd-hero-img--b" alt="" aria-hidden="true" decoding="async">`
           : `<div class="vd-hero-blur-bg vd-hero-blur-bg--fallback"></div>`}
         <div class="vd-hero-gradient"></div>
         <div class="vd-hero-top">
