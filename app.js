@@ -39,6 +39,10 @@ const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL
 // in the create-order / verify-payment edge functions, never in this bundle.
 const RAZORPAY_KEY_ID = import.meta.env.VITE_RAZORPAY_KEY_ID
 
+// WhatsApp fallback for the success-page "Talk to us" CTA — the venue team's
+// own number (teams.whatsapp) takes priority when the team is known.
+const WHATSAPP_FALLBACK_NUMBER = '919266964666'
+
 // Menu Data with detailed Indian menu items
 const foodList = [
   "Plain Omelette","Cheese Burst Omelette","Chicken Omelette","Bread Omelette",
@@ -3305,6 +3309,9 @@ function selectPackageTier(key) {
     if (bookView) {
       bookView.style.display = ''
       bookView.innerHTML = buildIntentScreenHTML(lead, { containerClass: 'vd-intent-wrap container' })
+      // Sync the already-captured lead row (carried via booking_id) with the
+      // new package's add-ons/amounts so create-order validation stays fresh.
+      captureLeadOnIntent()
     }
     return
   }
@@ -3851,7 +3858,14 @@ function buildIntentScreenHTML(lead, { containerClass = 'vd-intent-wrap containe
           ${buildIntentSummaryHTML()}
 
           <div class="vd-intent-options">
-            ${queryOnly ? '' : `
+            ${queryOnly ? `
+            <button class="vd-intent-btn vd-intent-btn--query" onclick="submitBookingIntent(false)">
+              <span class="vd-intent-btn-icon">📞</span>
+              <span class="vd-intent-btn-text">
+                <span class="vd-intent-btn-title">${isCombo ? 'Request the whole floor' : 'Send a request'}</span>
+                <span class="vd-intent-btn-desc">${isCombo ? 'We\'ll check the floor is free and reach out to confirm' : 'We\'ll confirm availability and reach out to finalise'}</span>
+              </span>
+            </button>` : `
             <button class="vd-intent-btn vd-intent-btn--lock" onclick="submitBookingIntent(true)">
               <span class="vd-intent-btn-icon">🔒</span>
               <span class="vd-intent-btn-text">
@@ -3859,14 +3873,17 @@ function buildIntentScreenHTML(lead, { containerClass = 'vd-intent-wrap containe
                 <span class="vd-intent-btn-desc">${lead.advance_amount > 0 ? `Remaining ₹${remainingFmt} due on the day · spot is reserved once payment clears` : 'Your spot is reserved the moment payment goes through'}</span>
               </span>
             </button>
-            <div class="vd-intent-divider">or</div>`}
-            <button class="vd-intent-btn vd-intent-btn--query" onclick="submitBookingIntent(false)">
-              <span class="vd-intent-btn-icon">📞</span>
-              <span class="vd-intent-btn-text">
-                <span class="vd-intent-btn-title">${isCombo ? 'Request the whole floor' : requiresConfirmation ? 'Send a request' : 'I have questions — call me'}</span>
-                <span class="vd-intent-btn-desc">${isCombo ? 'We\'ll check the floor is free and reach out to confirm' : requiresConfirmation ? 'We\'ll confirm availability and reach out to finalise' : 'We\'ll call you back within a few hours'}</span>
+            <div class="vd-intent-divider">or</div>
+            <a id="vd-intent-wa" class="vd-intent-btn vd-intent-btn--wa" href="${intentWaHref(lead)}"
+               target="_blank" rel="noopener noreferrer" onclick="intentWhatsAppClick()">
+              <span class="vd-intent-btn-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>
               </span>
-            </button>
+              <span class="vd-intent-btn-text">
+                <span class="vd-intent-btn-title">Questions? Chat with us on WhatsApp</span>
+                <span class="vd-intent-btn-desc">Instant replies from the ${escapeHtml(venueName) || 'venue'} team — we'll help you lock it in</span>
+              </span>
+            </a>`}
           </div>
 
           <p class="vd-intent-note">⏱ We'll hold this date for 24 hours.</p>
@@ -3962,7 +3979,120 @@ function handleInlineBookingSubmit(event) {
   if (!bookView) return
 
   bookView.innerHTML = buildIntentScreenHTML(lead, { containerClass: 'vd-intent-wrap container' })
+
+  // Capture the lead NOW — contact details are in hand, and anyone who
+  // abandons at this screen should still be reachable for follow-up.
+  captureLeadOnIntent()
 }
+
+// ── Intent-screen lead capture ─────────────────────────────────────────────
+// The lead row is created the moment the intent screen renders — the customer
+// has already given name/phone/email on the form, so someone who closes the
+// tab without clicking either button still exists as a follow-up-able row
+// (lead_status 'pending'; the nightly cron sweeps untouched ones to
+// 'abandoned'). First render INSERTs; re-renders (change date / change
+// package) and the later pay-click UPDATE the same row via p_booking_id —
+// the RPC guards that update server-side by matching phone+email on an
+// unconfirmed row, so a guessed id can't tamper with someone else's lead.
+function captureLeadOnIntent() {
+  const lead  = appState.pendingLead
+  const venue = appState.currentVenue
+  if (!lead || !lead.mobile_number) return
+  const addOns = appState.pendingAddOns || []
+  appState.pendingLeadCapture = supabase.rpc('submit_booking_intent', {
+    p_full_name:            lead.full_name,
+    p_mobile_number:        lead.mobile_number,
+    p_email_address:        lead.email_address,
+    p_guest_count:          lead.guest_count,
+    p_preferred_date:       lead.preferred_date,
+    p_special_requirements: lead.special_requirements || '',
+    p_advance_amount:       lead.advance_amount,
+    p_confirmed:            false,
+    p_customer_intent:      'query',
+    p_venue_id:             lead.venue_id             ?? null,
+    p_venue_address:        lead.venue_address        ?? null,
+    p_checkout_date:        lead.checkout_date        ?? null,
+    p_time_slot:            lead.time_slot            ?? null,
+    p_external_booking_ref: lead.external_booking_ref ?? null,
+    p_occasion:             lead.occasion ?? null,
+    p_board:                lead.board    ?? null,
+    p_children_count:       lead.children_count ?? 0,
+    p_booking_id:           lead.booking_id ?? null,
+    p_add_ons:              addOns.map(a => ({
+      addon_id:              a.addon_id,
+      name:                  a.name,
+      price_at_booking:      a.price_at_booking,
+      requires_confirmation: a.requires_confirmation,
+    })),
+  }).then(({ data, error }) => {
+    if (error) throw error
+    const row = data?.[0]
+    if (row?.id) {
+      lead.booking_id = row.id
+      // Refresh the WhatsApp CTA href so the pre-filled message carries the ref
+      const wa = document.getElementById('vd-intent-wa')
+      if (wa && appState.pendingLead === lead) wa.href = intentWaHref(lead)
+      if (!lead._captureTracked) {
+        lead._captureTracked = true
+        track('intent_lead_captured', {
+          booking_id: row.id, venue_id: lead.venue_id, venue_name: venue?.name,
+        })
+      }
+    }
+    return row
+  }).catch(err => {
+    console.warn('[lead-capture] not recorded:', err?.message || err)
+    return null
+  })
+}
+
+// wa.me href for the intent-screen CTA — venue team's number when known,
+// message pre-filled from the pending lead (booking ref included once the
+// capture RPC has returned an id).
+function intentWaHref(lead) {
+  const venue = appState.currentVenue
+  const team  = venue?.team_id ? (appState.teams || []).find(t => t.id === venue.team_id) : null
+  const num   = (team?.whatsapp || WHATSAPP_FALLBACK_NUMBER).replace(/\D/g, '')
+  const booking = {
+    id:             lead.booking_id ?? null,
+    preferred_date: lead.preferred_date,
+    time_slot:      lead.time_slot,
+    guest_count:    lead.guest_count,
+    advance_amount: lead.advance_amount,
+    total_amount:   lead.advance_amount > 0 ? Math.round(lead.advance_amount / 0.3) : null,
+  }
+  return `https://wa.me/${num}?text=${encodeURIComponent(buildWhatsAppMessage(booking, venue?.name || '', false))}`
+}
+
+// Intent-screen WhatsApp CTA click. The anchor opens wa.me natively (default
+// navigation → the global wa.me listener fires the Meta Pixel Contact event);
+// we record the funnel touch once the captured row id is known, then land the
+// main tab on the success page as a saved query lead.
+function intentWhatsAppClick() {
+  const lead  = appState.pendingLead
+  const venue = appState.currentVenue
+  if (!lead) return true
+  track('intent_whatsapp_clicked', {
+    booking_id: lead.booking_id ?? null, venue_id: lead.venue_id, venue_name: venue?.name,
+  })
+  // Wait for the capture RPC (usually already resolved) so the row exists,
+  // then mark it — recordLeadStatus no-ops safely if capture failed.
+  Promise.resolve(appState.pendingLeadCapture).then(() => {
+    if (lead.booking_id) recordLeadStatus(lead.booking_id, 'whatsapp_clicked')
+  })
+  const sub = document.querySelector('#vd-intent-wa .vd-intent-btn-desc')
+  if (sub) sub.textContent = 'Opening WhatsApp…'
+  setTimeout(() => {
+    const bookingRow = {
+      id: lead.booking_id ?? null,
+      preferred_date: lead.preferred_date,
+      guest_count:    lead.guest_count,
+    }
+    finishBookingFlow(bookingRow, venue, false)
+  }, 400)
+  return true
+}
+window.intentWhatsAppClick = intentWhatsAppClick
 
 // Step 2: user picks their intent → insert booking (always unconfirmed)
 // SECURITY: confirmed is never trusted from the client. Admin confirms manually
@@ -3998,6 +4128,14 @@ async function submitBookingIntent(wantsToLock) {
     customer_intent: wantsToLock ? 'lock' : 'query',
   }
   const addOnsToInsert = appState.pendingAddOns || []
+
+  // The intent-screen capture may still be in flight — wait for it so
+  // lead.booking_id is known and this click UPDATEs that row instead of
+  // inserting a duplicate. A failed capture resolves null (booking_id stays
+  // unset) and we fall through to a fresh insert, exactly the old behaviour.
+  if (appState.pendingLeadCapture) {
+    try { await appState.pendingLeadCapture } catch (_) { /* insert fresh below */ }
+  }
 
   try {
     // Server-side freshness check — catches stale client state (admin blocked/booked after page opened).
@@ -4082,6 +4220,10 @@ async function submitBookingIntent(wantsToLock) {
       p_occasion:             lead.occasion ?? null,
       p_board:                lead.board    ?? null,
       p_children_count:       lead.children_count ?? 0,
+      // Reuse the row captured when the intent screen rendered (see
+      // captureLeadOnIntent) — the RPC updates it in place when phone+email
+      // match; otherwise it inserts fresh.
+      p_booking_id:           lead.booking_id ?? null,
       p_add_ons:              addOnsToInsert.map(a => ({
         addon_id:              a.addon_id,
         name:                  a.name,
@@ -4207,6 +4349,7 @@ async function startRazorpayCheckout(bookingRow, lead, venue) {
       amount_inr:  Math.round(amountPaise / 100),
       order_id:    order.order_id,
     })
+    recordLeadStatus(bookingId, 'payment_initiated')
     rzp.open()
   } catch (err) {
     console.error('startRazorpayCheckout:', err)
@@ -4368,6 +4511,7 @@ async function handleEmailPayLink(bookingId) {
       track('email_payment_failed', { booking_id: bookingId, reason: resp?.error?.description })
     })
     track('email_payment_initiated', { booking_id: bookingId })
+    recordLeadStatus(bookingId, 'payment_initiated')
     rzp.open()
   } catch (err) {
     console.error('handleEmailPayLink:', err)
@@ -4407,6 +4551,7 @@ function finishBookingFlow(bookingRow, venue, confirmed) {
   appState.currentVenueAddOns  = []
   appState.pendingLead         = null
   appState.pendingAddOns       = null
+  appState.pendingLeadCapture  = null
 
   const bv = document.getElementById('vd-booking-view')
   if (bv) bv.style.display = 'none'
@@ -4420,6 +4565,57 @@ function finishBookingFlow(bookingRow, venue, confirmed) {
 // BOOKING SUCCESS PAGE
 // ----------------------------------------------------------------
 
+// Fire-and-forget lead-funnel status update. The RPC is SECURITY DEFINER,
+// only touches unconfirmed rows, and only accepts the customer-action
+// statuses — so a stray call can never overwrite a confirmed booking.
+function recordLeadStatus(bookingId, status) {
+  if (!bookingId) return
+  supabase
+    .rpc('update_lead_status', { p_booking_id: bookingId, p_status: status })
+    .then(({ error }) => { if (error) console.warn('[lead-status] not recorded:', error.message) })
+    .catch(err => console.warn('[lead-status] not recorded:', err))
+}
+
+// Pre-filled WhatsApp message for the success-page CTA. Only includes lines
+// we actually have data for — the RPC-returned booking row carries the full
+// bookings columns, but the local fallback row has just id/date/guests.
+function buildWhatsAppMessage(booking, venueName, confirmed) {
+  let dateStr = 'TBC'
+  if (booking?.preferred_date) {
+    const d = new Date(booking.preferred_date + 'T00:00:00')
+    dateStr = d.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  }
+  const slot = CAFE_SLOTS.find(s => s.key === booking?.time_slot)
+
+  const lines = [
+    confirmed
+      ? 'Hi! I\'ve just paid the advance for my picnic booking and wanted to connect.'
+      : 'Hi! I\'d like to confirm my picnic booking.',
+    '',
+  ]
+  if (venueName) lines.push(`📍 Venue: ${venueName}`)
+  lines.push(`📅 Date: ${dateStr}`)
+  if (slot) lines.push(`⏰ Slot: ${slot.label} (${slot.time})`)
+  if (booking?.guest_count) lines.push(`👥 Guests: ${booking.guest_count}`)
+  if (booking?.total_amount) lines.push(`💰 Total: ₹${Number(booking.total_amount).toLocaleString('en-IN')}`)
+  if (booking?.advance_amount > 0) lines.push(`💳 Advance: ₹${Number(booking.advance_amount).toLocaleString('en-IN')}${confirmed ? ' (paid)' : ''}`)
+  if (booking?.id) lines.push('', `Booking ref: #PS-${booking.id}`)
+  lines.push('', confirmed ? 'Looking forward to it!' : 'Please help me lock this in!')
+  return lines.join('\n')
+}
+
+// Success-page WhatsApp CTA click. Record the lead touch (unconfirmed leads
+// only), show brief feedback, then let the anchor open wa.me natively —
+// keeping the default navigation avoids popup blockers, and the global
+// wa.me click listener fires the Meta Pixel Contact event as usual.
+function onSuccessWhatsAppClick(bookingId, confirmed) {
+  if (!confirmed) recordLeadStatus(bookingId, 'whatsapp_clicked')
+  track('success_whatsapp_clicked', { booking_id: bookingId, confirmed })
+  const sub = document.querySelector('#bsc-wa-cta .bsc-wa-sub')
+  if (sub) sub.textContent = 'Opening WhatsApp…'
+  return true
+}
+
 function renderSuccessPage({ booking, venueName, venueTeamId, confirmed = false }) {
   const container = document.getElementById('booking-success-content')
   if (!container) return
@@ -4428,6 +4624,10 @@ function renderSuccessPage({ booking, venueName, venueTeamId, confirmed = false 
   const team = venueTeamId ? (appState.teams || []).find(t => t.id === venueTeamId) : null
   const teamPhone     = team?.phone    || '+91 92669-64666'
   const teamPhoneE164 = teamPhone.replace(/[\s\-]/g, '')
+
+  // WhatsApp CTA — route to the venue team's number when known
+  const waNumber = (team?.whatsapp || WHATSAPP_FALLBACK_NUMBER).replace(/\D/g, '')
+  const waHref   = `https://wa.me/${waNumber}?text=${encodeURIComponent(buildWhatsAppMessage(booking, venueName, confirmed))}`
 
   // Format date nicely: "Saturday, 14 June 2026"
   let dateFormatted = ''
@@ -4579,9 +4779,22 @@ function renderSuccessPage({ booking, venueName, venueTeamId, confirmed = false 
           <button class="bsc-link-btn" onclick="showMyBookingsPage()">Find my booking →</button>
         </p>
 
+        <!-- WhatsApp CTA -->
+        <a id="bsc-wa-cta" class="bsc-wa-card" href="${waHref}" target="_blank" rel="noopener noreferrer"
+           onclick="onSuccessWhatsAppClick(${booking?.id ?? 'null'}, ${confirmed})">
+          <span class="bsc-wa-icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>
+          </span>
+          <span class="bsc-wa-text">
+            <span class="bsc-wa-title">Talk to us</span>
+            <span class="bsc-wa-sub">We'll get back to you within a few hours</span>
+          </span>
+          <svg class="bsc-wa-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </a>
+
         <!-- Contact nudge -->
         <p class="bsc-contact-nudge">
-          Questions? Call or WhatsApp us at
+          Prefer a call? Reach us at
           <a href="tel:${teamPhoneE164}">${teamPhone}</a>
         </p>
 
@@ -8660,6 +8873,7 @@ window.selectPackageTier          = selectPackageTier
 window.updateBookingSummaryPrice  = updateBookingSummaryPrice
 window.handleInlineBookingSubmit  = handleInlineBookingSubmit
 window.submitBookingIntent        = submitBookingIntent
+window.onSuccessWhatsAppClick     = onSuccessWhatsAppClick
 window.showModal                  = showModal
 window.hideModal                  = hideModal
 window.sendOtpResend              = sendOtpResend
@@ -9128,6 +9342,8 @@ document.addEventListener('DOMContentLoaded', () => {
           if (bookView) {
             bookView.style.display = ''
             bookView.innerHTML = buildIntentScreenHTML(lead, { containerClass: 'vd-intent-wrap container' })
+            // Sync the captured lead row with the changed date/slot.
+            captureLeadOnIntent()
           }
         } else if (packageFlowActive(venue)) {
           const pending = appState.pendingPackage

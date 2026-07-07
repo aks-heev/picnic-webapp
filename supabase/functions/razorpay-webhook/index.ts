@@ -132,6 +132,8 @@ Deno.serve(async (req) => {
           payment_status: "paid",
           razorpay_order_id: orderId,
           razorpay_payment_id: paymentId,
+          lead_status: "confirmed",
+          lead_status_updated_at: new Date().toISOString(),
         })
       }
     } else if (event === "payment.failed") {

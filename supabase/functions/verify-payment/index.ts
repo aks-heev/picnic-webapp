@@ -145,6 +145,8 @@ Deno.serve(async (req) => {
           razorpay_order_id: orderId,
           razorpay_payment_id: paymentId,
           razorpay_signature: signature,
+          lead_status: "confirmed",
+          lead_status_updated_at: new Date().toISOString(),
         }),
       },
     )

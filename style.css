@@ -6220,6 +6220,59 @@ body.menu-viewer-open {
   flex: 1;
 }
 
+/* WhatsApp CTA card */
+.bsc-wa-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  background: #f0faf4;
+  border: 1px solid rgba(37, 211, 102, 0.35);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+  text-decoration: none;
+  box-shadow: 0 2px 12px rgba(37, 211, 102, 0.08);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+.bsc-wa-card:hover {
+  border-color: rgba(37, 211, 102, 0.6);
+  box-shadow: 0 4px 16px rgba(37, 211, 102, 0.16);
+  transform: translateY(-1px);
+}
+.bsc-wa-icon {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #25d366;
+  color: #fff;
+}
+.bsc-wa-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  flex: 1;
+  min-width: 0;
+}
+.bsc-wa-title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--boho-dark, #2d2418);
+}
+.bsc-wa-sub {
+  font-size: 0.8rem;
+  color: #6f8a76;
+}
+.bsc-wa-arrow {
+  flex: 0 0 auto;
+  color: #25d366;
+}
+
 /* Contact nudge */
 .bsc-contact-nudge {
   font-size: 0.82rem;
@@ -6245,6 +6298,9 @@ body.menu-viewer-open {
   }
   .bsc-card {
     padding: 16px 16px;
+  }
+  .bsc-wa-card {
+    padding: 14px 14px;
   }
 }
 
@@ -8138,6 +8194,25 @@ body.menu-viewer-open {
   border-color: rgba(196, 96, 122, 0.25);
 }
 .vd-intent-btn--query:hover { background: rgba(196, 96, 122, 0.1); border-color: rgba(196, 96, 122, 0.4); }
+
+/* WhatsApp — green-tinted ghost (replaces the call-me query button on
+   standard venues; combo/request-only venues keep the query button) */
+.vd-intent-btn--wa {
+  background: rgba(37, 211, 102, 0.06);
+  color: var(--boho-dark, #2d2418);
+  border-color: rgba(31, 170, 83, 0.35);
+  text-decoration: none;
+}
+.vd-intent-btn--wa:hover {
+  background: rgba(37, 211, 102, 0.13);
+  border-color: rgba(31, 170, 83, 0.55);
+  transform: translateY(-1px);
+}
+.vd-intent-btn--wa .vd-intent-btn-icon {
+  color: #1faa53;
+  display: inline-flex;
+  align-items: center;
+}
 
 .vd-intent-btn-icon {
   font-size: 1.4rem;
