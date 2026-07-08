@@ -3295,6 +3295,7 @@ function selectPackageTier(key) {
     const lead = {
       ...appState.changeModeData,
       advance_amount: Math.round((picnicPrice + addonSum) * 0.3),
+      package_key:    key, // "Change package" from the intent screen — this IS the new tier
     }
     appState.pendingLead   = lead
     appState.pendingAddOns = addonObjs.map(a => ({
@@ -3936,6 +3937,13 @@ function handleInlineBookingSubmit(event) {
   const boardMessage = form['board-message']?.value.trim() || ''
   lead.board = boardType ? { type: boardType, message: boardMessage } : null
   if (venue.type !== 'custom') lead.venue_id = venue.id
+  // Packages: appState.selectedPackage is set by selectPackageTier() when the
+  // package-tier flow was taken for this venue — snapshot the tier key onto
+  // the lead so captureLeadOnIntent/submitBookingIntent pass it to the RPC,
+  // which resolves it to a name/tagline snapshot on the booking row.
+  if (venue.type === 'cafe' && appState.selectedPackage) {
+    lead.package_key = appState.selectedPackage.tierKey
+  }
   if (venue.type === 'cafe' && appState.selectedTimeSlot) {
     lead.time_slot      = appState.selectedTimeSlot
     lead.advance_amount = Math.round((picnicPrice + addonSum) * 0.3)
@@ -4018,6 +4026,7 @@ function captureLeadOnIntent() {
     p_board:                lead.board    ?? null,
     p_children_count:       lead.children_count ?? 0,
     p_booking_id:           lead.booking_id ?? null,
+    p_package_key:          lead.package_key ?? null,
     p_add_ons:              addOns.map(a => ({
       addon_id:              a.addon_id,
       name:                  a.name,
@@ -4224,6 +4233,7 @@ async function submitBookingIntent(wantsToLock) {
       // captureLeadOnIntent) — the RPC updates it in place when phone+email
       // match; otherwise it inserts fresh.
       p_booking_id:           lead.booking_id ?? null,
+      p_package_key:          lead.package_key ?? null,
       p_add_ons:              addOnsToInsert.map(a => ({
         addon_id:              a.addon_id,
         name:                  a.name,

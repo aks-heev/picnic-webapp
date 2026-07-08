@@ -5,10 +5,9 @@
 import { sendEmail } from "./_shared/resend.ts"
 import { getVenueInfo } from "./_shared/venue.ts"
 import { getAddOns, type AddOn } from "./_shared/addons.ts"
+import { getBundledAddonIds } from "./_shared/packages.ts"
 
 const APP_URL = Deno.env.get("APP_URL") ?? "https://picnicstories.com"
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
-const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 
 const LOGO_URL =
   "https://cdn-reach.hostinger.com/settings/0a27628d960484a8a3d2b3e50518a32b/307542/logo_1780982818.png"
@@ -43,6 +42,20 @@ function esc(s: unknown): string {
     .replace(/"/g, "&quot;")
 }
 
+// Build a one-tap WhatsApp reply link to the lead, pre-filled with a greeting.
+// Indian 10-digit numbers get a 91 prefix; anything else is used as-is (digits only).
+function waReplyLink(phone: unknown, name: unknown, occasion: unknown): string {
+  const digits = String(phone ?? "").replace(/\D/g, "")
+  if (!digits) return ""
+  const intl = digits.length === 10 ? `91${digits}` : digits.replace(/^0+/, "")
+  const first = String(name ?? "").split(" ")[0] || "there"
+  const occ = occasion && typeof occasion === "string" ? ` ${occasion.toLowerCase()}` : " picnic"
+  const msg =
+    `Hi ${first}! Thanks for your enquiry with The Picnic Stories 🧺 ` +
+    `I'd love to help plan your${occ}. When's a good time for a quick chat?`
+  return `https://wa.me/${intl}?text=${encodeURIComponent(msg)}`
+}
+
 function boardText(board: unknown): string {
   if (!board || typeof board !== "object") return ""
   const b = board as { type?: string; message?: string }
@@ -59,33 +72,46 @@ function reservationRow(label: string, value: string): string {
                       </tr>`
 }
 
-async function getInclusionText(venueId: number | null | undefined, adults: number): Promise<string> {
-  if (!venueId || adults <= 0) return ""
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/venues?id=eq.${venueId}&select=metadata`, {
-      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
-    })
-    if (!res.ok) return ""
-    const m = (await res.json())?.[0]?.metadata ?? {}
-    const fm = Number(m.food_multiplier), dm = Number(m.drink_multiplier)
-    if (!fm && !dm) return ""
-    const food = Math.ceil(adults * (fm || 0)), drinks = Math.ceil(adults * (dm || 0))
-    return `${food} food item${food !== 1 ? "s" : ""} · ${drinks} beverage${drinks !== 1 ? "s" : ""}`
-  } catch (_err) { return "" }
-}
-
 const inr = (n: number) => `₹${Number(n || 0).toLocaleString("en-IN")}`
 
-function adminCostBlock(record: Record<string, unknown>, addons: AddOn[], setupLabel = "Picnic setup"): string {
-  const advance     = Number(record.advance_amount || 0)
-  const totalFromDB = Number(record.total_amount || 0)
-  const addonsTotal = addons.reduce((s, a) => s + Number(a.price_at_booking || 0), 0)
-  const pkgTotal    = totalFromDB > 0 ? totalFromDB : advance > 0 ? advance * 2 : 0
+// Partition a booking's add-ons into "bundled into the package price" vs
+// "extras chosen beyond it" — mirrors the collapsing the storefront already
+// does client-side (buildIntentSummaryHTML). Bookings with no package_key
+// (old bookings, or venues that don't use the packages flow) treat every
+// add-on as an extra, same as before this feature existed.
+function splitAddons(
+  addons: AddOn[],
+  packageKey: unknown,
+  bundledIds: Set<number>,
+): { bundled: AddOn[]; extras: AddOn[] } {
+  if (!packageKey || typeof packageKey !== "string") return { bundled: [], extras: addons }
+  const bundled: AddOn[] = []
+  const extras: AddOn[] = []
+  for (const a of addons) {
+    if (a.addon_id != null && bundledIds.has(Number(a.addon_id))) bundled.push(a)
+    else extras.push(a)
+  }
+  return { bundled, extras }
+}
+
+function adminCostBlock(
+  record: Record<string, unknown>,
+  addons: AddOn[],
+  bundledIds: Set<number>,
+  setupLabel = "Picnic setup",
+): string {
+  const advance      = Number(record.advance_amount || 0)
+  const totalFromDB  = Number(record.total_amount || 0)
+  const packageName  = typeof record.package_name === "string" && record.package_name ? record.package_name : null
+  const { extras }   = splitAddons(addons, record.package_key, bundledIds)
+  const extrasTotal  = extras.reduce((s, a) => s + Number(a.price_at_booking || 0), 0)
+  const pkgTotal     = totalFromDB > 0 ? totalFromDB : advance > 0 ? advance * 2 : 0
   if (pkgTotal <= 0 && !addons.length) return ""
 
-  const setupBase = Math.max(0, pkgTotal - addonsTotal)
-  const dueOnDay  = Math.max(0, pkgTotal - advance)
-  const status    = String(record.payment_status || "pending")
+  const rowLabel   = packageName ? `${packageName} package` : setupLabel
+  const setupBase  = Math.max(0, pkgTotal - extrasTotal)
+  const dueOnDay   = Math.max(0, pkgTotal - advance)
+  const status     = String(record.payment_status || "pending")
   const statusBadge = status === "paid"
     ? `<span style="background:#d4edda;color:#155724;padding:2px 8px;border-radius:4px;font-size:12px;">✅ Paid</span>`
     : status === "failed"
@@ -93,9 +119,9 @@ function adminCostBlock(record: Record<string, unknown>, addons: AddOn[], setupL
     : `<span style="background:#fff3cd;color:#856404;padding:2px 8px;border-radius:4px;font-size:12px;">⏳ Pending</span>`
 
   const setupRow   = setupBase > 0
-    ? `<tr><td style="padding:6px 8px;">${setupLabel}</td><td style="padding:6px 8px;text-align:right;">${inr(setupBase)}</td></tr>`
+    ? `<tr><td style="padding:6px 8px;">${rowLabel}</td><td style="padding:6px 8px;text-align:right;">${inr(setupBase)}</td></tr>`
     : ""
-  const addonRows  = addons.map((a) => {
+  const addonRows  = extras.map((a) => {
     const tag = a.requires_confirmation ? ` <span style="color:#b8860b;font-size:11px;">(on request)</span>` : ""
     return `<tr><td style="padding:6px 8px;">${a.name ?? "Add-on"}${tag}</td><td style="padding:6px 8px;text-align:right;">+${inr(a.price_at_booking || 0)}</td></tr>`
   }).join("")
@@ -126,8 +152,28 @@ function adminCostBlock(record: Record<string, unknown>, addons: AddOn[], setupL
         <td style="padding:6px 8px;text-align:right;color:#666;">${inr(Math.round(pkgTotal * 0.5))}</td>
       </tr>`}
     </table>
-    ${addons.some((a) => a.requires_confirmation) ? `<p style="color:#888;font-size:12px;margin:6px 0 0;">"On request" items are subject to host confirmation.</p>` : ""}
+    ${extras.some((a) => a.requires_confirmation) ? `<p style="color:#888;font-size:12px;margin:6px 0 0;">"On request" items are subject to host confirmation.</p>` : ""}
   </div>`
+}
+
+// "Your Package" block — headline (name + tagline) plus the bundled
+// inclusions, shown separately from any extras chosen beyond the package.
+function packageInclusionsSection(name: string, tagline: string, bundled: AddOn[]): string {
+  const bullets = bundled
+    .map((a) => `<p style="margin: 0 0 10px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 16px; color: #2D1F14;">• ${a.name ?? "Included"}</p>`)
+    .join("")
+
+  return `
+              <tr>
+                <td align="left" style="padding: 8px 32px 0 32px; word-wrap: break-word; overflow-wrap: break-word;">
+                  <div style="background: #FFF0EA; border-radius: 14px; padding: 22px 26px;">
+                    <p style="margin: 0 0 6px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 12px; color: #c4607a; text-transform: uppercase; letter-spacing: 2px;">Your Package</p>
+                    <h3 style="margin: 0; font-family: Garamond, 'Times New Roman', serif; font-size: 26px; color: #2D1F14; font-weight: normal;">${esc(name)}</h3>
+                    ${tagline ? `<p style="margin: 4px 0 ${bullets ? "14px" : "0"} 0; font-family: Garamond, 'Times New Roman', serif; font-size: 15px; color: #c4607a; font-style: italic;">${esc(tagline)}</p>` : (bullets ? `<div style="margin-top:14px;"></div>` : "")}
+                    ${bullets}
+                  </div>
+                </td>
+              </tr>`
 }
 
 function extrasSection(addons: AddOn[]): string {
@@ -168,22 +214,29 @@ function extrasSection(addons: AddOn[]): string {
 function buildGuestHtml(
   record: Record<string, unknown>,
   venueLabel: string | null,
-  inclusionText: string,
   addons: AddOn[],
+  bundledIds: Set<number>,
   variant: "query" | "lock" = "query",
 ): string {
-  const isLock     = variant === "lock"
-  const firstName  = String(record.full_name ?? "").split(" ")[0] || "there"
-  const date       = formatDate(record.preferred_date as string)
-  const location   = venueLabel ?? (record.venue_address as string | null) ?? "To be confirmed"
-  const kidsCount  = Number(record.children_count || 0)
-  const guestCount = Number(record.guest_count || 0)
-  const adults     = guestCount - kidsCount
-  const advance    = Number(record.advance_amount || 0)
-  const showPay    = advance > 0
-  const guests     = kidsCount
-    ? `${adults} Adults · ${kidsCount} Child${kidsCount !== 1 ? "ren" : ""} (free)`
+  const isLock      = variant === "lock"
+  const firstName   = String(record.full_name ?? "").split(" ")[0] || "there"
+  const date        = formatDate(record.preferred_date as string)
+  const location    = venueLabel ?? (record.venue_address as string | null) ?? "To be confirmed"
+  const kidsCount   = Number(record.children_count || 0)
+  const guestCount  = Number(record.guest_count || 0)
+  const advance     = Number(record.advance_amount || 0)
+  const showPay     = advance > 0
+  const guests      = kidsCount
+    ? `${guestCount - kidsCount} Adults · ${kidsCount} Child${kidsCount !== 1 ? "ren" : ""} (free)`
     : `${guestCount} ${guestCount === 1 ? "Person" : "Persons"}`
+
+  // Package: name/tagline are a snapshot taken at booking time (see
+  // submit_booking_intent), so a later rename in admin never rewrites what
+  // this email already promised the guest. NULL for bookings made before this
+  // feature shipped, or venues that don't use the packages flow.
+  const packageName    = typeof record.package_name === "string" && record.package_name ? record.package_name : null
+  const packageTagline = typeof record.package_tagline === "string" ? record.package_tagline : ""
+  const { bundled, extras } = splitAddons(addons, record.package_key, bundledIds)
 
   const pageTitle    = isLock ? "You're almost booked" : "We've received your request"
   const heroSub      = isLock
@@ -263,18 +316,18 @@ function buildGuestHtml(
                     <tbody>
                       ${reservationRow("DATE", date)}
                       ${reservationRow("GUESTS", guests)}
-                      ${inclusionText ? reservationRow("INCLUDED", inclusionText) : ""}
                       ${reservationRow("LOCATION", location)}
                       ${record.occasion ? reservationRow("OCCASION", esc(record.occasion)) : ""}
                       ${boardText(record.board) ? reservationRow("BOARD", boardText(record.board)) : ""}
                       ${record.special_requirements ? reservationRow("SPECIAL REQUESTS", esc(record.special_requirements as string)) : ""}
                     </tbody>
                   </table>
-                  ${inclusionText ? `<p style="margin: 14px 0 0 0; font-family: Garamond, 'Times New Roman', serif; font-size: 14px; color: #c4607a; font-style: italic;">Inclusions are based on the number of adults. Children are welcome — order anything extra à la carte.</p>` : ""}
                 </td>
               </tr>
 
-              ${extrasSection(addons)}
+              ${packageName ? packageInclusionsSection(packageName, packageTagline, bundled) : ""}
+
+              ${extrasSection(extras)}
 
               <!-- WHAT HAPPENS NEXT -->
               <tr>
@@ -378,13 +431,13 @@ Deno.serve(async (req) => {
     const advanceStr = advance.toLocaleString("en-IN")
     const { label: venueLabel, teamEmail } = await getVenueInfo(record.venue_id, record.venue_address)
     const addons = await getAddOns(record.id)
+    const bundledIds = await getBundledAddonIds(record.package_key)
+    const waHref = waReplyLink(record.mobile_number, record.full_name, record.occasion)
 
     const kids = Number(record.children_count || 0)
-    const adults = Number(record.guest_count || 0) - kids
     const guestStr = kids
-      ? `${adults} adults · ${kids} child${kids !== 1 ? "ren" : ""} (free)`
+      ? `${Number(record.guest_count || 0) - kids} adults · ${kids} child${kids !== 1 ? "ren" : ""} (free)`
       : `${record.guest_count} guest${Number(record.guest_count) !== 1 ? "s" : ""}`
-    const inclusionText = await getInclusionText(record.venue_id, adults)
 
     // T1: Customer acknowledgement — only for unconfirmed records.
     // Confirmed bookings get the confirmation email (T3) from notify-booking-confirmed instead.
@@ -394,7 +447,7 @@ Deno.serve(async (req) => {
         subject: isLock
           ? "You're almost booked — pay to confirm 🧺"
           : "We've received your picnic request! 🧺",
-        html: buildGuestHtml(record, venueLabel, inclusionText, addons, isLock ? "lock" : "query"),
+        html: buildGuestHtml(record, venueLabel, addons, bundledIds, isLock ? "lock" : "query"),
       })
     }
 
@@ -427,19 +480,28 @@ Deno.serve(async (req) => {
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
           ${adminBanner}
           <h2>${adminHeading}</h2>
+          ${waHref ? `
+          <table border="0" cellpadding="0" cellspacing="0" style="margin: 4px 0 20px;">
+            <tr><td>
+              <a href="${waHref}" style="display:inline-block; padding:14px 30px; background:#25D366; color:#ffffff; font-size:16px; font-weight:bold; text-decoration:none; border-radius:8px;">💬 Reply on WhatsApp &nbsp;·&nbsp; ${esc(record.mobile_number)}</a>
+            </td></tr>
+            <tr><td style="padding-top:6px;">
+              <a href="tel:${esc(record.mobile_number)}" style="font-size:13px; color:#2d6a4f; text-decoration:none;">or tap to call ${esc(record.mobile_number)}</a>
+            </td></tr>
+          </table>` : ""}
           <table style="border-collapse: collapse; width: 100%;">
             <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Name</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${record.full_name}</td></tr>
-            <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Email</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${record.email_address}</td></tr>
-            <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Phone</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${record.mobile_number}</td></tr>
+            <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Email</strong></td><td style="padding: 8px; border: 1px solid #ddd;"><a href="mailto:${esc(record.email_address)}" style="color:#2d6a4f;">${esc(record.email_address)}</a></td></tr>
+            <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Phone</strong></td><td style="padding: 8px; border: 1px solid #ddd;"><a href="tel:${esc(record.mobile_number)}" style="color:#2d6a4f; font-weight:bold;">${esc(record.mobile_number)}</a></td></tr>
             <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Date</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${record.preferred_date}</td></tr>
             <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Guests</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${guestStr}</td></tr>
-            ${inclusionText ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Included</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${inclusionText}</td></tr>` : ""}
+            ${record.package_name ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Package</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${esc(record.package_name)}${record.package_tagline ? ` — <em>${esc(record.package_tagline)}</em>` : ""}</td></tr>` : ""}
             ${venueLabel ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Location</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${venueLabel}</td></tr>` : ""}
             ${record.occasion ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Occasion</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${esc(record.occasion)}</td></tr>` : ""}
             ${boardText(record.board) ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Board</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${boardText(record.board)}</td></tr>` : ""}
             ${record.special_requirements ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Special req.</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${record.special_requirements}</td></tr>` : ""}
           </table>
-          ${adminCostBlock(record, addons, record.checkout_date ? "Stay + Picnic setup" : "Picnic setup")}
+          ${adminCostBlock(record, addons, bundledIds, record.checkout_date ? "Stay + Picnic setup" : "Picnic setup")}
           <p style="margin-top: 24px;">
             <a href="${APP_URL}#admin" style="background: #2d6a4f; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px;">Open Admin Dashboard</a>
           </p>

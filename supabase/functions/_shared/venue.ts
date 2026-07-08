@@ -1,13 +1,12 @@
 // Shared helper: resolve venue display label + a "Get Directions" URL for emails.
-// Bookings store venue_id (+ optional venue_address); venues store name/area/city
-// and an optional maps_url (a pasted Google Maps share link).
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 
 export interface VenueInfo {
-  label: string | null // human-readable location, e.g. "Terracottage Umber, DLF Phase 2, Gurugram"
-  directionsUrl: string | null // link that opens directions, or null if no location known
+  label: string | null
+  directionsUrl: string | null
+  teamEmail: string | null
 }
 
 export async function getVenueInfo(
@@ -16,6 +15,7 @@ export async function getVenueInfo(
 ): Promise<VenueInfo> {
   let label: string | null = null
   let mapsUrl: string | null = null
+  let teamEmail: string | null = null
 
   if (venueId) {
     try {
@@ -49,13 +49,8 @@ export async function getVenueInfo(
     }
   }
 
-  // Display label: venue name/area/city, else the booking-specific address.
   if (!label) label = venueAddress || null
 
-  // Directions destination priority:
-  //   1. booking-specific venue_address (custom / at-customer-location bookings win)
-  //   2. venue's pasted maps_url (precise pin)
-  //   3. name/area/city text search
   let directionsUrl: string | null = null
   if (venueAddress) {
     directionsUrl = mapsDirLink(venueAddress)
@@ -65,22 +60,19 @@ export async function getVenueInfo(
     directionsUrl = mapsDirLink(label)
   }
 
-  return { label, directionsUrl }
+  return { label, directionsUrl, teamEmail }
 }
 
-// Provider-neutral Google directions deep link (opens the user's maps app on mobile).
 function mapsDirLink(destination: string): string {
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`
 }
 
-// HTML <p> detail row for the location, or "" so emails never render "undefined".
 export function locationRow(label: string | null): string {
   return label
     ? `<p style="margin: 0 0 8px;"><strong>📍 Location:</strong> ${label}</p>`
     : ""
 }
 
-// "Get Directions" button, or "" when there's no destination to point at.
 export function directionsButton(url: string | null): string {
   if (!url) return ""
   return `
