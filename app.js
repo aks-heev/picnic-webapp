@@ -1528,17 +1528,97 @@ async function loadPackagesManager() {
   }
 }
 
+// Shared between the per-card occasion <select> and the "add new package"
+// form below, so the option list (and the universal/occasion semantics)
+// can't drift between the two.
+function pkgAdmOccasionOptions(selected) {
+  return ['<option value="">Universal (all occasions)</option>']
+    .concat(OCCASIONS.map(o => `<option value="${escapeHtml(o)}" ${selected === o ? 'selected' : ''}>${escapeHtml(o)}</option>`))
+    .join('')
+}
+
+// New-package form markup. Key is collected up front (not editable later,
+// same as every other package's key) since it's the stable identifier used
+// in ?tier= deep links, booking snapshots (bookings.package_key), and the
+// email edge function's add-on lookup — renaming it after the fact would
+// silently orphan any of those. Auto-filled from Name via pkgNewKeyAutofill()
+// but left free-text so the admin can override before creating.
+function pkgAdmNewFormHtml() {
+  return `
+    <div class="pkg-adm-new">
+      <div class="vf-section-title">Add a new package</div>
+      <div class="vf-row">
+        <div class="vf-field">
+          <label class="vf-label">Name</label>
+          <input type="text" class="vf-input" id="pkg-new-name" placeholder="e.g. The Celebration" oninput="pkgNewKeyAutofill()" />
+        </div>
+        <div class="vf-field">
+          <label class="vf-label">Key <span class="vf-hint">(unique, lowercase — used in URLs, can't be changed later)</span></label>
+          <input type="text" class="vf-input" id="pkg-new-key" placeholder="e.g. celebration" oninput="this.dataset.touched='1'" />
+        </div>
+        <div class="vf-field">
+          <label class="vf-label">Occasion</label>
+          <select class="vf-input" id="pkg-new-occasion">${pkgAdmOccasionOptions(null)}</select>
+        </div>
+      </div>
+      <button type="button" class="btn btn--primary" onclick="createNewPackage()">+ Add Package</button>
+      <p class="vf-hint" style="margin-top:8px">Creates the package with no add-ons and no images — configure those in its card below, then Save.</p>
+    </div>`
+}
+
+function pkgNewKeyAutofill() {
+  const keyEl = document.getElementById('pkg-new-key')
+  const nameEl = document.getElementById('pkg-new-name')
+  if (!keyEl || !nameEl || keyEl.dataset.touched) return
+  keyEl.value = nameEl.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+}
+window.pkgNewKeyAutofill = pkgNewKeyAutofill
+
+async function createNewPackage() {
+  if (!appState.session) return showToast('Admin login required', 'error')
+  const nameEl = document.getElementById('pkg-new-name')
+  const keyEl = document.getElementById('pkg-new-key')
+  const occEl = document.getElementById('pkg-new-occasion')
+  if (!nameEl || !keyEl || !occEl) return
+
+  const name = nameEl.value.trim()
+  const key = keyEl.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+  const occasion = occEl.value || null
+
+  if (!name) return showToast('Package name is required', 'error')
+  if (!key) return showToast('Package key is required', 'error')
+  if (packagesManagerState.packages.some(p => p.key === key)) {
+    return showToast(`Key "${key}" is already in use — pick another`, 'error')
+  }
+
+  const sortOrder = packagesManagerState.packages.reduce((max, p) => Math.max(max, p.sort_order || 0), 0) + 1
+
+  try {
+    const { error } = await supabase.from('packages').insert([{
+      key, name, tagline: '', occasion, is_featured: false, is_active: true, sort_order: sortOrder, images: [],
+    }])
+    if (error) throw error
+    showToast('Package created — configure it below, then Save', 'success')
+    await loadPackages()        // refresh PACKAGE_TIERS used by the live storefront
+    await loadPackagesManager() // refresh this admin view (new card + form reset)
+  } catch (err) {
+    console.error(err)
+    showToast('Failed to create package: ' + err.message, 'error')
+  }
+}
+window.createNewPackage = createNewPackage
+
 function renderPackagesManager() {
   const container = document.getElementById('packages-manager-container')
   if (!container) return
   const { packages, addons, venues } = packagesManagerState
 
   if (!packages.length) {
-    container.innerHTML = '<p class="venues-error">No packages found.</p>'
+    container.innerHTML = pkgAdmNewFormHtml() + '<p class="venues-error">No packages found.</p>'
     return
   }
 
-  container.innerHTML = packages.map(pkg => {
+  container.innerHTML = pkgAdmNewFormHtml() + packages.map(pkg => {
     const addonIds = (pkg.package_add_ons || []).slice().sort((a, b) => a.sort_order - b.sort_order).map(pa => pa.addon_id)
 
     const checklist = addons.map(a => `
@@ -1574,9 +1654,7 @@ function renderPackagesManager() {
         </tr>`
     }).join('')
 
-    const occasionOptions = ['<option value="">Universal (all occasions)</option>']
-      .concat(OCCASIONS.map(o => `<option value="${escapeHtml(o)}" ${pkg.occasion === o ? 'selected' : ''}>${escapeHtml(o)}</option>`))
-      .join('')
+    const occasionOptions = pkgAdmOccasionOptions(pkg.occasion)
 
     return `
       <div class="pkg-adm-card" data-pkg-id="${pkg.id}">

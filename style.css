@@ -7191,6 +7191,13 @@ body.menu-viewer-open {
 .vf-images-list, .vf-tiers-list { display: flex; flex-direction: column; }
 
 /* ── Packages admin panel ────────────────────────────────────────────── */
+.pkg-adm-new {
+  border: 1px dashed var(--boho-border, #e8ddd0);
+  border-radius: 10px;
+  padding: 18px;
+  margin-bottom: 24px;
+  background: #fdf9f3;
+}
 .pkg-adm-card {
   border: 1px solid var(--boho-border, #e8ddd0);
   border-radius: 10px;
