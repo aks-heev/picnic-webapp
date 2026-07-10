@@ -9424,6 +9424,8 @@ body.menu-viewer-open {
 .pkg-card--skeleton .pkg-card-name,
 .pkg-card--skeleton .pkg-card-tagline,
 .pkg-card--skeleton .pkg-card-price,
+.pkg-card--skeleton .pkg-card-price-strike,
+.pkg-card--skeleton .pkg-card-discount-tag,
 .pkg-card--skeleton .pkg-card-price-note,
 .pkg-card--skeleton .pkg-card-occasions,
 .pkg-card--skeleton .pkg-card-cta {
@@ -9435,9 +9437,15 @@ body.menu-viewer-open {
   animation: pkg-skel-shimmer 1.4s ease-in-out infinite;
 }
 /* Trim the shimmer bars so they read as text lines, not full-width blocks.
-   Width only — never height — so the reserved card height stays identical. */
+   Width only — never height — so the reserved card height stays identical.
+   .pkg-card-price-strike/-discount-tag sit inline in .pkg-card-price-row
+   alongside .pkg-card-price (2026-07-09 discount-anchor addition) — same
+   single-line height as before since the row is baseline-aligned flex, not
+   stacked, so no extra height needs reserving here. */
 .pkg-card--skeleton .pkg-card-name { width: 55%; }
 .pkg-card--skeleton .pkg-card-price { width: 42%; }
+.pkg-card--skeleton .pkg-card-price-strike { width: 26%; }
+.pkg-card--skeleton .pkg-card-discount-tag { width: 46px; }
 .pkg-card--skeleton .pkg-card-price-note { width: 60%; }
 .pkg-card--skeleton .pkg-card-occasions { width: 85%; }
 .pkg-card--skeleton .pkg-card-badge { width: 84px; }
@@ -9450,6 +9458,8 @@ body.menu-viewer-open {
   .pkg-card--skeleton .pkg-card-name,
   .pkg-card--skeleton .pkg-card-tagline,
   .pkg-card--skeleton .pkg-card-price,
+  .pkg-card--skeleton .pkg-card-price-strike,
+  .pkg-card--skeleton .pkg-card-discount-tag,
   .pkg-card--skeleton .pkg-card-price-note,
   .pkg-card--skeleton .pkg-card-occasions,
   .pkg-card--skeleton .pkg-card-cta { animation: none; }
@@ -9509,6 +9519,12 @@ body.menu-viewer-open {
   min-height: 34px;
   line-height: 1.45;
 }
+.pkg-card-price-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 7px;
+}
 .pkg-card-price {
   font-family: var(--font-serif);
   font-size: 1.55rem;
@@ -9517,6 +9533,27 @@ body.menu-viewer-open {
   letter-spacing: -0.01em;
 }
 .pkg-card--featured .pkg-card-price { color: var(--boho-accent-pink); }
+/* Struck-through reference price — see pkgStrikeThroughPrice() in app.js for
+   the math + the note on why this is a flat multiplier, not a real past price. */
+.pkg-card-price-strike {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--boho-text-light);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+.pkg-card-discount-tag {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--boho-accent-sage);
+  background: var(--boho-sage);
+  padding: 2px 8px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
 .pkg-card-price-note {
   font-family: var(--font-sans);
   font-size: 12px;

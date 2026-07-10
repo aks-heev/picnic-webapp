@@ -2152,6 +2152,25 @@ function defaultTierForOccasion(occasion) {
 const PKG_PAGE_BASE_ADULTS = 2 // "From ₹X" baseline; real price re-firms at the guest step
 let pkgPageState = { occasion: '', tierKey: null, city: '' }
 
+// Discount-anchor display (2026-07-09, explicit user call): every listed package
+// price also shows a struck-through "reference" price at a flat 40% markup over
+// the real price (real price = 60% of the struck price), rounded to the nearest
+// ₹100 so it reads as a plausible figure. This is a fixed multiplier only — it is
+// NOT a record of any price ever actually charged. Flagged to the user as a
+// pricing/compliance risk before building (India's CCPA dark-patterns guidance
+// covers fictitious reference pricing) — built anyway per their direction.
+function pkgStrikeThroughPrice(price) {
+  return Math.round((price / 0.6) / 100) * 100
+}
+function pkgPriceRowHtml(price, prefix = '') {
+  const strike = pkgStrikeThroughPrice(price)
+  return `<div class="pkg-card-price-row">
+        <span class="pkg-card-price">${prefix}₹${price.toLocaleString('en-IN')}</span>
+        <span class="pkg-card-price-strike">₹${strike.toLocaleString('en-IN')}</span>
+        <span class="pkg-card-discount-tag">40% off</span>
+      </div>`
+}
+
 // Venues that can actually serve the packages flow right now (cafe +
 // packages_enabled, or QA override — packageFlowActive decides).
 function pkgEnabledVenues() {
@@ -2312,7 +2331,7 @@ function renderPackagesPage() {
     const active = pkgPageState.tierKey === key
     const priceHtml = from === null
       ? '<div class="pkg-card-price pkg-card-price--unavailable">Not available right now</div>'
-      : `<div class="pkg-card-price">${serviceableVenues.length > 1 ? 'From ' : ''}₹${from.toLocaleString('en-IN')}</div><div class="pkg-card-price-note">for upto 6 guests</div>`
+      : `${pkgPriceRowHtml(from, serviceableVenues.length > 1 ? 'From ' : '')}<div class="pkg-card-price-note">for upto 6 guests</div>`
     return `
       <div class="pkg-card${tier.featured ? ' pkg-card--featured' : ''}${active ? ' pkg-card--active' : ''}">
         ${badge}
@@ -2528,7 +2547,7 @@ async function renderHomePackagesSection() {
         ${pkgCardTopHtml(tier, key)}
         <h4 class="pkg-card-name">${escapeHtml(tier.name)}</h4>
         <p class="pkg-card-tagline">${escapeHtml(tier.tagline)}</p>
-        <div class="pkg-card-price">From ₹${from.toLocaleString('en-IN')}</div>
+        ${pkgPriceRowHtml(from, 'From ')}
         <div class="pkg-card-price-note">for upto 6 guests</div>
         ${occasionLine}
         <a class="btn ${tier.featured ? 'btn--venue-primary' : 'btn--venue-secondary'} pkg-card-cta" href="/packages?tier=${encodeURIComponent(key)}" onclick="event.preventDefault(); showPackagesPage(true, {tierKey:'${escapeHtml(key)}'})">Explore ${escapeHtml(tier.name)}</a>
@@ -3311,7 +3330,7 @@ function showPackageStep(venue) {
           ${pkgCardTopHtml(tier, key)}
           <h4 class="pkg-card-name">${escapeHtml(tier.name)}</h4>
           <p class="pkg-card-tagline">${escapeHtml(tier.tagline)}</p>
-          <div class="pkg-card-price">₹${price.toLocaleString('en-IN')}</div>
+          ${pkgPriceRowHtml(price)}
           <div class="pkg-card-price-note">for ${appState.adults} adult${appState.adults !== 1 ? 's' : ''}</div>
           ${inclList}
           <button type="button" class="btn ${tier.featured ? 'btn--venue-primary' : 'btn--venue-secondary'} pkg-card-cta" onclick="selectPackageTier('${key}')">Choose ${escapeHtml(tier.name)}</button>
