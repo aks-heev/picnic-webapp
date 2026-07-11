@@ -554,37 +554,15 @@ function buildCityPages(template, allVenues, urls) {
   return count
 }
 
-// Price a tier at a venue exactly like packageTierPriceAt() in app.js — kept
-// in sync manually (this script can't import app.js: it relies on
-// import.meta.env/DOM). PKG_PAGE_BASE_ADULTS mirrors the client constant so
-// build-time "From ₹X" matches the /packages page and homepage section.
-const PKG_PAGE_BASE_ADULTS = 2
-
-function getVenuePriceAt(venue, billingGuests) {
-  const base = Number(venue?.base_price) || 0
-  if (venue?.free_guests_upto != null) {
-    const overage = Number(venue.overage_per_person) || 0
-    return billingGuests <= venue.free_guests_upto
-      ? base
-      : base + overage * (billingGuests - venue.free_guests_upto)
-  }
-  const m = venue?.metadata
-  if (!m || !Array.isArray(m.tiers) || m.tiers.length === 0) return base
-  const tiers = m.tiers
-  const match = tiers.find(t => billingGuests <= t.up_to)
-  if (match) return match.price
-  const last = tiers[tiers.length - 1]
-  const overage = billingGuests - last.up_to
-  return last.price + overage * (Number(m.overage_per_person) || 0)
-}
-
-function tierPriceAtVenue(venue, tier, catalog) {
-  const base = getVenuePriceAt(venue, PKG_PAGE_BASE_ADULTS)
-  const addonSum = (tier.addons || []).reduce((s, id) => {
-    const a = catalog.find(x => x.id === id)
-    return s + (a ? Number(a.price) : 0)
-  }, 0)
-  return base + addonSum
+// Stored per-venue package pricing (SPEC_stored_package_pricing_2026-07-10.md):
+// prices come straight from the venue_packages table — the derived math this
+// script used to hand-duplicate from app.js is GONE, along with the
+// keep-in-sync-by-hand burden. "From ₹X" at the page's baseline guest count
+// is simply the row's flat price (included_guests is always ≥ the baseline).
+// A package with no active row at a venue is not offered there.
+function tierPriceAtVenue(venue, tier, vpByKey) {
+  const row = vpByKey.get(`${venue.id}:${tier.key}`)
+  return row ? Number(row.price) : null
 }
 
 function packagesJsonLd(pageUrl, tiers, fromPriceByTier) {
@@ -612,50 +590,58 @@ function packagesJsonLd(pageUrl, tiers, fromPriceByTier) {
  * client's showPackagesPage() overwrites #packages-content with live prices
  * the moment app.js hydrates (same mechanism as the venue pages). */
 async function buildPackagesPage(supabase, template) {
-  const [pkgRes, venueRes, addonRes] = await Promise.all([
+  const [pkgRes, venueRes, addonRes, vpRes] = await Promise.all([
     supabase.from('packages').select('*, package_add_ons(addon_id, sort_order)')
       .eq('is_active', true).order('sort_order', { ascending: true }),
     supabase.from('venues').select('id, name, slug, base_price, free_guests_upto, overage_per_person, metadata, packages_enabled')
       .eq('type', 'cafe').eq('is_active', true).eq('packages_enabled', true),
     supabase.from('add_ons').select('*, venue_add_ons!inner(venue_id)').eq('is_active', true),
+    supabase.from('venue_packages').select('venue_id, package_id, price, included_guests').eq('is_active', true),
   ])
   if (pkgRes.error) { console.warn('[prerender] packages fetch failed, skipping /packages page:', pkgRes.error.message); return null }
   if (venueRes.error) { console.warn('[prerender] venues fetch failed, skipping /packages page:', venueRes.error.message); return null }
   if (addonRes.error) { console.warn('[prerender] add_ons fetch failed, skipping /packages page:', addonRes.error.message); return null }
+  if (vpRes.error) { console.warn('[prerender] venue_packages fetch failed, skipping /packages page:', vpRes.error.message); return null }
 
   const tiers = (pkgRes.data || []).map(pkg => ({
+    id: pkg.id,
     key: pkg.key,
     name: pkg.name,
     tagline: pkg.tagline || '',
     featured: !!pkg.is_featured,
     addons: (pkg.package_add_ons || []).slice().sort((a, b) => a.sort_order - b.sort_order).map(pa => pa.addon_id),
+    inclusions: pkg.inclusions || [],
   }))
   if (!tiers.length) { console.warn('[prerender] no active packages — skipping /packages page'); return null }
 
   const venues = venueRes.data || []
-  const catalogByVenue = new Map()
-  venues.forEach(v => catalogByVenue.set(v.id, []))
   const addonNameById = new Map()
-  ;(addonRes.data || []).forEach(row => {
-    const { venue_add_ons, ...addon } = row
-    addonNameById.set(addon.id, addon.name)
-    ;(venue_add_ons || []).forEach(j => {
-      const list = catalogByVenue.get(j.venue_id)
-      if (list) list.push(addon)
-    })
+  ;(addonRes.data || []).forEach(row => { addonNameById.set(row.id, row.name) })
+
+  // Stored prices keyed "<venueId>:<packageKey>" (same shape as the client's
+  // VENUE_PACKAGES map). Rows for inactive packages resolve to no tier and drop.
+  const keyById = new Map(tiers.map(t => [t.id, t.key]))
+  const vpByKey = new Map()
+  ;(vpRes.data || []).forEach(r => {
+    const key = keyById.get(r.package_id)
+    if (key) vpByKey.set(`${r.venue_id}:${key}`, r)
   })
 
   const fromPriceByTier = new Map()
   tiers.forEach(t => {
-    const prices = venues.map(v => tierPriceAtVenue(v, t, catalogByVenue.get(v.id) || []))
-    fromPriceByTier.set(t.key, prices.length ? Math.min(...prices) : 0)
+    const prices = venues.map(v => tierPriceAtVenue(v, t, vpByKey)).filter(p => p != null)
+    if (prices.length) fromPriceByTier.set(t.key, Math.min(...prices))
   })
+  // Packages priced nowhere (e.g. Prelude pre-enable) are left out of the
+  // static seed + JSON-LD entirely — a ₹0 offer is worse than no offer.
+  const pricedTiers = tiers.filter(t => fromPriceByTier.has(t.key))
+  if (!pricedTiers.length) { console.warn('[prerender] no priced packages — skipping /packages page'); return null }
 
   const url = `${SITE}/packages`
   const title = 'Picnic Packages — Date Night, Movie Night & More | The Picnic Stories'
   const desc = clamp(
-    `Pick a curated picnic package — ${tiers.map(t => t.name).join(', ')} — then choose your venue. ` +
-    `Prices shown for 2 adults, firm price confirmed once you pick a venue.`
+    `Pick a curated picnic package — ${pricedTiers.map(t => t.name).join(', ')} — then choose your venue. ` +
+    `Flat package prices, firm total confirmed once you pick a venue.`
   )
   const img = HERO_FALLBACK
 
@@ -672,17 +658,21 @@ async function buildPackagesPage(supabase, template) {
     [/<meta name="twitter:description"[^>]*>/, `<meta name="twitter:description" content="${esc(desc)}">`],
     [/<meta name="twitter:image"[^>]*>/, `<meta name="twitter:image" content="${esc(img)}">`],
     [/<script type="application\/ld\+json">[\s\S]*?<\/script>/,
-      `<script type="application/ld+json">\n${packagesJsonLd(url, tiers, fromPriceByTier)}\n</script>`],
+      `<script type="application/ld+json">\n${packagesJsonLd(url, pricedTiers, fromPriceByTier)}\n</script>`],
   ])
 
-  const cards = tiers.map(t => {
+  const cards = pricedTiers.map(t => {
     const from = fromPriceByTier.get(t.key) || 0
-    const inclNames = (t.addons || []).map(id => addonNameById.get(id)).filter(Boolean)
+    // Free-text inclusions (bundle-less packages like The Prelude) take
+    // precedence; otherwise list the bundled add-on names as before.
+    const inclNames = (t.inclusions || []).length
+      ? t.inclusions
+      : (t.addons || []).map(id => addonNameById.get(id)).filter(Boolean)
     return `
       <div class="pr-pkg-card">
         <h2>${esc(t.name)}</h2>
         <p>${esc(t.tagline)}</p>
-        <p><strong>${venues.length > 1 ? 'From ' : ''}₹${Math.round(from).toLocaleString('en-IN')}</strong> for ${PKG_PAGE_BASE_ADULTS} adults</p>
+        <p><strong>${venues.length > 1 ? 'From ' : ''}₹${Math.round(from).toLocaleString('en-IN')}</strong></p>
         ${inclNames.length ? `<ul>${inclNames.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
       </div>`
   }).join('')

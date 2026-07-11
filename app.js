@@ -1457,6 +1457,33 @@ let PACKAGE_TIERS = {
 let PACKAGE_TIER_ORDER = ['setting', 'moment', 'story']
 let packagesLoaded = false // set once loadPackages() has real DB rows
 
+// ── Stored per-venue package pricing (2026-07-10) ──────────────────────────
+// SPEC_stored_package_pricing_2026-07-10.md. Package prices are NO LONGER
+// derived (venue base + add-on sum) — each venue×package pair has an explicit
+// venue_packages row (price, included_guests, overage_per_person, max_guests).
+// Presence of an active row = the package is offered at that venue; absence
+// HIDES it there. Bundled add-ons (package_add_ons) are display-only
+// inclusions — their catalog prices never enter the package price.
+// Keyed "<venueId>:<packageKey>". Loaded with loadPackages(); on fetch failure
+// the map stays empty and package cards show "Not available" (fail-safe:
+// better no price than a wrong derived one — deliberate change from the old
+// derived fallback).
+let VENUE_PACKAGES = new Map()
+
+function venuePackageRow(venueId, packageKey) {
+  return VENUE_PACKAGES.get(`${venueId}:${packageKey}`) || null
+}
+function packageOfferedAt(venueId, packageKey) {
+  return !!venuePackageRow(venueId, packageKey)
+}
+// "Standalone" packages (The Prelude & future non-derived ones) carry a
+// free-text inclusions list instead of an add-on bundle. They render their
+// own list and are excluded from the "Everything in <prev>, plus:" ladder
+// chaining — a sibling setup, not a rung.
+function pkgStandalone(tier) {
+  return !!(tier && (tier.inclusions || []).length)
+}
+
 // Loads package tier definitions from the DB, replacing the hardcoded
 // fallback above. Falls back silently to the hardcoded defaults on error so a
 // DB hiccup never breaks the booking flow. Called once at bootstrap
@@ -1464,15 +1491,24 @@ let packagesLoaded = false // set once loadPackages() has real DB rows
 // public site.
 async function loadPackages() {
   try {
-    const { data, error } = await supabase
-      .from('packages')
-      .select('*, package_add_ons(addon_id, sort_order)')
-      .eq('is_active', true)
-      .order('sort_order', { ascending: true })
-    if (error) throw error
+    const [pkgRes, vpRes] = await Promise.all([
+      supabase
+        .from('packages')
+        .select('*, package_add_ons(addon_id, sort_order)')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true }),
+      supabase
+        .from('venue_packages')
+        .select('venue_id, package_id, price, included_guests, overage_per_person, max_guests')
+        .eq('is_active', true),
+    ])
+    if (pkgRes.error) throw pkgRes.error
+    if (vpRes.error) throw vpRes.error
+    const data = pkgRes.data
     if (!data || data.length === 0) return
     const tiers = {}
     const order = []
+    const idToKey = new Map()
     data.forEach(pkg => {
       const addons = (pkg.package_add_ons || [])
         .slice()
@@ -1481,11 +1517,20 @@ async function loadPackages() {
       // occasion: NULL/absent = universal (shown for every occasion). The
       // column lands in Phase 2.5 (occasion-specific packages) — carrying it
       // through now means the visiblePackagesFor() filter needs no change then.
-      tiers[pkg.key] = { key: pkg.key, name: pkg.name, tagline: pkg.tagline || '', addons, featured: !!pkg.is_featured, occasion: pkg.occasion || null, images: pkg.images || [] }
+      tiers[pkg.key] = { key: pkg.key, name: pkg.name, tagline: pkg.tagline || '', addons, featured: !!pkg.is_featured, occasion: pkg.occasion || null, images: pkg.images || [], inclusions: pkg.inclusions || [] }
       order.push(pkg.key)
+      idToKey.set(pkg.id, pkg.key)
+    })
+    // Stored per-venue prices (see VENUE_PACKAGES above). Rows for inactive
+    // packages have no key in idToKey and are skipped.
+    const vp = new Map()
+    ;(vpRes.data || []).forEach(row => {
+      const key = idToKey.get(row.package_id)
+      if (key) vp.set(`${row.venue_id}:${key}`, row)
     })
     PACKAGE_TIERS = tiers
     PACKAGE_TIER_ORDER = order
+    VENUE_PACKAGES = vp
     packagesLoaded = true
   } catch (err) {
     console.error('Failed to load packages, using fallback tier definitions:', err)
@@ -1493,33 +1538,34 @@ async function loadPackages() {
 }
 
 // ── Packages admin panel ───────────────────────────────────────────────────
-// Package composition (which add-ons belong to each tier) is admin-editable
-// here. Tier price is always DERIVED (base_price + sum of the tier's add-on
-// catalog prices) and shown read-only — never a typed-in number — so it
-// can't drift from the add-on catalog the way base_price and the old tiers
-// array once did (see the base_price/metadata.tiers desync found and fixed
-// this session). Food-included is shown read-only from each venue's own
-// food_offline setting, not editable per-package, for the same reason.
-let packagesManagerState = { packages: [], addons: [], venues: [] }
+// Package composition (name/tagline/add-ons/inclusions/images) is edited per
+// card; prices are STORED per venue in venue_packages and managed in each
+// card's "Venue pricing" table (SPEC_stored_package_pricing_2026-07-10.md).
+// Derived pricing (base + add-on sum) is dead — enabling a package at a venue
+// means creating its priced row here.
+let packagesManagerState = { packages: [], addons: [], venues: [], venuePackages: [] }
 
 async function loadPackagesManager() {
   const container = document.getElementById('packages-manager-container')
   if (!container) return
   container.innerHTML = '<p class="admin-loading">Loading packages…</p>'
   try {
-    const [pkgRes, addonRes, venueRes] = await Promise.all([
+    const [pkgRes, addonRes, venueRes, vpRes] = await Promise.all([
       supabase.from('packages').select('*, package_add_ons(addon_id, sort_order)').order('sort_order', { ascending: true }),
       supabase.from('add_ons').select('id, name, price').eq('is_active', true).order('sort_order', { ascending: true }),
       supabase.from('venues').select('id, name, type, packages_enabled, base_price, metadata, venue_add_ons(addon_id)')
         .eq('type', 'cafe').eq('is_active', true).order('id', { ascending: true }),
+      supabase.from('venue_packages').select('*'), // incl. inactive rows — admin sees everything
     ])
     if (pkgRes.error) throw pkgRes.error
     if (addonRes.error) throw addonRes.error
     if (venueRes.error) throw venueRes.error
+    if (vpRes.error) throw vpRes.error
     packagesManagerState = {
       packages: pkgRes.data || [],
       addons: addonRes.data || [],
       venues: venueRes.data || [],
+      venuePackages: vpRes.data || [],
     }
     renderPackagesManager()
   } catch (err) {
@@ -1611,7 +1657,7 @@ window.createNewPackage = createNewPackage
 function renderPackagesManager() {
   const container = document.getElementById('packages-manager-container')
   if (!container) return
-  const { packages, addons, venues } = packagesManagerState
+  const { packages, addons, venues, venuePackages } = packagesManagerState
 
   if (!packages.length) {
     container.innerHTML = pkgAdmNewFormHtml() + '<p class="venues-error">No packages found.</p>'
@@ -1627,32 +1673,47 @@ function renderPackagesManager() {
         ${escapeHtml(a.name)} <span class="vf-hint">₹${Number(a.price).toLocaleString('en-IN')}</span>
       </label>`).join('')
 
-    // Occasion packages (Phase 2.5) can't tolerate a missing add-on the way
-    // universal tiers do — the theme IS the add-on (Movie Night without
-    // Movie Screening isn't Movie Night). The live storefront already hides
-    // the package/venue combo in that case (packageServiceableAt) — this
-    // just labels it accurately instead of showing the generic "gap" warning.
+    // ── Stored per-venue pricing manager (SPEC_stored_package_pricing) ──
+    // THE management surface for package prices: a package is offered at a
+    // venue iff it has a venue_packages row here. Enable/edit/deactivate/
+    // remove act per-row with immediate saves (not batched into the card's
+    // Save button — a price change shouldn't ride along with unrelated
+    // name/add-on edits). Add-on gaps stay as an advisory column only —
+    // they no longer hide packages (bundled add-ons are display-only).
+    const activeRowCount = (venuePackages || []).filter(r => r.package_id === pkg.id && r.is_active).length
     const rows = venues.map(v => {
       const venueAddonIds = (v.venue_add_ons || []).map(x => x.addon_id)
       const missingIds = addonIds.filter(id => !venueAddonIds.includes(id))
-      const addonSum = addonIds
-        .filter(id => venueAddonIds.includes(id))
-        .reduce((sum, id) => sum + (addons.find(a => a.id === id)?.price || 0), 0)
-      const price = (Number(v.base_price) || 0) + addonSum
-      const foodIncluded = !v.metadata?.food_offline
       const missingNames = missingIds.map(id => addons.find(a => a.id === id)?.name || `#${id}`).join(', ')
       const gapHtml = !missingIds.length ? '—'
-        : pkg.occasion
-          ? `🚫 Not offerable here — missing ${escapeHtml(missingNames)} (package hidden at this venue)`
-          : `⚠ Missing ${missingIds.length} of ${addonIds.length}: ${escapeHtml(missingNames)}`
-      return `
-        <tr class="${missingIds.length ? 'pkg-adm-row--warn' : ''}">
-          <td>${escapeHtml(v.name)}${v.packages_enabled ? '' : ' <span class="vf-hint">(packages off)</span>'}</td>
-          <td>₹${price.toLocaleString('en-IN')}</td>
-          <td>${foodIncluded ? 'Yes' : 'No — self-sourced'}</td>
+        : `⚠ Venue doesn't serve: ${escapeHtml(missingNames)}`
+      const vp = (venuePackages || []).find(r => r.package_id === pkg.id && r.venue_id === v.id)
+      const rowId = `pkgvp-${pkg.id}-${v.id}`
+      const offCafe = v.packages_enabled ? '' : ' <span class="vf-hint">(packages off)</span>'
+      if (!vp) {
+        return `
+        <tr id="${rowId}" class="pkg-adm-vp-row pkg-adm-vp-row--off">
+          <td>${escapeHtml(v.name)}${offCafe}</td>
+          <td colspan="5"><span class="vf-hint">Not offered at this venue</span></td>
+          <td><button type="button" class="btn btn--secondary pkg-adm-vp-btn" onclick="enablePkgVenueRow(${pkg.id}, ${v.id})">+ Enable</button></td>
           <td>${gapHtml}</td>
         </tr>`
+      }
+      return `
+        <tr id="${rowId}" class="pkg-adm-vp-row${vp.is_active ? '' : ' pkg-adm-vp-row--inactive'}${missingIds.length ? ' pkg-adm-row--warn' : ''}">
+          <td>${escapeHtml(v.name)}${offCafe}</td>
+          <td><input type="number" class="vf-input pkg-adm-vp-price" value="${Number(vp.price)}" min="1" step="100" /></td>
+          <td><input type="number" class="vf-input pkg-adm-vp-incl" value="${vp.included_guests}" min="1" step="1" /></td>
+          <td><input type="number" class="vf-input pkg-adm-vp-overage" value="${Number(vp.overage_per_person)}" min="0" step="100" /></td>
+          <td><input type="number" class="vf-input pkg-adm-vp-max" value="${vp.max_guests ?? ''}" min="1" step="1" placeholder="venue cap" /></td>
+          <td><label class="vf-toggle-label"><input type="checkbox" class="pkg-adm-vp-active" ${vp.is_active ? 'checked' : ''} /> Active</label></td>
+          <td><button type="button" class="btn btn--primary pkg-adm-vp-btn" onclick="savePkgVenueRow(${pkg.id}, ${v.id})">Save</button></td>
+          <td><button type="button" class="btn btn--secondary pkg-adm-vp-btn" onclick="removePkgVenueRow(${pkg.id}, ${v.id}, '${escapeHtml(pkg.name)}', '${escapeHtml(v.name)}')">Remove</button> ${gapHtml === '—' ? '' : gapHtml}</td>
+        </tr>`
     }).join('')
+    const zeroRowsWarning = activeRowCount === 0
+      ? '<p class="venues-error" style="margin:8px 0">🚫 No active venue pricing — this package is invisible everywhere on the site until you enable it at a venue below.</p>'
+      : ''
 
     const occasionOptions = pkgAdmOccasionOptions(pkg.occasion)
 
@@ -1677,8 +1738,10 @@ function renderPackagesManager() {
             <select class="vf-input pkg-adm-occasion">${occasionOptions}</select>
           </div>
         </div>
-        <div class="vf-section-title">Add-ons in this package</div>
+        <div class="vf-section-title">Add-ons in this package <span class="vf-hint">(display-only inclusions — prices come from the venue table below, never from summing these)</span></div>
         <div class="pkg-adm-addons">${checklist}</div>
+        <div class="vf-section-title" style="margin-top:16px">Inclusions (free text) <span class="vf-hint">(one per line — shown as card bullets for packages without add-ons, e.g. The Prelude; a package with lines here never chains "Everything in…, plus" copy)</span></div>
+        <textarea class="vf-input pkg-adm-inclusions" rows="4" placeholder="Cozy macramé tent setup&#10;Ambient fairy lighting">${escapeHtml(((pkg.inclusions || []).join('\n')))}</textarea>
         <div class="vf-section-title" style="margin-top:16px">Carousel images <span class="vf-hint">(shown at the top of the tier card on /packages, the homepage, and the venue-first flow)</span></div>
         <div id="pkg-adm-images-${pkg.id}" class="vf-images-list"></div>
         <label class="vf-img-upload-btn">
@@ -1687,10 +1750,10 @@ function renderPackagesManager() {
                  onchange="addPkgAdmImagesMulti(this, ${pkg.id})" style="display:none" />
         </label>
         <button type="button" class="btn btn--primary" style="margin-top:16px" onclick="savePackageCard(${pkg.id})">Save ${escapeHtml(pkg.name)}</button>
-        ${addonIds.length === 0 ? '<p class="vf-hint" style="margin-top:8px">No add-ons selected — price is just the venue base price.</p>' : ''}
-        <div class="vf-section-title" style="margin-top:16px">Price by venue (cafe, 2 guests, live)</div>
-        <table class="pkg-adm-table">
-          <thead><tr><th>Venue</th><th>Price</th><th>Food included</th><th>Add-on gaps</th></tr></thead>
+        <div class="vf-section-title" style="margin-top:16px">Venue pricing <span class="vf-hint">(stored prices — the ONLY place package prices live; flat up to Incl. guests, + Overage per extra adult; Max guests empty = venue capacity)</span></div>
+        ${zeroRowsWarning}
+        <table class="pkg-adm-table pkg-adm-table--vp">
+          <thead><tr><th>Venue</th><th>Price ₹</th><th>Incl. guests</th><th>Overage ₹/extra</th><th>Max guests</th><th>Active</th><th></th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>`
@@ -1702,9 +1765,9 @@ function renderPackagesManager() {
   packages.forEach(pkg => renderPkgAdmImages(pkg.id, pkg.images || []))
 }
 
-// Persists name/tagline/featured + the add-on checklist for one package card.
-// Price is never written here — it's always recomputed live from base_price
-// + the catalog prices of whatever add-ons end up checked.
+// Persists name/tagline/featured/inclusions + the add-on checklist for one
+// package card. Prices are NOT saved here — they live in venue_packages and
+// are managed per-row in the card's "Venue pricing" table (savePkgVenueRow).
 async function savePackageCard(pkgId) {
   if (!appState.session) return showToast('Admin login required', 'error')
   const card = document.querySelector(`.pkg-adm-card[data-pkg-id="${pkgId}"]`)
@@ -1714,13 +1777,17 @@ async function savePackageCard(pkgId) {
   const isFeatured = card.querySelector('.pkg-adm-featured').checked
   const occasion = card.querySelector('.pkg-adm-occasion').value || null
   const addonIds = Array.from(card.querySelectorAll('.pkg-adm-addon-cb:checked')).map(cb => parseInt(cb.value, 10))
+  // Free-text inclusions (one per line) — card bullets for bundle-less
+  // packages (Prelude); also switches the card off ladder chaining.
+  const inclusions = (card.querySelector('.pkg-adm-inclusions')?.value || '')
+    .split('\n').map(s => s.trim()).filter(Boolean)
 
   const images = readPkgAdmImages(pkgId).filter(img => img.url) // drop empty rows (upload never finished)
 
   try {
     const { error: updErr } = await supabase
       .from('packages')
-      .update({ name, tagline, is_featured: isFeatured, occasion, images, updated_at: new Date().toISOString() })
+      .update({ name, tagline, is_featured: isFeatured, occasion, images, inclusions, updated_at: new Date().toISOString() })
       .eq('id', pkgId)
     if (updErr) throw updErr
 
@@ -1740,6 +1807,85 @@ async function savePackageCard(pkgId) {
   }
 }
 window.savePackageCard = savePackageCard
+
+// ── Per-venue package pricing rows (stored pricing) ─────────────────────────
+// Row-level immediate saves, deliberately separate from savePackageCard: a
+// price change shouldn't ride along with unrelated name/add-on edits, and a
+// half-filled new-venue row shouldn't block saving the card.
+
+// "+ Enable" swaps the placeholder row into an editable one client-side; the
+// DB row is only created when Save validates and upserts.
+function enablePkgVenueRow(pkgId, venueId) {
+  const tr = document.getElementById(`pkgvp-${pkgId}-${venueId}`)
+  if (!tr) return
+  const venueName = tr.querySelector('td')?.innerHTML || ''
+  tr.classList.remove('pkg-adm-vp-row--off')
+  tr.innerHTML = `
+    <td>${venueName}</td>
+    <td><input type="number" class="vf-input pkg-adm-vp-price" value="" min="1" step="100" placeholder="required" /></td>
+    <td><input type="number" class="vf-input pkg-adm-vp-incl" value="6" min="1" step="1" /></td>
+    <td><input type="number" class="vf-input pkg-adm-vp-overage" value="0" min="0" step="100" /></td>
+    <td><input type="number" class="vf-input pkg-adm-vp-max" value="" min="1" step="1" placeholder="venue cap" /></td>
+    <td><label class="vf-toggle-label"><input type="checkbox" class="pkg-adm-vp-active" checked /> Active</label></td>
+    <td><button type="button" class="btn btn--primary pkg-adm-vp-btn" onclick="savePkgVenueRow(${pkgId}, ${venueId})">Save</button></td>
+    <td><span class="vf-hint">not saved yet</span></td>`
+  tr.querySelector('.pkg-adm-vp-price')?.focus()
+}
+window.enablePkgVenueRow = enablePkgVenueRow
+
+async function savePkgVenueRow(pkgId, venueId) {
+  if (!appState.session) return showToast('Admin login required', 'error')
+  const tr = document.getElementById(`pkgvp-${pkgId}-${venueId}`)
+  if (!tr) return
+  const price    = Number(tr.querySelector('.pkg-adm-vp-price')?.value)
+  const included = parseInt(tr.querySelector('.pkg-adm-vp-incl')?.value, 10)
+  const overage  = Number(tr.querySelector('.pkg-adm-vp-overage')?.value || 0)
+  const maxRaw   = tr.querySelector('.pkg-adm-vp-max')?.value.trim()
+  const maxGuests = maxRaw === '' ? null : parseInt(maxRaw, 10)
+  const isActive = !!tr.querySelector('.pkg-adm-vp-active')?.checked
+
+  // Mirror the table's CHECK constraints so failures are friendly, not 500s.
+  if (!Number.isFinite(price) || price <= 0) return showToast('Price must be a positive number', 'error')
+  if (!Number.isInteger(included) || included < 1) return showToast('Included guests must be at least 1', 'error')
+  if (!Number.isFinite(overage) || overage < 0) return showToast('Overage can\'t be negative', 'error')
+  if (maxGuests !== null && (!Number.isInteger(maxGuests) || maxGuests < included)) {
+    return showToast('Max guests must be ≥ included guests (or empty for venue capacity)', 'error')
+  }
+
+  try {
+    const { error } = await supabase.from('venue_packages').upsert({
+      venue_id: venueId, package_id: pkgId,
+      price, included_guests: included, overage_per_person: overage,
+      max_guests: maxGuests, is_active: isActive,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'venue_id,package_id' })
+    if (error) throw error
+    showToast('Venue pricing saved!', 'success')
+    await loadPackages()        // storefront prices update immediately
+    await loadPackagesManager()
+  } catch (err) {
+    console.error(err)
+    showToast('Failed to save venue pricing: ' + err.message, 'error')
+  }
+}
+window.savePkgVenueRow = savePkgVenueRow
+
+async function removePkgVenueRow(pkgId, venueId, pkgName, venueName) {
+  if (!appState.session) return showToast('Admin login required', 'error')
+  if (!confirm(`Remove ${pkgName} from ${venueName}?\n\nThe package disappears from this venue on the site immediately. (To pause it instead, untick Active and Save.)`)) return
+  try {
+    const { error } = await supabase.from('venue_packages').delete()
+      .eq('venue_id', venueId).eq('package_id', pkgId)
+    if (error) throw error
+    showToast('Removed', 'success')
+    await loadPackages()
+    await loadPackagesManager()
+  } catch (err) {
+    console.error(err)
+    showToast('Failed to remove: ' + err.message, 'error')
+  }
+}
+window.removePkgVenueRow = removePkgVenueRow
 
 // ── Package carousel images (admin) ─────────────────────────────────────────
 // Mirrors the venue-images editor 1:1 (same .vf-image-row/.vf-img-* markup,
@@ -2238,7 +2384,7 @@ async function showPackagesPage(push = true, opts = {}) {
     const visible = visiblePackagesFor(null)
     const prices = visible.flatMap(key => {
       const tier = PACKAGE_TIERS[key]
-      return venues.map(v => packageTierPriceAt(v, tier, venueCatalog(v.id), PKG_PAGE_BASE_ADULTS))
+      return venues.map(v => packageTierPriceAt(v, tier, venueCatalog(v.id), PKG_PAGE_BASE_ADULTS)).filter(p => p != null)
     })
     const params = {
       content_ids:  visible,
@@ -2299,18 +2445,22 @@ function renderPackagesPage() {
     const tier = PACKAGE_TIERS[key]
     const isUniversal = !tier.occasion
     // Ladder copy chains within the tier's own group (universal, or one
-    // occasion's own tiers) — never across groups. See showPackageStep for
-    // the same logic on the venue-first surface.
-    const prevKey  = visible.slice(0, idx).reverse().find(k => (PACKAGE_TIERS[k]?.occasion || null) === (tier.occasion || null))
-    const prevTier = prevKey ? PACKAGE_TIERS[prevKey] : null
-    // "From ₹X" only counts venues that can actually serve this package —
-    // required-addon rule (packageServiceableAt). Universal tiers are always
-    // serviceable, so this is a no-op for them.
-    const serviceableVenues = venues.filter(v => packageServiceableAt(tier, venueCatalog(v.id)))
-    const prices = serviceableVenues.map(v => packageTierPriceAt(v, tier, venueCatalog(v.id), PKG_PAGE_BASE_ADULTS))
+    // occasion's own tiers) — never across groups, and never off a standalone
+    // package (Prelude is a sibling setup, not a rung — pkgStandalone). See
+    // showPackageStep for the same logic on the venue-first surface.
+    const prevKey  = visible.slice(0, idx).reverse().find(k =>
+      (PACKAGE_TIERS[k]?.occasion || null) === (tier.occasion || null) && !pkgStandalone(PACKAGE_TIERS[k]))
+    const prevTier = (prevKey && !pkgStandalone(tier)) ? PACKAGE_TIERS[prevKey] : null
+    // "From ₹X" only counts venues with an active venue_packages row — a
+    // missing row means the package isn't offered there (stored pricing).
+    const offeredVenues = venues.filter(v => packageOfferedAt(v.id, key))
+    const prices = offeredVenues.map(v => packageTierPriceAt(v, tier, venueCatalog(v.id), PKG_PAGE_BASE_ADULTS)).filter(p => p != null)
     const from = prices.length ? Math.min(...prices) : null
     let incl
-    if (!prevTier) {
+    if (pkgStandalone(tier)) {
+      // Free-text inclusions (packages.inclusions) — bundle-less packages.
+      incl = `<ul class="pkg-card-incl">${(tier.inclusions || []).map(n => `<li>${escapeHtml(n)}</li>`).join('')}</ul>`
+    } else if (!prevTier) {
       // Venue-independent: the shared setup only (venue-specific extras show
       // once a venue is picked — mirrors the venue-first tier step's list).
       const lead = isUniversal ? '' : '<p class="pkg-card-incl-lead">The signature setup, plus:</p>'
@@ -2329,9 +2479,14 @@ function renderPackagesPage() {
       ? '<span class="pkg-card-badge">Most picked</span>'
       : (key === suggested ? '<span class="pkg-card-badge pkg-card-badge--suggested">Suggested</span>' : '')
     const active = pkgPageState.tierKey === key
+    // Guest note reads from the cheapest offered venue's own row — "upto N"
+    // is per-package now (Prelude 4, others 6), not a hardcoded 6.
+    const fromRow = from !== null
+      ? offeredVenues.map(v => venuePackageRow(v.id, key)).filter(Boolean).sort((a, b) => Number(a.price) - Number(b.price))[0]
+      : null
     const priceHtml = from === null
       ? '<div class="pkg-card-price pkg-card-price--unavailable">Not available right now</div>'
-      : `${pkgPriceRowHtml(from, serviceableVenues.length > 1 ? 'From ' : '')}<div class="pkg-card-price-note">for upto 6 guests</div>`
+      : `${pkgPriceRowHtml(from, offeredVenues.length > 1 ? 'From ' : '')}<div class="pkg-card-price-note">for upto ${fromRow ? fromRow.included_guests : 6} guests</div>`
     return `
       <div class="pkg-card${tier.featured ? ' pkg-card--featured' : ''}${active ? ' pkg-card--active' : ''}">
         ${badge}
@@ -2403,10 +2558,9 @@ function renderPackagesPage() {
 function renderPkgVenuePicker(venues) {
   const tier = PACKAGE_TIERS[pkgPageState.tierKey]
   if (!tier) return ''
-  // Required-addon rule: only venues that can actually serve this tier's
-  // add-ons are offered here (packageServiceableAt — no-op for universal
-  // tiers, which tolerate gaps).
-  const serviceable = venues.filter(v => packageServiceableAt(tier, venueCatalog(v.id)))
+  // Stored pricing: only venues with an active venue_packages row offer this
+  // package — the admin panel is where a package gets enabled per venue.
+  const serviceable = venues.filter(v => packageOfferedAt(v.id, tier.key))
   if (!serviceable.length) {
     return `
       <div class="pkgp-venues" id="pkgp-venues">
@@ -2432,8 +2586,9 @@ function renderPkgVenuePicker(venues) {
   // Same cards as the homepage grid (venueCardHtml) — only the price line
   // differs: it shows THIS tier's firm price at the venue.
   const cards = shown.map(v => {
+    const row = venuePackageRow(v.id, tier.key)
     const price = packageTierPriceAt(v, tier, venueCatalog(v.id), PKG_PAGE_BASE_ADULTS)
-    const priceHtml = `₹${price.toLocaleString('en-IN')} <span class="venue-card-price-sub">for ${PKG_PAGE_BASE_ADULTS} adults</span>`
+    const priceHtml = `₹${price.toLocaleString('en-IN')} <span class="venue-card-price-sub">for upto ${row.included_guests} guests</span>`
     return venueCardHtml(v, { priceHtml })
   }).join('')
   return `
@@ -2441,7 +2596,7 @@ function renderPkgVenuePicker(venues) {
       <p class="pkgp-step-label">Where should ${escapeHtml(tier.name)} happen?</p>
       ${cityPills}
       <div class="venue-grid pkgp-venue-grid" id="pkgp-venue-grid">${cards}</div>
-      <p class="pkgp-venues-note">Prices shown for ${PKG_PAGE_BASE_ADULTS} adults — you'll pick date, time and guests next.</p>
+      <p class="pkgp-venues-note">Package prices are flat up to the included guest count — you'll pick date, time and guests next.</p>
     </div>`
 }
 
@@ -2534,8 +2689,13 @@ async function renderHomePackagesSection() {
 
   grid.innerHTML = visible.map(key => {
     const tier = PACKAGE_TIERS[key]
-    const prices = venues.map(v => packageTierPriceAt(v, tier, venueCatalog(v.id), PKG_PAGE_BASE_ADULTS))
+    // Stored pricing: only venues with an active venue_packages row count; a
+    // tier offered nowhere is skipped from the teaser entirely.
+    const offeredVenues = venues.filter(v => packageOfferedAt(v.id, key))
+    const prices = offeredVenues.map(v => packageTierPriceAt(v, tier, venueCatalog(v.id), PKG_PAGE_BASE_ADULTS)).filter(p => p != null)
+    if (!prices.length) return ''
     const from = Math.min(...prices)
+    const fromRow = offeredVenues.map(v => venuePackageRow(v.id, key)).filter(Boolean).sort((a, b) => Number(a.price) - Number(b.price))[0]
     const occasions = OCCASIONS.filter(o => defaultTierForOccasion(o) === key).slice(0, 3)
     const occasionLine = occasions.length
       ? `<p class="pkg-card-occasions">Perfect for ${occasions.map(o => escapeHtml(o)).join(', ')}</p>`
@@ -2548,7 +2708,7 @@ async function renderHomePackagesSection() {
         <h4 class="pkg-card-name">${escapeHtml(tier.name)}</h4>
         <p class="pkg-card-tagline">${escapeHtml(tier.tagline)}</p>
         ${pkgPriceRowHtml(from, 'From ')}
-        <div class="pkg-card-price-note">for upto 6 guests</div>
+        <div class="pkg-card-price-note">for upto ${fromRow ? fromRow.included_guests : 6} guests</div>
         ${occasionLine}
         <a class="btn ${tier.featured ? 'btn--venue-primary' : 'btn--venue-secondary'} pkg-card-cta" href="/packages?tier=${encodeURIComponent(key)}" onclick="event.preventDefault(); showPackagesPage(true, {tierKey:'${escapeHtml(key)}'})">Explore ${escapeHtml(tier.name)}</a>
       </div>`
@@ -3241,17 +3401,19 @@ function setBookingOccasion(value) {
   appState.bookingOccasion = value || ''
 }
 
-// Price a tier for this venue = base picnic price (current adults) + the tier's
-// add-on prices from this venue's catalog. Matches the booking-form total exactly
-// (the form sums the same base + the same add-on checkboxes), so the card price
-// equals the form total when the customer adds no extras.
+// Price a tier at a venue = the STORED venue_packages price (flat through the
+// row's included_guests, + overage_per_person per adult beyond it). Returns
+// NULL when the package has no active row at this venue — callers must treat
+// null as "not offered here" and hide/disable, never fall back to derived
+// math (SPEC_stored_package_pricing_2026-07-10.md). Bundled add-ons are
+// display-only and price at ₹0, so the booking form's checkbox sum still
+// matches this card price exactly when no extras are added.
+// `catalog` is kept in the signature (unused) so call sites didn't all churn.
 function packageTierPriceAt(venue, tier, catalog, adults) {
-  const base = getPicnicPrice(venue, adults)
-  const addonSum = (tier.addons || []).reduce((s, id) => {
-    const a = catalog.find(x => x.id === id)
-    return s + (a ? Number(a.price) : 0)
-  }, 0)
-  return base + addonSum
+  const row = venuePackageRow(venue?.id, tier?.key)
+  if (!row) return null
+  const extra = Math.max(0, (Number(adults) || 0) - row.included_guests)
+  return Number(row.price) + extra * Number(row.overage_per_person || 0)
 }
 // Current-booking flavour: prices at whatever guest count the flow has.
 // The /packages page uses packageTierPriceAt directly with a fixed baseline
@@ -3281,32 +3443,52 @@ function showPackageStep(venue) {
   const catalog    = appState.currentVenueAddOns || []
   const defaultKey = defaultTierForOccasion(appState.bookingOccasion)
 
-  // Occasion-specific packages must actually be servable at THIS venue's
-  // catalog (required-addon rule — see packageServiceableAt). If the chosen
-  // occasion isn't servable here at all, fall back to the universal ladder
-  // rather than showing an empty tier step.
+  // Stored pricing: a package is offered at THIS venue only if it has an
+  // active venue_packages row (admin enables per venue). If the chosen
+  // occasion's packages aren't offered here, fall back to whichever universal
+  // tiers are; if NOTHING is offered here, skip the tier step entirely —
+  // straight to the plain booking form (venue is packages_enabled but has no
+  // priced rows yet).
   let visibleKeys = visiblePackagesFor(appState.bookingOccasion || null)
-    .filter(k => packageServiceableAt(PACKAGE_TIERS[k], catalog))
-  if (!visibleKeys.length) visibleKeys = PACKAGE_TIER_ORDER.filter(k => !PACKAGE_TIERS[k]?.occasion)
+    .filter(k => packageOfferedAt(venue.id, k))
+  if (!visibleKeys.length) {
+    visibleKeys = PACKAGE_TIER_ORDER.filter(k => !PACKAGE_TIERS[k]?.occasion && packageOfferedAt(venue.id, k))
+  }
+  if (!visibleKeys.length) {
+    appState.selectedPackage = null
+    showBookingForm(venue)
+    return
+  }
+
+  const totalGuests = appState.adults + appState.children
 
   const cards = visibleKeys.map((key, idx) => {
     const tier     = PACKAGE_TIERS[key]
+    const row      = venuePackageRow(venue.id, key)
     const price    = packageTierPrice(venue, tier, catalog)
+    // Hard cap (venue_packages.max_guests): the setup physically can't host
+    // more — card stays visible but can't be chosen with this party size.
+    const overCap  = row?.max_guests != null && totalGuests > row.max_guests
     // Ladder copy ("Everything in <prev>, plus:") chains within whatever
     // group this tier belongs to — the universal three, or one occasion's
     // own tiers (e.g. Movie Night Deluxe chains off Movie Night, not off
-    // The Story) — never across groups.
-    const prevKey  = visibleKeys.slice(0, idx).reverse().find(k => (PACKAGE_TIERS[k]?.occasion || null) === (tier.occasion || null))
-    const prevTier = prevKey ? PACKAGE_TIERS[prevKey] : null
+    // The Story) — never across groups, and never off a standalone package
+    // (Prelude is a sibling setup, not a rung — pkgStandalone).
+    const prevKey  = visibleKeys.slice(0, idx).reverse().find(k =>
+      (PACKAGE_TIERS[k]?.occasion || null) === (tier.occasion || null) && !pkgStandalone(PACKAGE_TIERS[k]))
+    const prevTier = (prevKey && !pkgStandalone(tier)) ? PACKAGE_TIERS[prevKey] : null
 
     // The Setting IS the base setup — its checklist is what the venue page's
     // "What's included" section used to show (now hidden in this flow, see
     // renderVenueDetail). Every other first-of-group tier (Moment/Story, or
     // an occasion's own first tier) is additive: "Everything in <prev>,
     // plus:" the add-ons that tier introduces on top of the one before it.
+    // Standalone packages (Prelude) show their own free-text inclusions.
     let inclLead  = ''
     let inclItems = []
-    if (!prevTier) {
+    if (pkgStandalone(tier)) {
+      inclItems = tier.inclusions || []
+    } else if (!prevTier) {
       if (tier.occasion) {
         inclLead  = 'The signature setup, plus:'
         inclItems = (tier.addons || []).map(id => catalog.find(a => a.id === id)).filter(Boolean).map(a => a.name)
@@ -3324,6 +3506,11 @@ function showPackageStep(venue) {
     const badge = tier.featured
       ? '<span class="pkg-card-badge">Most picked</span>'
       : (key === defaultKey ? '<span class="pkg-card-badge pkg-card-badge--suggested">Suggested</span>' : '')
+    // Guest note: flat price through included_guests; past it the shown price
+    // already carries the per-head overage for the current party size.
+    const priceNote = row && appState.adults <= row.included_guests
+      ? `for upto ${row.included_guests} guests`
+      : `for ${appState.adults} adult${appState.adults !== 1 ? 's' : ''}`
     return `
         <div class="pkg-card${tier.featured ? ' pkg-card--featured' : ''}${key === defaultKey ? ' pkg-card--suggested' : ''}">
           ${badge}
@@ -3331,9 +3518,9 @@ function showPackageStep(venue) {
           <h4 class="pkg-card-name">${escapeHtml(tier.name)}</h4>
           <p class="pkg-card-tagline">${escapeHtml(tier.tagline)}</p>
           ${pkgPriceRowHtml(price)}
-          <div class="pkg-card-price-note">for ${appState.adults} adult${appState.adults !== 1 ? 's' : ''}</div>
+          <div class="pkg-card-price-note">${priceNote}</div>
           ${inclList}
-          <button type="button" class="btn ${tier.featured ? 'btn--venue-primary' : 'btn--venue-secondary'} pkg-card-cta" onclick="selectPackageTier('${key}')">Choose ${escapeHtml(tier.name)}</button>
+          <button type="button" class="btn ${tier.featured ? 'btn--venue-primary' : 'btn--venue-secondary'} pkg-card-cta" ${overCap ? 'disabled' : ''} onclick="selectPackageTier('${key}')">${overCap ? `Up to ${row.max_guests} guests only` : `Choose ${escapeHtml(tier.name)}`}</button>
         </div>`
   }).join('')
 
@@ -3373,6 +3560,19 @@ function selectPackageTier(key) {
   const tier  = PACKAGE_TIERS[key]
   const venue = appState.currentVenue
   if (!tier || !venue) return
+  // Stored pricing guards: the package must have an active venue_packages row
+  // here, and the party must fit its hard cap. Both are re-checked (and
+  // raised on) server-side by submit_booking_intent — these are the friendly
+  // front-line versions.
+  const vpRow = venuePackageRow(venue.id, key)
+  if (!vpRow) {
+    showToast(`${tier.name} isn't available at ${venue.name} right now`, 'error')
+    return
+  }
+  if (vpRow.max_guests != null && (appState.adults + appState.children) > vpRow.max_guests) {
+    showToast(`${tier.name} hosts up to ${vpRow.max_guests} guests — reduce the guest count or pick another package`, 'error')
+    return
+  }
   const catalog  = appState.currentVenueAddOns || []
   const addonIds = (tier.addons || []).filter(id => catalog.some(a => a.id === id))
   appState.selectedPackage = { occasion: appState.bookingOccasion || null, tierKey: key, addonIds }
@@ -3386,17 +3586,18 @@ function selectPackageTier(key) {
   // tier's price, instead of re-showing the full contact-details form —
   // name/email/mobile/etc. are already saved in changeModeData.
   if (appState.changeMode === 'intent-package' && appState.changeModeData) {
-    const picnicPrice = getPicnicPrice(venue, appState.adults)
+    // Stored pricing: the tier's price IS the package price (bundled add-ons
+    // included at ₹0) — no more base + add-on summing.
+    const pkgPrice  = packageTierPriceAt(venue, tier, catalog, appState.adults)
     const addonObjs = addonIds.map(id => catalog.find(a => a.id === id)).filter(Boolean)
-    const addonSum  = addonObjs.reduce((s, a) => s + Number(a.price), 0)
     const lead = {
       ...appState.changeModeData,
-      advance_amount: Math.round((picnicPrice + addonSum) * 0.3),
+      advance_amount: Math.round((pkgPrice ?? getPicnicPrice(venue, appState.adults)) * 0.3),
       package_key:    key, // "Change package" from the intent screen — this IS the new tier
     }
     appState.pendingLead   = lead
     appState.pendingAddOns = addonObjs.map(a => ({
-      addon_id: a.id, name: a.name, price_at_booking: a.price, requires_confirmation: a.requires_confirmation || false,
+      addon_id: a.id, name: a.name, price_at_booking: 0, requires_confirmation: a.requires_confirmation || false,
     }))
     appState.changeMode     = null
     appState.changeModeData = null
@@ -3488,12 +3689,13 @@ async function showBookingForm(venue) {
     baseTotal += nights * (Number(venue.metadata?.stay_price_per_night) || 0)
     hasStay = true
   }
-  // Packages: fold the setup + its locked add-ons into a single line (their
-  // individual prices are already shown per-tier on the previous step) —
-  // only add-ons chosen beyond the package get itemized below.
-  if (pkg && pkgTier) {
-    const lockedSum = lockedAddons.reduce((s, a) => s + Number(a.price || 0), 0)
-    priceRows += `<div class="vd-bv-price-row vd-bv-price-row--package"><span>${escapeHtml(pkgTier.name)} package</span><span>₹${(baseTotal + lockedSum).toLocaleString('en-IN')}</span></div>`
+  // Packages: the stored venue_packages price IS the package line (bundled
+  // add-ons are included in it, priced at ₹0 below) — only add-ons chosen
+  // beyond the package get itemized.
+  const pkgPrice = (pkg && pkgTier) ? packageTierPriceAt(venue, pkgTier, addOns, appState.adults) : null
+  if (pkg && pkgTier && pkgPrice != null) {
+    baseTotal = pkgPrice
+    priceRows += `<div class="vd-bv-price-row vd-bv-price-row--package"><span>${escapeHtml(pkgTier.name)} package</span><span>₹${baseTotal.toLocaleString('en-IN')}</span></div>`
   } else {
     priceRows += `<div class="vd-bv-price-row"><span>${hasStay ? 'Stay + Picnic setup' : 'Picnic setup'}</span><span>₹${baseTotal.toLocaleString('en-IN')}</span></div>`
   }
@@ -3519,10 +3721,14 @@ async function showBookingForm(venue) {
           </div>
           <div class="vd-bf-addon-right">
             <span class="pkg-included-tick" aria-hidden="true">✓</span>
+            <!-- data-addon-price=0: bundled add-ons are included in the stored
+                 package price — they ride along for the submit payload but
+                 contribute nothing to the client total (mirrors the RPC's
+                 price_at_booking=0 for bundled rows). -->
             <input type="checkbox" class="bv-addon-check pkg-locked-check" checked
                    data-addon-id="${a.id}"
                    data-addon-name="${escapeHtml(a.name)}"
-                   data-addon-price="${a.price}"
+                   data-addon-price="0"
                    data-addon-confirm="${a.requires_confirmation || false}"
                    onclick="return false" tabindex="-1" aria-label="Included add-on (locked)">
           </div>
@@ -3781,7 +3987,12 @@ function updateBookingSummaryPrice() {
   const venue = appState.currentVenue
   if (!venue) return
 
-  const picnicPrice = getPicnicPrice(venue, appState.adults)
+  // Stored package pricing: when a tier is selected, the venue_packages price
+  // replaces the venue base entirely (bundled checkboxes carry price 0, so the
+  // checkbox sum below only ever adds true extras).
+  const pkgTier = (appState.selectedPackage && venue.type === 'cafe') ? PACKAGE_TIERS[appState.selectedPackage.tierKey] : null
+  const pkgPrice = pkgTier ? packageTierPriceAt(venue, pkgTier, [], appState.adults) : null
+  const picnicPrice = pkgPrice != null ? pkgPrice : getPicnicPrice(venue, appState.adults)
   const addonSum      = Array.from(document.querySelectorAll('.bv-addon-check:checked'))
     .reduce((sum, cb) => sum + Number(cb.dataset.addonPrice), 0)
 
@@ -3860,15 +4071,14 @@ function buildIntentSummaryHTML() {
       hasStay = true
     }
 
-    // Packages: same collapsing as the booking form (showBookingForm) — fold
-    // the setup + its locked add-ons into one line, only itemize add-ons
-    // chosen beyond the package.
-    const lockedAddOns = lockedIds.length ? addOns.filter(ao => lockedIds.includes(ao.addon_id)) : []
+    // Packages: same collapsing as the booking form (showBookingForm) — the
+    // stored venue_packages price IS the package line (bundled add-ons ride
+    // at ₹0); only itemize add-ons chosen beyond the package.
     const extraAddOns  = lockedIds.length ? addOns.filter(ao => !lockedIds.includes(ao.addon_id)) : addOns
 
-    if (pkgTier) {
-      const lockedSum = lockedAddOns.reduce((s, ao) => s + Number(ao.price_at_booking || 0), 0)
-      rows += `<div class="vd-bv-price-row vd-bv-price-row--package"><span>${escapeHtml(pkgTier.name)} package</span><span>₹${(setupBase + lockedSum).toLocaleString('en-IN')}</span></div>`
+    const pkgLinePrice = pkgTier ? packageTierPriceAt(venue, pkgTier, [], appState.adults) : null
+    if (pkgTier && pkgLinePrice != null) {
+      rows += `<div class="vd-bv-price-row vd-bv-price-row--package"><span>${escapeHtml(pkgTier.name)} package</span><span>₹${pkgLinePrice.toLocaleString('en-IN')}</span></div>`
     } else if (setupBase) {
       rows += `<div class="vd-bv-price-row"><span>${hasStay ? 'Stay + Picnic setup' : 'Picnic setup'}</span><span>₹${setupBase.toLocaleString('en-IN')}</span></div>`
     }
@@ -4007,7 +4217,12 @@ function handleInlineBookingSubmit(event) {
     return
   }
 
-  const picnicPrice = getPicnicPrice(venue, appState.adults)
+  // Stored package pricing: the venue_packages price replaces the venue base
+  // when a tier is selected; bundled checkboxes carry price 0 so addonSum is
+  // extras-only. (Server recomputes authoritatively either way.)
+  const subPkgTier  = (venue.type === 'cafe' && appState.selectedPackage) ? PACKAGE_TIERS[appState.selectedPackage.tierKey] : null
+  const subPkgPrice = subPkgTier ? packageTierPriceAt(venue, subPkgTier, [], appState.adults) : null
+  const picnicPrice = subPkgPrice != null ? subPkgPrice : getPicnicPrice(venue, appState.adults)
   const addonSum      = Array.from(document.querySelectorAll('.bv-addon-check:checked'))
     .reduce((s, cb) => s + Number(cb.dataset.addonPrice), 0)
 
