@@ -3,7 +3,7 @@ SEO SPEC — do not render this block
 title: Private Birthday Picnic in Gurugram | The Picnic Stories   (57 chars)
 meta: Plan a private birthday picnic in Gurugram — Aravalli lawns, cozy city setups, cake, decor & photographer handled for you. Book your date in minutes.   (150 chars)
 slug: /blog/birthday-picnic-ideas-gurugram
-published: 2026-07-20
+published: 2026-07-11
 hero: (paste a Supabase image URL — Beige/Offgrid birthday setup; falls back to site hero if empty)
 primary keyword: private birthday picnic Gurugram
 secondary: birthday celebration ideas Gurugram, birthday picnic ideas

@@ -3,7 +3,7 @@ SEO SPEC — do not render this block
 title: Anniversary Celebration Ideas in Delhi NCR | Picnic Stories   (60 chars)
 meta: Celebrate your anniversary with a private picnic setup in Delhi NCR — glasshouse cafes, Aravalli sunsets, photographers, and zero planning stress.   (146 chars)
 slug: /blog/anniversary-celebration-ideas-delhi-ncr
-published: 2026-07-20
+published: 2026-07-11
 hero: (paste a Supabase image URL — Sunroom/Beige couple setup; falls back to site hero if empty)
 primary keyword: outdoor anniversary celebration Delhi NCR
 secondary: anniversary celebration ideas Delhi NCR, anniversary picnic

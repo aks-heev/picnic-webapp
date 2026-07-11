@@ -3,7 +3,7 @@ SEO SPEC — do not render this block
 title: Picnic Proposal Setups in Delhi NCR | The Picnic Stories   (55 chars)
 meta: Propose at a private picnic setup in Gurugram or Delhi NCR — hidden photographer, cold pyros, and a styled scene ready before they arrive.   (138 chars)
 slug: /blog/picnic-proposal-ideas-gurugram-delhi-ncr
-published: 2026-07-20
+published: 2026-07-11
 hero: (paste a Supabase image URL — proposal/pyros setup; falls back to site hero if empty)
 primary keyword: picnic proposal setup Delhi NCR
 secondary: proposal ideas Gurugram, romantic proposal Delhi

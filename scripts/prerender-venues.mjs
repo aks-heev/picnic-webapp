@@ -808,6 +808,11 @@ function parseBlogPost(raw, file) {
   }
   const md = raw.replace(/<!--[\s\S]*?-->/, '').trim()
   const h1 = md.match(/^#\s+(.+)$/m)?.[1]?.trim() || stripAnno(spec.title) || file
+  // The H1 is already rendered once in the post-hero block (see buildBlogPages)
+  // — drop the leading "# Title" line here so raw HTML never carries two <h1>s
+  // for the same page (the article-body one used to be CSS-hidden but still
+  // crawler-visible).
+  const bodyMd = md.replace(/^#\s+.+(?:\r?\n)?/, '')
   const name = (spec.slug || `/blog/${file.replace(/\.md$/, '')}`).split('/').filter(Boolean).pop()
   return {
     name,
@@ -817,7 +822,7 @@ function parseBlogPost(raw, file) {
     hero: (spec.hero || '').startsWith('http') ? spec.hero : '',
     h1,
     words: md.split(/\s+/).length,
-    bodyHtml: mdToHtml(md),
+    bodyHtml: mdToHtml(bodyMd),
     url: `${SITE}/blog/${name}`,
   }
 }

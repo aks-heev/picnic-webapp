@@ -3,7 +3,7 @@ SEO SPEC — do not render this block
 title: Candlelight Picnic Dates in Gurugram | The Picnic Stories   (56 chars)
 meta: Skip the dinner reservation — book a private candlelight picnic date in Gurugram. Bonfires, bouquets, and setups styled before you arrive.   (139 chars)
 slug: /blog/romantic-picnic-date-gurugram
-published: 2026-07-20
+published: 2026-07-11
 hero: (paste a Supabase image URL — candlelit couple setup; falls back to site hero if empty)
 primary keyword: private candlelight picnic date Gurugram
 secondary: best date ideas Gurugram, romantic picnic Gurugram
