@@ -3,7 +3,7 @@
 // dist/index.html into dist/venues/<slug>.html with per-venue <title>, meta,
 // Open Graph / Twitter tags, JSON-LD, and a crawlable content block. Also writes
 // sitemap.xml + robots.txt. The same app.js bundle hydrates the page on load.
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { createClient } from '@supabase/supabase-js'
 import { loadEnv } from 'vite'
@@ -62,6 +62,11 @@ const clamp = (s = '', n = 155) => {
   const t = String(s).replace(/\s+/g, ' ').trim()
   if (t.length <= n) return t
   const cut = t.slice(0, n)
+  // Prefer ending on a complete sentence if one falls late enough in the
+  // budget (avoids "…" hanging off a half-finished clause) — otherwise fall
+  // back to the last word boundary.
+  const lastSentenceEnd = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '))
+  if (lastSentenceEnd > n * 0.4) return cut.slice(0, lastSentenceEnd + 1)
   return cut.slice(0, cut.lastIndexOf(' ')).concat('…')
 }
 
@@ -518,6 +523,7 @@ function buildCityPages(template, allVenues, urls) {
     <p>${esc(city)} &mdash; <a href="tel:${cfg.phone.replace(/\s/g, '')}">${esc(cfg.phone)}</a></p>
     <nav class="footer-links" aria-label="Footer links">
       <a href="/">Home</a>
+      <a href="/blog">Blog</a>
       <a href="/privacy.html">Privacy</a>
       <a href="/terms.html">Terms</a>
       <a href="/cancellation.html">Cancellation</a>
@@ -589,7 +595,7 @@ function packagesJsonLd(pageUrl, tiers, fromPriceByTier) {
  * hydration overlay. Build-time "From ₹X" prices are placeholders — the
  * client's showPackagesPage() overwrites #packages-content with live prices
  * the moment app.js hydrates (same mechanism as the venue pages). */
-async function buildPackagesPage(supabase, template) {
+async function buildPackagesPage(supabase, template, blogPosts = []) {
   const [pkgRes, venueRes, addonRes, vpRes] = await Promise.all([
     supabase.from('packages').select('*, package_add_ons(addon_id, sort_order)')
       .eq('is_active', true).order('sort_order', { ascending: true }),
@@ -639,10 +645,10 @@ async function buildPackagesPage(supabase, template) {
 
   const url = `${SITE}/packages`
   const title = 'Picnic Packages — Date Night, Movie Night & More | The Picnic Stories'
-  const desc = clamp(
-    `Pick a curated picnic package — ${pricedTiers.map(t => t.name).join(', ')} — then choose your venue. ` +
-    `Flat package prices, firm total confirmed once you pick a venue.`
-  )
+  // Hand-written and kept under ~155 chars deliberately — the old version
+  // concatenated every tier name into the description, which overflowed the
+  // budget and got cut off mid-sentence as tiers were added.
+  const desc = 'Curated picnic packages for every occasion — pick The Setting, Date Night, Movie Night and more, then choose your venue. Flat pricing, confirmed upfront.'
   const img = HERO_FALLBACK
 
   let html = swapHead(template, [
@@ -691,7 +697,8 @@ async function buildPackagesPage(supabase, template) {
       <h1>Picnic Packages</h1>
       <p>Bouquets at golden hour, bonfires under the stars, a screening just for two — pick the picnic that already feels like you, then choose where it happens.</p>
       <div class="pr-pkg-cards">${cards}</div>
-      ${venuesLine}`
+      ${venuesLine}
+      ${blogPosts.length ? `<p>Planning an occasion? Read our guides: ${blogPosts.map(p => `<a href="/blog/${esc(p.name)}">${esc(p.h1)}</a>`).join(' · ')}</p>` : ''}`
 
   const loader = `
 <div id="pr-loader" aria-hidden="true" style="position:fixed;inset:0;z-index:99999;background:#fdfaf7;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem">
@@ -744,6 +751,285 @@ async function buildPackagesPage(supabase, template) {
   return { url, html }
 }
 
+// ───────────────────────────── Blog (BLOG_SEO_PLAN_2026-07-11.md, Track B1) ─────────────────────────────
+// Blog posts are STANDALONE static pages (city-page pattern), NOT SPA-shell
+// clones: app.js has no /blog route, so there is nothing to hydrate. Source of
+// truth is content/blog/*.md — each file starts with an HTML-comment "SEO SPEC"
+// block (title / meta / slug / published / hero), followed by a constrained
+// markdown subset (#..#### headings, **bold**, *italic*, [links](url), - and
+// 1. lists, --- rules, paragraphs). The parser below covers exactly that
+// subset — if you write fancier markdown in a post, extend mdToHtml() first.
+const BLOG_DIR = resolve(process.cwd(), 'content', 'blog')
+
+function mdInline(s) {
+  s = s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, t, h) => `<a href="${h}">${t}</a>`)
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+  s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>')
+  return s
+}
+
+function mdToHtml(md) {
+  const out = []
+  let para = []
+  let list = null
+  const flushPara = () => { if (para.length) { out.push(`<p>${mdInline(para.join(' '))}</p>`); para = [] } }
+  const flushList = () => {
+    if (list) {
+      out.push(`<${list.type}>${list.items.map(i => `<li>${mdInline(i)}</li>`).join('')}</${list.type}>`)
+      list = null
+    }
+  }
+  for (const raw of md.split('\n')) {
+    const t = raw.trim()
+    if (!t) { flushPara(); flushList(); continue }
+    let m
+    if ((m = t.match(/^(#{1,4})\s+(.*)/))) { flushPara(); flushList(); out.push(`<h${m[1].length}>${mdInline(m[2])}</h${m[1].length}>`); continue }
+    if (/^-{3,}$/.test(t)) { flushPara(); flushList(); out.push('<hr>'); continue }
+    if ((m = t.match(/^-\s+(.*)/))) { flushPara(); if (!list || list.type !== 'ul') { flushList(); list = { type: 'ul', items: [] } } list.items.push(m[1]); continue }
+    if ((m = t.match(/^\d+\.\s+(.*)/))) { flushPara(); if (!list || list.type !== 'ol') { flushList(); list = { type: 'ol', items: [] } } list.items.push(m[1]); continue }
+    flushList(); para.push(t)
+  }
+  flushPara(); flushList()
+  return out.join('\n')
+}
+
+// The spec block annotates title/meta with "(NN chars)" — strip those.
+const stripAnno = (s = '') => s.replace(/\s*\(\d+\s*chars?\)\s*$/i, '').trim()
+
+function parseBlogPost(raw, file) {
+  const spec = {}
+  const specMatch = raw.match(/<!--([\s\S]*?)-->/)
+  if (specMatch) {
+    for (const line of specMatch[1].split('\n')) {
+      const i = line.indexOf(':')
+      if (i > 0) spec[line.slice(0, i).trim().toLowerCase()] = line.slice(i + 1).trim()
+    }
+  }
+  const md = raw.replace(/<!--[\s\S]*?-->/, '').trim()
+  const h1 = md.match(/^#\s+(.+)$/m)?.[1]?.trim() || stripAnno(spec.title) || file
+  const name = (spec.slug || `/blog/${file.replace(/\.md$/, '')}`).split('/').filter(Boolean).pop()
+  return {
+    name,
+    title: stripAnno(spec.title) || h1,
+    desc: clamp(stripAnno(spec.meta) || '', 155),
+    published: spec.published || new Date().toISOString().slice(0, 10),
+    hero: (spec.hero || '').startsWith('http') ? spec.hero : '',
+    h1,
+    words: md.split(/\s+/).length,
+    bodyHtml: mdToHtml(md),
+    url: `${SITE}/blog/${name}`,
+  }
+}
+
+const BLOG_CSS = `
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+    body{font-family:'Lato',system-ui,sans-serif;background:#fdfaf7;color:#2d2420;-webkit-font-smoothing:antialiased;line-height:1.7}
+    a{color:inherit;text-decoration:none}
+    img{display:block;max-width:100%}
+    .site-header{position:sticky;top:0;z-index:50;background:rgba(253,250,247,.93);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(232,224,216,.8)}
+    .header-inner{max-width:1140px;margin:0 auto;padding:.85rem 1.5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem}
+    .header-brand{display:flex;align-items:center;gap:.55rem;font-family:'EB Garamond',Georgia,serif;font-size:1.15rem;color:#2d2420;flex-shrink:0}
+    .header-brand img{height:32px;width:auto}
+    .header-nav{display:flex;gap:.45rem;flex-wrap:wrap}
+    .sec-pill{padding:.38rem 1rem;border-radius:999px;font-size:.78rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b5d57;border:1.5px solid #ddd5cb;transition:background .18s,color .18s,border-color .18s;white-space:nowrap}
+    .sec-pill:hover{background:#a84d66;color:#fff;border-color:#a84d66}
+    .post-hero{padding:3.5rem 1.5rem 2.25rem;text-align:center;background:linear-gradient(155deg,#fdf6ef 0%,#f8ede4 45%,#f3e4db 100%)}
+    .post-hero-inner{max-width:760px;margin:0 auto}
+    .crumb{display:flex;align-items:center;justify-content:center;gap:.35rem;font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:#b09890;margin-bottom:1.25rem}
+    .crumb a:hover{color:#a84d66}
+    .post-hero h1{font-family:'EB Garamond',Georgia,serif;font-size:clamp(1.9rem,4.5vw,3rem);font-weight:400;line-height:1.15;margin-bottom:1rem}
+    .post-meta{font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:#9a8b85}
+    article{max-width:720px;margin:0 auto;padding:2.75rem 1.5rem 3.5rem;font-size:1.04rem;color:#4a3f39}
+    article h1{display:none}
+    article h2{font-family:'EB Garamond',Georgia,serif;font-size:1.75rem;font-weight:500;color:#2d2420;line-height:1.25;margin:2.4rem 0 .85rem}
+    article h3{font-family:'EB Garamond',Georgia,serif;font-size:1.3rem;font-weight:500;color:#2d2420;margin:1.9rem 0 .6rem}
+    article p{margin-bottom:1.1rem}
+    article ul,article ol{margin:0 0 1.25rem 1.35rem}
+    article li{margin-bottom:.55rem}
+    article a{color:#a84d66;font-weight:700;border-bottom:1px solid rgba(168,77,102,.35);transition:border-color .15s}
+    article a:hover{border-color:#a84d66}
+    article strong{color:#2d2420}
+    article hr{border:0;height:1px;background:#e8e0d8;margin:2.5rem 0}
+    article .lead-img{border-radius:16px;margin-bottom:1.6rem;aspect-ratio:16/9;object-fit:cover;width:100%}
+    .cta-band{background:linear-gradient(140deg,#1e1410 0%,#2d2420 60%,#352820 100%);color:#f5ede8;padding:4.5rem 1.5rem;text-align:center}
+    .cta-band-inner{max-width:520px;margin:0 auto}
+    .cta-band h2{font-family:'EB Garamond',Georgia,serif;font-size:clamp(1.8rem,4vw,2.5rem);font-weight:400;line-height:1.2;margin-bottom:.7rem}
+    .cta-band p{color:rgba(245,237,232,.68);margin-bottom:2rem}
+    .cta-btn{display:inline-flex;align-items:center;gap:.5rem;background:#a84d66;color:#fff;padding:.9rem 2.1rem;border-radius:999px;font-size:.97rem;font-weight:700;letter-spacing:.025em;transition:filter .2s,transform .18s}
+    .cta-btn:hover{filter:brightness(1.1);transform:translateY(-2px)}
+    .page-footer{padding:2.75rem 1.5rem;text-align:center;font-size:.82rem;color:#9a8b85;border-top:1px solid #e8e0d8}
+    .page-footer a:hover{color:#a84d66}
+    .footer-links{display:flex;justify-content:center;gap:1.75rem;flex-wrap:wrap;margin:.6rem 0 1rem}
+    .post-list{max-width:760px;margin:0 auto;padding:2.5rem 1.5rem 3.5rem;display:grid;gap:1.5rem}
+    .post-card{display:block;background:#fff;border:1px solid #ede6de;border-radius:16px;padding:1.75rem 1.9rem;transition:transform .22s,box-shadow .22s}
+    .post-card:hover{transform:translateY(-4px);box-shadow:0 14px 40px rgba(168,77,102,.13)}
+    .post-card h2{font-family:'EB Garamond',Georgia,serif;font-size:1.45rem;font-weight:500;color:#2d2420;line-height:1.3;margin-bottom:.5rem}
+    .post-card p{font-size:.92rem;color:#6b5d57;margin-bottom:.85rem}
+    .post-card .read-more{font-size:.82rem;font-weight:700;color:#a84d66;letter-spacing:.03em}
+    @media(max-width:640px){.post-hero{padding:2.5rem 1.25rem 1.75rem}article{padding:2rem 1.25rem 2.75rem}.header-nav{display:none}}`
+
+function blogShell({ title, desc, canonical, jsonLd, heroBlock, mainHtml, ogType = 'article', ogImage }) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${esc(title)}</title>
+  <meta name="description" content="${esc(desc)}">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="${canonical}">
+  <meta property="og:type" content="${ogType}">
+  <meta property="og:site_name" content="The Picnic Stories">
+  <meta property="og:title" content="${esc(title)}">
+  <meta property="og:description" content="${esc(desc)}">
+  <meta property="og:url" content="${canonical}">
+  <meta property="og:locale" content="en_IN">
+  <meta property="og:image" content="${esc(ogImage || HERO_FALLBACK)}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="${esc(title)}">
+  <meta name="twitter:description" content="${esc(desc)}">
+  <meta name="twitter:image" content="${esc(ogImage || HERO_FALLBACK)}">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Lato:wght@400;700&display=swap" rel="stylesheet">
+  <script type="application/ld+json">${jsonLd}</script>
+  <style>${BLOG_CSS}
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a href="/" class="header-brand"><img src="/logo3.png" alt="The Picnic Stories logo">The Picnic Stories</a>
+      <nav class="header-nav" aria-label="Site">
+        <a href="/blog" class="sec-pill">All posts</a>
+        <a href="/packages" class="sec-pill">Packages</a>
+        <a href="/#venues-section" class="sec-pill">Venues</a>
+      </nav>
+    </div>
+  </header>
+  ${heroBlock}
+  <main>
+${mainHtml}
+    <div class="cta-band">
+      <div class="cta-band-inner">
+        <h2>Make it a story worth telling</h2>
+        <p>Pick an occasion, pick a venue — the setup is styled and waiting before you arrive.</p>
+        <a href="/packages" class="cta-btn">Browse picnic packages</a>
+      </div>
+    </div>
+  </main>
+  <footer class="page-footer">
+    <nav class="footer-links" aria-label="Footer links">
+      <a href="/">Home</a>
+      <a href="/blog">Blog</a>
+      <a href="/packages">Packages</a>
+      <a href="/privacy.html">Privacy</a>
+      <a href="/terms.html">Terms</a>
+    </nav>
+    <p>&copy; ${new Date().getFullYear()} The Picnic Stories. All rights reserved.</p>
+  </footer>
+</body>
+</html>`
+}
+
+/** Build /blog/<slug> pages + the /blog index from content/blog/*.md.
+ * Returns the parsed posts (for cross-linking from other prerendered pages);
+ * empty array if the content dir is missing — never fails the build. */
+function buildBlogPages(urls) {
+  if (!existsSync(BLOG_DIR)) {
+    console.warn('[prerender] content/blog not found — skipping blog pages')
+    return []
+  }
+  const files = readdirSync(BLOG_DIR).filter(f => f.endsWith('.md')).sort()
+  if (!files.length) { console.warn('[prerender] content/blog is empty — skipping blog pages'); return [] }
+
+  const posts = files.map(f => parseBlogPost(readFileSync(resolve(BLOG_DIR, f), 'utf8'), f))
+  mkdirSync(resolve(DIST, 'blog'), { recursive: true })
+
+  for (const p of posts) {
+    const readMins = Math.max(1, Math.round(p.words / 220))
+    const jsonLd = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'BlogPosting',
+      headline: p.h1,
+      description: p.desc,
+      image: p.hero || HERO_FALLBACK,
+      datePublished: p.published,
+      dateModified: p.published,
+      mainEntityOfPage: p.url,
+      author: { '@type': 'Organization', name: 'The Picnic Stories' },
+      publisher: {
+        '@type': 'Organization', name: 'The Picnic Stories', url: SITE,
+        logo: { '@type': 'ImageObject', url: `${SITE}/logo3.png` },
+      },
+    }, null, 2).replaceAll('<', '\\u003c')
+
+    const heroBlock = `
+  <div class="post-hero">
+    <div class="post-hero-inner">
+      <nav class="crumb" aria-label="Breadcrumb"><a href="/">Home</a> &rsaquo; <a href="/blog">Blog</a></nav>
+      <h1>${esc(p.h1)}</h1>
+      <p class="post-meta">${esc(new Date(p.published + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }))} &middot; ${readMins} min read</p>
+    </div>
+  </div>`
+
+    const mainHtml = `    <article>
+${p.hero ? `      <img class="lead-img" src="${esc(p.hero)}" alt="${esc(p.h1)}">\n` : ''}${p.bodyHtml}
+    </article>`
+
+    const html = blogShell({
+      title: p.title, desc: p.desc, canonical: p.url, jsonLd, heroBlock, mainHtml, ogImage: p.hero,
+    })
+    writeFileSync(resolve(DIST, 'blog', `${p.name}.html`), html)
+    urls.push(p.url)
+    console.log(`[prerender] blog post: /blog/${p.name}`)
+  }
+
+  // /blog index
+  const indexUrl = `${SITE}/blog`
+  const indexLd = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'Blog',
+    name: 'The Picnic Stories Blog',
+    url: indexUrl,
+    blogPost: posts.map(p => ({ '@type': 'BlogPosting', headline: p.h1, url: p.url, datePublished: p.published })),
+  }, null, 2).replaceAll('<', '\\u003c')
+
+  const cards = posts
+    .slice().sort((a, b) => b.published.localeCompare(a.published))
+    .map(p => `      <a class="post-card" href="/blog/${esc(p.name)}">
+        <h2>${esc(p.h1)}</h2>
+        <p>${esc(p.desc)}</p>
+        <span class="read-more">Read the guide &rarr;</span>
+      </a>`).join('\n')
+
+  const indexHtml = blogShell({
+    title: 'Picnic Ideas & Celebration Guides | The Picnic Stories',
+    desc: 'Guides to birthdays, dates, proposals, and anniversaries at private picnic setups across Gurugram, Delhi NCR, and Jaipur.',
+    canonical: indexUrl,
+    jsonLd: indexLd,
+    ogType: 'website',
+    heroBlock: `
+  <div class="post-hero">
+    <div class="post-hero-inner">
+      <nav class="crumb" aria-label="Breadcrumb"><a href="/">Home</a> &rsaquo; <span>Blog</span></nav>
+      <h1>Ideas &amp; Guides</h1>
+      <p class="post-meta">Celebrations, planned properly</p>
+    </div>
+  </div>`,
+    mainHtml: `    <div class="post-list">
+${cards}
+    </div>`,
+  })
+  writeFileSync(resolve(DIST, 'blog.html'), indexHtml)
+  urls.push(indexUrl)
+  console.log(`[prerender] blog index: /blog (${posts.length} posts)`)
+  return posts
+}
+
 async function main() {
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   // Only public, browseable venues. `custom` (Your Own Space) has no detail page.
@@ -776,7 +1062,9 @@ async function main() {
 
   const cityPageCount = buildCityPages(template, venues, urls)
 
-  const packagesPage = await buildPackagesPage(supabase, template)
+  const blogPosts = buildBlogPages(urls)
+
+  const packagesPage = await buildPackagesPage(supabase, template, blogPosts)
   if (packagesPage) {
     writeFileSync(resolve(DIST, 'packages.html'), packagesPage.html)
     urls.push(packagesPage.url)
@@ -792,7 +1080,7 @@ async function main() {
   writeFileSync(resolve(DIST, 'robots.txt'),
     `User-agent: *\nAllow: /\nDisallow: /admin\nSitemap: ${SITE}/sitemap.xml\n`)
 
-  console.log(`[prerender] wrote ${seen.size} venue pages + ${cityPageCount} city pages + ${packagesPage ? 1 : 0} packages page + sitemap (${urls.length} urls)`)
+  console.log(`[prerender] wrote ${seen.size} venue pages + ${cityPageCount} city pages + ${packagesPage ? 1 : 0} packages page + ${blogPosts.length} blog posts (+ index) + sitemap (${urls.length} urls)`)
 }
 
 main().catch((e) => { console.error('[prerender]', e); process.exit(1) })

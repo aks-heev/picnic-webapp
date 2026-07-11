@@ -379,6 +379,56 @@
             </div>
         </section>
 
+        <!-- From the Blog (BLOG_SEO_PLAN_2026-07-11.md, Track B2) — static links so
+             the prerendered blog posts are never orphan pages. Post list is
+             hand-maintained: update when content/blog/ changes. Styles are inline
+             (bhs- prefix) to keep this section self-contained; migrate to
+             style.css if it grows. Sits inside #home-page, so the slim-shell
+             prerender correctly drops it on venue/packages pages. -->
+        <section class="blog-home-section" id="blog-section">
+            <style>
+                .blog-home-section{padding:64px 0;background:#faf5f0;border-top:1px solid #e8e0d8}
+                .bhs-header{text-align:center;margin-bottom:36px}
+                .bhs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;max-width:1140px;margin:0 auto}
+                .bhs-card{display:block;background:#fff;border:1px solid #ede6de;border-radius:14px;padding:22px 24px;text-decoration:none;color:inherit;transition:transform .22s,box-shadow .22s}
+                .bhs-card:hover{transform:translateY(-4px);box-shadow:0 12px 36px rgba(168,77,102,.13)}
+                .bhs-card h3{font-family:'EB Garamond',Georgia,serif;font-weight:500;font-size:1.15rem;line-height:1.35;margin:0 0 8px;color:#2d2420}
+                .bhs-card p{font-size:.85rem;color:#6b5d57;line-height:1.55;margin:0 0 12px}
+                .bhs-card span{font-size:.78rem;font-weight:700;color:#a84d66;letter-spacing:.03em}
+                .bhs-all{display:inline-block;margin-top:28px;font-size:.85rem;font-weight:700;color:#a84d66;text-decoration:none}
+                .bhs-all:hover{text-decoration:underline}
+            </style>
+            <div class="container">
+                <div class="bhs-header">
+                    <p class="section-label">From the blog</p>
+                    <h2 class="section-heading">Ideas for your next celebration</h2>
+                </div>
+                <div class="bhs-grid">
+                    <a class="bhs-card" href="/blog/birthday-picnic-ideas-gurugram">
+                        <h3>Private birthday picnics in Gurugram</h3>
+                        <p>Venues, add-ons, and how to plan a birthday they'll actually remember.</p>
+                        <span>Read the guide &rarr;</span>
+                    </a>
+                    <a class="bhs-card" href="/blog/romantic-picnic-date-gurugram">
+                        <h3>The candlelight picnic date</h3>
+                        <p>Gurugram's better answer to "dinner?" — setups, timing, and three date blueprints.</p>
+                        <span>Read the guide &rarr;</span>
+                    </a>
+                    <a class="bhs-card" href="/blog/picnic-proposal-ideas-gurugram-delhi-ncr">
+                        <h3>Planning a picnic proposal</h3>
+                        <p>The cover story, the scene, the hidden photographer — a run-sheet that works.</p>
+                        <span>Read the guide &rarr;</span>
+                    </a>
+                    <a class="bhs-card" href="/blog/anniversary-celebration-ideas-delhi-ncr">
+                        <h3>Anniversary ideas beyond dinner</h3>
+                        <p>Private setups across Delhi NCR — re-creations, screenings, and golden-hour sessions.</p>
+                        <span>Read the guide &rarr;</span>
+                    </a>
+                </div>
+                <div style="text-align:center"><a class="bhs-all" href="/blog">All guides &rarr;</a></div>
+            </div>
+        </section>
+
         <!-- Contact / Footer Section -->
         <footer class="contact-info">
             <div class="container">
@@ -396,6 +446,8 @@
                     <a href="mailto:team@picnicstories.com" class="footer-link">team@picnicstories.com</a>
                 </div>
                 <nav class="footer-legal" aria-label="Legal">
+                    <a href="/blog">Blog</a>
+                    <span class="footer-meta__sep" aria-hidden="true">&middot;</span>
                     <a href="/privacy.html">Privacy Policy</a>
                     <span class="footer-meta__sep" aria-hidden="true">&middot;</span>
                     <a href="/terms.html">Terms &amp; Conditions</a>
