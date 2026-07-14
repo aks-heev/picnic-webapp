@@ -5409,6 +5409,11 @@ function applyAuthState(session) {
     if (adminDashboard) adminDashboard.classList.remove('hidden')
     loadQueries()
     loadMenuLinks()
+    // Deep link: admin.html#add-booking lands the phone straight on the form
+    // (Supabase session persists in localStorage, so a bookmarked link works).
+    if (typeof location !== 'undefined' && location.hash === '#add-booking') {
+      switchTab('add-booking')
+    }
   } else {
     appState.session = null   // never let a customer session bleed into admin state
     if (adminLogin)     adminLogin.classList.remove('hidden')
@@ -6657,6 +6662,8 @@ function switchTab(tabName) {
   
   if (tabName === 'queries') {
     loadQueries()
+  } else if (tabName === 'add-booking') {
+    loadAddBookingForm()
   } else if (tabName === 'bookings') {
     loadBookings()
   } else if (tabName === 'menu-link') {
@@ -9242,6 +9249,504 @@ function goBackToVenueDetail(mode) {
   showVenuePage(venue.id, false)
 }
 window.goBackToVenueDetail = goBackToVenueDetail
+
+// ================================================================
+// ADD BOOKING (manual offline entry) — Phase 3
+// A phone-friendly form that writes a confirmed booking via the
+// admin_add_manual_booking RPC (server-side conflict check + atomic
+// booking + add-ons + combo fanout). See docs/ADMIN_MANUAL_BOOKING_PLAN.
+// ================================================================
+
+const ABK_PICNIC_TYPES = ['cafe', 'custom']
+const ABK_STAY_TYPES   = ['self_managed', 'partner_bnb', 'combo']
+
+let abk = {
+  loaded: false,
+  type: 'picnic',
+  venues: [], addons: [], venueAddons: [], packages: [], venuePackages: [],
+  venueId: null, venueAddress: '',
+  date: '', slot: '',
+  checkin: '', checkout: '',
+  adults: 2, children: 0,
+  packageKey: '', addonIds: [], occasion: '', boardType: '', boardMessage: '',
+  externalRef: '', notes: '',
+  name: '', phone: '', email: '',
+  total: 0, advance: 0, totalTouched: false, advanceTouched: false,
+  sendEmail: true, emailToggleTouched: false,
+  slotMap: null, slotMax: 1, slotVenueId: null,
+  saving: false,
+}
+
+async function loadAddBookingForm() {
+  if (!appState.session) return
+  const container = document.getElementById('add-booking-container')
+  if (!container) return
+  if (abk.loaded) { renderAddBookingForm(); return }
+  container.innerHTML = '<p class="admin-loading">Loading…</p>'
+  try {
+    const [venueRes, addonRes, vaRes, pkgRes, vpRes] = await Promise.all([
+      supabase.from('venues')
+        .select('id, name, type, base_price, packages_enabled, max_concurrent_setups, parent_venue_id, metadata, free_guests_upto, overage_per_person')
+        .eq('is_active', true).order('type', { ascending: true }).order('id', { ascending: true }),
+      supabase.from('add_ons').select('id, name, price, category, requires_confirmation').eq('is_active', true).order('sort_order', { ascending: true }),
+      supabase.from('venue_add_ons').select('venue_id, addon_id'),
+      supabase.from('packages').select('id, key, name, tagline, occasion, is_active').eq('is_active', true).order('sort_order', { ascending: true }),
+      supabase.from('venue_packages').select('venue_id, package_id, price, included_guests, overage_per_person, max_guests, is_active').eq('is_active', true),
+    ])
+    if (venueRes.error) throw venueRes.error
+    if (addonRes.error) throw addonRes.error
+    if (vaRes.error) throw vaRes.error
+    if (pkgRes.error) throw pkgRes.error
+    if (vpRes.error) throw vpRes.error
+    abk.venues = venueRes.data || []
+    abk.addons = addonRes.data || []
+    abk.venueAddons = vaRes.data || []
+    abk.packages = pkgRes.data || []
+    abk.venuePackages = vpRes.data || []
+    abk.loaded = true
+    renderAddBookingForm()
+  } catch (err) {
+    console.error('Failed to load Add Booking form:', err)
+    container.innerHTML = '<p class="venues-error">Unable to load the booking form.</p>'
+  }
+}
+
+function abkVenue() { return abk.venues.find(v => v.id === Number(abk.venueId)) || null }
+
+function abkVenuesForType() {
+  const types = abk.type === 'picnic' ? ABK_PICNIC_TYPES : ABK_STAY_TYPES
+  return abk.venues.filter(v => types.includes(v.type))
+}
+
+// Add-ons offered at a venue = the venue_add_ons junction ∩ active add_ons.
+function abkAddonsForVenue(venueId) {
+  const ids = new Set(abk.venueAddons.filter(r => r.venue_id === venueId).map(r => r.addon_id))
+  return abk.addons.filter(a => ids.has(a.id))
+}
+
+// Packages offered at a venue = its active venue_packages rows, resolved to
+// the package (key/name/occasion) via package_id.
+function abkPackagesForVenue(venueId) {
+  return abk.venuePackages
+    .filter(r => r.venue_id === venueId)
+    .map(r => {
+      const p = abk.packages.find(pk => pk.id === r.package_id)
+      return p ? { ...p, vp: r } : null
+    })
+    .filter(Boolean)
+}
+
+function abkVenuePackagePrice(venueId, pkgKey, adults) {
+  const p = abk.packages.find(pk => pk.key === pkgKey)
+  if (!p) return null
+  const vp = abk.venuePackages.find(r => r.venue_id === venueId && r.package_id === p.id)
+  if (!vp) return null
+  const extra = Math.max(0, (Number(adults) || 0) - Number(vp.included_guests || 0))
+  return Number(vp.price) + extra * Number(vp.overage_per_person || 0)
+}
+
+// Prefill total from venue/package/nights + extras. Editable afterward.
+function abkComputeTotal() {
+  const v = abkVenue()
+  if (!v) return 0
+  const adults = Number(abk.adults) || 0
+  const children = Number(abk.children) || 0
+  let base = 0
+  if (abk.type === 'picnic') {
+    const pkgPrice = abk.packageKey ? abkVenuePackagePrice(v.id, abk.packageKey, adults) : null
+    base = pkgPrice != null ? pkgPrice : getVenuePrice(v, adults)
+  } else {
+    const nights = calcNights(abk.checkin, abk.checkout) || 0
+    base = getVenuePrice(v, adults + children) * nights
+  }
+  const extras = (abk.addonIds || []).reduce((s, id) => {
+    const a = abk.addons.find(x => x.id === id)
+    return s + (a ? Number(a.price) || 0 : 0)
+  }, 0)
+  return Math.max(0, Math.round(base + extras))
+}
+
+function abkNights() { return abk.type === 'stay' ? (calcNights(abk.checkin, abk.checkout) || 0) : 0 }
+
+// Read current DOM inputs back into state (guarded so missing fields don't clobber).
+function abkRead() {
+  const g = (id) => document.getElementById(id)
+  let el
+  if ((el = g('abk-venue'))) abk.venueId = el.value ? Number(el.value) : null
+  if ((el = g('abk-venue-address'))) abk.venueAddress = el.value
+  if ((el = g('abk-date'))) abk.date = el.value
+  if ((el = g('abk-checkin'))) abk.checkin = el.value
+  if ((el = g('abk-checkout'))) abk.checkout = el.value
+  if ((el = g('abk-adults'))) abk.adults = el.value === '' ? '' : Number(el.value)
+  if ((el = g('abk-children'))) abk.children = el.value === '' ? '' : Number(el.value)
+  if ((el = g('abk-package'))) abk.packageKey = el.value
+  if ((el = g('abk-occasion'))) abk.occasion = el.value
+  if ((el = g('abk-board-type'))) abk.boardType = el.value
+  if ((el = g('abk-board-message'))) abk.boardMessage = el.value
+  if ((el = g('abk-external-ref'))) abk.externalRef = el.value
+  if ((el = g('abk-notes'))) abk.notes = el.value
+  if ((el = g('abk-name'))) abk.name = el.value
+  if ((el = g('abk-phone'))) abk.phone = el.value
+  if ((el = g('abk-email'))) abk.email = el.value
+  if ((el = g('abk-total'))) abk.total = el.value === '' ? '' : Number(el.value)
+  if ((el = g('abk-advance'))) abk.advance = el.value === '' ? '' : Number(el.value)
+  if ((el = g('abk-send-email'))) abk.sendEmail = el.checked
+  // Slot chips (radio-like)
+  const slotSel = document.querySelector('input[name="abk-slot"]:checked')
+  if (document.querySelector('input[name="abk-slot"]')) abk.slot = slotSel ? slotSel.value : abk.slot
+  // Add-on checkboxes
+  if (document.querySelector('.abk-addon-check')) {
+    abk.addonIds = Array.from(document.querySelectorAll('.abk-addon-check:checked')).map(c => Number(c.dataset.id))
+  }
+}
+
+// Type toggle
+function abkSetType(t) {
+  if (abk.type === t) return
+  abkRead()
+  abk.type = t
+  abk.venueId = null; abk.slot = ''; abk.packageKey = ''; abk.addonIds = []
+  abk.slotMap = null; abk.slotVenueId = null
+  abk.totalTouched = false
+  renderAddBookingForm()
+}
+window.abkSetType = abkSetType
+
+function abkVenueChanged() {
+  abkRead()
+  abk.slot = ''; abk.packageKey = ''; abk.addonIds = []
+  abk.totalTouched = false
+  renderAddBookingForm()
+  if (abk.type === 'picnic') abkFetchSlots()
+}
+window.abkVenueChanged = abkVenueChanged
+
+async function abkFetchSlots() {
+  const v = abkVenue()
+  if (!v || !ABK_PICNIC_TYPES.includes(v.type)) { abk.slotMap = null; return }
+  try {
+    const res = await fetchBookedData(v.id, 'cafe', v.max_concurrent_setups || 1)
+    abk.slotMap = res.slotMap || null
+    abk.slotMax = res.maxConcurrentSetups || 1
+    abk.slotVenueId = v.id
+    renderAddBookingForm()
+  } catch (err) { console.warn('slot hint fetch failed', err) }
+}
+
+// Structural change → re-render from state.
+function abkChanged() { abkRead(); abk.totalTouched = false; renderAddBookingForm() }
+window.abkChanged = abkChanged
+// Same, but keep a manually-edited total (used by date/slot/addon changes).
+function abkChangedKeepTotal() { abkRead(); renderAddBookingForm() }
+window.abkChangedKeepTotal = abkChangedKeepTotal
+
+// Price-affecting text input (guests) → update total field only, no re-render.
+function abkPriceInput() {
+  abkRead()
+  if (!abk.totalTouched) {
+    const t = abkComputeTotal()
+    abk.total = t
+    const el = document.getElementById('abk-total')
+    if (el) el.value = t
+  }
+}
+window.abkPriceInput = abkPriceInput
+
+function abkTotalInput() { abk.totalTouched = true; abkRead() }
+window.abkTotalInput = abkTotalInput
+function abkAdvanceInput() { abk.advanceTouched = true; abkRead() }
+window.abkAdvanceInput = abkAdvanceInput
+
+function abkEmailInput() {
+  abkRead()
+  const cb = document.getElementById('abk-send-email')
+  const has = !!String(abk.email || '').trim()
+  if (cb) {
+    cb.disabled = !has
+    if (!has) { cb.checked = false; abk.sendEmail = false }
+    else if (!abk.emailToggleTouched) { cb.checked = true; abk.sendEmail = true }
+  }
+  const hint = document.getElementById('abk-send-email-hint')
+  if (hint) hint.textContent = has ? '' : 'No email on file — confirmation can’t be sent.'
+}
+window.abkEmailInput = abkEmailInput
+
+function abkSendEmailChange() { abk.emailToggleTouched = true; abkRead() }
+window.abkSendEmailChange = abkSendEmailChange
+
+function abkText(v) { return escapeHtml(String(v ?? '')) }
+
+function renderAddBookingForm() {
+  const container = document.getElementById('add-booking-container')
+  if (!container) return
+
+  // Keep total synced unless the admin edited it.
+  if (!abk.totalTouched) abk.total = abkComputeTotal()
+
+  const v = abkVenue()
+  const isPicnic = abk.type === 'picnic'
+  const venues = abkVenuesForType()
+
+  const venueOptions = ['<option value="">Select a venue…</option>']
+    .concat(venues.map(vn => `<option value="${vn.id}" ${Number(abk.venueId) === vn.id ? 'selected' : ''}>${abkText(vn.name)} · ${abkText(vn.type)}</option>`))
+    .join('')
+
+  const isCustom = v && v.type === 'custom'
+
+  // Dates block
+  let datesHtml = ''
+  if (isPicnic) {
+    const dayMap = abk.slotMap && abk.date ? abk.slotMap.get(abk.date) : null
+    const slotChips = CAFE_SLOTS.map(s => {
+      const cnt = dayMap ? (dayMap.get(s.key) || 0) : 0
+      const full = cnt >= (abk.slotMax || 1)
+      return `
+        <label class="abk-slot ${abk.slot === s.key ? 'abk-slot--on' : ''} ${full ? 'abk-slot--full' : ''}">
+          <input type="radio" name="abk-slot" value="${s.key}" ${abk.slot === s.key ? 'checked' : ''} ${full ? 'disabled' : ''} onchange="abkChangedKeepTotal()" />
+          <span class="abk-slot-icon">${s.icon}</span>
+          <span class="abk-slot-label">${s.label}</span>
+          <span class="abk-slot-time">${s.time}${full ? ' · full' : ''}</span>
+        </label>`
+    }).join('')
+    datesHtml = `
+      <div class="abk-field">
+        <label class="abk-label" for="abk-date">Date</label>
+        <input type="date" id="abk-date" class="abk-input" value="${abkText(abk.date)}" onchange="abkChangedKeepTotal()" />
+      </div>
+      <div class="abk-field">
+        <label class="abk-label">Time slot</label>
+        <div class="abk-slots">${slotChips}</div>
+      </div>`
+  } else {
+    const nights = abkNights()
+    datesHtml = `
+      <div class="abk-row2">
+        <div class="abk-field">
+          <label class="abk-label" for="abk-checkin">Check-in</label>
+          <input type="date" id="abk-checkin" class="abk-input" value="${abkText(abk.checkin)}" onchange="abkChanged()" />
+        </div>
+        <div class="abk-field">
+          <label class="abk-label" for="abk-checkout">Check-out</label>
+          <input type="date" id="abk-checkout" class="abk-input" value="${abkText(abk.checkout)}" onchange="abkChanged()" />
+        </div>
+      </div>
+      <p class="abk-nights">${nights > 0 ? `${nights} night${nights !== 1 ? 's' : ''}` : 'Pick check-in and check-out dates'}</p>`
+  }
+
+  // Extras block (venue-dependent)
+  let extrasHtml = ''
+  if (v) {
+    if (isPicnic) {
+      const pkgs = abkPackagesForVenue(v.id)
+      const pkgOptions = ['<option value="">No package</option>']
+        .concat(pkgs.map(p => `<option value="${abkText(p.key)}" ${abk.packageKey === p.key ? 'selected' : ''}>${abkText(p.name)}${p.occasion ? ' · ' + abkText(p.occasion) : ''}</option>`))
+        .join('')
+      const pkgField = pkgs.length ? `
+        <div class="abk-field">
+          <label class="abk-label" for="abk-package">Package</label>
+          <select id="abk-package" class="abk-input" onchange="abkChanged()">${pkgOptions}</select>
+        </div>` : ''
+      const occOptions = ['<option value="">No occasion</option>']
+        .concat(OCCASIONS.map(o => `<option value="${abkText(o)}" ${abk.occasion === o ? 'selected' : ''}>${abkText(o)}</option>`))
+        .join('')
+      extrasHtml = `
+        ${pkgField}
+        <div class="abk-field">
+          <label class="abk-label" for="abk-occasion">Occasion</label>
+          <select id="abk-occasion" class="abk-input" onchange="abkChangedKeepTotal()">${occOptions}</select>
+        </div>
+        ${abkAddonsHtml(v)}
+        <div class="abk-field">
+          <label class="abk-label" for="abk-board-type">Celebration board</label>
+          <select id="abk-board-type" class="abk-input" onchange="abkChangedKeepTotal()">
+            <option value="">No board</option>
+            <option value="black" ${abk.boardType === 'black' ? 'selected' : ''}>Black chalkboard</option>
+            <option value="white" ${abk.boardType === 'white' ? 'selected' : ''}>White wooden arch board</option>
+          </select>
+          ${abk.boardType ? `<input type="text" id="abk-board-message" class="abk-input" style="margin-top:8px" maxlength="60" placeholder="Board message (optional)" value="${abkText(abk.boardMessage)}" oninput="abkRead()" />` : ''}
+        </div>`
+    } else {
+      extrasHtml = `
+        <div class="abk-field">
+          <label class="abk-label" for="abk-external-ref">Reference <span class="abk-hint">(optional booking ref)</span></label>
+          <input type="text" id="abk-external-ref" class="abk-input" value="${abkText(abk.externalRef)}" placeholder="e.g. Airbnb HMXXXX / WhatsApp" oninput="abkRead()" />
+        </div>
+        ${abkAddonsHtml(v)}`
+    }
+  }
+
+  const emailHas = !!String(abk.email || '').trim()
+
+  container.innerHTML = `
+    <div class="abk-form">
+      <!-- Type toggle -->
+      <div class="abk-type">
+        <button type="button" class="abk-type-btn ${isPicnic ? 'abk-type-btn--on' : ''}" onclick="abkSetType('picnic')">🧺 Picnic</button>
+        <button type="button" class="abk-type-btn ${!isPicnic ? 'abk-type-btn--on' : ''}" onclick="abkSetType('stay')">🏡 Stay</button>
+      </div>
+
+      <div class="abk-field">
+        <label class="abk-label" for="abk-venue">Venue</label>
+        <select id="abk-venue" class="abk-input" onchange="abkVenueChanged()">${venueOptions}</select>
+      </div>
+      ${isCustom ? `
+      <div class="abk-field">
+        <label class="abk-label" for="abk-venue-address">Address <span class="abk-hint">(custom location)</span></label>
+        <input type="text" id="abk-venue-address" class="abk-input" value="${abkText(abk.venueAddress)}" placeholder="Full address of the picnic" oninput="abkRead()" />
+      </div>` : ''}
+
+      ${datesHtml}
+
+      <div class="abk-row2">
+        <div class="abk-field">
+          <label class="abk-label" for="abk-adults">Adults</label>
+          <input type="number" id="abk-adults" class="abk-input" min="1" max="100" value="${abkText(abk.adults)}" oninput="abkPriceInput()" />
+        </div>
+        <div class="abk-field">
+          <label class="abk-label" for="abk-children">Children</label>
+          <input type="number" id="abk-children" class="abk-input" min="0" max="100" value="${abkText(abk.children)}" oninput="abkPriceInput()" />
+        </div>
+      </div>
+
+      ${extrasHtml}
+
+      <div class="abk-divider"></div>
+
+      <div class="abk-field">
+        <label class="abk-label" for="abk-name">Guest name</label>
+        <input type="text" id="abk-name" class="abk-input" value="${abkText(abk.name)}" placeholder="Full name" oninput="abkRead()" />
+      </div>
+      <div class="abk-row2">
+        <div class="abk-field">
+          <label class="abk-label" for="abk-phone">Phone</label>
+          <input type="tel" id="abk-phone" class="abk-input" value="${abkText(abk.phone)}" placeholder="10-digit mobile" oninput="abkRead()" />
+        </div>
+        <div class="abk-field">
+          <label class="abk-label" for="abk-email">Email <span class="abk-hint">(optional)</span></label>
+          <input type="email" id="abk-email" class="abk-input" value="${abkText(abk.email)}" placeholder="guest@email.com" oninput="abkEmailInput()" />
+        </div>
+      </div>
+
+      <div class="abk-field">
+        <label class="abk-label" for="abk-notes">Notes / special requests <span class="abk-hint">(optional)</span></label>
+        <textarea id="abk-notes" class="abk-input" rows="2" placeholder="Anything the team should know" oninput="abkRead()">${abkText(abk.notes)}</textarea>
+      </div>
+
+      <div class="abk-divider"></div>
+
+      <div class="abk-row2">
+        <div class="abk-field">
+          <label class="abk-label" for="abk-total">Total (₹)</label>
+          <input type="number" id="abk-total" class="abk-input" min="0" step="100" value="${abkText(abk.total)}" oninput="abkTotalInput()" />
+          <span class="abk-hint">Prefilled from venue/package — edit for negotiated deals.</span>
+        </div>
+        <div class="abk-field">
+          <label class="abk-label" for="abk-advance">Advance received (₹)</label>
+          <input type="number" id="abk-advance" class="abk-input" min="0" step="100" value="${abkText(abk.advance)}" oninput="abkAdvanceInput()" />
+        </div>
+      </div>
+
+      <label class="abk-toggle">
+        <input type="checkbox" id="abk-send-email" ${abk.sendEmail && emailHas ? 'checked' : ''} ${emailHas ? '' : 'disabled'} onchange="abkSendEmailChange()" />
+        <span>Send confirmation email to guest</span>
+      </label>
+      <span id="abk-send-email-hint" class="abk-hint">${emailHas ? '' : 'No email on file — confirmation can’t be sent.'}</span>
+
+      <button type="button" id="abk-save" class="btn btn--primary abk-save" onclick="abkSave()" ${abk.saving ? 'disabled' : ''}>${abk.saving ? 'Saving…' : 'Save booking'}</button>
+    </div>`
+}
+
+function abkAddonsHtml(v) {
+  const list = abkAddonsForVenue(v.id)
+  if (!list.length) return ''
+  const rows = list.map(a => `
+    <label class="abk-addon">
+      <input type="checkbox" class="abk-addon-check" data-id="${a.id}" ${abk.addonIds.includes(a.id) ? 'checked' : ''} onchange="abkChangedKeepTotal()" />
+      <span class="abk-addon-name">${abkText(a.name)}${a.requires_confirmation ? ' <span class="abk-addon-tag">(on request)</span>' : ''}</span>
+      <span class="abk-addon-price">+₹${Number(a.price).toLocaleString('en-IN')}</span>
+    </label>`).join('')
+  return `
+    <div class="abk-field">
+      <label class="abk-label">Add-ons</label>
+      <div class="abk-addons">${rows}</div>
+    </div>`
+}
+
+async function abkSave() {
+  if (abk.saving) return
+  abkRead()
+  const v = abkVenue()
+  // Client-side validation (RPC re-checks authoritatively).
+  if (!v) return showToast('Pick a venue', 'error')
+  const phone = String(abk.phone || '').replace(/\D/g, '')
+  if (!String(abk.name || '').trim()) return showToast('Guest name is required', 'error')
+  if (phone.length !== 10) return showToast('Phone must be a 10-digit mobile number', 'error')
+  if (!(Number(abk.adults) >= 1)) return showToast('At least 1 adult is required', 'error')
+  if (v.type === 'custom' && !String(abk.venueAddress || '').trim()) return showToast('Enter the custom location address', 'error')
+
+  let preferredDate, checkoutDate = null, timeSlot = null
+  if (abk.type === 'picnic') {
+    if (!abk.date) return showToast('Pick a date', 'error')
+    if (!abk.slot) return showToast('Pick a time slot', 'error')
+    preferredDate = abk.date; timeSlot = abk.slot
+  } else {
+    if (!abk.checkin || !abk.checkout) return showToast('Pick check-in and check-out dates', 'error')
+    if (abkNights() < 1) return showToast('Check-out must be after check-in', 'error')
+    preferredDate = abk.checkin; checkoutDate = abk.checkout
+  }
+
+  const children = Number(abk.children) || 0
+  const adults = Number(abk.adults) || 0
+  const email = String(abk.email || '').trim()
+
+  const p_booking = {
+    full_name: String(abk.name).trim(),
+    mobile_number: phone,
+    email_address: email || null,
+    guest_count: adults + children,
+    children_count: children,
+    preferred_date: preferredDate,
+    checkout_date: checkoutDate,
+    time_slot: timeSlot,
+    special_requirements: String(abk.notes || '').trim() || null,
+    occasion: abk.type === 'picnic' ? (abk.occasion || null) : null,
+    board: (abk.type === 'picnic' && abk.boardType) ? { type: abk.boardType, message: String(abk.boardMessage || '').trim() } : null,
+    venue_id: v.id,
+    venue_address: v.type === 'custom' ? String(abk.venueAddress).trim() : null,
+    external_booking_ref: abk.type === 'stay' ? (String(abk.externalRef || '').trim() || null) : null,
+    advance_amount: Number(abk.advance) || 0,
+    total_amount: abk.total === '' ? null : Number(abk.total),
+    package_key: abk.type === 'picnic' ? (abk.packageKey || null) : null,
+    send_guest_email: email ? !!abk.sendEmail : false,
+  }
+
+  const p_add_ons = (abk.addonIds || []).map(id => {
+    const a = abk.addons.find(x => x.id === id)
+    return a ? { addon_id: a.id, name: a.name, price: a.price, requires_confirmation: a.requires_confirmation } : null
+  }).filter(Boolean)
+
+  abk.saving = true
+  const saveBtn = document.getElementById('abk-save')
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…' }
+  try {
+    const { data, error } = await supabase.rpc('admin_add_manual_booking', { p_booking, p_add_ons })
+    if (error) throw error
+    showToast(`Booking #${data} added`, 'success')
+    // Reset the form for the next entry.
+    abk = { ...abk, venueId: null, venueAddress: '', date: '', slot: '', checkin: '', checkout: '',
+      adults: 2, children: 0, packageKey: '', addonIds: [], occasion: '', boardType: '', boardMessage: '',
+      externalRef: '', notes: '', name: '', phone: '', email: '', total: 0, advance: 0,
+      totalTouched: false, advanceTouched: false, sendEmail: true, emailToggleTouched: false,
+      slotMap: null, slotVenueId: null, saving: false }
+    switchTab('bookings')
+  } catch (err) {
+    console.error('admin_add_manual_booking failed:', err)
+    showToast(err.message || 'Could not save the booking', 'error')
+    abk.saving = false
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save booking' }
+  }
+}
+window.abkSave = abkSave
 
 // ── Admin page initialisation ────────────────────────────────
 function initAdminPage() {

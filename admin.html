@@ -74,6 +74,7 @@
 
             <div class="dashboard-tabs" role="tablist">
                 <button class="tab-btn active" data-tab="queries" role="tab" aria-selected="true">Queries</button>
+                <button class="tab-btn" data-tab="add-booking" role="tab" aria-selected="false">+ Add Booking</button>
                 <button class="tab-btn" data-tab="bookings" role="tab" aria-selected="false">Bookings</button>
                 <button class="tab-btn" data-tab="venues" role="tab" aria-selected="false">Venues</button>
                 <button class="tab-btn" data-tab="availability" role="tab" aria-selected="false">Availability</button>
@@ -109,6 +110,17 @@
                     <!-- Queries will be populated here by JavaScript -->
                 </div>
                 <button id="export-queries" class="btn btn--outline">Export Queries (CSV)</button>
+            </div>
+
+            <!-- Add Booking Tab (manual offline booking entry) -->
+            <div id="add-booking-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="tab-header">
+                    <h3>Add a Booking</h3>
+                    <p>Enter a confirmed offline booking — it blocks the public calendar and (for stays) exports to Airbnb, just like a site booking.</p>
+                </div>
+                <div id="add-booking-container" class="data-container">
+                    <!-- Manual booking form rendered here by JavaScript (renderAddBookingForm) -->
+                </div>
             </div>
 
             <!-- Bookings Tab -->

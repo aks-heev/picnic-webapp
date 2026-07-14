@@ -10148,3 +10148,120 @@ body.menu-viewer-open {
 @media (max-width: 768px) {
   .packages-home-section { padding: 3rem 0 3.5rem; }
 }
+
+/* ================================================================
+   ADD BOOKING (manual offline entry) — admin, mobile-first
+   ================================================================ */
+.abk-form {
+  max-width: 560px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.abk-type {
+  display: flex;
+  gap: 10px;
+}
+.abk-type-btn {
+  flex: 1;
+  padding: 14px 12px;
+  min-height: 48px;
+  border: 1.5px solid var(--boho-border, #e4d3c4);
+  background: #fff;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--boho-text-dark, #2D1F14);
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.abk-type-btn--on {
+  border-color: var(--boho-accent-pink, #c4607a);
+  background: var(--boho-accent-pink, #c4607a);
+  color: #fff;
+}
+.abk-field { display: flex; flex-direction: column; gap: 6px; }
+.abk-row2 { display: flex; gap: 12px; }
+.abk-row2 .abk-field { flex: 1; }
+.abk-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--boho-text-dark, #2D1F14);
+}
+.abk-hint {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--boho-text-light, #8a7864);
+}
+.abk-input {
+  width: 100%;
+  padding: 12px 14px;
+  min-height: 46px;
+  border: 1.5px solid var(--boho-border, #e4d3c4);
+  border-radius: 10px;
+  font-size: 16px; /* ≥16px stops iOS zoom-on-focus */
+  color: var(--boho-text-dark, #2D1F14);
+  background: #fff;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+.abk-input:focus {
+  outline: none;
+  border-color: var(--boho-accent-pink, #c4607a);
+}
+textarea.abk-input { resize: vertical; min-height: 60px; }
+.abk-slots { display: flex; flex-direction: column; gap: 8px; }
+.abk-slot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  min-height: 48px;
+  border: 1.5px solid var(--boho-border, #e4d3c4);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.abk-slot input { margin: 0; }
+.abk-slot--on { border-color: var(--boho-accent-pink, #c4607a); background: #fdf3f6; }
+.abk-slot--full { opacity: .5; cursor: not-allowed; }
+.abk-slot-icon { font-size: 18px; }
+.abk-slot-label { font-weight: 600; font-size: 15px; }
+.abk-slot-time { margin-left: auto; font-size: 13px; color: var(--boho-text-light, #8a7864); }
+.abk-nights { margin: 2px 0 0; font-size: 14px; color: var(--boho-accent-pink, #c4607a); font-weight: 600; }
+.abk-addons { display: flex; flex-direction: column; gap: 8px; }
+.abk-addon {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  min-height: 46px;
+  border: 1.5px solid var(--boho-border, #e4d3c4);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.abk-addon input { margin: 0; }
+.abk-addon-name { font-size: 15px; }
+.abk-addon-tag { font-size: 12px; color: #b8860b; }
+.abk-addon-price { margin-left: auto; font-size: 14px; font-weight: 600; color: var(--boho-accent-pink, #c4607a); }
+.abk-divider { height: 1px; background: var(--boho-border, #e4d3c4); margin: 4px 0; }
+.abk-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.abk-toggle input { width: 20px; height: 20px; margin: 0; }
+.abk-save {
+  position: sticky;
+  bottom: 12px;
+  width: 100%;
+  min-height: 52px;
+  font-size: 17px;
+  margin-top: 8px;
+}
+@media (max-width: 480px) {
+  .abk-row2 { flex-direction: column; gap: 16px; }
+}

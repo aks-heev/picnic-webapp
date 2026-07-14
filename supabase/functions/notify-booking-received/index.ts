@@ -1,6 +1,9 @@
 // Triggered by: Database trigger on bookings INSERT (on_booking_insert_notify)
 // Sends: T1 — acknowledgement email to customer (branded, matches confirmation email design)
 //        T2 — alert email to admin
+// T1 is skipped for confirmed inserts (they get T3 from notify-booking-confirmed),
+// for rows with send_guest_email=false, and for rows without an email address
+// (admin manual entries).
 
 import { sendEmail } from "./_shared/resend.ts"
 import { getVenueInfo } from "./_shared/venue.ts"
@@ -116,6 +119,8 @@ function adminCostBlock(
     ? `<span style="background:#d4edda;color:#155724;padding:2px 8px;border-radius:4px;font-size:12px;">✅ Paid</span>`
     : status === "failed"
     ? `<span style="background:#f8d7da;color:#721c24;padding:2px 8px;border-radius:4px;font-size:12px;">❌ Failed</span>`
+    : record.entry_source === "admin"
+    ? `<span style="background:#e7f1ff;color:#084298;padding:2px 8px;border-radius:4px;font-size:12px;">📝 Collected offline</span>`
     : `<span style="background:#fff3cd;color:#856404;padding:2px 8px;border-radius:4px;font-size:12px;">⏳ Pending</span>`
 
   const setupRow   = setupBase > 0
@@ -425,6 +430,7 @@ Deno.serve(async (req) => {
     //   lock_unpaid            → guest chose to lock the date but hasn't paid yet — chase payment
     //   query                  → soft enquiry
     const isLock = record.customer_intent === "lock"
+    const isManual = record.entry_source === "admin"
     const adminState: "booking" | "lock_unpaid" | "query" =
       record.confirmed ? "booking" : isLock ? "lock_unpaid" : "query"
     const advance = Number(record.advance_amount || 0)
@@ -441,35 +447,47 @@ Deno.serve(async (req) => {
 
     // T1: Customer acknowledgement — only for unconfirmed records.
     // Confirmed bookings get the confirmation email (T3) from notify-booking-confirmed instead.
+    // Also skipped when the row suppresses guest email or has no email address
+    // (admin manual entries).
     if (!record.confirmed) {
-      await sendEmail({
-        to: record.email_address,
-        subject: isLock
-          ? "You're almost booked — pay to confirm 🧺"
-          : "We've received your picnic request! 🧺",
-        html: buildGuestHtml(record, venueLabel, addons, bundledIds, isLock ? "lock" : "query"),
-      })
+      if (record.send_guest_email === false || !record.email_address) {
+        console.log(`notify-booking-received: guest ack skipped for booking ${record.id} (send_guest_email=${record.send_guest_email ?? true}, email=${record.email_address ? "present" : "missing"})`)
+      } else {
+        await sendEmail({
+          to: record.email_address,
+          subject: isLock
+            ? "You're almost booked — pay to confirm 🧺"
+            : "We've received your picnic request! 🧺",
+          html: buildGuestHtml(record, venueLabel, addons, bundledIds, isLock ? "lock" : "query"),
+        })
+      }
     }
 
     // T2: Admin alert (plain functional)
     const adminTo = teamEmail ? [teamEmail, "team@picnicstories.com"] : "team@picnicstories.com"
 
     const adminSubject =
-      adminState === "booking"
+      isManual && adminState === "booking"
+        ? `Manual booking added — ${record.full_name} — ${record.preferred_date}`
+        : adminState === "booking"
         ? `New Booking (paid) from ${record.full_name} — ${record.preferred_date}`
         : adminState === "lock_unpaid"
         ? `⚠️ Unpaid lock from ${record.full_name} — ${record.preferred_date} · ₹${advanceStr} pending`
         : `New Query from ${record.full_name} — ${record.preferred_date}`
 
     const adminHeading =
-      adminState === "booking"
+      isManual && adminState === "booking"
+        ? `📝 Manual Booking #${record.id}`
+        : adminState === "booking"
         ? `🔒 Booking (paid) #${record.id}`
         : adminState === "lock_unpaid"
         ? `⏳ Lock — PAYMENT PENDING #${record.id}`
         : `📋 Query #${record.id}`
 
     const adminBanner =
-      adminState === "lock_unpaid"
+      isManual
+        ? `<div style="background:#e7f1ff;border:1px solid #b6d4fe;color:#084298;padding:12px 16px;border-radius:6px;margin:0 0 16px;font-weight:bold;">📝 Entered manually from the admin panel. Any advance shown was collected offline — payment status stays “pending” by design.${record.send_guest_email === false || !record.email_address ? " Guest confirmation email was NOT sent." : " Guest received the confirmation email."}</div>`
+        : adminState === "lock_unpaid"
         ? `<div style="background:#fff3cd;border:1px solid #ffe69c;color:#856404;padding:12px 16px;border-radius:6px;margin:0 0 16px;font-weight:bold;">⏳ Guest chose to lock this date but hasn't paid the advance (₹${advanceStr}). Follow up to secure payment — the slot is NOT held until paid.</div>`
         : ""
 
@@ -491,12 +509,13 @@ Deno.serve(async (req) => {
           </table>` : ""}
           <table style="border-collapse: collapse; width: 100%;">
             <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Name</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${record.full_name}</td></tr>
-            <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Email</strong></td><td style="padding: 8px; border: 1px solid #ddd;"><a href="mailto:${esc(record.email_address)}" style="color:#2d6a4f;">${esc(record.email_address)}</a></td></tr>
+            ${record.email_address ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Email</strong></td><td style="padding: 8px; border: 1px solid #ddd;"><a href="mailto:${esc(record.email_address)}" style="color:#2d6a4f;">${esc(record.email_address)}</a></td></tr>` : `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Email</strong></td><td style="padding: 8px; border: 1px solid #ddd; color:#888;">— not provided</td></tr>`}
             <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Phone</strong></td><td style="padding: 8px; border: 1px solid #ddd;"><a href="tel:${esc(record.mobile_number)}" style="color:#2d6a4f; font-weight:bold;">${esc(record.mobile_number)}</a></td></tr>
-            <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Date</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${record.preferred_date}</td></tr>
+            <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Date</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${record.preferred_date}${record.checkout_date ? ` → ${record.checkout_date}` : ""}</td></tr>
             <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Guests</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${guestStr}</td></tr>
             ${record.package_name ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Package</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${esc(record.package_name)}${record.package_tagline ? ` — <em>${esc(record.package_tagline)}</em>` : ""}</td></tr>` : ""}
             ${venueLabel ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Location</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${venueLabel}</td></tr>` : ""}
+            ${record.external_booking_ref ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Reference</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${esc(record.external_booking_ref)}</td></tr>` : ""}
             ${record.occasion ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Occasion</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${esc(record.occasion)}</td></tr>` : ""}
             ${boardText(record.board) ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Board</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${boardText(record.board)}</td></tr>` : ""}
             ${record.special_requirements ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Special req.</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${record.special_requirements}</td></tr>` : ""}
