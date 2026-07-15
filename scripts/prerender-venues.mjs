@@ -560,6 +560,92 @@ function buildCityPages(template, allVenues, urls) {
   return count
 }
 
+/** GSC audit 2026-07-15: all 13 venue/city/packages URLs sat at "Discovered
+ * - currently not indexed" with a last-crawled date of never. Root cause:
+ * the homepage's #venues-grid ships a blank skeleton in raw HTML (real cards
+ * only appear after loadVenues() hydrates client-side), so Googlebot's
+ * initial (non-JS) crawl of the site's highest-authority page saw zero
+ * outbound links to any venue page — the only path in was the sitemap.
+ * City-hub links were already fixed (commit 4437dfa put real <a href> to
+ * /picnic-venues-gurugram and /picnic-venues-jaipur in the footer), but that
+ * only gets Google to the city pages, which themselves needed the same fix
+ * one hop earlier. This mirrors renderVenueGallery()'s section/card shape
+ * (app.js) closely enough that hydration is a clean swap, not a visual
+ * jump — see venueSetting()/venueCardHtml() there for the source of truth
+ * this intentionally mirrors a simplified version of (no carousel, no type
+ * badge — those need helpers this build script doesn't have and add no
+ * crawl value). renderVenueGallery() still does grid.innerHTML = ... on
+ * load regardless of what's here, so real users never see this — it only
+ * matters to a crawler that reads raw HTML before executing JS. */
+function homeVenueSetting(v) {
+  if (v.setting === 'indoor' || v.setting === 'outdoor') return v.setting
+  if (v.type === 'cafe') return 'outdoor'
+  if (v.type === 'custom') return null
+  return 'indoor'
+}
+
+function buildHomeVenueGridHtml(venues) {
+  const outdoor = venues.filter(v => v.type !== 'custom' && homeVenueSetting(v) === 'outdoor')
+  const indoor  = venues.filter(v => v.type !== 'custom' && homeVenueSetting(v) === 'indoor')
+
+  const card = (v) => {
+    const img = v.images?.[0]?.url || HERO_FALLBACK
+    const capacity = v.capacity_max
+      ? `${v.capacity_min}–${v.capacity_max} guests`
+      : `${v.capacity_min}+ guests`
+    const price = Number(v.base_price) > 0
+      ? `From ₹${Math.round(Number(v.base_price)).toLocaleString('en-IN')}`
+      : 'Get a quote'
+    const area = v.area ? `${v.area} · ${v.city}` : v.city
+    return `
+      <a class="venue-card" href="/venues/${esc(v.slug)}" data-venue-id="${v.id}" data-venue-name="${esc(v.name)}" aria-label="View ${esc(v.name)}">
+        <div class="venue-card-image">
+          <img src="${esc(img)}" alt="${esc(v.name)}" loading="lazy" width="400" height="300">
+        </div>
+        <div class="venue-card-body">
+          <h3 class="venue-card-name">${esc(v.name)}</h3>
+          <p class="venue-card-area">${esc(area)}</p>
+          <div class="venue-card-footer">
+            <span class="venue-card-capacity">${esc(capacity)}</span>
+            <div class="venue-card-price-group"><span class="venue-card-price">${esc(price)}</span></div>
+          </div>
+        </div>
+      </a>`
+  }
+
+  const section = (title, sub, modifier, list) => list.length === 0 ? '' : `
+      <section class="venue-section" id="${modifier}-venues">
+        <div class="venue-section-head">
+          <span class="venue-section-dot venue-section-dot--${modifier}" aria-hidden="true"></span>
+          <h3 class="venue-section-title">${title}</h3>
+        </div>
+        <p class="venue-section-sub">${sub}</p>
+        <div class="venue-grid">${list.map(card).join('')}</div>
+      </section>`
+
+  return section('Outdoor', 'Open-air settings, under the sky', 'outdoor', outdoor)
+       + section('Indoor', 'Cosy, weatherproof spaces for any season', 'indoor', indoor)
+}
+
+/** Replaces the skeleton <section> markup inside #venues-grid with real,
+ * crawlable venue cards. Leaves the trailing custom-picnic CTA block
+ * (already real static copy, not a skeleton) untouched. Fails safe: if
+ * index.html is ever reorganised and these markers move, logs a warning
+ * and returns the input unchanged rather than corrupting the page. */
+function injectHomeVenueLinks(html, venues) {
+  const startMarker = '<div id="venues-grid" class="venues-grid">'
+  const endMarker = '<div class="venue-custom-cta venue-custom-cta--skeleton"'
+  const start = html.indexOf(startMarker)
+  const end = html.indexOf(endMarker)
+  if (start === -1 || end === -1 || end <= start) {
+    console.warn('[prerender] homepage #venues-grid markers not found — leaving skeleton in place (fails safe)')
+    return html
+  }
+  const insertAt = start + startMarker.length
+  const real = buildHomeVenueGridHtml(venues)
+  return html.slice(0, insertAt) + '\n' + real + '\n      ' + html.slice(end)
+}
+
 // Stored per-venue package pricing (SPEC_stored_package_pricing_2026-07-10.md):
 // prices come straight from the venue_packages table — the derived math this
 // script used to hand-duplicate from app.js is GONE, along with the
@@ -1040,7 +1126,7 @@ async function main() {
   // Only public, browseable venues. `custom` (Your Own Space) has no detail page.
   const { data: venues, error } = await supabase
     .from('venues')
-    .select('id,name,slug,type,city,area,description,capacity_min,capacity_max,base_price,images')
+    .select('id,name,slug,type,city,area,description,capacity_min,capacity_max,base_price,images,setting')
     .eq('is_active', true)
     .neq('type', 'custom')
     .order('sort_order', { ascending: true, nullsFirst: false })
@@ -1075,6 +1161,16 @@ async function main() {
     urls.push(packagesPage.url)
     console.log(`[prerender] packages page: /packages`)
   }
+
+  // Homepage itself (GSC fix 2026-07-15): inject real venue-card links into
+  // #venues-grid so Googlebot's raw-HTML crawl of "/" — its highest-authority,
+  // most-frequently-crawled page — has a direct, one-hop, crawlable path to
+  // every venue page, not just the sitemap. Built from the pristine `template`
+  // read at the top of main(), so it can't be affected by anything the venue/
+  // city/blog/packages builders above did with their own copies of it.
+  const homeHtml = injectHomeVenueLinks(template, venues)
+  writeFileSync(resolve(DIST, 'index.html'), homeHtml)
+  console.log(`[prerender] homepage: injected ${venues.filter(v => v.type !== 'custom').length} real venue links into #venues-grid`)
 
   const lastmod = new Date().toISOString().slice(0, 10)
   const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n` +
