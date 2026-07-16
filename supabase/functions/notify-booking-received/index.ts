@@ -153,8 +153,8 @@ function adminCostBlock(
       </tr>
       ${pidRow}` : `
       <tr>
-        <td style="padding:6px 8px;color:#666;">Advance required (50%)</td>
-        <td style="padding:6px 8px;text-align:right;color:#666;">${inr(Math.round(pkgTotal * 0.5))}</td>
+        <td style="padding:6px 8px;color:#666;">Advance required (30%)</td>
+        <td style="padding:6px 8px;text-align:right;color:#666;">${inr(Math.round(pkgTotal * 0.3))}</td>
       </tr>`}
     </table>
     ${extras.some((a) => a.requires_confirmation) ? `<p style="color:#888;font-size:12px;margin:6px 0 0;">"On request" items are subject to host confirmation.</p>` : ""}
