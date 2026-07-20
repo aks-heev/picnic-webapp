@@ -4,6 +4,16 @@
 // Sends: T3 — booking confirmation email to customer
 // Skips the guest email when send_guest_email=false or the row has no email
 // (admin manual entries may suppress it / have no email at all).
+//
+// Changed 2026-07-20: stay-aware guest copy. Admin manually adds Airbnb/TerraCottage
+// stays via admin_add_manual_booking, which inserts confirmed=true directly — so this
+// function (not notify-booking-received) is the ONLY guest-facing email a manual stay
+// booking gets. It already branched DATE/STAY row + TIME/STAY value on checkout_date,
+// but the subject line, hero heading default, hero copy, "Good to Know" policy bullets
+// (which talked about picnic time-slots and extra-hour charges), and the contact-section
+// question were all hardcoded to picnic language regardless of checkout_date — so a
+// stay booking's confirmation email still read like a picnic email end-to-end. Added an
+// `isStay = Boolean(record.checkout_date)` flag and branched all of the above.
 
 import { sendEmail } from "./_shared/resend.ts"
 import { getVenueInfo } from "./_shared/venue.ts"
@@ -16,7 +26,7 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 const LOGO_URL =
   "https://cdn-reach.hostinger.com/settings/0a27628d960484a8a3d2b3e50518a32b/307542/logo_1780982818.png"
 const HERO_IMG =
-  "https://images.hostinger.com/94826b0b-025f-4661-94d7-3e767b98d39d.png"
+  "https://evmftrogyzoudiccqkya.supabase.co/storage/v1/object/public/images/DSC03089.JPG"
 
 const TIME_SLOTS: Record<string, string> = {
   morning:   "9 AM – 12 PM",
@@ -35,9 +45,10 @@ const OCCASION_HEADINGS: Record<string, string> = {
   "Just Because":  "BECAUSE TODAY IS ENOUGH",
 }
 
-function occasionHeading(occasion: unknown): string {
-  if (!occasion || typeof occasion !== "string") return "IT'S A DATE"
-  return OCCASION_HEADINGS[occasion] ?? "IT'S A DATE"
+function occasionHeading(occasion: unknown, isStay: boolean): string {
+  const fallback = isStay ? "YOUR STAY AWAITS" : "IT'S A DATE"
+  if (!occasion || typeof occasion !== "string") return fallback
+  return OCCASION_HEADINGS[occasion] ?? fallback
 }
 
 function formatDate(d: string | null | undefined): string {
@@ -132,7 +143,17 @@ function directionsRow(url: string | null): string {
     </tr>`
 }
 
-function policySection(): string {
+function policySection(isStay: boolean): string {
+  const bullets = isStay
+    ? `
+        <p style="margin: 0 0 10px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 15px; color: #5c4a3a; line-height: 1.7;">• Check-in and checkout timings will be confirmed with you closer to your stay.</p>
+        <p style="margin: 0 0 10px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 15px; color: #5c4a3a; line-height: 1.7;">• The advance payment is non-refundable in case of cancellation.</p>
+        <p style="margin: 0; font-family: Garamond, 'Times New Roman', serif; font-size: 15px; color: #5c4a3a; line-height: 1.7;">• Need to reschedule? Let us know at least 3 days before check-in and we'll do our best to accommodate.</p>`
+    : `
+        <p style="margin: 0 0 10px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 15px; color: #5c4a3a; line-height: 1.7;">• Your slot starts and ends at the booked time. Delays don't extend your slot — any time beyond it attracts extra-hour charges.</p>
+        <p style="margin: 0 0 10px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 15px; color: #5c4a3a; line-height: 1.7;">• The advance payment is non-refundable in case of cancellation.</p>
+        <p style="margin: 0; font-family: Garamond, 'Times New Roman', serif; font-size: 15px; color: #5c4a3a; line-height: 1.7;">• Need to reschedule? Let us know at least 3 days before your picnic date and we'll do our best to accommodate.</p>`
+
   return `
     <!-- DIVIDER -->
     <tr>
@@ -146,14 +167,13 @@ function policySection(): string {
     <tr>
       <td align="left" style="padding: 8px 32px 32px; word-wrap: break-word; overflow-wrap: break-word;">
         <h3 style="margin: 0 0 16px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 20px; color: #2D1F14; font-weight: normal; text-transform: uppercase; letter-spacing: 2px;">Good to Know</h3>
-        <p style="margin: 0 0 10px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 15px; color: #5c4a3a; line-height: 1.7;">• Your slot starts and ends at the booked time. Delays don't extend your slot — any time beyond it attracts extra-hour charges.</p>
-        <p style="margin: 0 0 10px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 15px; color: #5c4a3a; line-height: 1.7;">• The advance payment is non-refundable in case of cancellation.</p>
-        <p style="margin: 0; font-family: Garamond, 'Times New Roman', serif; font-size: 15px; color: #5c4a3a; line-height: 1.7;">• Need to reschedule? Let us know at least 3 days before your picnic date and we'll do our best to accommodate.</p>
+        ${bullets}
       </td>
     </tr>`
 }
 
 function buildHtml(record: Record<string, unknown>, venueLabel: string | null, directionsUrl: string | null, addons: AddOn[], inclusionText: string): string {
+  const isStay    = Boolean(record.checkout_date)
   const name      = record.full_name as string
   const date      = formatDate(record.preferred_date as string)
   const time      = timeRow(record)
@@ -168,12 +188,15 @@ function buildHtml(record: Record<string, unknown>, venueLabel: string | null, d
   const totalFromDB = Number(record.total_amount || 0)
   const totalAmt  = totalFromDB > 0 ? totalFromDB : advAmt * 2
   const remainAmt = Math.max(0, totalAmt - advAmt)
-  const setupLabel = record.checkout_date ? "Stay + Picnic setup" : "Picnic setup"
+  const setupLabel = isStay ? "Stay + Picnic setup" : "Picnic setup"
   const packageName = typeof record.package_name === "string" && record.package_name ? record.package_name : null
   const occasionRowHtml = record.occasion ? reservationRow("OCCASION", esc(record.occasion)) : ""
   const packageRowHtml  = packageName ? reservationRow("PACKAGE", esc(packageName)) : ""
   const boardRowHtml    = boardText(record.board) ? reservationRow("BOARD", boardText(record.board)) : ""
   const inclusionRowHtml = inclusionText ? reservationRow("INCLUDED", inclusionText) : ""
+  const heroSub = isStay
+    ? `${name.split(" ")[0]}, your stay is officially on the calendar. Settle in, relax, and let us take care of the rest.`
+    : `${name.split(" ")[0]}, your luxury picnic is officially on the calendar. We are curating the magic — you just bring the memories.`
 
   return `<!DOCTYPE html>
 <html>
@@ -212,9 +235,9 @@ function buildHtml(record: Record<string, unknown>, venueLabel: string | null, d
               <!-- HERO -->
               <tr>
                 <td align="center" style="padding: 32px; word-wrap: break-word; overflow-wrap: break-word;">
-                  <h2 style="margin: 0; font-family: Garamond, 'Times New Roman', serif; font-size: 48px; color: #2D1F14; font-weight: normal; line-height: 1.1; text-transform: uppercase;">${occasionHeading(record.occasion)}</h2>
+                  <h2 style="margin: 0; font-family: Garamond, 'Times New Roman', serif; font-size: 48px; color: #2D1F14; font-weight: normal; line-height: 1.1; text-transform: uppercase;">${occasionHeading(record.occasion, isStay)}</h2>
                   <p style="margin: 20px 0 32px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 20px; color: #c4607a; line-height: 1.4;">
-                    ${name.split(" ")[0]}, your luxury picnic is officially on the calendar. We are curating the magic — you just bring the memories.
+                    ${heroSub}
                   </p>
                   <table border="0" cellpadding="0" cellspacing="0">
                     <tbody>
@@ -233,7 +256,7 @@ function buildHtml(record: Record<string, unknown>, venueLabel: string | null, d
               <!-- HERO IMAGE -->
               <tr>
                 <td align="center" style="padding: 20px;">
-                  <img alt="Luxury Picnic Setup" src="${HERO_IMG}"
+                  <img alt="The Picnic Stories" src="${HERO_IMG}"
                     style="width: 100%; max-width: 100%; height: auto; display: block; border-radius: 20px;"/>
                 </td>
               </tr>
@@ -291,13 +314,13 @@ function buildHtml(record: Record<string, unknown>, venueLabel: string | null, d
               ${extrasSection(addons)}
 
               <!-- GOOD TO KNOW -->
-              ${policySection()}
+              ${policySection(isStay)}
 
               <!-- CONTACT SUPPORT -->
               <tr>
                 <td align="center" style="padding: 32px; word-wrap: break-word; overflow-wrap: break-word;">
                   <p style="margin: 0 0 32px 0; font-family: Garamond, 'Times New Roman', serif; font-size: 18px; color: #c4607a; font-style: italic;">
-                    Have questions or need to make adjustments to your picnic?
+                    Have questions or need to make adjustments to your ${isStay ? "stay" : "picnic"}?
                   </p>
                   <table border="0" cellpadding="0" cellspacing="0">
                     <tbody>
@@ -370,7 +393,10 @@ Deno.serve(async (req) => {
     // Package inclusions supersede the legacy venue food/drink multipliers.
     const inclusionText = record.package_key ? "" : await getInclusionText(record.venue_id, adults)
     const firstName = String(record.full_name ?? "").split(" ")[0] || "there"
-    const subject = `You're confirmed, ${firstName} — picnic on ${formatDate(record.preferred_date)}`
+    const isStay = Boolean(record.checkout_date)
+    const subject = isStay
+      ? `You're confirmed, ${firstName} — stay from ${formatDate(record.preferred_date)} to ${formatDate(record.checkout_date)}`
+      : `You're confirmed, ${firstName} — picnic on ${formatDate(record.preferred_date)}`
 
     await sendEmail({
       to: record.email_address,
