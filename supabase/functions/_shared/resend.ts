@@ -5,6 +5,7 @@ export interface EmailPayload {
   to: string | string[]
   subject: string
   html: string
+  cc?: string | string[]
 }
 
 export async function sendEmail(payload: EmailPayload): Promise<void> {
@@ -22,11 +23,15 @@ export async function sendEmail(payload: EmailPayload): Promise<void> {
       to: payload.to,
       subject: payload.subject,
       html: payload.html,
+      ...(payload.cc ? { cc: payload.cc } : {}),
     }),
   })
 
+  const bodyText = await res.text()
   if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Resend API error ${res.status}: ${err}`)
+    throw new Error(`Resend API error ${res.status}: ${bodyText}`)
   }
+  // Log the Resend message id so a delivery question can be traced back to a
+  // specific send (Resend's own dashboard is the source of truth beyond this).
+  console.log(`sendEmail: accepted by Resend — to=${JSON.stringify(payload.to)} cc=${JSON.stringify(payload.cc ?? null)} response=${bodyText}`)
 }

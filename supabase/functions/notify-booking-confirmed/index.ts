@@ -369,7 +369,7 @@ function buildHtml(record: Record<string, unknown>, venueLabel: string | null, d
 
 Deno.serve(async (req) => {
   try {
-    const { record, old_record } = await req.json()
+    const { record, old_record, cc } = await req.json()
 
     if (!record.confirmed || old_record?.confirmed === true) {
       return new Response(JSON.stringify({ ok: true, skipped: true }), {
@@ -402,6 +402,7 @@ Deno.serve(async (req) => {
       to: record.email_address,
       subject,
       html: buildHtml(record, venueLabel, directionsUrl, addons, inclusionText),
+      ...(cc ? { cc } : {}),
     })
 
     return new Response(JSON.stringify({ ok: true }), {
