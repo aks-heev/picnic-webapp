@@ -6147,6 +6147,9 @@ function renderBookings(bookings) {
           ${paymentBadgeHtml(booking)}
           <span class="adm-amount-badge">₹${advanceFormatted} paid</span>
           <span class="adm-timestamp" title="${new Date(booking.created_at).toLocaleString()}">${timeAgo}</span>
+          <button type="button" class="adm-edit-btn" title="Edit booking" aria-label="Edit booking" onclick="abkStartEdit(${booking.id})" style="background:none;border:none;cursor:pointer;color:#c4607a;padding:2px 4px;display:inline-flex;align-items:center;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
         </div>
       </div>
 
@@ -9275,6 +9278,7 @@ let abk = {
   sendEmail: true, emailToggleTouched: false,
   slotMap: null, slotMax: 1, slotVenueId: null,
   saving: false,
+  editingId: null, existingPaid: false,
 }
 
 async function loadAddBookingForm() {
@@ -9579,6 +9583,7 @@ function renderAddBookingForm() {
 
   container.innerHTML = `
     <div class="abk-form">
+      ${abk.editingId ? `<div class="abk-edit-banner" style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#e7f1ff;border:1px solid #b6d4fe;color:#084298;padding:10px 14px;border-radius:8px;margin-bottom:14px;font-weight:600;">Editing booking #${abk.editingId}<button type="button" style="background:#fff;border:1px solid #b6d4fe;color:#084298;padding:4px 12px;border-radius:6px;cursor:pointer;font-weight:600;" onclick="abkCancelEdit()">Cancel edit</button></div>` : ''}
       <!-- Type toggle -->
       <div class="abk-type">
         <button type="button" class="abk-type-btn ${isPicnic ? 'abk-type-btn--on' : ''}" onclick="abkSetType('picnic')">🧺 Picnic</button>
@@ -9642,17 +9647,18 @@ function renderAddBookingForm() {
         </div>
         <div class="abk-field">
           <label class="abk-label" for="abk-advance">Advance received (₹)</label>
-          <input type="number" id="abk-advance" class="abk-input" min="0" step="100" value="${abkText(abk.advance)}" oninput="abkAdvanceInput()" />
+          <input type="number" id="abk-advance" class="abk-input" min="0" step="100" value="${abkText(abk.advance)}" oninput="abkAdvanceInput()" ${abk.editingId && abk.existingPaid ? 'disabled' : ''} />
+          ${abk.editingId && abk.existingPaid ? '<span class="abk-hint">Locked — paid online; the advance reflects the Razorpay charge and can’t be changed.</span>' : ''}
         </div>
       </div>
 
       <label class="abk-toggle">
         <input type="checkbox" id="abk-send-email" ${abk.sendEmail && emailHas ? 'checked' : ''} ${emailHas ? '' : 'disabled'} onchange="abkSendEmailChange()" />
-        <span>Send confirmation email to guest</span>
+        <span>${abk.editingId ? 'Send updated confirmation to guest' : 'Send confirmation email to guest'}</span>
       </label>
       <span id="abk-send-email-hint" class="abk-hint">${emailHas ? '' : 'No email on file — confirmation can’t be sent.'}</span>
 
-      <button type="button" id="abk-save" class="btn btn--primary abk-save" onclick="abkSave()" ${abk.saving ? 'disabled' : ''}>${abk.saving ? 'Saving…' : 'Save booking'}</button>
+      <button type="button" id="abk-save" class="btn btn--primary abk-save" onclick="abkSave()" ${abk.saving ? 'disabled' : ''}>${abk.saving ? 'Saving…' : (abk.editingId ? 'Save changes' : 'Save booking')}</button>
     </div>`
 }
 
@@ -9729,24 +9735,106 @@ async function abkSave() {
   const saveBtn = document.getElementById('abk-save')
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…' }
   try {
-    const { data, error } = await supabase.rpc('admin_add_manual_booking', { p_booking, p_add_ons })
-    if (error) throw error
-    showToast(`Booking #${data} added`, 'success')
-    // Reset the form for the next entry.
-    abk = { ...abk, venueId: null, venueAddress: '', date: '', slot: '', checkin: '', checkout: '',
-      adults: 2, children: 0, packageKey: '', addonIds: [], occasion: '', boardType: '', boardMessage: '',
-      externalRef: '', notes: '', name: '', phone: '', email: '', total: 0, advance: 0,
-      totalTouched: false, advanceTouched: false, sendEmail: true, emailToggleTouched: false,
-      slotMap: null, slotVenueId: null, saving: false }
-    switchTab('bookings')
+    if (abk.editingId) {
+      const editingId = abk.editingId
+      const { error } = await supabase.rpc('admin_edit_booking', { p_booking_id: editingId, p_booking, p_add_ons })
+      if (error) throw error
+      // Optional "updated details" email: resend the existing confirmation
+      // template with the freshly-updated row (manual-resend path on
+      // notify-booking-confirmed). A mail failure must NOT undo the saved edit.
+      if (email && abk.sendEmail) {
+        try {
+          // Resend the confirmation server-side via an admin-gated RPC (reads the
+          // freshly-saved row and posts to notify-booking-confirmed through
+          // net.http_post). Going via PostgREST avoids the edge function's lack
+          // of browser CORS.
+          const { error: mailErr } = await supabase.rpc('admin_resend_confirmation', { p_booking_id: editingId })
+          if (mailErr) throw mailErr
+        } catch (mailErr) {
+          console.error('updated-confirmation email failed:', mailErr)
+          showToast(`Booking #${editingId} saved, but the email couldn’t be sent`, 'error')
+        }
+      }
+      showToast(`Booking #${editingId} updated`, 'success')
+      abkResetForm()
+      switchTab('bookings')
+      loadBookings()
+    } else {
+      const { data, error } = await supabase.rpc('admin_add_manual_booking', { p_booking, p_add_ons })
+      if (error) throw error
+      showToast(`Booking #${data} added`, 'success')
+      abkResetForm()
+      switchTab('bookings')
+    }
   } catch (err) {
-    console.error('admin_add_manual_booking failed:', err)
+    console.error(abk.editingId ? 'admin_edit_booking failed:' : 'admin_add_manual_booking failed:', err)
     showToast(err.message || 'Could not save the booking', 'error')
     abk.saving = false
-    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save booking' }
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = abk.editingId ? 'Save changes' : 'Save booking' }
   }
 }
 window.abkSave = abkSave
+
+// Reset the Add-Booking form back to a clean "new booking" state.
+function abkResetForm() {
+  abk = { ...abk, editingId: null, existingPaid: false,
+    venueId: null, venueAddress: '', date: '', slot: '', checkin: '', checkout: '',
+    adults: 2, children: 0, packageKey: '', addonIds: [], occasion: '', boardType: '', boardMessage: '',
+    externalRef: '', notes: '', name: '', phone: '', email: '', total: 0, advance: 0,
+    totalTouched: false, advanceTouched: false, sendEmail: true, emailToggleTouched: false,
+    slotMap: null, slotVenueId: null, saving: false }
+}
+
+// Prefill the Add-Booking form from an existing booking and enter edit mode.
+async function abkStartEdit(id) {
+  try {
+    if (!abk.loaded) await loadAddBookingForm()
+    const { data: b, error } = await supabase
+      .from('bookings')
+      .select('*, booking_add_ons(addon_id, name, price_at_booking, requires_confirmation)')
+      .eq('id', id).single()
+    if (error) throw error
+    const v = abk.venues.find(x => x.id === b.venue_id)
+    const isStay = !!b.checkout_date || (v && ABK_STAY_TYPES.includes(v.type))
+    const kids = Number(b.children_count || 0)
+    abk.editingId = b.id
+    abk.existingPaid = b.payment_status === 'paid'
+    abk.type = isStay ? 'stay' : 'picnic'
+    abk.venueId = b.venue_id
+    abk.venueAddress = b.venue_address || ''
+    abk.date = isStay ? '' : (b.preferred_date || '')
+    abk.slot = b.time_slot || ''
+    abk.checkin = isStay ? (b.preferred_date || '') : ''
+    abk.checkout = isStay ? (b.checkout_date || '') : ''
+    abk.children = kids
+    abk.adults = Math.max(1, Number(b.guest_count || 0) - kids)
+    abk.packageKey = b.package_key || ''
+    abk.addonIds = (b.booking_add_ons || []).map(a => a.addon_id).filter(x => x != null)
+    abk.occasion = b.occasion || ''
+    abk.boardType = (b.board && b.board.type) || ''
+    abk.boardMessage = (b.board && b.board.message) || ''
+    abk.externalRef = b.external_booking_ref || ''
+    abk.notes = b.special_requirements || ''
+    abk.name = b.full_name || ''
+    abk.phone = b.mobile_number || ''
+    abk.email = b.email_address || ''
+    abk.total = b.total_amount == null ? '' : Number(b.total_amount)
+    abk.advance = Number(b.advance_amount || 0)
+    abk.totalTouched = true; abk.advanceTouched = true   // preserve the stored figures
+    abk.sendEmail = false; abk.emailToggleTouched = true // opt-in on edit
+    abk.slotMap = null; abk.slotVenueId = null; abk.saving = false
+    switchTab('add-booking')
+    renderAddBookingForm()
+    if (abk.type === 'picnic') abkFetchSlots()
+  } catch (err) {
+    console.error('abkStartEdit failed:', err)
+    showToast('Could not load that booking for editing', 'error')
+  }
+}
+window.abkStartEdit = abkStartEdit
+
+function abkCancelEdit() { abkResetForm(); switchTab('bookings') }
+window.abkCancelEdit = abkCancelEdit
 
 // ── Admin page initialisation ────────────────────────────────
 function initAdminPage() {
