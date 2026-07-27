@@ -1,16 +1,61 @@
 // export-ical  (PUBLIC — verify_jwt = false)
 // =================================================================
 // Site -> Airbnb. Emits an iCalendar feed of this venue's
-// website-origin unavailability so Airbnb can import it and stop
-// taking stays we've already filled.
+// unavailability so Airbnb can import it and stop taking stays
+// we've already filled.
 //
-// Busy set = admin + parent full-day blocks  UNION  confirmed site
-//            bookings on dates that reach max_concurrent_setups.
-//            'parent' rows are combo-origin blocks (whole floor booked);
-//            they are full-day, carry no PII, and MUST reach Airbnb.
-// EXCLUDES source='ical' rows  ->  loop prevention. Re-exporting
-//            Airbnb's own imported reservations back to Airbnb is the
-//            classic two-way-sync feedback loop.
+// Busy set = admin full-day blocks + BOOKING-LINKED parent blocks
+//            UNION confirmed site bookings on dates that reach
+//            max_concurrent_setups.
+//            'parent' rows with booking_id set are combo-origin blocks
+//            (whole floor booked on the site); they are full-day, carry
+//            no PII, and MUST reach Airbnb.
+// EXCLUDES this venue's OWN source='ical' rows AND its booking_id-NULL
+//            'parent' rows -> self-echo prevention. Both are derived from
+//            THIS listing's own Airbnb feed; re-exporting them to Airbnb
+//            is the classic two-way-sync feedback loop.
+//
+// COMBO PARENTS (venues with children via parent_venue_id): inherit every
+//            child floor's occupancy — admin blocks, booking-linked parent
+//            blocks, confirmed site bookings, AND (v12) the child's own
+//            source='ical' rows — so the whole-cottage listing shows busy
+//            whenever either floor is gone, however it was filled.
+//
+// v12 (2026-07-27) RE-INCLUDES child 'ical' rows, reversing the v11
+//            exclusion. v11 removed them to break a loop whose second step
+//            was "Airbnb's linked-listing feature pushes the parent's block
+//            DOWN to both child rooms". That step cannot occur: as verified
+//            in the Airbnb host UI on 2026-07-27, NO listing linking is
+//            configured on any of the three TerraCottage listings. The v11
+//            comment asserted Airbnb "ALREADY blocks the whole-home listing
+//            natively when a child room is booked" — it does not, and the
+//            exclusion therefore left the whole-cottage listing open while a
+//            floor was occupied by an Airbnb guest. Proven: Ochre held a real
+//            Airbnb reservation 2026-07-20..26 (HMH4X8EWTR) while Sienna sat
+//            bookable on Airbnb for those exact nights.
+//            See docs/ICAL_AUDIT_2026-07-27.md section 2.
+//
+//            TWO STANDING ASSUMPTIONS. If either stops holding, this
+//            inclusion must be reverted to the v11 behaviour:
+//              1. Airbnb does not re-export imported-calendar blocks in its
+//                 own .ics feed. (Verified 2026-07-27: Sienna's UI showed
+//                 27 Jul-30 Sep blocked from our feed; its .ics contained
+//                 none of it.) So what we publish cannot return to us.
+//              2. No Airbnb listing linking / listing group is configured.
+//                 (Verified 2026-07-27 in the host UI for all three.) So a
+//                 block Airbnb accepts on the parent cannot be pushed down
+//                 onto the children.
+//            A child's own 'ical' rows are still never re-exported on the
+//            CHILD's own feed — only inherited upward by a combo parent.
+//            booking_id-NULL 'parent' rows on a child stay excluded there
+//            too: those are this same combo's feed already fanned down by
+//            sync-ical, so inheriting them back up is a genuine self-echo.
+//
+//            Child-booking inheritance is binary: any occupied child night
+//            blocks the combo outright, independent of
+//            max_concurrent_setups. Mirrors the read-only combo logic in
+//            app.js fetchBookedData. No-op for non-combo venues (the child
+//            lookup returns zero rows).
 // No guest PII is ever emitted (no names, emails, external refs).
 // DTEND is EXCLUSIVE (all-day VEVENT convention), matching the
 //            [preferred_date, checkout_date) night model used in app.js.
@@ -53,24 +98,65 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY)
 
-    const [venueRes, adminRes, bookingsRes] = await Promise.all([
+    const [venueRes, adminRes, bookingsRes, kidsRes] = await Promise.all([
       supabase.from("venues").select("id, max_concurrent_setups").eq("id", venueId).single(),
-      // admin + parent full-day blocks (slot blocks are café-specific, not
-      // exported). 'parent' = whole-floor combo booking blocking this child.
+      // admin full-day blocks + booking-linked 'parent' blocks (slot blocks
+      // are cafe-specific, not exported). This venue's own 'ical' rows and its
+      // booking_id-NULL 'parent' rows are excluded — see self-echo note in
+      // the header.
       supabase.from("venue_availability").select("date")
-        .eq("venue_id", venueId).in("source", ["admin", "parent"]).is("time_slot", null),
+        .eq("venue_id", venueId)
+        .or("source.eq.admin,and(source.eq.parent,booking_id.not.is.null)")
+        .is("time_slot", null),
       // confirmed site bookings — only the two date columns, never PII
       supabase.from("bookings").select("preferred_date, checkout_date")
         .eq("venue_id", venueId).eq("confirmed", true),
+      // Child floors of this venue, if it's a combo parent. Empty array for
+      // every non-combo venue — the block below is then a no-op.
+      supabase.from("venues").select("id").eq("parent_venue_id", venueId),
     ])
     if (venueRes.error || !venueRes.data) {
       return new Response("Venue not found", { status: 404 })
+    }
+    if (adminRes.error) throw adminRes.error
+    // Fail closed: if we can't determine this venue's children, don't emit a
+    // feed that might be silently missing child-driven unavailability.
+    if (kidsRes.error) throw kidsRes.error
+
+    // deno-lint-ignore no-explicit-any
+    const childIds = (kidsRes.data || []).map((k: any) => k.id as number)
+
+    let childBlockDates: string[] = []
+    let childBookingRows: Array<{ preferred_date: string; checkout_date: string | null }> = []
+    if (childIds.length) {
+      const [childBlocksRes, childBookingsRes] = await Promise.all([
+        // Child unavailability: admin blocks + booking-linked parent blocks
+        // + (v12) the child's OWN Airbnb-origin 'ical' rows. The last of
+        // these is what closes the whole-cottage double-booking hole; see
+        // the v12 note and its two standing assumptions in the header.
+        // booking_id-NULL 'parent' rows on a child remain excluded: those
+        // are this combo's own feed fanned down by sync-ical, so pulling
+        // them back up would be a self-echo.
+        supabase.from("venue_availability").select("date")
+          .in("venue_id", childIds)
+          .or("source.eq.admin,source.eq.ical,and(source.eq.parent,booking_id.not.is.null)")
+          .is("time_slot", null),
+        supabase.from("bookings").select("preferred_date, checkout_date")
+          .in("venue_id", childIds).eq("confirmed", true),
+      ])
+      // Fail closed here too — a half-known child state is worse than no feed.
+      if (childBlocksRes.error) throw childBlocksRes.error
+      if (childBookingsRes.error) throw childBookingsRes.error
+      // deno-lint-ignore no-explicit-any
+      childBlockDates = (childBlocksRes.data || []).map((r: any) => r.date as string)
+      childBookingRows = childBookingsRes.data || []
     }
 
     const maxSetups = venueRes.data.max_concurrent_setups || 1
     const busy = new Set<string>()
 
     for (const r of adminRes.data || []) busy.add(r.date as string)
+    for (const d of childBlockDates) busy.add(d)
 
     // Count confirmed bookings per night; a date is busy only once it
     // reaches capacity (keeps a multi-setup venue open after 1 booking).
@@ -83,6 +169,15 @@ Deno.serve(async (req) => {
       }
     }
     for (const [d, c] of counts) if (c >= maxSetups) busy.add(d)
+
+    // Child bookings are binary — any night a child floor is booked blocks
+    // the whole combo outright, independent of the combo's own capacity
+    // counting above (max_concurrent_setups doesn't apply to "a floor is gone").
+    for (const b of childBookingRows) {
+      const start = b.preferred_date
+      const end = b.checkout_date || addDays(start, 1)
+      for (let d = start; d < end; d = addDays(d, 1)) busy.add(d)
+    }
 
     const stamp = icalStamp()
     const out: string[] = [

@@ -8398,6 +8398,51 @@ body.menu-viewer-open {
 .avail-detail-note { font-size: 12px; color: #7c2d12; line-height: 1.45; margin: 8px 0 0; }
 .btn--small { padding: 6px 12px; font-size: 13px; }
 
+/* Airbnb iCal health — staleness badge + all-calendars strip.
+   A broken feed keeps the site selling dates Airbnb has already taken, and
+   sync-ical does not alert on failure yet, so this is the visible signal.
+   See docs/ICAL_AUDIT_2026-07-27.md Leak #4. */
+.ical-badge {
+  align-self: flex-start;
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .01em;
+}
+.ical-badge--ok    { background: #dcfce7; color: #166534; }
+.ical-badge--stale { background: #fee2e2; color: #991b1b; }
+.ical-badge--off   { background: #e5e7eb; color: #4b5563; }
+
+.avail-ical-health { margin-top: 12px; border-top: 1px solid #fed7aa; padding-top: 10px; }
+.avail-ical-health-title {
+  font-size: 12px; font-weight: 700; color: #9a3412; margin-bottom: 6px;
+}
+.avail-ical-health-list { list-style: none; margin: 0; padding: 0; }
+.ical-health-row {
+  display: grid;
+  grid-template-columns: 10px minmax(120px, 1fr) auto;
+  grid-template-areas: "dot name when" ". status status";
+  gap: 2px 8px;
+  align-items: center;
+  font-size: 12px;
+  color: #7c2d12;
+  padding: 4px 0;
+}
+.ical-health-row + .ical-health-row { border-top: 1px dashed #fed7aa; }
+.ical-dot {
+  grid-area: dot;
+  width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+}
+.ical-dot--ok    { background: #16a34a; }
+.ical-dot--stale { background: #dc2626; }
+.ical-dot--off   { background: #9ca3af; }
+.ical-health-name   { grid-area: name; font-weight: 600; }
+.ical-health-when   { grid-area: when; color: #9a3412; white-space: nowrap; }
+.ical-health-status { grid-area: status; color: #9a3412; opacity: .85; }
+.ical-health-row--stale .ical-health-name { color: #991b1b; }
+
 /* ============================================================
    Logo usage: navbar mark, hero mark, site footer
    ============================================================ */

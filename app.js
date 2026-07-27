@@ -8133,6 +8133,24 @@ function renderAvailCalendarGrid() {
   // No listener added here — the single persistent listener lives in initAvailabilityTab.
 }
 
+// A feed is "stale" once it has missed roughly three hourly sync cycles. The
+// sync itself never alerts on failure (Leak #4, docs/ICAL_AUDIT_2026-07-27.md);
+// until Phase 4 wires up email, this badge is the only visible signal that a
+// feed has silently stopped importing while the site keeps selling.
+const ICAL_STALE_MS = 3 * 60 * 60 * 1000
+
+function icalHealth(v) {
+  if (!v.airbnb_ical_url) return { cls: 'off', label: 'not connected' }
+  if (!v.last_ical_sync_at) return { cls: 'stale', label: 'never synced' }
+  const ageMs = Date.now() - new Date(v.last_ical_sync_at).getTime()
+  const errored = /^error/i.test(v.last_ical_sync_status || '')
+  if (errored) return { cls: 'stale', label: 'last sync errored' }
+  if (ageMs > ICAL_STALE_MS) {
+    return { cls: 'stale', label: `stale — ${Math.floor(ageMs / 3600000)}h since last sync` }
+  }
+  return { cls: 'ok', label: 'healthy' }
+}
+
 // Render the Airbnb iCal sync panel (self_managed + combo venues): a copyable
 // export URL to paste into Airbnb, last-sync status, and a manual "Sync now".
 // Combo venues (e.g. a whole-cottage listing distinct from each child floor's
@@ -8150,6 +8168,7 @@ function renderAvailIcalPanel(venue) {
     ? new Date(venue.last_ical_sync_at).toLocaleString('en-IN')
     : 'never'
   const status    = venue.last_ical_sync_status || '—'
+  const health    = icalHealth(venue)
 
   panel.hidden = false
   panel.innerHTML = `
@@ -8162,10 +8181,14 @@ function renderAvailIcalPanel(venue) {
       </div>
       <div class="avail-ical-status">
         <span>Import from Airbnb: <strong>${importing ? 'on' : 'off — set the Airbnb iCal URL in the venue editor'}</strong></span>
+        ${importing ? `<span class="ical-badge ical-badge--${health.cls}">${escapeHtml(health.label)}</span>` : ''}
         ${importing ? `<span>Last sync: <strong>${escapeHtml(lastAt)}</strong> · ${escapeHtml(status)}</span>` : ''}
       </div>
       ${importing ? `<button type="button" class="btn btn--small btn--primary" id="avail-ical-sync-now">Sync now</button>` : ''}
+      <div class="avail-ical-health" id="avail-ical-health"></div>
     </div>`
+
+  renderIcalHealthStrip()
 
   document.getElementById('avail-ical-copy')?.addEventListener('click', () => {
     const inp = document.getElementById('avail-ical-export-url')
@@ -8181,6 +8204,48 @@ function renderAvailIcalPanel(venue) {
     }
   })
   document.getElementById('avail-ical-sync-now')?.addEventListener('click', () => syncIcalNow(venueId))
+}
+
+// All-calendars health strip. The per-venue panel above only tells you about
+// the venue you happen to be looking at; a feed that quietly broke on ANOTHER
+// venue is exactly the failure this is here to surface. Read-only, one small
+// query, admin-only screen.
+async function renderIcalHealthStrip() {
+  const box = document.getElementById('avail-ical-health')
+  if (!box) return
+  try {
+    const { data, error } = await supabase
+      .from('venues')
+      .select('id, name, type, is_active, airbnb_ical_url, last_ical_sync_at, last_ical_sync_status')
+      .in('type', ['self_managed', 'combo'])
+      .eq('is_active', true)
+      .order('id', { ascending: true })
+    if (error) throw error
+    const rows = (data || []).filter(v => v.airbnb_ical_url)
+    if (!rows.length) { box.innerHTML = ''; return }
+
+    const anyBad = rows.some(v => icalHealth(v).cls === 'stale')
+    box.innerHTML = `
+      <div class="avail-ical-health-title">All calendars${anyBad ? ' — needs attention' : ''}</div>
+      <ul class="avail-ical-health-list">
+        ${rows.map(v => {
+          const h = icalHealth(v)
+          const when = v.last_ical_sync_at
+            ? new Date(v.last_ical_sync_at).toLocaleString('en-IN')
+            : 'never'
+          return `<li class="ical-health-row ical-health-row--${h.cls}">
+            <span class="ical-dot ical-dot--${h.cls}"></span>
+            <span class="ical-health-name">${escapeHtml(v.name || ('#' + v.id))}</span>
+            <span class="ical-health-when">${escapeHtml(when)}</span>
+            <span class="ical-health-status">${escapeHtml(v.last_ical_sync_status || '—')}</span>
+          </li>`
+        }).join('')}
+      </ul>`
+  } catch (err) {
+    console.error('renderIcalHealthStrip error:', err)
+    // Fail loud-but-small: never leave a blank space that reads as "all fine".
+    box.innerHTML = `<div class="avail-ical-health-title">All calendars — could not load status</div>`
+  }
 }
 
 // Manually trigger Airbnb -> site import for one venue. The admin is signed in,

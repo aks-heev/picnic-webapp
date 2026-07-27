@@ -1,186 +1,225 @@
 # The Picnic Stories — Claude Working Notes
 
-## Session Handoff — 2026-07-15 PART 2 (Consolidated SEO plan written + advance-percentage bug found and FIXED live: 50%→30%, submit_booking_intent + notify-booking-received v31 — migration UNCOMMITTED)
+Read §1–§3 before doing anything. Then jump to the section matching your task. §11 (Definition of Done) gates every task — nothing is "done" until it passes. The full session history lives in `docs/HANDOFFS.md`; only the latest entry is kept at the bottom of this file.
 
-• **Wrote `docs/SEO_PLAN_2026-07-15.md`** — consolidated SEO plan reconciling `SEO_GROWTH_PLAN.md`/`PENDING_ITEMS_2026-07-06.md`/`BLOG_SEO_PLAN_2026-07-11.md` against verified live state, scoped to user's 3 chosen tracks (content scale-up, local SEO/GBP/reviews, conversion funnel). Confirmed live during research: the homepage venue-grid GSC fix (`4fa798f`, previously "pushed, awaiting deploy") is now actually live — real `<a href="/venues/...">` cards render server-side. Real booking-funnel data pulled: ~6–7 real leads/60d (test phone excluded), 1 confirmed, most abandoned — n is small enough that funnel % should be read directionally, not as a KPI to steer by week-to-week. Plan later run through plan-optimizer by the user (74→92) — effort tags, contingencies, "directional/n=7" caveats, and a downscoped daily-digest (not an admin UI) added throughout Track 3.
+---
 
-• 🔴 **Found and fixed a real, previously-undiagnosed pricing bug — not the vague "client-vs-server" framing in the 07-07 handoff below, something more specific.** `submit_booking_intent`'s signature has always accepted `p_advance_amount` — and the function body never read it. It hardcoded `v_advance := round(v_total * 0.5)` instead. Verified against live data: **every real booking since at least 2026-06-23 (15/15 most recent rows) was stored at exactly `advance_amount/total_amount = 0.500`**, not 30%. Meanwhile the client (app.js L3595/4261/4267) has always quoted 30% to the customer pre-submission, and a dedicated `compute_booking_advance` function (30%, added in the 07-10 package-pricing migration) already existed and was never wired in anywhere. `create-order` (the function that actually opens Razorpay checkout) reads `bookings.advance_amount` straight from the DB, so the *real money charged* was always the 50% figure — not just an admin-email display quirk as first assumed (the "(50%)" string literally only lives in one admin-email fallback row, `notify-booking-received` L156-157, shown when advance is still 0).
+## 1. Orientation — what this project is
 
-• **Business call (Aksheev, 2026-07-15): 30% is the correct rate** — the 50% in `submit_booking_intent` was drift/an oversight, not a deliberate decision; `compute_booking_advance` existing unused at 30% was the tell.
+**Business**: The Picnic Stories (www.picnicstories.com) sells curated picnic setups (time-slot bookings at partner cafes) and stay + celebration-setup bundles (TerraCottage homes) in Gurugram and Jaipur, India. Volume is tiny — single-digit real leads per month. One wrong price, double-booked slot, or broken email is a real business loss. **Correctness beats speed on every task. There is NO staging environment: every DB, RPC, and edge-function change is production the moment it lands.**
 
-• **Fix SHIPPED LIVE**: migration `20260715_fix_advance_percentage.sql` (repo file + applied via `apply_migration`) — `submit_booking_intent` (`CREATE OR REPLACE`, same signature, `p_advance_amount` param left in place unused rather than removed, to avoid the PostgREST-overload risk documented in the 07-07 lesson below) now computes `v_advance` by calling `compute_booking_advance(...)` instead of hardcoding its own rate — the percentage now lives in exactly one place. **Verified via a rolled-back `DO $$` test call** (matches the `admin_add_manual_booking` testing pattern from 07-14): `total=12900 advance=3870.00 ratio=0.300` for a real venue+package (Beige/Moment — price also confirmed live-updated to ₹12,900 via admin panel same session), zero residue after (`count(*) = 0` for the test phone number). **`notify-booking-received` redeployed as v31** — fixed the one hardcoded "Advance required (50%)" label + `pkgTotal * 0.5` in `adminCostBlock`'s no-advance-yet fallback row to 30%/`* 0.3`; deployed from the live-fetched v30 source (not local files) per the standing Edge Fn Drift lesson, confirmed byte-identical to local except this one block. `create-order` needed **no change** — it already just reads whatever `advance_amount` is stored, so it now charges 30% automatically once a booking is (re)created.
+**Stack** (vanilla JS, no framework, no frontend TypeScript):
 
-• **NOT touched, correctly**: the "legacy rows without total_amount: advance was always 50%" fallback in both `notify-booking-received` (`pkgTotal = totalFromDB > 0 ? totalFromDB : advance > 0 ? advance * 2 : 0`) and `notify-booking-confirmed` (same pattern) — left alone on purpose, since that's reconstructing history for real pre-07-08 rows that predate `total_amount` being stored at all, not a going-forward assumption. `admin_add_manual_booking` and the admin "confirm query" flow (`confirmBooking`) both take admin-entered total/advance directly — no formula, no fix needed.
+- Frontend: static SPA — `index.html` (public) + `admin.html` (admin panel) + `app.js` (~10,200 lines, ALL logic for both pages) + `style.css` (~250KB). Vite build; then `scripts/prerender-venues.mjs` post-build generates static SEO pages (venue pages, `/picnic-venues-gurugram`, `/picnic-venues-jaipur`, `/blog` + posts, sitemap) into `dist/`.
+- Hosting: Vercel, `cleanUrls: true`. Team `team_dLDWAkARaohP22HGIl1DpNnj`, project `prj_WDxIggD0U392TpTM527qqKe9vui0`. Deploys ride on git push.
+- Backend: Supabase project `evmftrogyzoudiccqkya` (ap-northeast-1) — Postgres + RLS + RPCs + 11 edge functions + pg_cron. Managed via the Supabase MCP tools (`execute_sql`, `apply_migration`, `get_edge_function`, `deploy_edge_function`, `get_logs`, `get_advisors`).
+- Payments: Razorpay — **a single LIVE key pair, no test mode exists in this app** (see §7 red line).
+- Email: Resend, sends from `team@picnicstories.com` (edge functions). Admin alerts go to team@ + the venue's team email.
+- Analytics: PostHog project 482400 (US cloud); Meta Pixel `1366746648648321`, ad account `565789031303932`.
+- Blog content: `content/blog/*.md`, each starting with an HTML-comment SEO SPEC block (title ≤60 / meta ≤155 / slug / published / hero). Parsed by `mdToHtml` in the prerender script — a deliberately constrained markdown subset (`#`–`####`, bold, italic, links, `-`/`1.` lists, `---`). Extend the parser BEFORE using fancier syntax in a post.
+- `index.html` "From the blog" card list is HAND-MAINTAINED — update it when `content/blog/` changes.
 
-• **UNCOMMITTED**: `supabase/migrations/20260715_fix_advance_percentage.sql`, `supabase/functions/notify-booking-received/index.ts`, `docs/SEO_PLAN_2026-07-15.md`, `CLAUDE.md`. Schema + edge fn are already live in Supabase (not gated on the commit) — the commit is purely to sync the repo:
+**Roles**: Aksheev (user) = owner/operator — makes business calls, runs all git commands from his own terminal, eyeballs emails/UI. Claude = engineer — ships nothing without the verification in §11.
+
+---
+
+## 2. Trust order — read before acting on ANY prior claim
+
+1. **Live systems** — SQL via `execute_sql`, `get_edge_function`, cache-busted fetch of the prod site, Vercel deploy list, `git log`. Live state wins every conflict.
+2. **Code on disk**, read via the Read tool (never bash — see §3).
+3. **This file, `docs/`, memory, handoffs** — hypotheses only. They rot fast, sometimes same-day. A prior session shipped on top of a handoff's false "already live" claims and lost half a day (see `docs/HANDOFFS.md`, 2026-07-14 correcting 2026-07-12).
+
+**Mandatory**: before building on any claim (a fn is at vN, a column exists, a fix is deployed, a doc's status list), probe the live thing itself. Run the `picnic-live-verify` skill first in any session that builds on prior work. Concretely:
+
+- Edge fn version/source → `list_edge_functions` / `get_edge_function` (never the local file).
+- Schema/RPC → `execute_sql` against `information_schema` / `pg_proc` (`pg_get_functiondef` for bodies).
+- Cron → `select jobname, schedule, active from cron.job;`
+- Prod pages → fetch with `?cb=<timestamp>` appended; an un-busted fetch can serve stale cache and has produced a wrong diagnosis before.
+- "Was it committed/pushed?" → `git log` (trustworthy) — NOT `git status`/`git diff` (§3).
+
+---
+
+## 3. Sandbox failure modes — why the file/git rules exist
+
+The bash mount **tears large files**: reads of `app.js`, `style.css`, `CLAUDE.md`, and edge-fn `.ts` files can come back cut off mid-token or padded with trailing garbage. This corrupts everything downstream: `cat`, `wc`, `node --check`, esbuild-on-the-mount, `git status`, and `git diff` have ALL reported false results on this repo (both phantom changes and silent omissions).
+
+Hard consequences — no exceptions:
+
+1. **Read large files ONLY with the Read tool.** Never trust a bash read of app.js / style.css / edge `.ts` / CLAUDE.md.
+2. **Never run `git add` / `git commit` / `git push`.** A commit from the sandbox could stage a torn file over good content. Always end the session by handing Aksheev a paste-ready git block (see §12). This holds even if he says "commit it" casually — the block runs on HIS terminal.
+3. **Never trust `git status`/`git diff` on this repo.** To verify what actually changed: reconstruct a trusted copy of the file via the Read tool, then diff it against `git show HEAD:<file>` (the object store reads correctly even when the working-tree read tears).
+4. **To syntax-check or bundle a large JS/TS file**: write a trusted copy (from Read-tool output or the live `get_edge_function` fetch) to `/tmp` inside the sandbox, and run `node --check` / esbuild THERE — never against the mount path.
+5. `git status` shows 5 long-standing pending deletions + stray untracked folders (`hyperframes-reel-starter/`, `graphify-out/`, `sets/`, `_temp/`, `~/` …). These predate your session — leave them alone; cleanup is Aksheev's deferred call.
+
+---
+
+## 4. Backend changes (migrations, RPCs, edge functions)
+
+Run the `picnic-backend-ship` skill for any `supabase/` change. The non-negotiable steps, inline in case the skill doesn't trigger:
+
+**Migrations**
+- Apply via `apply_migration` AND write the matching `supabase/migrations/YYYYMMDD_name.sql` repo file. Always both, same session.
+- Note: only `supabase/migrations/` is the migration home. The loose `.sql` files at `supabase/` root are legacy — don't add there.
+
+**RPC signature changes**
+- Changing a signature? `DROP FUNCTION` the old overload explicitly — two overloads make PostgREST calls ambiguous and break the frontend. Prefer leaving an unused parameter in place over changing the signature at all (this is why `submit_booking_intent` still accepts a never-read `p_advance_amount`).
+- New/changed RPCs follow house convention: `SECURITY INVOKER` where possible, explicit `SET search_path`, admin-gated ones check a hardcoded admin email from JWT claims. Run `get_advisors` after and explain any new warning.
+- Test EVERY branch via a rolled-back `DO $$` block before calling it done:
+
+```sql
+DO $$
+DECLARE v_result jsonb;
+BEGIN
+  -- simulate the caller; resolve the real admin email from the fn body via pg_get_functiondef, don't guess
+  PERFORM set_config('request.jwt.claims', '{"email":"<admin-email>"}', true);
+  SELECT to_jsonb(public.my_rpc(...)) INTO v_result;
+  RAISE EXCEPTION 'RESULT %', v_result;  -- RAISE aborts the txn: assertions ride the error message, nothing persists
+END $$;
 ```
-git add supabase/migrations/20260715_fix_advance_percentage.sql supabase/functions/notify-booking-received/index.ts docs/SEO_PLAN_2026-07-15.md CLAUDE.md
-git commit -m "Fix advance-amount bug: submit_booking_intent now uses compute_booking_advance (30%), was hardcoded 50%"
+- After the test, verify zero residue: `select count(*) from bookings where mobile_number = '<test-phone>';` must be 0.
+
+**Edge functions**
+1. Fetch the deployed source via `get_edge_function` FIRST — local files drift from deployed and have been broken-stale before. The live fetch is your editing base, not the repo file.
+2. Bundle-check the edited source before deploying: copy to `/tmp` (§3.4), then `npx esbuild /tmp/<fn>/index.ts --bundle --platform=neutral --outfile=/dev/null`.
+3. Deploy via `deploy_edge_function`, **preserving the fn's current `verify_jwt` flag**. Check it in `list_edge_functions` first. Trigger/cron-called fns MUST stay `verify_jwt=false` (currently: notify-booking-received, notify-booking-confirmed, notify-menu-link, notify-order-received, export-ical, razorpay-webhook, post-event-nudge, lead-digest). `create-order`, `verify-payment`, `sync-ical` are `verify_jwt=true`. Deploying with the wrong flag silently breaks DB-trigger email delivery.
+4. After deploy: sync the local `supabase/functions/<fn>/` files to byte-match what you deployed, and check `get_logs` after the smoke test.
+5. Layout quirk: local shared code lives at `supabase/functions/_shared/`; the deploy bundles it beside the entrypoint as `./_shared/*` — deployed import paths use `./_shared/`, local historical files sometimes `../_shared/`. Match the deployed form when deploying.
+
+**The 11 edge functions** (roles): `notify-booking-received` (guest ack + admin alert on every bookings INSERT, via trigger `on_booking_insert_notify`), `notify-booking-confirmed` (confirmation email), `create-order`/`verify-payment`/`razorpay-webhook` (payment flow — create-order reads `bookings.advance_amount` from the DB and charges exactly that), `export-ical`/`sync-ical` (Airbnb availability round-trip), `post-event-nudge` (day+2 thank-you/review email, cron), `lead-digest` (daily 09:00 IST lead email, cron), `notify-menu-link`, `notify-order-received` (legacy order flow).
+
+**Cron jobs** (resolve live before relying — `select * from cron.job`): `lead-digest-daily` 30 3 * * *, `post-event-nudge-daily` 30 4 * * *, `mark-abandoned-leads` 30 20 * * *, `sync-ical-hourly` 0 * * * * (all UTC; +5:30 for IST).
+
+---
+
+## 5. Smoke tests — after every backend deploy
+
+Run the `picnic-smoke-test` skill. Inline essentials:
+
+- Test emails: ALWAYS `aksheevs+<alias>@gmail.com` — never a real customer address, never bare team@ for the guest leg.
+- Test rows: insert temp rows via the real path (RPC or trigger-bearing INSERT), verify the fn response/`get_logs`, then DELETE the rows AND all children — `booking_add_ons` and any `venue_availability` fanout rows — and prove it: `count(*) = 0` for the test phone/email. An interrupted cleanup (a 503 mid-delete has happened) must be retried and re-verified, not assumed.
+- Admin-notice emails generated by tests land in the team@ inbox — tell Aksheev which ones to ignore.
+- Anything user-facing that you can't render (email visuals, UI on a real phone) → verified-logic-but-not-eyeballed; list it as owed-by-user in the handoff.
+
+🔴 **Razorpay red line: NEVER complete a real charge.** Single LIVE key pair; no test mode. UI payment testing stops at opening the checkout modal and dismissing it (dismiss → `ondismiss` → `finishBookingFlow`, which also fires the Meta Lead event). Delete the booking row after. The charge→webhook→`verify-payment` leg can only be proven by real money — that is always Aksheev's explicit call, never yours.
+
+---
+
+## 6. Data model — flag semantics (get these wrong and queries/emails lie)
+
+`bookings` is both the lead table and the booking table. One row per lead/booking; the flags carry the meaning:
+
+- `confirmed = true` — THE truth flag for a real booking. Every "is it booked" query, calendar block, and email eligibility check keys on this.
+- `payment_status` — `'paid'` means Razorpay-verified ONLY. Admin-entered/offline-collected bookings stay `'pending'` forever BY DESIGN — never "fix" this, and never use `payment_status='paid'` as the real-booking filter (that bug silently excluded all manual bookings from post-event-nudge once; `confirmed=true` is the filter).
+- `customer_intent` — `'query'` (enquiry; set on intent-screen render, before the user clicks anything) vs `'lock'` (chose to book).
+- `lead_status` — funnel state: `pending` / `whatsapp_clicked` / `abandoned` (cron-marked) / `confirmed`.
+- `entry_source` — `'site'` | `'admin'` (manual entry via admin + Add Booking tab). `send_guest_email=false` or null `email_address` suppresses guest emails (admin alert still sends).
+- `checkout_date` present ⇒ stay (per-night occupancy, nudges fire after checkout); absent ⇒ picnic (slot-based on `preferred_date`).
+- `package_key`/`package_name`/`package_tagline` — snapshot frozen at booking time, deliberately NO foreign key, so later renames never rewrite history. Old rows have null `package_key` → code paths must fall back gracefully. Never backfill.
+- `followed_up_at`/`followup_reason` — lead-digest bookkeeping. "Mark lead #NN followed up" = `UPDATE bookings SET followed_up_at=now(), followup_reason='…' WHERE id=NN;`
+- `external_booking_ref` — free-text attribution/reference (e.g. `IG-ad`, `IG-organic`, Airbnb ref).
+- Legacy gap: rows before 2026-07-08 have no `total_amount`; email code reconstructs old totals as `advance × 2` (50% was the historical rate) — that fallback is intentional history, don't "fix" it to 30%.
+
+**Venue types** (`venues.type`): `cafe` (picnics; slots checked against `max_concurrent_setups`), `self_managed` / `partner_bnb` (stays; per-night occupancy in `venue_availability`, some iCal-synced), `combo` (whole-home parent — booking it fans out blocks to child venues via `parent_venue_id` and vice versa; e.g. Sienna 17 = parent of Umber 15 + Ochre 16), `custom` (customer's own address).
+
+**IDs are traps — resolve live, every time** (`select id, name, type, is_active from venues;` / same for `add_ons`): venue names have been renamed and duplicated (ids 1–13 are mostly inactive legacy; two "House of Amer" rows — 23 stay vs 24 cafe; two "Skyshots" add-ons — 27 active, 10 dead; a stale note once pointed at 29 which is actually Movie Screening). Never take a venue/add-on id from a doc, memory, or this file.
+
+**Related tables**: `booking_add_ons` (children of bookings; `price_at_booking` snapshot), `venue_add_ons` (which add-ons a venue offers), `packages` + `package_add_ons` (tier definitions: `setting`/`moment`/`story` universal + occasion packages like `date_night_classic`), `venue_packages` (per-venue package pricing), `venue_availability` (nightly blocks; `source` = admin/ical/parent). Full schema: `docs/schema.md` (verify before relying).
+
+---
+
+## 7. Pricing — one source of truth
+
+- The advance percentage lives ONLY in the `compute_booking_advance` RPC (currently 30%). Never hardcode a rate in frontend, emails, or another fn. History: a hardcoded 50% in `submit_booking_intent` silently overcharged every customer for weeks (fixed 2026-07-15) — this rule exists because of that.
+- `compute_booking_total` is the total's single source (venue/package/guests/nights/add-ons). `create-order` charges whatever `bookings.advance_amount` says — so the stored value IS the money.
+- Admin flows (`admin_add_manual_booking`, admin confirm-query) take admin-entered totals verbatim — no formula, don't add one.
+- Any price shown in UI or email must be traceable to those RPCs or to a stored snapshot column — never re-derived with local arithmetic.
+
+---
+
+## 8. Funnel / lead queries
+
+Run the `picnic-lead-ops` skill for lead/funnel/booking questions. Standing exclusions (apply to EVERY count, always):
+
+- Team phones: `7742363777` (Aksheev), `7425055501` (Adhiraj).
+- Names starting "Test".
+- Phone+date duplicates of a confirmed row (same person re-entering; count once).
+- n is tiny (~3–7 real leads/60d) — report every rate as directional with n stated, never as a KPI.
+
+---
+
+## 9. Frontend / build / verification of public pages
+
+- Dev server `npm run dev` → `:5173` serves the SPA ONLY. Prerendered routes (`/blog`, city pages, venue pages) do NOT exist there — SPA fallback to the homepage is EXPECTED, not a bug. Verify prerendered output via `npm run build && npm run preview` → `:4173`, or on prod. (Sandbox can't run the real build — needs live creds; treat sandbox builds as untrusted anyway per §3.)
+- Prod page checks: always cache-bust (`?cb=<ts>`). "Not visible on localhost" has twice been a stale build/cached page, not a code problem — hard-refresh and check 5173-vs-4173 before suspecting code.
+- app.js edits: the file is one giant ESM module; admin form code is the `abk`-prefixed module; occasion deep-links validate against the `OCCASIONS` table in app.js. After editing, machine-parse a trusted copy (§3.4) — Read-tool review alone is not a parse.
+- CSS: admin add-booking styles are the `.abk-` block in style.css; blog homepage cards use inline `bhs-` styles in index.html deliberately (don't migrate them into style.css without being asked).
+- Mobile checks: Chrome-MCP `resize_window` does NOT actually resize (reports success, width unchanged) — use real-phone screenshots from Aksheev or CSS-source reading instead.
+
+---
+
+## 10. Skills — invoke automatically, don't wait to be asked
+
+- Session builds on prior work / any doc-or-handoff claim is load-bearing → `picnic-live-verify` FIRST.
+- Any change under `supabase/` → `picnic-backend-ship`.
+- Right after any backend deploy, or "test it live / verify the email fires" → `picnic-smoke-test`.
+- Leads, funnel, bookings, conversion, "mark lead #NN followed up" → `picnic-lead-ops`.
+- Session wrapping up (user says done, or context running low) → `picnic-session-handoff` proactively.
+
+If a skill fails to load, §4/§5/§8/§12 above carry the critical steps — follow them.
+
+---
+
+## 11. Definition of Done — no task is finished until this passes
+
+Walk this list explicitly before reporting completion. Anything failing → the task is NOT done; label it honestly (see §12 labels).
+
+**Every task**
+1. The claim you're making was verified against the LIVE system this session (not inferred from docs/memory/earlier-in-session state).
+2. Zero test residue: test rows + children deleted, `count(*)=0` proven; no stray files.
+3. Repo synced to reality: migration files written, edge-fn local files match deployed, docs updated if your change falsified one of their claims.
+4. UNCOMMITTED file list assembled + paste-ready git block handed over (you never run git).
+5. Anything you couldn't verify (visual email polish, real-phone UI, a branch not exercised) is listed as owed-by-user — not silently dropped.
+
+**Backend change** — additionally: esbuild bundle check passed (edge fn) or DO-block branch tests passed (RPC); `verify_jwt` preserved; smoke test through the REAL path (trigger/cron/RPC, not a shortcut) returned the predicted response; `get_logs` clean; `get_advisors` checked for new warnings.
+
+**Frontend change** — additionally: trusted-copy machine parse passed; behavior confirmed on `:4173`/prod for prerendered routes (or explicitly handed to user as a browser-eyeball item).
+
+**Data/funnel answer** — additionally: §8 exclusions applied; n stated.
+
+---
+
+## 12. Session handoffs
+
+Run `picnic-session-handoff` at session end. Format contract:
+
+- Absolute dates only ("2026-07-16", never "yesterday").
+- Label EVERY claim: **SHIPPED-verified** (live-probed this session) / **built-unverified** (written but not proven live) / **NOT-done**. The 07-12→07-14 incident is what happens when this is fuzzed.
+- End with: UNCOMMITTED file list, paste-ready `git add/commit/push` block, and a CONTINUE FROM line.
+- Rotation: write the new entry as "Latest Session Handoff" below; move the previous latest to the TOP of `docs/HANDOFFS.md`. This file keeps exactly one handoff entry.
+
+---
+
+## Latest Session Handoff — 2026-07-27 (iCal audit + Phase 0/1 of the fix plan shipped: export-ical v12 closes the whole-cottage double-booking hole; sync-ical v14 starts feed snapshots)
+
+Full audit: `docs/ICAL_AUDIT_2026-07-27.md`. Full remediation plan (6 phases): `docs/ICAL_FIX_PLAN_2026-07-27.md`. Previous entry (2026-07-24, v27 CC rule) rotated to `docs/HANDOFFS.md`.
+
+- 🔴 **THE FINDING (SHIPPED/CONFIRMED LIVE — fix deployed).** `export-ical` v11 excluded child `ical` rows from a combo parent's feed on the stated theory that "Airbnb's linked-listing feature ALREADY blocks the whole-home listing when a child room is booked." **That premise is false — NO Airbnb listing linking is configured on any of the three TerraCottage listings** (verified in the Airbnb host UI via the Chrome extension, 2026-07-27). Consequence, proven not theorised: Ochre held a real Airbnb reservation 2026-07-20…26 (HMH4X8EWTR) while **Sienna sat bookable on Airbnb for those exact nights**. Fixed in **export-ical v12** (`verify_jwt=false` preserved) by re-including child `ical` rows for combo parents only. Acceptance test passed live: venue-17 feed went 70 → 81 events, gaining exactly `2026-07-16…07-26` (Umber's + Ochre's Airbnb-origin occupancy), losing nothing. Child feeds unchanged (15 → 66, 16 → 7), so no self-echo was introduced.
+- 🔴 **TWO STANDING ASSUMPTIONS now hold up v12 — recorded in its header, re-verify before touching it.** (1) **Airbnb does not re-export imported-calendar blocks in its own `.ics`** — Sienna's UI showed 27 Jul–30 Sep blocked from our feed while its `.ics` contained none of it. So a block we publish cannot return to us. (2) **No listing linking configured.** If either changes, revert to v11 behaviour. Corollary worth keeping: **the raw `.ics` feeds tell you NOTHING about what Airbnb received from us** — only the host UI or a booking attempt does. An earlier draft of the audit drew the wrong conclusion from feeds alone and had to be corrected.
+- **Airbnb host-UI facts (verified 2026-07-27, all three listings)**: Umber `1700764232488317603` — window 12 months, **NO connected calendar**, August dates read "Blocked by you" (manual). Ochre `1713473341201785526` — window 12 months, connected to `export-ical?venue_id=16`. Sienna `1720049229921991894` — **window 6 months** (vs 12 on both floors), connected to `export-ical?venue_id=17`. That 6-month window is the entire cause of Sienna's 186 imported blocks spanning `2027-01-23 → 2027-07-28` (= day 180 → day 366, rolling forward daily).
+- **SHIPPED/CONFIRMED LIVE — Phase 0 observation.** New table `public.ical_feed_snapshots` (RLS on, admin-only SELECT via `auth.email() = 'aksh.eeev@gmail.com'`; **note the admin email is `aksh.eeev@`, NOT the account email `aksheevs@`** — resolved live from `pg_policies`, don't guess). New cron `ical-snapshot-prune` `15 3 * * *` (SQL-only, 30-day retention) — now 5 jobs total. **sync-ical v14** (`verify_jwt=true` preserved) writes one snapshot row per feed per run, including sibling feeds pulled only for `occupancyContext`; wrapped in try/catch so it can never fail a sync. Verified through the REAL cron path (`net.http_post` with the `ical_service_key` vault secret) → 200 on version 14, 3 snapshot rows written matching the live feeds (Umber 2 events, Ochre 3, Sienna 2). Reconciliation logic **unchanged** — Ochre and Sienna statuses byte-identical to the v13 run.
+- **Expected, not a regression**: Umber's `ical` rows went 15 → 77 on that run. Its Airbnb feed gained a manual "Blocked by you" block `2026-07-31 → 10-01` matching confirmed booking #72 (Amy Bomjen, 62 nights, real — user-confirmed). Those manual blocks survive the sibling-echo suppression **only because #72 covers the same nights** (`occ.self` protects them). Delete or un-confirm #72 while Ochre stays booked and they get silently dropped — that is Leak #3, live and armed.
+- **SHIPPED/CONFIRMED LIVE — admin health strip** (`app.js` `icalHealth()` + `renderIcalHealthStrip()`, `style.css` `.ical-badge`/`.ical-health-*`). Per-venue staleness badge (red at >3h since last sync, or on an `error —` status) plus an all-calendars list, since the existing panel only ever showed the venue you happened to be viewing. Trusted-copy `node --check` passed; CSS braces balanced 1677/1677. **Not eyeballed in a browser — owed by user.**
+- **NOT done (deliberate, gated).** Phase 2 (reconnect Umber's export URL, then widen Sienna's window 6→12mo) is **yours** — Airbnb UI. Order matters: reconnect first, leave the manual Umber blocks until the feed block is visibly present, widen the window last. Phase 3 (remove `occupancyContext`, flip to over-block) is **gated on ≥24h of snapshot evidence** showing zero cross-floor echoes — the suppression may be defending against a mechanism that no longer exists, but do NOT remove it on that hunch. Phases 4–6 (feed-break alerting, NULL-url row cleanup, `*/15` cron, submit-guard gaps, DB overbook trigger) not started.
+- 🔴 **`partner_bnb` is OUT OF SCOPE by user decision (2026-07-27)** — Countryside Offgrid 22, House of Amer 23, Om Niwas 25 keep today's behaviour exactly. Trap #1 therefore stays live but disarmed: `fetchBookedData` routes `partner_bnb` through the cafe/slot branch, reading only `source='admin'` and ignoring `ical`/`parent` rows and `checkout_date`. Harmless **only** because no `partner_bnb` has an `airbnb_ical_url`. **It arms the instant one does** — a feed attached to a partner_bnb would be silently invisible on the public calendar. Phase 4.5 adds a venue-type guard so that fails loudly instead.
+- **Zero test residue**: no rows created this session. Only booking dated today is #72 (yours, 05:39, pre-session). `venue_availability` parent rows with `booking_id IS NULL` = 0. Snapshots (3 rows) are intentional. `get_logs` clean (200s on v12 and v14); no table in `public` has RLS disabled and the new table has RLS + 1 policy, so no new advisor class.
+- **UNCOMMITTED (verified 2026-07-27 by diffing trusted Read-tool copies against `git show HEAD:<file>` — HEAD is `fef8a62`)**: `app.js` (+65), `style.css` (+45), `supabase/functions/export-ical/index.ts` (+108/-13, byte-matches deployed v12), `supabase/functions/sync-ical/index.ts` (+263/-9, sha-verified byte-match to deployed v14), and NEW: `docs/ICAL_AUDIT_2026-07-27.md`, `docs/ICAL_FIX_PLAN_2026-07-27.md`, `supabase/migrations/20260727_ical_feed_snapshots.sql`, `supabase/migrations/20260727_ical_snapshot_prune_cron.sql`, `CLAUDE.md`, `docs/HANDOFFS.md`. **All backend changes are already LIVE regardless of commit** (deployed via `deploy_edge_function` / `apply_migration`); only `app.js` + `style.css` need the push to reach users.
+
+```
+git add app.js style.css supabase/functions/export-ical/index.ts supabase/functions/sync-ical/index.ts supabase/migrations/20260727_ical_feed_snapshots.sql supabase/migrations/20260727_ical_snapshot_prune_cron.sql docs/ICAL_AUDIT_2026-07-27.md docs/ICAL_FIX_PLAN_2026-07-27.md CLAUDE.md docs/HANDOFFS.md
+git commit -m "ical: export-ical v12 inherits child Airbnb bookings onto combo parent (closes whole-cottage double-booking hole); sync-ical v14 feed snapshots + admin calendar health strip"
 git push
 ```
 
-CONTINUE FROM: one real end-to-end test booking through the actual UI + Razorpay checkout (this session only verified the RPC directly via SQL, not the browser flow) to confirm quoted and charged amounts match to the rupee live; then the SEO plan's remaining Track 3 items (sticky-sidebar bug — confirmed already fixed this session, see `.vd-booking-card` max-height/overflow-y guard in style.css — and the daily-digest follow-up queue) plus Track 1/2 (GSC resubmission, Jaipur GBP) are next per `docs/SEO_PLAN_2026-07-15.md`'s sequencing section.
+CONTINUE FROM: **User** — (1) run the git block; (2) Phase 2 in the Airbnb UI, in order: connect `export-ical?venue_id=15` to Umber (verify the URL reads `venue_id=15`), confirm 31 Jul–30 Sep shows as blocked from the feed, remove the manual "Blocked by you" blocks, then set Sienna's availability window 6 → 12 months; (3) eyeball the admin availability tab for the new calendar-health strip. **Claude** — after ≥24h of snapshots, run the Phase 0 cross-floor-echo query in `docs/ICAL_FIX_PLAN_2026-07-27.md` §Phase 0 and report Result A or B before any Phase 3 work.
 
-## Session Handoff — 2026-07-15 (terracottage.ggn IG launch: 90-day plan + 30-day content pack + brand avatar SHIPPED to docs/ — Drive footage folder review pending)
-
-• **Project**: new IG page `terracottage.ggn` (handle CONFIRMED — `.ggn` not `.gnn`) selling **stay + celebration setup** bundles — a product Airbnb can't list. Ochre ₹2.5–3k base → ~₹10k w/ setup; Umber ₹3–3.5k → ₹16–18k; Sienna = whole-home group upsell. Goal: 4–6 IG-attributed bookings/mo by day 90 at CAC ≤₹2k; budget ₹5–15k/mo; capacity 1–2 reels/wk.
-
-• **Plan → `docs/TERRACOTTAGE_IG_PLAN_2026-07-14.md`** (plan-optimizer, 86/100, 63→76→84→86→86). Load-bearing mechanisms: ALL reels post as **IG Collabs with the Picnic Stories page** (cold-start killer); paid = **ONE Click-to-WhatsApp campaign**, warm ad set first (Picnic IG engagers 365d ∪ bookings-table customer list ∪ site visitors, pooled — individually too small at ~250 visitors/mo); **attribution = admin + Add Booking tab, `external_booking_ref = IG-ad/IG-organic/IG-story`**; inventory ceiling ~26 premium weekend nights/mo caps scaling; kill <10 qualified WA leads/₹5k by wk6, scale at CAC<₹2k ×2wks; monsoon → indoor-default setups.
-
-• **Content → `docs/TERRACOTTAGE_IG_CONTENT_30DAY_2026-07-14.md`**: 8 reels (R1 setup-transformation = hero + first ad creative), 12-post seed grid (live BEFORE ads, gate wk3), 30-day calendar, WA qualification script (pitch Umber high → downsell Ochre, never discount — founding offer = free tier upgrade; ₹3k advance; SLA <15min). Unverifiable facts are [bracketed placeholders] — fill or cut pre-publish.
-
-• **Brand**: logo = variant 6 (arch+vases, TERRACOTTAGE/STAYS two-line). Icon-only circle-safe avatars built (SVG+1000px PNG, terracotta `#AE5D20` / cream `#F2E9DA`, dark disc recommended) — delivered via session outputs, **NOT in repo; regenerable**. Profile header finalized: name field "TerraCottage · Stays, Gurugram", category Vacation Home Rental, 143-char bio (Picnic Stories handle = placeholder, still needed), link `https://wa.me/919266964666?text=Hi!%20I%27d%20like%20to%20check%20dates%20for%20a%20stay%20%2B%20setup%20at%20TerraCottage` (bio-specific prefill; ads get different prefill; verify number on WA Business).
-
-• **Footage reviewed** (/watch, 4-min Drive walkthrough): on-brand B-roll (terracotta triptychs, candles) but **80% dark, no bright payoff** — dark→bright arc needs a bright half re-shot (+1 stop); walkthrough pans need 0.7–1.5s cuts; candle vignettes usable for stories now. Watch-skill env: yt-dlp at `~/.local/bin` in sandbox (PATH export), no Whisper key (frames-only), frames copy `/tmp → mnt/outputs/` before Read.
-
-• **Open**: setup margins per tier, WA phone owner, picnic IG handle, ₹3k advance confirm. `docs/TERRACOTTAGE_IG_*.md` + CLAUDE.md uncommitted (user commits).
-
-CONTINUE FROM: user shared a Drive folder of raw images + footage (https://drive.google.com/drive/folders/1L7ADWrWY6rowgbGIW5-WmzIRZXRUAgsg) — not yet reviewed; audit it against the content doc's 8 reels + 12 seed posts and produce a "have vs. need to shoot" gap list.
-
-## Session Handoff — 2026-07-15 (GSC "Discovered - not indexed" fix: homepage venue-grid now server-rendered — PUSHED, awaiting next deploy)
-
-• **Problem**: user uploaded a GSC export flagging 13 URLs as "Discovered – currently not indexed," last-crawled never, since the report's 2026-06-08 start: `/packages`, `/picnic-venues-gurugram`, `/picnic-venues-jaipur`, and 10 of 12 venue pages (`terracottage-umber` and `om-niwas-suite-hotel-stay` were already indexed — unexplained, not investigated further).
-
-• 🔴 **First diagnosis was wrong — corrected mid-session.** Initially concluded the homepage had zero server-rendered outbound links at all, based on a `web_fetch` that turned out to be stale-cached. A cache-busted refetch showed the homepage→city-page footer links (`/picnic-venues-gurugram`, `/picnic-venues-jaipur`) were already live, shipped in commit `4437dfa` days earlier. **Lesson: cache-bust (`?cb=...`) before treating a `web_fetch` of a public page as ground truth, especially when re-checking something after a known recent deploy.**
-
-• **Real root cause**: the homepage's own `#venues-grid` ("Choose Your Venue" section) still ships a blank skeleton in raw HTML — only populated client-side by `loadVenues()`/`renderVenueGallery()` in app.js. City pages already link to every venue page, so venue pages were 2 hops from the homepage (home→city→venue), not the 0-hop, sitemap-only situation first assumed — but still no *direct* crawl path from the site's highest-authority page.
-
-• **Fix shipped in `scripts/prerender-venues.mjs` only** (no app.js/index.html/style.css touched): new `homeVenueSetting()` / `buildHomeVenueGridHtml()` / `injectHomeVenueLinks()` inject real `<a href="/venues/slug">` cards into `dist/index.html`'s `#venues-grid` at build time. Outdoor/Indoor classification exactly mirrors app.js's `venueSetting()` fallback (`setting` column → `cafe` type defaults outdoor → else indoor) — verified against the live DB, matches the existing "8 outdoor + 4 indoor" skeleton comment exactly. Added `setting` to the `venues` `.select()` in `main()`. `renderVenueGallery()` still does `grid.innerHTML = ...` wholesale on load — zero behavior change for real users; this only changes what a non-JS crawler sees before hydration.
-
-• 🔴 **Sandbox git unreliability reconfirmed, new symptom**: `git status` on this repo returned a `.git/index.lock` permission warning and silently omitted `scripts/prerender-venues.mjs` from the modified list even though it clearly was. Worked around by reconstructing a trusted copy of the script via the Read tool for a real `node --check` (bash mount's own copy was torn mid-file, same standing issue as app.js), and by diffing that trusted copy against `git show HEAD:scripts/prerender-venues.mjs` directly (bypassing `git status`/`git diff` entirely) to confirm the real change before handing over git commands: 97 lines added, 1 line modified, nothing else. Logic-tested `injectHomeVenueLinks()` against the real `index.html` + the actual 12 live venue rows from Supabase — all assertions passed (correct hrefs, correct 8/4 split, custom-CTA untouched, fails safe if HTML markers move).
-
-• **PUSHED** — user committed + pushed `scripts/prerender-venues.mjs` (only file; everything else `git status` showed predates this session — the 5 pending deletions + stray untracked docs/folders, unchanged). Still needs `npm run build` / the next Vercel deploy to actually regenerate `dist/index.html` with the fix live.
-
-CONTINUE FROM: after the next deploy, verify the live homepage's raw HTML has real `<a href="/venues/...">` links inside `#venues-grid` (view-source or a cache-busted fetch); then manually submit all 13 flagged URLs via GSC URL Inspection → Request Indexing (rate-limited, ~2 days for all 13); re-pull the GSC "Discovered - not indexed" report in 1–2 weeks to confirm the count drops.
-
-## Session Handoff — 2026-07-14 (Manual booking SHIPPED end-to-end: migration + RPC applied, edge fns v21/v30 deployed, frontend verified + live smoke test passed — PUSHED, tab confirmed live in prod)
-
-🔴 **CORRECTION of the 07-12 entry below: its "Phase 1/2 already live" claims were FALSE.** At this session's start the live DB had NONE of it — `email_address` still NOT NULL, `guest_count` check still 1..20, no `entry_source`/`send_guest_email` columns, no `admin_add_manual_booking` RPC — and the live edge fns were **v20/v29 WITHOUT the guards** (fetched via `get_edge_function` before touching anything). Only the 07-12 entry's Phase-3 frontend claims were real (code found on disk, verified this session). Everything server-side was actually built + shipped TODAY:
-
-• **Phase 1 APPLIED LIVE** (migration `manual_booking_admin_entry`, repo file `supabase/migrations/20260711_manual_booking.sql`): `email_address` DROP NOT NULL; `entry_source` ('site'|'admin', default site); `send_guest_email` (default true); `guest_count` check widened 1..20→1..100; **RPC `admin_add_manual_booking(p_booking jsonb, p_add_ons jsonb)`** — SECURITY INVOKER + explicit `search_path` + hardcoded admin-email guard (matches RLS convention), server-side conflict checks for all venue shapes (cafe/custom slot vs `max_concurrent_setups` + admin blocks; self_managed/partner_bnb per-night occupancy + admin/ical/parent blocks; combo children fanout-blocked both directions), package snapshot resolved server-side, booking + `booking_add_ons` + combo parent-fanout **in one transaction** (kills the email/add-on race and the partial-fanout failure mode), returns booking id; grants: authenticated only (revoked from public/anon). Inserts `confirmed=true, customer_intent='lock', lead_status='confirmed', payment_status='pending'` ('paid' stays Razorpay-verified-only by design). **Tested via DO-block harness with simulated admin JWT + forced rollback (zero rows/emails persisted): 12 assertions across A–H all passed** — happy paths ×3 shapes, cap-2 Beige takes 2 rejects 3rd, admin-block conflict, overlapping-stay conflict, back-to-back stay allowed, combo fanout row count, child-blocked-by-combo + combo-blocked-by-child, non-admin caller rejected. Verbatim toastable error messages (e.g. "2027-09-01 (evening) already has 1/1 confirmed setup(s)").
-
-• **Phase 2 DEPLOYED**: **notify-booking-confirmed v21** — skip guard (`send_guest_email===false || !email_address` → log + 200 skip), TOTAL now uses `record.total_amount` when present (fixes the old `advance×2` assumption — wrong for negotiated manual deals; legacy rows without total still fall back), ADVANCE PAID row only when advance>0, new PACKAGE reservation row, legacy food/drink `getInclusionText` suppressed when `package_key` present. **notify-booking-received v30** — same guard on the guest ack (T1 already skipped for confirmed inserts pre-existing), admin notice gains "Manual booking added" subject + "📝 Manual Booking #id" heading + blue banner (says whether guest email was sent), "📝 Collected offline" payment badge for admin entries, Email row shows "— not provided" when null, Date row shows checkout for stays, new Reference row (`external_booking_ref`). **post-event-nudge audited, needs NO change** (filters `payment_status=eq.paid` — manual rows never match, null-email unreachable). **Local `index.ts` for both fns synced to deployed** (both now use `./_shared/` imports like the deployed bundles; `_shared/*` already matched).
-
-• **Phase 3 (frontend from 07-12, verified this session)**: `+ Add Booking` tab (admin.html L77 + panel L115-125), `abk` module app.js L9253–9750, `switchTab` branch L6665-6666, `#add-booking` deep link L5412-5416, `.abk-` CSS style.css L10155–10266. RPC payload verified key-for-key against the RPC actually created today. 🔴 **The "false EOF" blocker is RESOLVED with a real machine parse**: mount tear persists (bash sees app.js cut mid-line at ~L9691; `node --check` on the mount is untrustworthy — it "passed" on a file that visibly ended mid-expression), so the file was RECONSTRUCTED from trusted sources (git `HEAD:app.js` from the object store + bash-readable working lines 1–9690, which `diff` proved faithful, + the 60 torn-off lines re-typed from Read-tool output) → **10,210 lines, `node --check` PARSE_OK as ESM**, mid-tail spot-checks byte-identical to the working file. admin.html verified intact via Read (diff's scary tail hunk = tear artifact, not a real change).
-
-• **Phase 4 LIVE smoke test PASSED (rows deleted after)**: committed inserts #44 (Beige picnic, `moment` pkg + real add-on, total 12,500/advance 3,000, email aksheevs+smoketest@gmail.com, send ON) + #45 (Umber stay 2 nights, NO email, send OFF, ref SMOKE-TEST) → all four trigger calls 200 on v30/v21; suppress guard proven for #45 (1,027ms fast-return vs 2,081ms full send; a real send attempt with null email would have 500'd); `get_cafe_booked_slots`/`get_booked_dates` showed both occupancies (same source the public calendar + export-ical read); package snapshot "The Moment" + addon row + all flags verified by SQL. Test rows + add-ons deleted, 0 residue (one execute_sql 503'd mid-cleanup — retried, verified 0/0).
-
-• 🔴 **NEW gotcha: `git status` did NOT list style.css as modified even though `HEAD:style.css` has zero `abk-` rules and the working file has 32** — the sandbox status lies by omission here; `git add style.css` explicitly. Also: the 07-12 entry's "supabase functions download to de-drift local edge index.ts" advice is OBSOLETE — local files were synced this session from the exact deployed sources.
-
-• **Owed by user (only items left)**: (1) eyeball the smoke-test guest confirmation email at aksheevs+smoketest@gmail.com (TOTAL ₹12,500 / ADVANCE PAID ₹3,000 / DUE ₹9,500, PACKAGE "The Moment" row) — the two "Manual booking added" admin notices in the team inbox are the test, ignore; (2) quick browser eyeball: `npm run dev` → `localhost:5173/admin.html` → login → **+ Add Booking** → flip Picnic/Stay, pick venues, confirm slot hints render (server re-checks regardless, so this is UX polish not correctness); real-phone look at the form; (3) commit from own terminal (sandbox never commits app.js/style.css per torn-read rule):
-```
-git add app.js admin.html style.css CLAUDE.md docs/ADMIN_MANUAL_BOOKING_PLAN_2026-07-11.md supabase/migrations/20260711_manual_booking.sql supabase/functions/notify-booking-confirmed/index.ts supabase/functions/notify-booking-received/index.ts
-git commit -m "Admin manual booking entry: + Add Booking tab, admin_add_manual_booking RPC, guest-email suppress guards (fns v21/v30)"
-git push
-```
-Schema + RPC + edge fns are already live; the commit only syncs the repo and ships the frontend via Vercel. The 5 old pending deletions + stray untracked files remain the user's separate cleanup call.
-
-• **UPDATE (2026-07-14, later): PUSHED + CONFIRMED LIVE IN PROD** — user ran the commit block; `+ Add Booking` tab visible in prod. (The earlier "not visible on localhost" was a stale build/cached page — the file on disk was always correct; hard-refresh / check 5173-vs-4173 before suspecting the code.) Only remaining: eyeball the smoke-test guest email at aksheevs+smoketest@gmail.com + a real-phone UX look at the form. Parked ideas: unconfirmed manual leads ("Save as query" — RPC + email guards make it a ~20-line follow-up), editing manual bookings post-save.
-
-## Session Handoff — 2026-07-12 [SUPERSEDED — see 2026-07-14 above; this entry's Phase-1/2 "already live" claims were wrong] (Manual booking: Phase 3 admin form BUILT + RPC server-logic fully verified — frontend UNCOMMITTED, needs browser eyeball)
-
-Resumed `docs/ADMIN_MANUAL_BOOKING_PLAN_2026-07-11.md` after credits ran out. **State found:** Phase 1 (migration `20260711_manual_booking.sql`) already APPLIED LIVE — verified `bookings.email_address` nullable, `entry_source`/`send_guest_email` cols present, `guest_count` check widened to 1..100, RPC `admin_add_manual_booking` exists. Phase 2 (edge fns) already DEPLOYED LIVE — **notify-booking-received v30** + **notify-booking-confirmed v21** both carry the full guest-email skip guard (`send_guest_email===false || !email_address`), `entry_source==='admin'` badges/banners ("📝 Manual Booking", "Collected offline" payment badge, "Manual booking added" subject), and `total_amount` handling. So only Phase 3 (frontend) + Phase 4 (verification) were outstanding.
-
-• **Phase 3 BUILT (UNCOMMITTED):** new **"+ Add Booking" tab** (admin.html, 1st after Queries; `admin.html#add-booking` deep-links to it via `applyAuthState`). Whole form rendered in **app.js** (new `abk`-prefixed module ~L9253–9760, inserted before `initAdminPage`; `switchTab` gained an `add-booking` branch → `loadAddBookingForm`). style.css gained an `.abk-` mobile-first block (46–52px targets, sticky Save, ≥16px inputs to stop iOS zoom). Form: Picnic|Stay toggle → venue (type-filtered; custom→address) → dates (picnic: date + slot chips w/ `fetchBookedData` full-hints; stay: check-in/out + nights) → adults/children → picnic extras (package from `venue_packages`, add-ons from `venue_add_ons`∩active, occasion, board) / stay extras (reference, add-ons) → name(req)/phone(10-digit req)/email(optional) → notes → **editable** Total (prefilled via `getVenuePrice`/`abkVenuePackagePrice`×nights + extras) + Advance (default 0) → send-guest-email toggle (auto-off+disabled when email blank) → Save → `admin_add_manual_booking` RPC, exception `.message` toasted verbatim, then jumps to Bookings tab + resets form. State pattern: `abkRead()` DOM→state, `renderAddBookingForm()` state→DOM; structural changes re-render, guest/price inputs update total in place (keep focus); manual total edit sets `totalTouched` so prefill stops overriding.
-
-• **RPC server logic FULLY VERIFIED live** via `execute_sql` DO-blocks with simulated admin JWT (`set_config('request.jwt.claims',...)`) that RAISE the inserted row as the error message → auto-rollback, **zero test data persisted, no emails** (confirmed 0 admin_bookings / 0 test-named / 0 leaked fanout+addons after). Cases proven: (1) happy-path picnic Beige+Moment+Cake → `entry_source=admin, confirmed=true, customer_intent=lock, lead_status=confirmed, payment_status=pending`, package snapshot `The Moment`/tagline resolved, add-on row w/ price_at_booking; (2) cafe conflict Castle Valley(max 1) → `"2026-09-20 (morning) already has 1/1 confirmed setup(s)"` (verbatim toast); (3) combo stay Sienna(17) → parent-fanout `venue_availability` rows source='parent' on BOTH children Umber(15)+Ochre(16) across both nights (rides export-ical to Airbnb); (4) admin guard → non-admin email raises `"Admin login required"`. `get_advisors` clean for the new fn (SECURITY INVOKER + explicit `search_path` + admin-email guard; warnings shown are all pre-existing fns).
-
-• 🔴 **Could NOT do in-sandbox, OWED by user:** (a) **app.js syntax check / browser E2E** — the documented app.js mount-tear is ACTIVE this session, deterministic at byte ~L9691 (esbuild reports false "Unexpected end of file" there; Read tool confirms the line is valid + content continues). Frontend was hand-reviewed via the Read tool (structure sound, template literals balanced, tail `initAdminPage` intact) but NOT machine-parsed. User must `npm run dev`, open `admin.html`, log in, open **+ Add Booking**, and (i) confirm no console SyntaxError, (ii) enter a real picnic + a real stay, (iii) re-enter same slot → conflict toast, (iv) check public calendar blocks + export-ical feed + email (one to a `+smoketest` alias; one toggle-off/no-email = no guest send), then delete the test rows. (b) **Local edge-fn `index.ts` sync** — local `supabase/functions/notify-booking-{received,confirmed}/index.ts` are STALE vs deployed v30/v21 (no `send_guest_email`); the local `_shared/*` ALREADY matches v30 (has teamEmail/addon_id/packages.ts). Deliberately NOT hand-transcribed (local uses `../_shared/` import paths vs deployed `./_shared/`, and ~800 lines of email HTML can't be sandbox-syntax-checked given the tear) — cleanest fix is `supabase functions download notify-booking-received notify-booking-confirmed` from the user's terminal. Deployed is correct + live; this is repo-hygiene only.
-
-• **UNCOMMITTED:** `admin.html`, `app.js`, `style.css`, `CLAUDE.md` (sandbox never commits app.js/style.css per torn-read rule — user commits from own terminal after the browser eyeball). Schema + edge fns are already live (not gated on the commit).
-
-CONTINUE FROM: user runs the dev-server browser check + real picnic/stay smoke test above, deletes test rows, commits the 3 frontend files; optionally `supabase functions download` to de-drift local edge index.ts. Feature is otherwise complete.
-
-## Session Handoff — 2026-07-11 (Blog SEO: plan v2 + 4 posts written & approved + prerender blog infra built — ALL UNCOMMITTED)
-
-• **Plan v2 → `docs/BLOG_SEO_PLAN_2026-07-11.md`** (plan-optimizer run, 58→88). Original draft plan's premises corrected: rendering was never a risk (prerender pipeline already existed), GBP Gurugram = enrich not create (playbook at `docs/Google Business Profile Playbook.docx`), PostHog not GA4 for organic→enquiry measurement, posts re-picked around booking data (birthday/date/proposal/anniversary; bachelorette + family-gathering moved to Phase 5 queue — family post must NOT target birthday keywords, post 1 owns them), primaries = mid-tail commercial keywords (head terms owned by LBB/So Delhi), FAQ content kept but FAQPage schema dropped as a success gate (Google restricted FAQ rich results to gov/health sites in 2023). Publish gate Jul 20.
-
-• **4 posts written + user-approved (voice explicitly signed off — reuse this voice for Phase 5 posts)** at `content/blog/`: `birthday-picnic-ideas-gurugram.md`, `romantic-picnic-date-gurugram.md`, `picnic-proposal-ideas-gurugram-delhi-ncr.md`, `anniversary-celebration-ideas-delhi-ncr.md`. Each starts with an HTML-comment **SEO SPEC block** (title ≤60 / meta ≤155 / slug / `published: 2026-07-20` / `hero:` — empty→site-hero fallback; "(NN chars)" annotations are stripped by the parser). All facts grounded in live DB (venues/add_ons/packages via SQL); no prices, no TerraCottage Sienna; `requires_confirmation` add-ons (Movie Screening 29, Live Music 30, Extra Hour 32) marked "subject to venue confirmation"; CTAs deep-link `/packages?occasion=…` verified against `OCCASIONS` (app.js L2076); posts cross-linked as siblings. "Weekend slots fill first" claim REMOVED — bookings data didn't support it (only 6 real dated rows excluding owner-test phone); replaced with slots-per-day scarcity (true by construction).
-
-• **Track B built in `scripts/prerender-venues.mjs`**: `buildBlogPages(urls)` renders `content/blog/*.md` → `dist/blog/<slug>.html` + `dist/blog.html` index as **standalone static pages (city-page pattern, NOT SPA-shell — app.js has no /blog route, nothing to hydrate)**, BlogPosting/Blog JSON-LD, URLs pushed into sitemap. Markdown parser (`mdToHtml`) covers a deliberately constrained subset — `#`–`####`, `**bold**`, `*italic*`, `[links](url)`, `-`/`1.` lists, `---` — **extend it before writing fancier markdown in a post**. `buildPackagesPage(supabase, template, blogPosts)` gained a 3rd arg and appends a crawlable "read our guides" links line (post list passed in, no hand-maintained duplication). City-page + blog footers link `/blog`. Missing/empty `content/blog` → warn + skip, never fails the build.
-
-• **`index.html`**: new "From the blog" section (4 static cards, `bhs-` prefixed INLINE styles — deliberate, avoids touching style.css; migrate later if wanted — placed inside `#home-page` between testimonials and footer so slim-shell correctly drops it on venue/packages prerenders) + `Blog` link in `.footer-legal` nav. **Post-card list in this section is hand-maintained — update it when content/blog changes.**
-
-• **Verified via Node harness** (script copy in /tmp, supabase/vite imports + `main()` stripped, run against the REAL content/blog files): **55/55 assertions** — JSON-LD parses, article text present without JS, titles ≤60, no markdown leftovers/spec-comment/hero-placeholder leaks, no Sienna/prices, sibling+venue+packages links, datePublished 2026-07-20, index has 4 cards. Whole-script syntax validated (harness parsed the full file). Full `npm run build` NOT run (needs live creds; sandbox build untrusted per standing caveat). 🔴 **`localhost:5173/blog` showing the homepage is EXPECTED, not a bug** — dev server has no prerendered pages (SPA fallback to index.html); verify via `npm run build && npm run preview` → `:4173/blog` (preview's static server resolves `/blog`→`blog.html`, prod uses Vercel `cleanUrls`).
-
-• **UNCOMMITTED**: `scripts/prerender-venues.mjs`, `index.html`, `content/blog/*.md` (×4), `docs/BLOG_SEO_PLAN_2026-07-11.md`, `CLAUDE.md`. Owed by user: paste Supabase image URLs into each post's `hero:` field (else posts ship without lead images), build+preview eyeball, commit, GSC domain-property + Bing check (Track C). Owed by Claude on go-ahead: PostHog organic→enquiry insight (referrer google.* + no ad click IDs → `intent_lead_captured` → `lead_status`), then Phase 3 indexing (GSC URL Inspection per post) + GBP enrichment.
-
-CONTINUE FROM: user runs `npm run build && npm run preview`, checks `:4173/blog` + one post; then hero images + commit; then Claude builds the PostHog organic insight and Track C/Phase 3 begins.
-
-## Session Handoff — 2026-07-08 PART 3 (git-state audit + 2 of 3 blocking decisions closed)
-
-• **Confirmed `c39be71` (PART 2's package-snapshot commit) is really in the log and really contains all 7 files from that handoff's "uncommitted" list** — nothing was lost, no re-commit needed.
-
-• 🔴 **Sandbox bash mount reconfirmed unreliable for `git status`/`git diff` on this repo — now worse than previously documented.** Prior entries only flagged `cat`/`python3`/`wc -l` reads of style.css as torn. This session, `git diff` itself (not just plain file reads) reported bogus changes on `app.js`, `notify-booking-received/index.ts`, `CLAUDE.md`, `addons.ts`, `venue.ts` — all five were confirmed byte-identical to HEAD via the Read tool (which reads correctly). Mechanism seen twice: (1) trailing garbage padding appended after real content (made `addons.ts` mis-classify as binary), (2) content torn off mid-token partway through the file (`app.js`/`index.ts`/`CLAUDE.md`, cutting mid-identifier). **New rule: never run `git add`/`git commit` on large files (app.js, style.css, edge-fn `.ts`) from this sandbox — a real commit could stage the torn/padded version over good content. Large-file commits should go through the user's own terminal.** Small/genuinely-tracked diffs (docs, migrations) are fine to trust.
-
-• **Real outstanding git items** (not mount artifacts): 5 confirmed-real pending deletions (`MY_BOOKINGS_PHONE_OTP.md`, `homepage-preview.html`, `logo2.png`, `schema.md`, `test_postcss.mjs` — superseded by `docs/` copies, cleanup commit still not run) + a stray-file tail in untracked (`hyperframes-reel-starter/`, `graphify-out/`, `sets/`, `SpecialYou_Competitive_Analysis.md`, `~/`, `_temp/`) that doesn't look like it belongs to this project — user deferred cleanup, not investigated.
-
-• **Decision: Phase 0 pricing (bases/overage) — CLOSED, current live state confirmed intentional** (Beige-only −₹1,000 cut, 2000/2500 overage). No DB change; `docs/PENDING_ITEMS_2026-07-06.md` item 6 updated to reflect this as the real pricing, spec doc superseded.
-
-• **Decision: venue-21 (Once Upon A Time At The Bagh) Skyshots — YES, enabled live.** Caught a real error before running it: the standing note said "add-on 29," but 29 is actually Movie Screening — `add_ons` has two rows literally named "Skyshots" (id 27, active/₹4,000/used at 5 venues/has image; id 10, inactive/no image/zero usages, looks like dead data worth a future cleanup). Inserted `venue_add_ons (venue_id=21, addon_id=27)` — the live one — verified via SELECT.
-
-• **Still open**: image-resize approach (Supabase Image Transform Pro-plan status unconfirmed) — user said not now, deferred.
-
-CONTINUE FROM: user to decide whether to move to the build queue (Jaipur GBP / image resize / SEO pages) or stop here; the 5-deletion + stray-untracked-files cleanup is still unaddressed by choice.
-
-## Session Handoff — 2026-07-08 PART 2 (customer-email packages redesign SHIPPED end-to-end: migration + RPC + frontend + both email templates — live-smoke-tested, git block handed over)
-
-• **Built directly per user's call (skipped plan-optimizer)** on top of the PART 1 handoff below. All four build-order steps from that handoff done in sequence and each verified live before moving to the next: migration → RPC arg → frontend wiring → email templates → deploy → smoke test.
-
-• **Migration `add_package_snapshot_to_bookings` APPLIED LIVE** (+ repo file `supabase/migrations/20260708_package_snapshot.sql`): `bookings` gained nullable `package_key`/`package_name`/`package_tagline` (no FK on `package_key` — deliberate, snapshot pattern so a later admin rename never rewrites old bookings/emails). Same session, `submit_booking_intent` gained `p_package_key` (20th arg) — old 19-arg overload **DROPPED** (not CREATE OR REPLACE, same ambiguous-PostgREST-overload reasoning as the 07-07 18→19 migration), function resolves `packages.name`/`tagline` by key at booking time and freezes them onto the row. Grants re-issued (`PUBLIC`, matching prior). SQL-verified all 3 branches live (insert / matched update incl. package change / phone+email mismatch→fresh insert, including an occasion package `date_night_classic`) using real venue 14 + real `moment` package before cleanup. `get_advisors`: only the expected anon-executable SECURITY DEFINER note, same class as the function already had.
-
-• **Frontend (app.js) wired**: `handleInlineBookingSubmit` sets `lead.package_key = appState.selectedPackage.tierKey` for cafe venues; the intent-screen "Change package" fast-resume path (`selectPackageTier`'s `changeMode === 'intent-package'` branch) sets `package_key: key` on the rebuilt lead (propagates through `changeModeData` spread to the change-date resume path too, confirmed by reading the spread chain — no separate fix needed there); both `captureLeadOnIntent` and `submitBookingIntent` RPC calls now pass `p_package_key: lead.package_key ?? null`. Occasion packages use the exact same `selectPackageTier(key)` code path as universal tiers, so no separate wiring was needed for them — confirmed via the RPC-level test above.
-
-• **`notify-booking-received` v29 DEPLOYED** (Supabase MCP `deploy_edge_function`, `verify_jwt=false` preserved). Redesign per the PART 1 agreed fix: new `_shared/packages.ts` (`getBundledAddonIds(key)` — 2-hop REST lookup, packages→package_add_ons, degrades to empty Set on any failure); `_shared/addons.ts` `AddOn` gained `addon_id` (needed to split bundled vs extra). `index.ts`: `getInclusionText`/food-multiplier logic **retired entirely** (both emails); new `splitAddons()` partitions a booking's `booking_add_ons` into bundled-in-package vs extras using `bundledIds` — bookings with no `package_key` treat every add-on as an extra (old-booking fallback, unconditional). Customer email (T1) gained a "Your Package" block (name + tagline + bundled-inclusion bullets, no prices since they're baked into the tier price) inserted between the details table and the existing "Curated Extras" section (which now only lists true extras). Admin email (T2) gained a `<strong>Package</strong>` row + `adminCostBlock` now collapses the package+bundled add-ons into one `"<Name> package"` line (mirrors the frontend's own `buildIntentSummaryHTML` collapsing) with only extras itemized — verified the arithmetic live (₹6,000 total → ₹2,500 package line + ₹3,500 Photographer extra, matches `compute_booking_total`).
-
-• 🔴 **Local `_shared/*.ts` had drifted from deployed before this session** (`venue.ts` was missing `teamEmail` — an actually-broken older version, would have thrown `ReferenceError` if ever redeployed from disk; `addons.ts` had a dead unused `costBreakdownBlock` not present in the live v28). Per the standing Edge Fn Drift lesson, did NOT edit local files as the deploy source — reconstructed everything from the live `get_edge_function` fetch, deployed from that, then wrote local files to match the new deployed state afterward. Local `supabase/functions/{notify-booking-received/index.ts, _shared/{addons,packages,venue,resend}.ts}` are now byte-consistent with deployed v29.
-
-• **Verification chain, cheapest-to-most-expensive**: esbuild bundle (`--bundle --platform=neutral`) caught nothing — syntax/imports clean. Node harness (esbuild→CJS, stubbed `Deno`/`fetch`) ran the real handler against a mocked package booking and a mocked legacy (no `package_key`) booking — confirmed "Your Package" section present/absent correctly, old `INCLUDED`/`food item` text gone from both, `Curated Extras` still renders extras-only, admin `<strong>Package</strong>` row correct, and the admin cost-block arithmetic checked out to the rupee. Then a **real live smoke test**: real RPC insert (venue 14, `moment` package, 3 bundled + 1 real extra add-on) fired the actual `on_booking_insert_notify` trigger → v29 → `get_logs` showed `200` with no error → real emails sent (customer ack to a `+smoketest` Gmail alias, admin alert to the real venue+team addresses — user should eyeball both for final visual sign-off). Test booking row deleted after (`booking_add_ons` + `bookings`, confirmed 0 remaining).
-
-• **NOT done / carried forward from PART 1's still-open item**: Phase 2 decision on whether the customer ack email's immediate "Pay Advance ₹X" button (fires on every intent-screen render, before any human contact) should stay as-is or be delayed/suppressed for pure enquiries — untouched this session, still needs a call.
-
-• **UNCOMMITTED** — git block handed over (not run, per no-commit-without-permission rule): `app.js supabase/functions/notify-booking-received/index.ts supabase/functions/_shared/addons.ts supabase/functions/_shared/packages.ts supabase/functions/_shared/venue.ts supabase/functions/_shared/resend.ts supabase/migrations/20260708_package_snapshot.sql CLAUDE.md`. Schema/RPC/edge-fn changes are already live in Supabase (not gated on this commit) — the commit is purely to get the repo back in sync with what's deployed.
-
-CONTINUE FROM: user eyeballs the two smoke-test emails for visual polish (spacing/copy, not correctness — logic is verified), confirms the git commands were run, then the Phase 2 pay-button-timing decision from PART 1 is still open.
-
-## Session Handoff — 2026-07-08 (lead delivery: capture CONFIRMED live; admin email hardened w/ WhatsApp button v28; customer-email packages redesign scoped)
-
-• **Lead capture (intent-screen render) CONFIRMED LIVE in prod** — corrects the stale 07-07 "frontend never committed/deployed" note (it WAS: commit `4cdd13f` is the READY prod Vercel deploy `dpl_6mF2sy…`). Backend verified: `submit_booking_intent` 19-arg upsert live; unconditional `AFTER INSERT` trigger `on_booking_insert_notify` → `notify-booking-received` fires admin email on EVERY insert to `team@picnicstories.com` + venue team email. Live prod smoke test (user booked) → row `id 23` created `customer_intent='query'`/`lead_status='pending'` on render (pre-click), `intent_lead_captured` PostHog event fired (event had NEVER appeared in prod taxonomy before — why earlier checks looked "not live"; was just never exercised). Test row 23 deleted.
-
-• **Volume tiny (~0.7 real leads/day** last 14d; most `bookings` rows are owner tests, phone `7742363777`). Killed Fable's daily-digest plan AND my instant-Telegram-push plan as premature — email delivery already works and user reads it. Decision via AskUserQuestion: **harden the email, no new channel.** Traffic real though: PostHog ~50-63 visitors/wk, 49-199 `packages_page_viewed`/wk.
-
-• **P1 SHIPPED — `notify-booking-received` v28 deployed** (Supabase MCP `deploy_edge_function`, verify_jwt=false preserved — DB trigger calls without JWT): admin alert (T2) gained a top green "💬 Reply on WhatsApp · \<number\>" button (`waReplyLink()`: wa.me, 91-prefix for 10-digit, pre-filled greeting) + "tap to call" + tappable `tel:`/`mailto:` phone/email rows. Only `index.ts` changed; `_shared/{resend,venue,addons}.ts` byte-identical. Local repo `supabase/functions/notify-booking-received/index.ts` synced to deployed. User committing manually — not run (no-commit rule). NOTE: local `_shared` dir sits at `functions/_shared/`, deploy bundles it beside entrypoint as `_shared/*`.
-
-• **NEXT TASK (scoped, not built) — customer ack email (`buildGuestHtml` T1 in `notify-booking-received`) is old-model:** shows food/bev inclusion (`getInclusionText` from stale venue `food_multiplier`/`drink_multiplier`) + never names the chosen package. ROOT CAUSE (grounded via SQL): package not stored anywhere — `bookings` has NO tier/package column, `booking_add_ons` holds only true add-ons (Cake/Photographer/Skyshots…), `submit_booking_intent` RPC 19 args have no package arg. Data-capture gap, not a template bug.
-
-• **AGREED FIX (Option A; rejected Option B = infer-tier-from-add-on-fingerprint as fragile — breaks on manual add-ons + occasion pkgs):** persist `bookings.package_key` + snapshot `package_name`/`tagline` (rename-safe); add RPC arg; set in frontend where tier known (`selectPackageTier`/`pendingPackage.tierKey`). Email render: headline = package name+tagline; inclusions = lookup `package_add_ons[package_key]`; extras = `booking_add_ons` MINUS bundled; DROP food/bev row + retire `getInclusionText`. Apply to BOTH customer + admin emails. Old bookings (no key) → graceful fallback to current add-on list. Packages: `setting/moment/story` (universal, occasion=null) + `date_night_classic/deluxe`, `movie_night_classic/deluxe` (occasion). Build order: migration → RPC arg → frontend → email template → smoke test. Confirm occasion packages also set `package_key`.
-
-• **Phase 2 open decision (unbuilt):** every intent-screen render fires the customer ack email IMMEDIATELY with a "Pay Advance ₹X" button, before any human contact — keep as recovery nudge vs delay/suppress the pay button for pure enquiries. User confirmed both admin + customer emails land correctly.
-
-• **Env refs:** Vercel team `team_dLDWAkARaohP22HGIl1DpNnj` / project `prj_WDxIggD0U392TpTM527qqKe9vui0` (project.json absent locally; use `list_teams`); Supabase `evmftrogyzoudiccqkya`; PostHog project 482400. `submit_booking_intent` 19 args: full_name, mobile, email, guest_count, preferred_date, special_requirements, advance_amount, confirmed, customer_intent, venue_id, venue_address, checkout_date, time_slot, external_booking_ref, add_ons, occasion, board, children_count, booking_id.
-
-## Session Handoff — 2026-07-07 PHASE 2 (intent-screen lead capture + WA CTA — the ACTUAL plan; user corrected scope)
-
-• **Scope correction from user:** the WhatsApp CTA belongs on the INTENT screen ("You're almost there!") replacing "I have questions — call me", and anyone REACHING that screen must be captured as a lead even if they click nothing (they've already given name/phone/email on the form; previously no DB row existed until a button click — the biggest leak). The success-page CTA from the earlier session stays as a complement.
-
-• **Migration `lead_capture_intent_upsert` APPLIED LIVE** (+ repo file `supabase/migrations/20260707_lead_capture_intent.sql`): `submit_booking_intent` gained `p_booking_id` (19th arg; old 18-arg overload DROPPED — CREATE OR REPLACE would've left an ambiguous PostgREST overload — grants re-issued). NULL → insert (unchanged); given → guarded UPDATE in place (fields + recomputed totals + replaced add-ons). **Tamper guard:** update matches only on `confirmed=false AND mobile_number AND email_address` equal — anon + sequential ids can't touch someone else's row; mismatch falls through to fresh insert (worst case duplicate lead, never lost action). SQL-verified all 3 branches (insert / matched update / mismatch→new row) + cleaned up.
-
-• **app.js:** `captureLeadOnIntent()` fires on ALL THREE intent-screen render sites (form submit ~L3968-area, change-package resume ~L3311-area, change-date resume ~L9205-area) — inserts as `query`/unconfirmed on first render, updates same row on re-renders via `lead.booking_id`; promise kept in `appState.pendingLeadCapture`; `submitBookingIntent` awaits it and passes `p_booking_id` so the pay click UPDATEs instead of duplicating (create-order's compute-based validation keeps seeing fresh amounts). `intentWaHref()` builds the wa.me link (venue team number, `buildWhatsAppMessage`, href refreshed with #PS-ref once capture returns). `intentWhatsAppClick()` records `whatsapp_clicked` (race-safe via the capture promise), tracks `intent_whatsapp_clicked` + `intent_lead_captured`, lands the main tab on the success page after 400ms. `finishBookingFlow` also clears `pendingLeadCapture`. Intent markup: WA anchor (green ghost `.vd-intent-btn--wa` in style.css) replaces call-me for standard venues; **combo/requires_confirmation keep their request button** (request semantics preserved).
-
-• **E2E-verified on localhost:5173 via Chrome MCP** (screenshot tool froze again — same standing issue; used find/javascript_tool refs instead): full Beige flow date→slot→guests→Moment tier→form→submit → intent screen up, call-me gone, WA CTA routed to Beige team number with #PS-ref in href → DB row captured on render (`query`/`pending`, correct slot/addons ×3, exactly ONE row) → WA click → row flipped `whatsapp_clicked` + success page rendered. Test row deleted. **Side effects:** test insert fired the real admin "booking received" email (test-named, ignore); dev PostHog events landed in prod project (known accepted noise).
-
-• 🔴 **Observed pre-existing discrepancy, NOT from this change, worth a look:** client showed total ₹12,000 / advance ₹3,600 (30%) for Beige+Moment while the server-authoritative `compute_booking_total` wrote `total_amount=13000` and the RPC computes advance at 50% (`round(v_total*0.5)`) — client UI and server math disagree on both total and advance %. Bookings work in prod so create-order evidently tolerates it, but quoted-vs-stored amounts differ on every booking.
-
-• **NOT done:** Meta Pixel Contact fires via the global wa.me listener on the intent CTA (anchor default nav) — assumed, not verified in Events Manager. Real-device check of the intent screen (CSS-only reasoning for mobile). PostHog arrival of the two new events not queried.
-
-## Session Handoff — 2026-07-07 (WhatsApp CTA + lead-status funnel: BACKEND SHIPPED, frontend commit handed over)
-
-• **Feature (built 07-06 in a session that never wrote a handoff — code sat uncommitted/undeployed until today):** success-page WhatsApp CTA + `bookings.lead_status` funnel (`pending → whatsapp_clicked / payment_initiated → confirmed | abandoned`). app.js: `recordLeadStatus()` fire-and-forget, `payment_initiated` on both Razorpay entry paths (~L4214/L4376), success-page CTA with pre-filled booking summary (`buildWhatsAppMessage`) routed to the venue team's number, `whatsapp_clicked` recorded for unconfirmed leads + PostHog `success_whatsapp_clicked`. style.css `.bsc-wa-*`.
-
-• **SHIPPED 2026-07-07:** migration `lead_status_funnel` APPLIED LIVE (columns + backfill: 1 confirmed / 14 pending, partial index, `update_lead_status` RPC — client-restricted to the two customer-action statuses, verified: no-op on missing id, raises on 'confirmed' — and pg_cron `mark-abandoned-leads` 20:30 UTC scheduled). **verify-payment v9 + razorpay-webhook v5 DEPLOYED** (deployed-source drift-check done first: local = deployed + only the lead_status lines; webhook kept `verify_jwt=false`). Order mattered: migration BEFORE fns — the new PATCH body includes `lead_status`, which would fail against a column-less table and block booking confirmation. `get_advisors`: only the expected anon-executable SECURITY DEFINER note on the new RPC (intentional, same class as `submit_booking_intent`).
-
-• **Frontend NOT yet committed/deployed** — git block handed over staging `app.js style.css supabase/functions/{verify-payment,razorpay-webhook}/index.ts supabase/migrations/20260706_lead_status.sql CLAUDE.md docs/PENDING_ITEMS_2026-07-06.md`. Until Vercel deploys app.js, nothing writes `whatsapp_clicked`/`payment_initiated` (harmless: columns default 'pending'; cron will mark stale leads abandoned). index.html/admin.html/analytics.js show M in the sandbox but carry NO feature code — verify against the user's terminal before touching.
-
-• **Post-deploy verification owed:** real booking → success page → CTA click → row flips to `whatsapp_clicked` + `success_whatsapp_clicked` lands in PostHog; a paid booking lands `lead_status='confirmed'`. Later phase (unbuilt, tracked as PENDING_ITEMS item 28): admin/ops view over the funnel + follow-up queue tie-in to the WhatsApp sales playbook (`docs/WHATSAPP_SALES_AUDIT_2026-07-06.md` §G).
-
-*(2026-07-06 and earlier build-log entries — pending-items sweep (slim-shell prerender `9538fa7`, PostHog guardrail dashboard 1803479, GBP audit, phantom-deletions correction), iCal loop fix (export-ical v11), packages-first carousel, occasion packages, /packages redesign — pruned by /compact 2026-07-15. All confirmed PUSHED/deployed; durable details + still-open items (Jaipur GBP, image-resize decision, Meta Events Manager verification, Umber 2027-07-06 ical residue) live in `docs/PENDING_ITEMS_2026-07-06.md`, `docs/schema.md`, and `docs/Google Business Profile Playbook.docx`.)*
+*2026-07-18: CLAUDE.md restructured (rules made explicit, Definition of Done added); handoff history moved verbatim to `docs/HANDOFFS.md`.*
