@@ -9274,7 +9274,7 @@ let abk = {
   packageKey: '', addonIds: [], occasion: '', boardType: '', boardMessage: '',
   externalRef: '', notes: '',
   name: '', phone: '', email: '',
-  total: 0, advance: 0, totalTouched: false, advanceTouched: false,
+  total: 0, advance: 0, discount: 0, totalTouched: false, advanceTouched: false,
   sendEmail: true, emailToggleTouched: false,
   slotMap: null, slotMax: 1, slotVenueId: null,
   saving: false,
@@ -9394,6 +9394,7 @@ function abkRead() {
   if ((el = g('abk-email'))) abk.email = el.value
   if ((el = g('abk-total'))) abk.total = el.value === '' ? '' : Number(el.value)
   if ((el = g('abk-advance'))) abk.advance = el.value === '' ? '' : Number(el.value)
+  if ((el = g('abk-discount'))) abk.discount = el.value === '' ? 0 : Number(el.value)
   if ((el = g('abk-send-email'))) abk.sendEmail = el.checked
   // Slot chips (radio-like)
   const slotSel = document.querySelector('input[name="abk-slot"]:checked')
@@ -9652,6 +9653,12 @@ function renderAddBookingForm() {
         </div>
       </div>
 
+      <div class="abk-field">
+        <label class="abk-label" for="abk-discount">Discount / on-site extra (₹) <span class="abk-hint">(optional)</span></label>
+        <input type="number" id="abk-discount" class="abk-input" step="100" value="${abkText(abk.discount)}" oninput="abkRead()" />
+        <span class="abk-hint">Records the split behind the total above. Positive = discount off the total; negative = extra charged on the day (e.g. −2952). Leave 0 if none.</span>
+      </div>
+
       <label class="abk-toggle">
         <input type="checkbox" id="abk-send-email" ${abk.sendEmail && emailHas ? 'checked' : ''} ${emailHas ? '' : 'disabled'} onchange="abkSendEmailChange()" />
         <span>${abk.editingId ? 'Send updated confirmation to guest' : 'Send confirmation email to guest'}</span>
@@ -9722,6 +9729,7 @@ async function abkSave() {
     external_booking_ref: abk.type === 'stay' ? (String(abk.externalRef || '').trim() || null) : null,
     advance_amount: Number(abk.advance) || 0,
     total_amount: abk.total === '' ? null : Number(abk.total),
+    discount_amount: Number(abk.discount) || 0,
     package_key: abk.type === 'picnic' ? (abk.packageKey || null) : null,
     send_guest_email: email ? !!abk.sendEmail : false,
   }
@@ -9780,7 +9788,7 @@ function abkResetForm() {
   abk = { ...abk, editingId: null, existingPaid: false,
     venueId: null, venueAddress: '', date: '', slot: '', checkin: '', checkout: '',
     adults: 2, children: 0, packageKey: '', addonIds: [], occasion: '', boardType: '', boardMessage: '',
-    externalRef: '', notes: '', name: '', phone: '', email: '', total: 0, advance: 0,
+    externalRef: '', notes: '', name: '', phone: '', email: '', total: 0, advance: 0, discount: 0,
     totalTouched: false, advanceTouched: false, sendEmail: true, emailToggleTouched: false,
     slotMap: null, slotVenueId: null, saving: false }
 }
@@ -9820,6 +9828,7 @@ async function abkStartEdit(id) {
     abk.email = b.email_address || ''
     abk.total = b.total_amount == null ? '' : Number(b.total_amount)
     abk.advance = Number(b.advance_amount || 0)
+    abk.discount = Number(b.discount_amount || 0)
     abk.totalTouched = true; abk.advanceTouched = true   // preserve the stored figures
     abk.sendEmail = false; abk.emailToggleTouched = true // opt-in on edit
     abk.slotMap = null; abk.slotVenueId = null; abk.saving = false

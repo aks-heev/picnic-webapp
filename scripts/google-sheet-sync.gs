@@ -69,7 +69,7 @@ function syncBookings() {
   const select = [
     'id', 'full_name', 'mobile_number', 'email_address', 'guest_count', 'children_count',
     'preferred_date', 'checkout_date', 'time_slot', 'occasion', 'board', 'special_requirements',
-    'advance_amount', 'total_amount', 'payment_status', 'razorpay_payment_id', 'confirmed', 'venue_id',
+    'advance_amount', 'total_amount', 'discount_amount', 'payment_status', 'razorpay_payment_id', 'confirmed', 'venue_id',
     'booking_add_ons(addon_id,price_at_booking)'   // embedded — scoped to this booking set only
   ].join(',');
   const rows = JSON.parse(get(
@@ -151,9 +151,13 @@ function syncBookings() {
 // separately by applyPicnicAddons so removals can be cleared on update.
 function buildRowValues(b, v, isStay, ad) {
   const total  = (b.total_amount == null) ? null : Number(b.total_amount);
+  // Signed adjustment: + = discount that lowered the total, - = on-site extra that
+  // raised it. total_amount already includes it, so back it out of the base:
+  //   base = total - add-ons + discount  (mirrors the sheet's Total = Base + Add-ons - Discount).
+  const discount = Number(b.discount_amount) || 0;
   const common = {
     'Mobile': b.mobile_number || '', 'Email': b.email_address || '',
-    'City': v.city || '', 'Payment Status': payStatus(b.payment_status)
+    'City': v.city || '', 'Payment Status': payStatus(b)
   };
   if (isStay) {
     const nights = nightsBetween(b.preferred_date, b.checkout_date);
@@ -174,7 +178,8 @@ function buildRowValues(b, v, isStay, ad) {
     'Adults': b.guest_count || '', 'Children': b.children_count || 0,
     'Occasion': b.occasion || '', 'Board Type': capit(board.type) || 'None',
     'Board Message': board.message || '', 'Special Requirements': b.special_requirements || '',
-    'Base Package (₹)': (total != null) ? (total - ad.sum) : '',
+    'Base Package (₹)': (total != null) ? (total - ad.sum + discount) : '',
+    'Discount (₹)': discount ? discount : '',
     'Advance Received (₹)': b.advance_amount || '', 'Payment Ref': b.razorpay_payment_id || '',
     'Booking Status': b.confirmed ? 'Confirmed' : 'Enquiry'
   });
@@ -233,5 +238,16 @@ function prep(sheet) {
 }
 function writeRow(t, r, obj) { Object.keys(obj).forEach(k => { if (t.col[k]) t.sheet.getRange(r, t.col[k]).setValue(obj[k]); }); }
 function setVal(t, r, header, val) { if (t.col[header]) t.sheet.getRange(r, t.col[header]).setValue(val); }
-function payStatus(s) { return ({ paid: 'Paid', pending: 'Pending', failed: 'Failed' })[s] || 'Pending'; }
+// Only two payment states by design:
+//   "Paid"         — the advance already covers the whole total (fully settled).
+//   "Advance Paid" — a deposit is in, balance still due at the event (everything else).
+// Every booking the sync writes is confirmed/paid, i.e. at least the advance is in hand,
+// so there is deliberately no "Pending"/"Failed" here. Keeping this to two values means the
+// sheet's =IF(status="Paid",0,Total−Advance) balance formula zeroes out only on full
+// settlement. Takes the whole booking so it can compare advance vs total.
+function payStatus(b) {
+  const total = Number(b && b.total_amount) || 0;
+  const adv   = Number(b && b.advance_amount) || 0;
+  return (total > 0 && adv >= total) ? 'Paid' : 'Advance Paid';
+}
 function capit(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : ''; }
