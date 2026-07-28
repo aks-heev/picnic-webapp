@@ -214,6 +214,19 @@ function getPicnicPrice(venue, adults) {
   return getVenuePrice(venue, adults)
 }
 
+// Venue types whose price is charged PER NIGHT. For these, getVenuePrice()
+// returns the nightly rate (base_price, plus per-person overage beyond
+// free_guests_upto) and the total is rate × nights — mirroring the
+// `v_type in ('self_managed','combo')` branch of the compute_booking_total RPC.
+//
+// partner_bnb is deliberately NOT here: the guest books the stay on Airbnb
+// themselves and we only price the picnic setup, so its price is flat.
+//
+// 🔴 metadata.stay_price_per_night is DEAD — it was 0 on every venue, which is
+// why multi-night stays priced flat until 2026-07-28. Do not reintroduce it;
+// base_price is the single nightly source (CLAUDE.md §7).
+const STAY_NIGHTLY_TYPES = ['self_managed', 'combo']
+
 // Included food & drink counts for a booking, scaled to adults only.
 // food   = ceil(adults × food_multiplier)
 // drinks = ceil(adults × drink_multiplier)
@@ -1165,10 +1178,10 @@ function renderVenueDetail(venue, addOns = []) {
                     <span class="vd-property-stat-label">${m.bathrooms === 1 ? 'Bathroom' : 'Bathrooms'}</span>
                   </div>
                 </div>` : ''}
-                ${m.stay_price_per_night ? `<div class="vd-property-stat">
+                ${venue.base_price ? `<div class="vd-property-stat">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                   <div class="vd-property-stat-text">
-                    <span class="vd-property-stat-value">₹${Number(m.stay_price_per_night).toLocaleString('en-IN')}</span>
+                    <span class="vd-property-stat-value">₹${Number(venue.base_price).toLocaleString('en-IN')}</span>
                     <span class="vd-property-stat-label">per night</span>
                   </div>
                 </div>` : ''}
@@ -3350,10 +3363,10 @@ function updateGuestPrice(venue) {
   const guestLine = `${appState.adults} adult${appState.adults !== 1 ? 's' : ''}` +
     (appState.children ? ` · ${appState.children} child${appState.children !== 1 ? 'ren' : ''}` : '')
 
-  if (venue.type === 'self_managed' && appState.checkinDate && appState.checkoutDate) {
+  if (STAY_NIGHTLY_TYPES.includes(venue.type) && appState.checkinDate && appState.checkoutDate) {
     const nights    = calcNights(appState.checkinDate, appState.checkoutDate)
-    const stayTotal = nights * (Number(venue.metadata?.stay_price_per_night) || 0)
-    priceEl.textContent = formatPrice(stayTotal + picnicPrice) || 'Custom'
+    const stayTotal = nights * picnicPrice
+    priceEl.textContent = formatPrice(stayTotal) || 'Custom'
     if (labelEl) labelEl.textContent = `${nights} night${nights !== 1 ? 's' : ''} · ${guestLine}`
     return
   }
@@ -3665,7 +3678,7 @@ async function showBookingForm(venue) {
 
   // Date chips
   let dateChips = ''
-  if (venue.type === 'self_managed' && appState.checkinDate && appState.checkoutDate) {
+  if (STAY_NIGHTLY_TYPES.includes(venue.type) && appState.checkinDate && appState.checkoutDate) {
     const nights = calcNights(appState.checkinDate, appState.checkoutDate)
     dateChips = `
       <span class="vd-bv-chip">🛬 Check-in &nbsp;<strong>${formatSelectedDate(appState.checkinDate)}</strong></span>
@@ -3684,9 +3697,10 @@ async function showBookingForm(venue) {
   let priceRows = ''
   let baseTotal = picnicPrice
   let hasStay = false
-  if (venue.type === 'self_managed' && appState.checkinDate && appState.checkoutDate) {
-    const nights = calcNights(appState.checkinDate, appState.checkoutDate)
-    baseTotal += nights * (Number(venue.metadata?.stay_price_per_night) || 0)
+  let stayNights = 0
+  if (STAY_NIGHTLY_TYPES.includes(venue.type) && appState.checkinDate && appState.checkoutDate) {
+    stayNights = calcNights(appState.checkinDate, appState.checkoutDate)
+    baseTotal = picnicPrice * stayNights
     hasStay = true
   }
   // Packages: the stored venue_packages price IS the package line (bundled
@@ -3697,7 +3711,10 @@ async function showBookingForm(venue) {
     baseTotal = pkgPrice
     priceRows += `<div class="vd-bv-price-row vd-bv-price-row--package"><span>${escapeHtml(pkgTier.name)} package</span><span>₹${baseTotal.toLocaleString('en-IN')}</span></div>`
   } else {
-    priceRows += `<div class="vd-bv-price-row"><span>${hasStay ? 'Stay + Picnic setup' : 'Picnic setup'}</span><span>₹${baseTotal.toLocaleString('en-IN')}</span></div>`
+    const baseLabel = hasStay
+      ? `Stay · ${stayNights} night${stayNights !== 1 ? 's' : ''} × ₹${picnicPrice.toLocaleString('en-IN')}`
+      : 'Picnic setup'
+    priceRows += `<div class="vd-bv-price-row"><span>${baseLabel}</span><span>₹${baseTotal.toLocaleString('en-IN')}</span></div>`
   }
   priceRows += `<div id="bv-addon-price-rows"></div>`
 
@@ -3997,8 +4014,10 @@ function updateBookingSummaryPrice() {
     .reduce((sum, cb) => sum + Number(cb.dataset.addonPrice), 0)
 
   let total = picnicPrice
-  if (venue.type === 'self_managed' && appState.checkinDate && appState.checkoutDate) {
-    total += calcNights(appState.checkinDate, appState.checkoutDate) * (Number(venue.metadata?.stay_price_per_night) || 0)
+  if (STAY_NIGHTLY_TYPES.includes(venue.type) && appState.checkinDate && appState.checkoutDate) {
+    // Nightly venues: picnicPrice IS the nightly rate, so it multiplies
+    // rather than adding alongside a separate stay line.
+    total = picnicPrice * calcNights(appState.checkinDate, appState.checkoutDate)
   }
   total += addonSum
 
@@ -4065,9 +4084,10 @@ function buildIntentSummaryHTML() {
     let rows = ''
     let setupBase = picnicPrice
     let hasStay = false
-    if (venue.type === 'self_managed' && lead.checkout_date) {
-      const nights = calcNights(lead.preferred_date, lead.checkout_date)
-      setupBase += nights * (Number(venue.metadata?.stay_price_per_night) || 0)
+    let stayNights = 0
+    if (STAY_NIGHTLY_TYPES.includes(venue.type) && lead.checkout_date) {
+      stayNights = calcNights(lead.preferred_date, lead.checkout_date)
+      setupBase = picnicPrice * stayNights
       hasStay = true
     }
 
@@ -4080,7 +4100,10 @@ function buildIntentSummaryHTML() {
     if (pkgTier && pkgLinePrice != null) {
       rows += `<div class="vd-bv-price-row vd-bv-price-row--package"><span>${escapeHtml(pkgTier.name)} package</span><span>₹${pkgLinePrice.toLocaleString('en-IN')}</span></div>`
     } else if (setupBase) {
-      rows += `<div class="vd-bv-price-row"><span>${hasStay ? 'Stay + Picnic setup' : 'Picnic setup'}</span><span>₹${setupBase.toLocaleString('en-IN')}</span></div>`
+      const setupLabel = hasStay
+        ? `Stay · ${stayNights} night${stayNights !== 1 ? 's' : ''} × ₹${picnicPrice.toLocaleString('en-IN')}`
+        : 'Picnic setup'
+      rows += `<div class="vd-bv-price-row"><span>${setupLabel}</span><span>₹${setupBase.toLocaleString('en-IN')}</span></div>`
     }
     for (const ao of extraAddOns) {
       const name = appState.currentVenueAddOns?.find(a => a.id === ao.addon_id)?.name || 'Add-on'
@@ -4260,11 +4283,21 @@ function handleInlineBookingSubmit(event) {
     lead.time_slot      = appState.selectedTimeSlot
     lead.advance_amount = Math.round((picnicPrice + addonSum) * 0.3)
   }
-  if (venue.type === 'self_managed' && appState.checkinDate && appState.checkoutDate) {
+  // These advance figures are DISPLAY ONLY — submit_booking_intent ignores the
+  // p_advance_amount it is handed and re-derives from compute_booking_advance.
+  // They must still match the RPC or the guest sees one number and is charged
+  // another (CLAUDE.md §7).
+  if (STAY_NIGHTLY_TYPES.includes(venue.type) && appState.checkinDate && appState.checkoutDate) {
     lead.checkout_date  = appState.checkoutDate
     lead.preferred_date = appState.checkinDate
     const nights        = calcNights(appState.checkinDate, appState.checkoutDate)
-    lead.advance_amount = Math.round((nights * (Number(venue.metadata?.stay_price_per_night) || 0) + picnicPrice + addonSum) * 0.3)
+    lead.advance_amount = Math.round((nights * picnicPrice + addonSum) * 0.3)
+  }
+  // partner_bnb: picnic setup only, never multiplied by nights.
+  if (venue.type === 'partner_bnb') {
+    if (appState.checkinDate)  lead.preferred_date = appState.checkinDate
+    if (appState.checkoutDate) lead.checkout_date  = appState.checkoutDate
+    lead.advance_amount = Math.round((picnicPrice + addonSum) * 0.3)
   }
 
   // Snapshot selected add-ons (checkboxes disappear when we replace the view)
