@@ -308,10 +308,11 @@
                                     <label class="vf-label">Bathrooms</label>
                                     <input type="number" id="vf-bathrooms" class="vf-input" min="1" value="2" />
                                 </div>
-                                <div class="vf-field">
-                                    <label class="vf-label">Stay Price / Night (₹)</label>
-                                    <input type="number" id="vf-stay-price" class="vf-input" min="0" step="500" value="0" />
-                                </div>
+                                <!-- "Stay Price / Night" (vf-stay-price -> metadata.stay_price_per_night)
+                                     removed 2026-07-28. It was 0 on every venue and multiplied into every
+                                     stay total, which is why multi-night bookings priced flat. The nightly
+                                     rate is now Base Price in the Pricing section above -- one field, one
+                                     meaning. Do not reintroduce this. -->
                             </div>
                             <div class="vf-field">
                                 <label class="vf-label">Amenities <span class="vf-hint">(comma-separated)</span></label>

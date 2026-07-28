@@ -7308,7 +7308,6 @@ function clearVenueForm() {
   document.getElementById('vf-free-guests-upto').value = 6
   document.getElementById('vf-rooms').value = 2
   document.getElementById('vf-bathrooms').value = 2
-  document.getElementById('vf-stay-price').value = 0
   document.getElementById('vf-includes').value = ''
   document.getElementById('vf-amenities').value = ''
   document.getElementById('vf-highlights').value = ''
@@ -7355,7 +7354,6 @@ function populateVenueForm(venue) {
   // BnB fields
   document.getElementById('vf-rooms').value = meta.rooms || 2
   document.getElementById('vf-bathrooms').value = meta.bathrooms || 2
-  document.getElementById('vf-stay-price').value = meta.stay_price_per_night || 0
   document.getElementById('vf-includes').value = (meta.includes || []).join(', ')
   document.getElementById('vf-amenities').value = (meta.amenities || []).join(', ')
   document.getElementById('vf-highlights').value = (meta.highlights || []).join(', ')
@@ -7828,7 +7826,9 @@ async function handleVenueFormSubmit(event) {
       ...metadata,
       rooms: parseInt(document.getElementById('vf-rooms').value, 10) || 2,
       bathrooms: parseInt(document.getElementById('vf-bathrooms').value, 10) || 2,
-      stay_price_per_night: parseInt(document.getElementById('vf-stay-price').value, 10) || 0,
+      // stay_price_per_night is no longer written or read (removed 2026-07-28) —
+      // base_price is the nightly rate. Any existing key rides through untouched
+      // via ...originalMeta; nothing consumes it.
       amenities: splitCsv('vf-amenities'),
       highlights: splitCsv('vf-highlights'),
       ideal_for: splitCsv('vf-ideal-for')
