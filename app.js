@@ -9373,10 +9373,21 @@ let abk = {
   externalRef: '', notes: '',
   name: '', phone: '', email: '',
   total: 0, advance: 0, discount: 0, totalTouched: false, advanceTouched: false,
+  includesFood: false, foodItems: '', bevItems: '',
+  slotStart: '', slotEnd: '',
   sendEmail: true, emailToggleTouched: false,
   slotMap: null, slotMax: 1, slotVenueId: null,
   saving: false,
   editingId: null, existingPaid: false,
+}
+
+// Default clock times per slot, mirroring TIME_SLOTS in the notify-booking-*
+// edge functions. These only PREFILL the two time inputs — whatever is left in
+// the boxes is what gets stored, and what the guest email prints.
+const ABK_SLOT_TIMES = {
+  morning:   ['09:00', '12:00'],
+  afternoon: ['13:00', '16:00'],
+  evening:   ['17:00', '20:00'],
 }
 
 async function loadAddBookingForm() {
@@ -9493,6 +9504,11 @@ function abkRead() {
   if ((el = g('abk-total'))) abk.total = el.value === '' ? '' : Number(el.value)
   if ((el = g('abk-advance'))) abk.advance = el.value === '' ? '' : Number(el.value)
   if ((el = g('abk-discount'))) abk.discount = el.value === '' ? 0 : Number(el.value)
+  if ((el = g('abk-includes-food'))) abk.includesFood = el.checked
+  if ((el = g('abk-food-items'))) abk.foodItems = el.value === '' ? '' : Number(el.value)
+  if ((el = g('abk-bev-items')))  abk.bevItems  = el.value === '' ? '' : Number(el.value)
+  if ((el = g('abk-slot-start'))) abk.slotStart = el.value
+  if ((el = g('abk-slot-end')))   abk.slotEnd   = el.value
   if ((el = g('abk-send-email'))) abk.sendEmail = el.checked
   // Slot chips (radio-like)
   const slotSel = document.querySelector('input[name="abk-slot"]:checked')
@@ -9619,7 +9635,17 @@ function renderAddBookingForm() {
       <div class="abk-field">
         <label class="abk-label">Time slot</label>
         <div class="abk-slots">${slotChips}</div>
-      </div>`
+      </div>
+      ${abk.slot ? `
+      <div class="abk-field">
+        <label class="abk-label" for="abk-slot-start">Start &amp; end time</label>
+        <div class="abk-timerow">
+          <input type="time" id="abk-slot-start" class="abk-input abk-time" value="${abkText(abk.slotStart || (ABK_SLOT_TIMES[abk.slot] || ['', ''])[0])}" oninput="abkRead()" />
+          <span class="abk-time-sep">to</span>
+          <input type="time" id="abk-slot-end" class="abk-input abk-time" value="${abkText(abk.slotEnd || (ABK_SLOT_TIMES[abk.slot] || ['', ''])[1])}" oninput="abkRead()" />
+        </div>
+        <span class="abk-hint">Prefilled from the slot. Change it if this booking runs to different hours — the guest email prints exactly what is here.</span>
+      </div>` : ''}`
   } else {
     const nights = abkNights()
     datesHtml = `
@@ -9757,6 +9783,25 @@ function renderAddBookingForm() {
         <span class="abk-hint">Records the split behind the total above. Positive = discount off the total; negative = extra charged on the day (e.g. −2952). Leave 0 if none.</span>
       </div>
 
+      <div class="abk-field">
+        <label class="abk-toggle">
+          <input type="checkbox" id="abk-includes-food" ${abk.includesFood ? 'checked' : ''} onchange="abkChangedKeepTotal()" />
+          <span>Includes food</span>
+        </label>
+        ${abk.includesFood ? `
+        <div class="abk-foodrow">
+          <div class="abk-foodcell">
+            <label class="abk-label" for="abk-food-items">Food items</label>
+            <input type="number" id="abk-food-items" class="abk-input" min="0" max="99" value="${abkText(abk.foodItems)}" oninput="abkRead()" />
+          </div>
+          <div class="abk-foodcell">
+            <label class="abk-label" for="abk-bev-items">Beverage items</label>
+            <input type="number" id="abk-bev-items" class="abk-input" min="0" max="99" value="${abkText(abk.bevItems)}" oninput="abkRead()" />
+          </div>
+        </div>
+        <span class="abk-hint">Totals for the whole booking, not per guest. These override the venue's own food/drink multipliers in the guest email.</span>` : ''}
+      </div>
+
       <label class="abk-toggle">
         <input type="checkbox" id="abk-send-email" ${abk.sendEmail && emailHas ? 'checked' : ''} ${emailHas ? '' : 'disabled'} onchange="abkSendEmailChange()" />
         <span>${abk.editingId ? 'Send updated confirmation to guest' : 'Send confirmation email to guest'}</span>
@@ -9828,6 +9873,12 @@ async function abkSave() {
     advance_amount: Number(abk.advance) || 0,
     total_amount: abk.total === '' ? null : Number(abk.total),
     discount_amount: Number(abk.discount) || 0,
+    includes_food: !!abk.includesFood,
+    food_items_count: abk.includesFood && abk.foodItems !== '' ? Number(abk.foodItems) : null,
+    beverage_items_count: abk.includesFood && abk.bevItems !== '' ? Number(abk.bevItems) : null,
+    // Times only mean anything on a slot booking; the RPC clears them for stays anyway.
+    slot_start_time: timeSlot ? (abk.slotStart || null) : null,
+    slot_end_time:   timeSlot ? (abk.slotEnd   || null) : null,
     package_key: abk.type === 'picnic' ? (abk.packageKey || null) : null,
     send_guest_email: email ? !!abk.sendEmail : false,
   }
@@ -9887,6 +9938,7 @@ function abkResetForm() {
     venueId: null, venueAddress: '', date: '', slot: '', checkin: '', checkout: '',
     adults: 2, children: 0, packageKey: '', addonIds: [], occasion: '', boardType: '', boardMessage: '',
     externalRef: '', notes: '', name: '', phone: '', email: '', total: 0, advance: 0, discount: 0,
+    includesFood: false, foodItems: '', bevItems: '', slotStart: '', slotEnd: '',
     totalTouched: false, advanceTouched: false, sendEmail: true, emailToggleTouched: false,
     slotMap: null, slotVenueId: null, saving: false }
 }
@@ -9927,6 +9979,12 @@ async function abkStartEdit(id) {
     abk.total = b.total_amount == null ? '' : Number(b.total_amount)
     abk.advance = Number(b.advance_amount || 0)
     abk.discount = Number(b.discount_amount || 0)
+    abk.includesFood = !!b.includes_food
+    abk.foodItems = b.food_items_count == null ? '' : Number(b.food_items_count)
+    abk.bevItems  = b.beverage_items_count == null ? '' : Number(b.beverage_items_count)
+    // Stored times are `time` values (HH:MM:SS); <input type="time"> wants HH:MM.
+    abk.slotStart = b.slot_start_time ? String(b.slot_start_time).slice(0, 5) : ''
+    abk.slotEnd   = b.slot_end_time   ? String(b.slot_end_time).slice(0, 5)   : ''
     abk.totalTouched = true; abk.advanceTouched = true   // preserve the stored figures
     abk.sendEmail = false; abk.emailToggleTouched = true // opt-in on edit
     abk.slotMap = null; abk.slotVenueId = null; abk.saving = false

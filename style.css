@@ -10273,6 +10273,16 @@ textarea.abk-input { resize: vertical; min-height: 60px; }
 .abk-slot-icon { font-size: 18px; }
 .abk-slot-label { font-weight: 600; font-size: 15px; }
 .abk-slot-time { margin-left: auto; font-size: 13px; color: var(--boho-text-light, #8a7864); }
+
+/* Start/end time pair shown once a slot is picked (2026-08-15). */
+.abk-timerow { display: flex; align-items: center; gap: 10px; }
+.abk-timerow .abk-time { flex: 1 1 0; min-width: 0; }
+.abk-time-sep { font-size: 13px; color: var(--boho-text-light, #8a7864); flex: 0 0 auto; }
+
+/* Food / beverage item counts, revealed by the "Includes food" toggle. */
+.abk-foodrow { display: flex; gap: 12px; margin-top: 10px; }
+.abk-foodcell { flex: 1 1 0; min-width: 0; }
+.abk-foodcell .abk-label { display: block; margin-bottom: 4px; }
 .abk-nights { margin: 2px 0 0; font-size: 14px; color: var(--boho-accent-pink, #c4607a); font-weight: 600; }
 .abk-addons { display: flex; flex-direction: column; gap: 8px; }
 .abk-addon {
