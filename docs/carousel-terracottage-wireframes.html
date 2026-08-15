@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TerraCottage Stays — Carousel Wireframes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#F2E9DA;
+    --cream-deep:#E8DCC8;
+    --terracotta:#AE5D20;
+    --clay:#7A3D12;
+    --ink:#2B211A;
+    --muted:#8A7A6A;
+    --serif:'Cormorant Garamond',Georgia,serif;
+    --sans:'Jost','Helvetica Neue',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#3a322b;font-family:var(--sans);color:var(--cream);padding:28px 16px 80px}
+
+  .shell{max-width:1180px;margin:0 auto}
+  h1.page{font-family:var(--serif);font-size:30px;font-weight:400;letter-spacing:.02em;margin-bottom:4px}
+  p.page-sub{font-size:13px;color:#b9ada0;margin-bottom:22px;line-height:1.6;max-width:640px}
+
+  .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:18px}
+  .btn{background:var(--terracotta);color:#fff;border:0;border-radius:4px;padding:9px 16px;font-family:var(--sans);font-size:13px;letter-spacing:.04em;cursor:pointer}
+  .btn.ghost{background:transparent;border:1px solid #6d6058;color:#cdc2b6}
+  .btn.ghost.on{border-color:var(--terracotta);color:#fff;background:rgba(174,93,32,.35)}
+  .btn:disabled{opacity:.35;cursor:default}
+  .count{font-size:12px;color:#b9ada0;letter-spacing:.08em;margin-left:6px}
+
+  .stage{display:flex;justify-content:center}
+  .slide{
+    width:1080px;height:1350px;flex:0 0 auto;position:relative;overflow:hidden;
+    background:var(--cream);color:var(--ink);
+    transform:scale(.42);transform-origin:top center;
+    margin-bottom:calc(-1350px * .58);
+  }
+  .slide.hide{display:none}
+
+  /* ---- slide interior system ---- */
+  .pad{position:absolute;inset:78px 84px 96px 84px;display:flex;flex-direction:column}
+  .eyebrow{font-family:var(--sans);font-size:19px;font-weight:400;letter-spacing:.34em;text-transform:uppercase;color:var(--terracotta)}
+  .rule{width:64px;height:1px;background:var(--terracotta);margin:26px 0}
+  .rule.wide{width:100%;background:#d8c9b2;margin:30px 0}
+  h2.big{font-family:var(--serif);font-weight:300;font-size:96px;line-height:1.04;letter-spacing:-.01em;color:var(--clay)}
+  h2.mid{font-family:var(--serif);font-weight:300;font-size:70px;line-height:1.1;color:var(--clay)}
+  h3.sm{font-family:var(--serif);font-weight:400;font-size:46px;line-height:1.2;color:var(--clay)}
+  p.body{font-family:var(--sans);font-weight:300;font-size:29px;line-height:1.62;color:#4a3d33;max-width:78%}
+  p.body.full{max-width:100%}
+  .note{font-family:var(--sans);font-size:21px;letter-spacing:.02em;color:var(--muted);font-weight:300}
+
+  .spacer{flex:1}
+  .foot{display:flex;justify-content:space-between;align-items:flex-end}
+  .wm{font-family:var(--sans);font-size:19px;letter-spacing:.3em;text-transform:uppercase;color:var(--muted)}
+  .pg{font-family:var(--serif);font-size:30px;color:#c3b09a}
+
+  /* arch photo placeholder = wireframe slot */
+  .arch{
+    border:2px dashed var(--terracotta);
+    border-radius:999px 999px 8px 8px;
+    display:flex;align-items:center;justify-content:center;text-align:center;
+    background:repeating-linear-gradient(45deg,rgba(174,93,32,.05) 0 12px,transparent 12px 24px);
+    padding:40px;
+  }
+  .arch span{font-family:var(--sans);font-size:23px;line-height:1.5;letter-spacing:.03em;color:var(--terracotta);font-weight:400;max-width:82%}
+  .arch small{display:block;font-size:19px;color:#a08straight;margin-top:10px}
+  .slot-label{font-family:var(--sans);font-size:19px;letter-spacing:.18em;text-transform:uppercase;color:var(--terracotta);margin-bottom:14px}
+
+  .band{background:var(--terracotta);color:var(--cream)}
+  .band h2.big,.band h2.mid,.band h3.sm{color:var(--cream)}
+  .band .eyebrow{color:#f0d6bd}
+  .band p.body{color:#f6e8da}
+  .band .rule{background:#f0d6bd}
+  .band .wm,.band .pg,.band .note{color:#e4c3a4}
+
+  /* price rows */
+  .prow{display:flex;justify-content:space-between;align-items:baseline;padding:26px 0;border-bottom:1px solid #ddcdb6}
+  .prow .lab{font-family:var(--sans);font-weight:300;font-size:30px;color:#4a3d33}
+  .prow .val{font-family:var(--serif);font-size:38px;color:var(--clay)}
+  .prow.total .lab,.prow.total .val{color:var(--terracotta)}
+  .prow.total{border-bottom:0;padding-top:34px}
+  .prow.total .val{font-size:52px}
+
+  .steps{display:flex;flex-direction:column;gap:34px;margin-top:10px}
+  .step{display:flex;gap:28px;align-items:flex-start}
+  .num{font-family:var(--serif);font-size:52px;line-height:1;color:#d3b795;min-width:64px}
+  .step-t{font-family:var(--serif);font-size:42px;color:var(--clay);line-height:1.15}
+  .step-d{font-family:var(--sans);font-weight:300;font-size:25px;line-height:1.55;color:#5b4c40;margin-top:8px}
+
+  .incl{font-family:var(--sans);font-weight:300;font-size:28px;line-height:2.0;color:#4a3d33}
+  .incl li{list-style:none;padding-left:34px;position:relative}
+  .incl li:before{content:'';position:absolute;left:0;top:.85em;width:16px;height:1px;background:var(--terracotta)}
+
+  .specs{background:#2f2822;border:1px solid #4b4038;border-radius:6px;padding:18px 20px;margin:26px 0 34px;font-size:12.5px;line-height:1.85;color:#c9bcae;max-width:900px}
+  .specs b{color:#e8dccd;font-weight:500}
+  .specs code{background:#241e19;padding:1px 6px;border-radius:3px;color:#e0a76c;font-size:12px}
+</style>
+</head>
+<body>
+<div class="shell">
+  <h1 class="page">TerraCottage Stays — carousel wireframes</h1>
+  <p class="page-sub">1080×1350 (4:5). Dashed arches are photo slots, each labelled with the exact shot to take — use this as the shot list. Replace with real images before publishing.</p>
+
+  <div class="specs">
+    <b>Design system:</b> cream <code>#F2E9DA</code> · terracotta <code>#AE5D20</code> · clay <code>#7A3D12</code> · ink <code>#2B211A</code> · muted <code>#8A7A6A</code><br>
+    <b>Type:</b> Cormorant Garamond (display, weight 300 — the restraint is the point) + Jost (labels/body, 300–400). Eyebrows are letterspaced small-caps at <code>.34em</code>.<br>
+    <b>Rules:</b> one idea per slide · no emoji · no drop shadows · ~78px outer padding minimum · prices stated plainly, never shouted · every slide carries the wordmark bottom-left.
+  </div>
+
+  <div class="bar">
+    <button class="btn ghost on" data-set="A">A · The setup menu (7)</button>
+    <button class="btn ghost" data-set="B">B · What ₹10,000 gets you (6)</button>
+    <button class="btn ghost" data-set="C">C · How to book (5)</button>
+  </div>
+  <div class="bar">
+    <button class="btn" id="prev">← Prev</button>
+    <button class="btn" id="next">Next →</button>
+    <span class="count" id="counter">A · 1 / 7</span>
+    <button class="btn" id="zip" style="margin-left:auto">Download set as ZIP</button>
+  </div>
+
+  <div class="stage" id="stage">
+
+    <!-- ============ SET A — THE SETUP MENU ============ -->
+    <div class="slide" data-set="A">
+      <div class="pad">
+        <div class="eyebrow">TerraCottage · Gurugram</div>
+        <div class="rule"></div>
+        <h2 class="big">The room is<br>only half<br>of it.</h2>
+        <div style="height:44px"></div>
+        <p class="body">Private cottage stays with a celebration setup built in, before you arrive.</p>
+        <div class="spacer"></div>
+        <div class="arch" style="height:300px">
+          <span>PHOTO — hero<br><small>Umber, full birthday setup, lights on, shot wide from the doorway. Bright exposure.</small></span>
+        </div>
+        <div style="height:40px"></div>
+        <div class="foot"><span class="wm">TerraCottage Stays</span><span class="pg">01</span></div>
+      </div>
+    </div>
+
+    <div class="slide" data-set="A">
+      <div class="pad">
+        <div class="eyebrow">Why we started this</div>
+        <div class="rule"></div>
+        <h2 class="mid">Booking a room<br>is easy.</h2>
+        <div style="height:30px"></div>
+        <h2 class="mid" style="color:var(--terracotta)">Making the night<br>feel like something<br>is not.</h2>
+        <div class="spacer"></div>
+        <p class="body full">So we stopped selling rooms, and started building the evening around the reason you came.</p>
+        <div style="height:50px"></div>
+        <div class="foot"><span class="wm">TerraCottage Stays</span><span class="pg">02</span></div>
+      </div>
+    </div>
+
+    <div class="slide" data-set="A">
+      <div class="pad">
+        <div class="slot-label">Tier one</div>
+        <h3 class="sm">Ochre</h3>
+        <div class="rule"></div>
+        <p class="body">Our cosier room. Warm-lit, intimate, built for two.</p>
+        <div style="height:34px"></div>
+        <div class="arch" style="height:430px">
+          <span>PHOTO — Ochre setup<br><small>Bed dressed, candles lit, decor up. Shot from corner at eye level, curtains open for daylight fill.</small></span>
+        </div>
+        <div class="spacer"></div>
+        <div class="prow total"><span class="lab">Stay + setup, from</span><span class="val">₹[X,XXX]</span></div>
+        <div class="foot"><span class="wm">TerraCottage Stays</span><span class="pg">03</span></div>
+      </div>
+    </div>
+
+    <div class="slide" data-set="A">
+      <div class="pad">
+        <div class="slot-label">Tier two</div>
+        <h3 class="sm">Umber</h3>
+        <div class="rule"></div>
+        <p class="body">The larger room. More space to decorate, more to photograph.</p>
+        <div style="height:34px"></div>
+        <div class="arch" style="height:430px">
+          <span>PHOTO — Umber setup<br><small>Full decor: drapes, balloon arrangement, name letters, cake table. The most photogenic frame you have.</small></span>
+        </div>
+        <div class="spacer"></div>
+        <div class="prow total"><span class="lab">Stay + setup, from</span><span class="val">₹[XX,XXX]</span></div>
+        <div class="foot"><span class="wm">TerraCottage Stays</span><span class="pg">04</span></div>
+      </div>
+    </div>
+
+    <div class="slide band" data-set="A">
+      <div class="pad">
+        <div class="eyebrow">The whole cottage</div>
+        <div class="rule"></div>
+        <h2 class="mid">Book both rooms<br>and nobody else<br>is here.</h2>
+        <div style="height:40px"></div>
+        <p class="body">For group birthdays, family celebrations, and the occasions that need a living room too.</p>
+        <div class="spacer"></div>
+        <div class="arch" style="height:320px;border-color:#f0d6bd">
+          <span style="color:#f6e8da">PHOTO — shared space<br><small style="color:#e4c3a4">Living area dressed for a group, long table, warm lamps. Wide shot.</small></span>
+        </div>
+        <div style="height:40px"></div>
+        <div class="foot"><span class="wm">TerraCottage Stays</span><span class="pg">05</span></div>
+      </div>
+    </div>
+
+    <div class="slide" data-set="A">
+      <div class="pad">
+        <div class="eyebrow">Every setup includes</div>
+        <div class="rule"></div>
+        <ul class="incl">
+          <li>Decor built fresh in-room, same day</li>
+          <li>Candles, florals and warm lighting</li>
+          <li>[Cake / personalisation — confirm]</li>
+          <li>Setup and clearing, both handled</li>
+          <li>Private check-in for the occasion</li>
+        </ul>
+        <div class="spacer"></div>
+        <p class="note">Add-ons available on request. Nothing is a surprise at checkout.</p>
+        <div style="height:26px"></div>
+        <div class="foot"><span class="wm">TerraCottage Stays</span><span class="pg">06</span></div>
+      </div>
+    </div>
+
+    <div class="slide band" data-set="A">
+      <div class="pad">
+        <div class="eyebrow">Dates open now</div>
+        <div class="rule"></div>
+        <h2 class="big">Tell us<br>the occasion.</h2>
+        <div style="height:40px"></div>
+        <p class="body">We will send the full setup menu and hold your date.</p>
+        <div class="spacer"></div>
+        <div class="rule wide" style="background:#c98b52"></div>
+        <h3 class="sm" style="color:var(--cream)">DM &nbsp;BIRTHDAY</h3>
+        <div style="height:14px"></div>
+        <p class="note">or tap the WhatsApp link in bio</p>
+        <div style="height:40px"></div>
+        <div class="foot"><span class="wm">TerraCottage Stays</span><span class="pg">07</span></div>
+      </div>
+    </div>
+
+    <!-- ============ SET B — WHAT ₹10,000 GETS YOU ============ -->
+    <div class="slide hide" data-set="B">
+      <div class="pad">
+        <div class="eyebrow">No surprises</div>
+        <div class="rule"></div>
+        <h2 class="big">What<br>₹10,000<br>actually<br>gets you.</h2>
+        <div class="spacer"></div>
+        <p class="body">Most places make you ask. We would rather you knew before you message.</p>
+        <div style="height:50px"></div>
+        <div class="foot"><span class="wm">TerraCottage Stays</span><span class="pg">01</span></div>
+      </div>
+    </div>
+
+    <div class="slide" data-set="B" style="display:none">
+      <div class="pad">
+        <div class="slot-label">Line one</div>
+        <h3 class="sm">The room, all night</h3>
+        <div class="rule"></div>
+        <div class="arch" style="height:440px">
+          <span>PHOTO — Ochre, undressed<br><small>Clean room, made bed, daylight. Shows what you are paying for before decor.</small></span>
+        </div>
+        <div class="spacer"></div>
+        <div class="prow"><span class="lab">Ochre, one night</span><span class="val">₹[X,XXX]</span></div>
+        <div class="foot"><span class="wm">TerraCottage Stays</span><span class="pg">02</span></div>
+      </div>
+    </div>
+
+    <div class="slide" data-set="B" style="display:none">
+      <div class="pad">
+        <div class="slot-label">Line two</div>
+        <h3 class="sm">The setup</h3>
+        <div class="rule"></div>
+        <div class="arch" style="height:440px">
+          <span>PHOTO — same room, dressed<br><small>Identical angle to the previous slide, now with full decor. The match is the whole point.</small></span>
+        </div>
+        <div class="spacer"></div>
+        <div class="prow"><span class="lab">Decor, florals, lighting</span><span class="val">₹[X,XXX]</span></div>
+        <div class="foot"><span class="wm">TerraCottage Stays</span><span class="pg">03</span></div>
+      </div>
+    </div>
+
+    <div class="slide" data-set="B" style="display:none">
+      <div class="pad">
+        <div class="slot-label">Line three</div>
+        <h3 class="sm">The extras</h3>
+        <div class="rule"></div>
+        <p class="body">Cake, personalisation, and anything you want us to quietly arrange.</p>
+        <div style="height:30px"></div>
+        <div class="arch" style="height:360px">
+          <span>PHOTO — detail<br><small>Cake and name letters, close and shallow. Candlelight, no flash.</small></span>
+        </div>
+        <div class="spacer"></div>
+        <div class="prow"><span class="lab">Add-ons</span><span class="val">from ₹[XXX]</span></div>
+        <div class="foot"><span class="wm">TerraCottage Stays</span><span class="pg">04</span></div>
+      </div>
+    </div>
+
+    <div class="slide band" data-set="B" style="display:none">
+      <div class="pad">
+        <div class="eyebrow">The full number</div>
+        <div class="rule"></div>
+        <div style="height:20px"></div>
+        <div class="prow" style="border-color:#c98b52"><span class="lab" style="color:#f6e8da">Room</span><span class="val" style="color:var(--cream)">₹[X,XXX]</span></div>
+        <div class="prow" style="border-color:#c98b52"><span class="lab" style="color:#f6e8da">Setup</span><span class="val" style="color:var(--cream)">₹[X,XXX]</span></div>
+        <div class="prow" style="border-color:#c98b52"><span class="lab" style="color:#f6e8da">Extras</span><span class="val" style="color:var(--cream)">₹[XXX]</span></div>
+        <div class="prow total"><span class="lab" style="color:var(--cream)">Total</span><span class="val" style="color:var(--cream)">₹10,000</span></div>
+        <div class="spacer"></div>
+        <p class="body">₹3,000 holds the date. The rest at check-in.</p>
+        <div style="height:40px"></div>
+        <div class="foot"><span class="wm">TerraCottage Stays</span><span class="pg">05</span></div>
+      </div>
+    </div>
+
+    <div class="slide" data-set="B" style="display:none">
+      <div class="pad">
+        <div class="eyebrow">Umber premium</div>
+        <div class="rule"></div>
+        <h2 class="mid">The larger room,<br>the fuller setup,<br>₹16,000 to ₹18,000.</h2>
+        <div style="height:40px"></div>
+        <p class="body">Same transparency. We will break it down the same way in your DM.</p>
+        <div class="spacer"></div>
+        <div class="rule wide"></div>
+        <h3 class="sm" style="color:var(--terracotta)">DM &nbsp;BIRTHDAY</h3>
+        <div style="height:40px"></div>
+        <div class="foot"><span class="wm">TerraCottage Stays</span><span class="pg">06</span></div>
+      </div>
+    </div>
+
+    <!-- ============ SET C — HOW TO BOOK ============ -->
+    <div class="slide hide" data-set="C">
+      <div class="pad">
+        <div class="eyebrow">Four steps</div>
+        <div class="rule"></div>
+        <h2 class="big">How to<br>book<br>direct.</h2>
+        <div class="spacer"></div>
+        <p class="body">No app, no waiting on a request. One message and the date is yours.</p>
+        <div style="height:50px"></div>
+        <div class="foot"><span class="wm">TerraCottage Stays</span><span class="pg">01</span></div>
+      </div>
+    </div>
+
+    <div class="slide" data-set="C" style="display:none">
+      <div class="pad">
+        <div class="eyebrow">The whole process</div>
+        <div class="rule"></div>
+        <div class="steps">
+          <div class="step"><div class="num">01</div><div><div class="step-t">Message us</div><div class="step-d">Tell us the occasion and the date. WhatsApp link in bio.</div></div></div>
+          <div class="step"><div class="num">02</div><div><div class="step-t">Pick your setup</div><div class="step-d">We send the menu with photos, and what each tier includes.</div></div></div>
+          <div class="step"><div class="num">03</div><div><div class="step-t">₹3,000 holds it</div><div class="step-d">Adjusted into your total. UPI or a payment link.</div></div></div>
+          <div class="step"><div class="num">04</div><div><div class="step-t">Arrive to it done</div><div class="step-d">Built in-room before check-in. You walk into the finished thing.</div></div></div>
+        </div>
+        <div class="spacer"></div>
+        <div class="foot"><span class="wm">TerraCottage Stays</span><span class="pg">02</span></div>
+      </div>
+    </div>
+
+    <div class="slide" data-set="C" style="display:none">
+      <div class="pad">
+        <div class="eyebrow">Three hours before you arrive</div>
+        <div class="rule"></div>
+        <div class="arch" style="height:600px">
+          <span>PHOTO — the build<br><small>Team mid-setup: steaming linen, trimming florals, testing lights. Hands and motion, faces optional.</small></span>
+        </div>
+        <div class="spacer"></div>
+        <p class="body full">Nothing is a prop drop. Every setup is built fresh, for your date only.</p>
+        <div style="height:40px"></div>
+        <div class="foot"><span class="wm">TerraCottage Stays</span><span class="pg">03</span></div>
+      </div>
+    </div>
+
+    <div class="slide" data-set="C" style="display:none">
+      <div class="pad">
+        <div class="eyebrow">Who we are</div>
+        <div class="rule"></div>
+        <h2 class="mid">By the team<br>behind<br>The Picnic Stories.</h2>
+        <div style="height:36px"></div>
+        <p class="body">[NN] celebrations set up across Gurugram. Same hands, now with somewhere to stay the night.</p>
+        <div class="spacer"></div>
+        <p class="note">Verify the number before publishing, or cut the line.</p>
+        <div style="height:26px"></div>
+        <div class="foot"><span class="wm">TerraCottage Stays</span><span class="pg">04</span></div>
+      </div>
+    </div>
+
+    <div class="slide band" data-set="C" style="display:none">
+      <div class="pad">
+        <div class="eyebrow">Gurugram</div>
+        <div class="rule"></div>
+        <h2 class="big">Which date<br>are you<br>thinking?</h2>
+        <div class="spacer"></div>
+        <div class="rule wide" style="background:#c98b52"></div>
+        <h3 class="sm" style="color:var(--cream)">WhatsApp link in bio</h3>
+        <div style="height:14px"></div>
+        <p class="note">Two rooms only. Weekends go first.</p>
+        <div style="height:40px"></div>
+        <div class="foot"><span class="wm">TerraCottage Stays</span><span class="pg">05</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<script>
+(function(){
+  var all = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var set = 'A', idx = 0;
+
+  function inSet(){ return all.filter(function(s){ return s.dataset.set === set; }); }
+  function render(){
+    all.forEach(function(s){ s.style.display='none'; });
+    var list = inSet();
+    if(idx >= list.length) idx = list.length - 1;
+    if(idx < 0) idx = 0;
+    list[idx].style.display = 'block';
+    document.getElementById('counter').textContent = set + ' · ' + (idx+1) + ' / ' + list.length;
+    document.getElementById('prev').disabled = idx === 0;
+    document.getElementById('next').disabled = idx === list.length - 1;
+  }
+  document.getElementById('prev').onclick = function(){ idx--; render(); };
+  document.getElementById('next').onclick = function(){ idx++; render(); };
+  document.querySelectorAll('[data-set]').forEach(function(b){
+    if(b.tagName !== 'BUTTON') return;
+    b.onclick = function(){
+      document.querySelectorAll('button[data-set]').forEach(function(x){ x.classList.remove('on'); });
+      b.classList.add('on');
+      set = b.dataset.set; idx = 0; render();
+    };
+  });
+
+  document.getElementById('zip').onclick = async function(){
+    var btn = this, list = inSet(), zip = new JSZip();
+    btn.disabled = true; btn.textContent = 'Rendering…';
+    var prevDisplay = all.map(function(s){ return s.style.display; });
+    for(var i=0;i<list.length;i++){
+      btn.textContent = 'Rendering ' + (i+1) + '/' + list.length + '…';
+      all.forEach(function(s){ s.style.display='none'; });
+      var el = list[i];
+      el.style.display = 'block';
+      el.style.transform = 'none';
+      el.style.marginBottom = '0';
+      var canvas = await html2canvas(el, {width:1080, height:1350, scale:1, backgroundColor:null, useCORS:true});
+      el.style.transform = '';
+      el.style.marginBottom = '';
+      var data = canvas.toDataURL('image/png').split(',')[1];
+      zip.file('terracottage-' + set + '-' + String(i+1).padStart(2,'0') + '.png', data, {base64:true});
+    }
+    all.forEach(function(s,i){ s.style.display = prevDisplay[i]; });
+    render();
+    var blob = await zip.generateAsync({type:'blob'});
+    saveAs(blob, 'terracottage-carousel-' + set + '.zip');
+    btn.disabled = false; btn.textContent = 'Download set as ZIP';
+  };
+
+  render();
+})();
+</script>
+</body>
+</html>

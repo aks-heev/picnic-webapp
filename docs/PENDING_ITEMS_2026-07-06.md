@@ -32,10 +32,10 @@ Priority key: **P0** = live-impact / blocking, do now · **P1** = high impact, t
 - ✅ `fetchpriority="high"` + `decoding="async"` on the venue hero (app.js) and homepage hero (index.html); per-venue hero `<link rel="preload">` injected into each prerendered page's head.
 - ⬜ Still open (needs a decision): serve **resized** images — Supabase Storage image transformation requires the Pro-plan feature (confirm it's enabled before building URLs around it) or an alternative (upload-time resize / Vercel image opt). Also confirm webp variants are referenced, not the 6–8MB PNGs. Re-measure mobile venue LCP after.
 
-### 6. Decide + finish Phase 0 package pricing (bases and overage)
+### 6. Phase 0 package pricing (bases and overage) — ✅ CLOSED 2026-07-08, current state confirmed intentional
 - **Source:** `SPEC_packages_mvp.md` Phase 0, `SEO_GROWTH_PLAN.md` Phase 4
-- **Verified partially done — docs are stale here:** all 6 cafes now have `free_guests_upto=6` (flat-to-6 is live everywhere). But the −₹1,000 food-removal base cut was applied **only to Beige** (8900); Sunroom/Castle Valley/Om Niwas/Once Upon A Time/House of Amer still carry their original bases, and `overage_per_person` is 2000/2500 vs the plan's 1000.
-- **Action:** decision needed — either confirm current bases/overages as intentional (then close the plan item) or enter the reduced bases per the runbook. This also sets the honest "From ₹X" anchors on /packages and the homepage.
+- All 6 cafes have `free_guests_upto=6` (flat-to-6 live everywhere). The −₹1,000 food-removal base cut applied **only to Beige** (8900); Sunroom/Castle Valley/Om Niwas/Once Upon A Time/House of Amer keep their original bases. `overage_per_person` is 2000/2500, not the original plan's 1000.
+- **Decision (user, 2026-07-08): this is the real intended pricing, not a gap.** No DB change. `SPEC_packages_mvp.md` Phase 0's original bases/overage table is superseded by live pricing — treat this doc's numbers, not the spec's, as current.
 
 ### 7. Verify email deliverability end to end
 - **Source:** `NOTIFICATIONS_PLAN.md`, product diagnostic RC-2
@@ -127,7 +127,7 @@ Verified against deployed functions / live code; status headers added to each do
 | `SPEC_razorpay_webhook_and_admin_payment_status.md` | "Draft / not started" | `razorpay-webhook` deployed (v4); `create-order` v10 / `verify-payment` v8 |
 | `PAYMENT_SECURITY_FIX_PLAN.md` | Layers drafted, not deployed | `compute_booking_advance` live in DB; patched functions deployed; sender fixed |
 | `ICAL_SYNC_PLAN.md` "Remaining" list | Cron/listing wiring pending | All live (cron running, listings wired, sync at v10/v11) |
-| `SPEC_packages_mvp.md` Phase 0 table | 5 venues "pending" flat pricing | All 6 have `free_guests_upto=6`; only bases/overage differ from plan (see item 6) |
+| `SPEC_packages_mvp.md` Phase 0 table | 5 venues "pending" flat pricing | All 6 have `free_guests_upto=6`; Beige-only base cut + 2000/2500 overage confirmed intentional 2026-07-08 (item 6, closed) |
 | `SEO_GROWTH_PLAN.md` "PostHog dead in prod" | 0 events/30d | PostHog live (web vitals + packages events verified landing) |
 
 ---

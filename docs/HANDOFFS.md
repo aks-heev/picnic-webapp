@@ -6,6 +6,54 @@ Full, verbatim session-handoff log, moved out of `CLAUDE.md` on 2026-07-18 so th
 
 ---
 
+## Session Handoff — 2026-08-11 (Airbnb↔DB reconcile: ₹84,502.81 / 9 missing July reservations found and backfilled as ids 81–89; 402 outage reported still live at write time — see correction below; git block since run as `afec394`)
+
+The 2026-08-04 entry (🔴 Supabase 402 outage, ₹42,130 of collections, earnings review) is below. Read it for the outage's original scope.
+
+**SHIPPED-verified (live-probed 2026-08-10/11)**
+
+- **The gap**: a manual reconcile of the Airbnb earnings CSV against `bookings` found **9 reservations / 39 nights / ₹84,502.81 of already-received payouts** — essentially all of July — that had **never been entered into `bookings`**. The admin booking form worked the whole time; nothing ever *told* Aksheev the reservations existed. The Google Sheet had the guest names; the DB did not. Root cause is the absence of a reconciliation loop, not a capture-tool gap.
+- **All 9 backfilled — ids 81–89** (id range re-queried and confirmed live 2026-08-11): 81 Jagmeet Singh `HMSFQWTSB2`, 82 Deepak Kumar `HM4MBMERZ2`, 83 S M Hamza `HMBYT89HRN`, 84 Arushi `HM24QNCBZ8`, 85 Neeleshwar Rathore `HMF2S449TW`, 86 Amy Bomjen `HMYSNH229H`, 87 Upasna Kanwar `HM3ZBYWBZR`, 88 Tushar Kanchan `HMH4X8EWTR`, 89 Priyadarshini Choudhary `HM4H5DPJMS`. All `confirmed=true`, `advance_amount = total_amount`.
+- **Plus two inserted directly** at the user's instruction: **#79** Priyadarshini `HM92A9DAMT` (venue 16, 2026-08-12→08-14, ₹3,576) and **#80** Pankaj `HMNMNEPKEJ` (venue 16, 2026-08-14→08-15, ₹2,463.16), each with its `venue_availability` fanout rows (Ochre `admin` + Sienna `parent`).
+- **Convention for Airbnb rows**: `mobile_number = 'AIRBNB-<confirmation code>'`, `payment_status` left at `'pending'` (§6 — `'paid'` means Razorpay-verified only), `guest_count` a placeholder **2** on ids 81–89 (the CSV carries no guest count).
+- **Reconciled totals, verified 2026-08-11**: **13 Airbnb-coded confirmed rows / 45 nights / ₹95,905.97**, of which the 10 appearing in the Jan–Aug CSV sum to exactly **₹88,078.81** — tying to the earnings-report payout total. The ₹7,827.16 remainder is the three not yet paid out (Nikhil ₹1,788, #79 ₹3,576, #80 ₹2,463.16). **Zero overlapping confirmed stays** (self-join on `daterange && daterange` empty).
+- **Zero test residue.** All three `bookings` triggers were disabled for the insert and verified back to `tgenabled='O'` afterwards.
+- 🔴 **Occupancy was understated. 45% → ~72%** for 2026-07-01→08-10, because the 9 July reservations were missing. **The 2026-08-04 earnings review's 68%-break-even conclusion rests on the wrong input and must be re-derived.**
+- **The Airbnb host account email was `singhalaa25@gmail.com` until 2026-08-10** (confirmed from a forwarded Airbnb email, not inferred). That is why the daily email detector was silently blind — there is no Airbnb mail history in `aksheevs@` before that date.
+- 🔴 **Airbnb fee structure changed.** The split ≈3% host + ≈14% guest fee is replaced by a single **15.5% host fee**. Confirmed on this account by booking date: **3% for bookings ≤2026-07-07, 15.5% for ≥2026-07-10**. Global cutover **2026-09-15**. **Nightly prices must be raised before then or payouts drop.**
+- **CSV parsing rule (non-obvious)**: the earnings CSV is *not* one row per reservation. Each reservation is several rows sharing a `Confirmation Code` (a `Reservation` row, usually `Host-Remitted Tax`, and a negative `Tax Withholding for India Income`). Separate `Payout` rows have a BLANK confirmation code and cannot be joined. **Per-reservation payout = SUM of the `Amount` column across all rows sharing the code** — that sum is what ties to the bank and is what `total_amount` stores.
+- **Parent/child availability is one-directional BY DESIGN.** Read from `pg_get_functiondef`: `admin_add_manual_booking` and `replace_parent_ical_blocks` both propagate **parent → children only** (`where ch.parent_venue_id = v_venue_id`). Child → parent is deliberately delegated to **Airbnb listing linking**, which Aksheev has configured on the three TerraCottage listings. 🔴 **Never flag "a child is booked but Sienna has no block row" as a bug, and never infer Airbnb's live calendar from `venue_availability`.**
+
+**built-unverified**
+
+- Scheduled task **`airbnb-monthly-reconcile`** (cron `0 10 1 * *`, next 2026-09-01, read-only — proposes INSERT SQL, never writes). **Never executed once**; its tool permissions are unapproved, so the first real run may stall. Hard rule baked in: **no fresh CSV is a FAILURE state, never a clean state.**
+- Corrected ~72% occupancy — recomputed, not yet published back into the earnings review.
+
+**NOT-done / carried forward (as of this entry's original write — see correction below)**
+
+- 🔴 **Supabase 402 egress restriction — reported still live as of 2026-08-13.** All email dead, iCal stale since 2026-08-02. Verify with `net._http_response.status_code`, **not** `cron.job_run_details` (which reports `succeeded` for a request that only got queued).
+- 🔴 Raise Airbnb nightly prices before **2026-09-15**.
+- `guest_count` correction on ids 81–89. Earnings review re-run at 72%. Booking **#61**'s year-`0026` date. Jaipur workbook stale since 2026-06-24.
+- Commit **`bb2a81f`** (stay per-night pricing) is still unreviewed against §7 by any session.
+
+**Two claims retracted this session — do not let them resurface**: (1) a "₹9,200 loss from the fee change" — invalid, it compared a 3%-era booking to a 15.5%-era one; compare **payout ÷ nights** instead. (2) a "live Sienna double-booking exposure" — wrong, the listings are linked on Airbnb.
+
+**UNCOMMITTED (verified 2026-08-11 by sha256-comparing each working-tree file against `git show HEAD:<file>`; HEAD is `644a596`)**: **`scripts/google-sheet-sync.gs`** (still uncommitted since 2026-07-27 — the git block has now been handed over twice and run zero times), **`CLAUDE.md`**, **`docs/HANDOFFS.md`**. No code changed this session: `app.js`, `style.css`, `index.html`, `admin.html`, `supabase/` untouched. `Airbnb/earnings/airbnb_07_2026-08_2026.csv` sits inside the pre-existing untracked `Airbnb/` folder.
+
+```
+git add scripts/google-sheet-sync.gs CLAUDE.md docs/HANDOFFS.md
+git commit -m "sheet sync: date-based Completed booking status; handoffs for 2026-08-04 and 2026-08-11 (Airbnb reconcile)"
+git push
+```
+
+🔴 **Correction, 2026-08-15 (both points below verified live that day):**
+1. **The git block above WAS eventually run.** `git log` on 2026-08-15 shows HEAD is now **`afec394`** — *"admin_edit_booking: only conflict-check newly-occupied nights (fixes self-blocking from Airbnb ical echo); sheet sync Completed status; handoffs"* — one commit ahead of `644a596`. That single commit folds in the exact git-add set listed above (confirmed live: `scripts/google-sheet-sync.gs`, `CLAUDE.md`, `docs/HANDOFFS.md` are no longer in `git status`) **plus an undocumented additional fix to `admin_edit_booking`** (the conflict-check narrowing) that no prior handoff entry describes. Treat that RPC's current live definition, not this file, as ground truth for its behavior.
+2. **The 402 egress outage's status is unresolved as fact, not confirmed-cleared.** A live smoke test on 2026-08-15 (booking #96) got two `200` responses from `net._http_response` where earlier 402s were expected — a real, live-probed data point that the restriction may have lifted — but no exhaustive project-wide re-check was performed that session. Do not treat either "still down" or "cleared" as settled; probe `net._http_response.status_code` fresh before relying on it.
+
+CONTINUE FROM (historical, superseded by later entries — kept verbatim for the record): **User** — (1) 🔴 clear the Supabase egress restriction; (2) 🔴 raise Airbnb prices before 2026-09-15; (3) run the git block above; (4) paste `scripts/google-sheet-sync.gs` into BOTH workbooks' Apps Script editor and run `syncBookings` — a push does NOT ship Apps Script; (5) click "Run now" on `airbnb-monthly-reconcile` to pre-approve its tools; (6) confirm no Airbnb mail still routes to singhalaa25@; (7) correct `guest_count` on ids 81–89; (8) still open from 08-04 — BEIGE-006/007 cost columns, booking #61's date, Airbnb Phase 2. **Claude** — (a) verify the 402 via `net._http_response`, never `cron.job_run_details`; (b) review `bb2a81f`'s pricing change against §7 before trusting any stay price; (c) re-run the earnings review at ~72% occupancy; (d) run the Phase 0 cross-floor-echo query once syncs have resumed for ≥24h.
+
+---
+
 ## Session Handoff — 2026-08-04 (🔴 LIVE OUTAGE — Supabase project restricted, EVERY edge function 402: all email and both iCal directions dead since 2026-08-02 22:00. Plus: ₹42,130 of collections recorded, cake add-on on #65, earnings review rebuilt)
 
 Prior entries (2026-07-27a iCal, 2026-07-27b discount/sheet) are both below. Both workstreams are fully committed — HEAD was `3b7bf0d` at session start.
