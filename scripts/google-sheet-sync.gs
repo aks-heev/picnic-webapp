@@ -167,7 +167,7 @@ function buildRowValues(b, v, isStay, ad) {
       'Guests': b.guest_count || '',
       'Nightly Rate (₹)': (total != null && nights > 0) ? Math.round(total / nights) : '',
       'Advance / Prepaid (₹)': b.advance_amount || '',
-      'Booking Status': b.confirmed ? 'Confirmed' : 'Enquiry',
+      'Booking Status': bookingStatus(b),
       'Notes': b.special_requirements || ''
     });
   }
@@ -181,7 +181,7 @@ function buildRowValues(b, v, isStay, ad) {
     'Base Package (₹)': (total != null) ? (total - ad.sum + discount) : '',
     'Discount (₹)': discount ? discount : '',
     'Advance Received (₹)': b.advance_amount || '', 'Payment Ref': b.razorpay_payment_id || '',
-    'Booking Status': b.confirmed ? 'Confirmed' : 'Enquiry'
+    'Booking Status': bookingStatus(b)
   });
 }
 
@@ -249,5 +249,17 @@ function payStatus(b) {
   const total = Number(b && b.total_amount) || 0;
   const adv   = Number(b && b.advance_amount) || 0;
   return (total > 0 && adv >= total) ? 'Paid' : 'Advance Paid';
+}
+// Booking Status the sheet should show. Enquiry until confirmed; once confirmed, a
+// PAST event auto-reads Completed (picnic: the day is over; stay: guest has checked
+// out), otherwise Confirmed. Date-based so it self-maintains on every sync — no manual
+// re-marking. NOTE: the DB has no Cancelled state, so a cancelled booking must be
+// un-confirmed (-> Enquiry) or removed; it can't be represented as "Cancelled" here.
+function bookingStatus(b) {
+  if (!b.confirmed) return 'Enquiry';
+  var eventEnd = b.checkout_date || b.preferred_date;   // stay ends at checkout; picnic is the day
+  var todayIso = new Date().toISOString().slice(0, 10);
+  if (eventEnd && String(eventEnd).slice(0, 10) < todayIso) return 'Completed';
+  return 'Confirmed';
 }
 function capit(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : ''; }
