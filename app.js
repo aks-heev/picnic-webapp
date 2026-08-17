@@ -5501,6 +5501,9 @@ async function loadQueries() {
       .from('bookings')
       .select('*, venues(name, type, area, team_id)')
       .eq('confirmed', false)
+      // A cancelled booking has confirmed=false and would otherwise reappear here
+      // looking like a brand-new enquiry. It stays on the Bookings tab instead.
+      .or('booking_status.is.null,booking_status.neq.Cancelled')
       .order('created_at', { ascending: false })
 
     if (error) throw error
@@ -5527,8 +5530,12 @@ async function loadBookings() {
     // Fetch confirmed bookings, including venue info via FK join
     const { data: bookings, error: bErr } = await supabase
       .from('bookings')
-      .select('*, venues(name, type, area, team_id)')
-      .eq('confirmed', true)
+      // booking_costs is admin-only by RLS; for any other signed-in user the
+      // embed simply comes back empty rather than erroring.
+      .select('*, venues(name, type, area, team_id), booking_costs(closed_at, closed_by, close_notes, total_cost, quoted_total_amount, cost_food, cost_fruits, cost_flowers, cost_decor_other, cost_vendor_photo)')
+      // Cancelling clears confirmed, so a cancelled booking would drop off both
+      // tabs. Keep it visible here, greyed out, instead of losing the record.
+      .or('confirmed.eq.true,booking_status.eq.Cancelled')
       .order('created_at', { ascending: false })
     
     if (bErr) throw bErr
@@ -6168,20 +6175,33 @@ function renderBookings(bookings) {
     const timeAgo = formatTimeAgo(new Date(booking.created_at))
     const advanceFormatted = Number(booking.advance_amount || 0).toLocaleString('en-IN')
 
+    // Close state. A booking_costs row existing IS the "has been closed" signal;
+    // there is no closed_at column on bookings by design (see the phase 1 migration).
+    const bCost       = bclCostsOf(booking)
+    const isCancelled = booking.booking_status === 'Cancelled'
+    const isClosed    = !isCancelled && !!bCost
+    const statusMod   = isCancelled ? 'cancelled' : isClosed ? 'closed' : 'confirmed'
+    const statusLabel = isCancelled ? 'Cancelled'  : isClosed ? 'Closed' : 'Confirmed'
+    const closeLabel  = bCost ? 'Edit close' : 'Close booking'
+
     return `
-    <div class="adm-card adm-card--booking" data-id="${escapeHtml(booking.id)}">
+    <div class="adm-card adm-card--booking${isCancelled ? ' adm-card--cancelled' : ''}" data-id="${escapeHtml(booking.id)}">
       <div class="adm-card-header">
         <div class="adm-card-header-name">
-          <span class="adm-status-dot adm-status-dot--confirmed"></span>
+          <span class="adm-status-dot adm-status-dot--${statusMod}"></span>
           <span class="adm-name">${escapeHtml(booking.full_name)}</span>
         </div>
         <div class="adm-card-header-meta">
-          <span class="adm-badge adm-badge--confirmed">Confirmed</span>
+          <span class="adm-badge adm-badge--${statusMod}">${statusLabel}</span>
           ${paymentBadgeHtml(booking)}
           <span class="adm-amount-badge">₹${advanceFormatted} paid</span>
           <span class="adm-timestamp" title="${new Date(booking.created_at).toLocaleString()}">${timeAgo}</span>
           <button type="button" class="adm-edit-btn" title="Edit booking" aria-label="Edit booking" onclick="abkStartEdit(${booking.id})" style="background:none;border:none;cursor:pointer;color:#c4607a;padding:2px 4px;display:inline-flex;align-items:center;">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
+          <button type="button" class="bcl-open-btn${bCost ? ' bcl-open-btn--done' : ''}" data-booking-id="${escapeHtml(booking.id)}" onclick="bclOpen(${booking.id})" title="${escapeHtml(closeLabel)}">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            ${escapeHtml(closeLabel)}
           </button>
         </div>
       </div>
@@ -6209,6 +6229,7 @@ function renderBookings(bookings) {
       ${booking.booking_add_ons?.length ? `<div class="adm-booking-addons">${booking.booking_add_ons.map(a => `<span class="adm-addon-pill">${escapeHtml(a.name || 'Add-on')} <span class="adm-addon-pill-price">+₹${Number(a.price_at_booking || 0).toLocaleString('en-IN')}</span>${a.requires_confirmation ? ' <span class="adm-addon-pill-tag">on req.</span>' : ''}</span>`).join('')}</div>` : ''}
       ${airbnbHtml}
       ${ordersHtml}
+      ${bclSummaryHtml(booking, bCost)}
 
       <div class="adm-menu-section">
         <div class="adm-menu-header">
@@ -6239,6 +6260,246 @@ function renderBookings(bookings) {
     </div>`
   }).join('')
 }
+
+
+// ================================================================
+// CLOSE BOOKING (bcl)
+// ================================================================
+// Writes per-booking direct costs to booking_costs and stamps
+// bookings.booking_status, all through the admin_close_booking RPC — never a
+// direct table write. The RPC re-checks everything this form checks (admin
+// email, terminal status only, note-required-when-the-total-moves), so the
+// client-side validation below is purely to give a friendlier message than a
+// raw Postgres exception.
+//
+// Namespaced `bcl` on purpose: the Add Booking module (`abk`) has uncommitted
+// work in flight and these two must not share state or CSS.
+
+const BCL_COST_FIELDS = [
+  { key: 'cost_food',         label: 'Food'          },
+  { key: 'cost_fruits',       label: 'Fruits'        },
+  { key: 'cost_flowers',      label: 'Flowers'       },
+  { key: 'cost_decor_other',  label: 'Decor / other' },
+  { key: 'cost_vendor_photo', label: 'Vendor / photo'},
+]
+
+let bcl = { id: null, saving: false, origTotal: null }
+
+// PostgREST returns a one-to-one embed as an object, but older versions (and
+// some relationship shapes) hand back a single-element array. Accept both.
+function bclCostsOf(booking) {
+  const raw = booking && booking.booking_costs
+  if (!raw) return null
+  const row = Array.isArray(raw) ? (raw[0] || null) : raw
+  return row && row.closed_at ? row : (row || null)
+}
+
+function bclMoney(n) {
+  return '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })
+}
+
+// The card strip shown once a booking has been closed.
+function bclSummaryHtml(booking, cost) {
+  if (!cost) return ''
+  const total  = Number(booking.total_amount || 0)
+  const spend  = Number(cost.total_cost || 0)
+  const net    = total - spend
+  const margin = total > 0 ? (net / total) * 100 : null
+  const parts  = BCL_COST_FIELDS
+    .filter(f => cost[f.key] != null)
+    .map(f => `<span class="bcl-sum-item">${escapeHtml(f.label)} ${bclMoney(cost[f.key])}</span>`)
+    .join('')
+  const when = cost.closed_at
+    ? new Date(cost.closed_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+    : ''
+  return `
+    <div class="bcl-summary">
+      <div class="bcl-sum-head">
+        <span class="bcl-sum-title">Costs</span>
+        ${when ? `<span class="bcl-sum-when">closed ${escapeHtml(when)}</span>` : ''}
+      </div>
+      ${parts ? `<div class="bcl-sum-items">${parts}</div>` : '<div class="bcl-sum-items"><span class="bcl-sum-item">No costs entered</span></div>'}
+      <div class="bcl-sum-totals">
+        <span>Spend <b>${bclMoney(spend)}</b></span>
+        <span>Net <b class="${net < 0 ? 'bcl-neg' : 'bcl-pos'}">${bclMoney(net)}</b></span>
+        ${margin === null ? '' : `<span>Margin <b class="${net < 0 ? 'bcl-neg' : 'bcl-pos'}">${margin.toFixed(1)}%</b></span>`}
+      </div>
+      ${cost.close_notes ? `<div class="bcl-sum-note">${escapeHtml(cost.close_notes)}</div>` : ''}
+    </div>`
+}
+
+function bclOpen(id) {
+  if (!appState.session) return showToast('Admin login required', 'error')
+  const booking = (loadedBookings || []).find(x => String(x.id) === String(id))
+  if (!booking) return showToast('Booking not found — reload the tab', 'error')
+  document.getElementById('bcl-overlay')?.remove()
+
+  const cost        = bclCostsOf(booking)
+  const isCancelled = booking.booking_status === 'Cancelled'
+  const total       = booking.total_amount
+  bcl = { id: booking.id, saving: false, origTotal: total == null ? null : Number(total) }
+
+  // The event date drives a warning, not a gate: cancelling is something you do
+  // BEFORE the date, so locking the button until the date passes would put the
+  // Cancel path out of reach exactly when it is needed.
+  const eventDate = booking.checkout_date || booking.preferred_date
+  const isFuture  = eventDate ? (new Date(eventDate + 'T00:00:00') > new Date(new Date().toDateString())) : false
+
+  const costInputs = BCL_COST_FIELDS.map(f => `
+    <label class="bcl-field">
+      <span>${escapeHtml(f.label)}</span>
+      <input id="bcl-${escapeHtml(f.key)}" class="bcl-input" type="number" min="0" step="0.01" inputmode="decimal"
+             placeholder="—" value="${cost && cost[f.key] != null ? escapeHtml(String(cost[f.key])) : ''}" oninput="bclRecalc()">
+    </label>`).join('')
+
+  const quoted = cost && cost.quoted_total_amount != null ? Number(cost.quoted_total_amount) : null
+
+  const overlay = document.createElement('div')
+  overlay.className = 'bcl-overlay'
+  overlay.id = 'bcl-overlay'
+  overlay.innerHTML = `
+    <div class="bcl-modal" role="dialog" aria-modal="true" aria-label="Close booking">
+      <div class="bcl-head">
+        <h3>${cost ? 'Edit close' : 'Close booking'} · ${escapeHtml(booking.full_name || '')}</h3>
+        <button class="bcl-x" type="button" onclick="bclCloseModal()" aria-label="Close">×</button>
+      </div>
+      <div class="bcl-body">
+        <div class="bcl-meta">
+          #${escapeHtml(String(booking.id))}
+          ${eventDate ? ` · ${escapeHtml(new Date(eventDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }))}` : ''}
+          ${booking.venues?.name ? ` · ${escapeHtml(booking.venues.name)}` : ''}
+        </div>
+        ${isFuture ? '<div class="bcl-warn">This event hasn’t happened yet. Closing it now records final costs for a booking that is still upcoming — pick <b>Cancelled</b> if that’s what you meant.</div>' : ''}
+
+        <div class="bcl-label-row">Direct costs (₹)</div>
+        <div class="bcl-grid">${costInputs}</div>
+
+        <div class="bcl-live">
+          <span>Spend <b id="bcl-live-spend">₹0</b></span>
+          <span>Net <b id="bcl-live-net">₹0</b></span>
+          <span>Margin <b id="bcl-live-margin">—</b></span>
+        </div>
+
+        <label class="bcl-field bcl-field--full">
+          <span>Booking total (₹)</span>
+          <input id="bcl-total" class="bcl-input" type="number" min="0" step="0.01" inputmode="decimal"
+                 value="${total == null ? '' : escapeHtml(String(total))}" oninput="bclRecalc()">
+        </label>
+        <p class="bcl-hint" id="bcl-total-hint">${
+          quoted != null
+            ? `Originally quoted ${bclMoney(quoted)}. Changing the total requires a note.`
+            : 'Prefilled from the booking. Changing it requires a note.'
+        }</p>
+
+        <label class="bcl-field bcl-field--full">
+          <span>Status</span>
+          <select id="bcl-status" class="bcl-input" onchange="bclRecalc()">
+            <option value="Closed"${isCancelled ? '' : ' selected'}${booking.confirmed ? '' : ' disabled'}>Closed — event done, books settled</option>
+            <option value="Cancelled"${isCancelled ? ' selected' : ''}>Cancelled — unconfirm and release the dates</option>
+          </select>
+        </label>
+        ${booking.confirmed ? '' : '<p class="bcl-hint">This booking isn’t confirmed, so it can only be recorded as Cancelled.</p>'}
+
+        <label class="bcl-field bcl-field--full">
+          <span>Notes <em id="bcl-note-req" class="bcl-req" style="display:none">required</em></span>
+          <textarea id="bcl-notes" class="bcl-input" rows="2" placeholder="Why the price changed, what went wrong, anything worth remembering">${escapeHtml((cost && cost.close_notes) || '')}</textarea>
+        </label>
+      </div>
+      <div class="bcl-foot">
+        <button class="bcl-cancel" type="button" onclick="bclCloseModal()">Cancel</button>
+        <button class="bcl-save" id="bcl-save-btn" type="button" onclick="bclSave()">${cost ? 'Save changes' : 'Save & close booking'}</button>
+      </div>
+    </div>`
+  overlay.addEventListener('click', e => { if (e.target === overlay) bclCloseModal() })
+  document.body.appendChild(overlay)
+  bclRecalc()
+}
+window.bclOpen = bclOpen
+
+function bclCloseModal() {
+  document.getElementById('bcl-overlay')?.remove()
+  bcl = { id: null, saving: false, origTotal: null }
+}
+window.bclCloseModal = bclCloseModal
+
+// Reads a numeric input. '' -> null (meaning NOT ENTERED, which is distinct
+// from 0 all the way down to the column).
+function bclNum(elId) {
+  const raw = document.getElementById(elId)?.value
+  if (raw == null) return null
+  const t = String(raw).trim()
+  if (t === '') return null
+  const n = Number(t)
+  return Number.isFinite(n) ? n : null
+}
+
+function bclRecalc() {
+  const spend  = BCL_COST_FIELDS.reduce((a, f) => a + (bclNum('bcl-' + f.key) || 0), 0)
+  const total  = bclNum('bcl-total')
+  const net    = (total || 0) - spend
+  const margin = total ? (net / total) * 100 : null
+
+  const set = (id, txt, cls) => {
+    const el = document.getElementById(id)
+    if (!el) return
+    el.textContent = txt
+    el.className = cls || ''
+  }
+  const sign = net < 0 ? 'bcl-neg' : 'bcl-pos'
+  set('bcl-live-spend', bclMoney(spend))
+  set('bcl-live-net', bclMoney(net), sign)
+  set('bcl-live-margin', margin === null ? '—' : margin.toFixed(1) + '%', margin === null ? '' : sign)
+
+  // Mirror the RPC's rule in the UI: total moved, or cancelling => note needed.
+  const status     = document.getElementById('bcl-status')?.value || 'Closed'
+  const moved      = bcl.origTotal !== (total == null ? null : Number(total))
+  const noteNeeded = moved || status === 'Cancelled'
+  const req = document.getElementById('bcl-note-req')
+  if (req) req.style.display = noteNeeded ? '' : 'none'
+  const saveBtn = document.getElementById('bcl-save-btn')
+  if (saveBtn) saveBtn.classList.toggle('bcl-save--danger', status === 'Cancelled')
+}
+window.bclRecalc = bclRecalc
+
+async function bclSave() {
+  if (!bcl.id || bcl.saving) return
+  if (!appState.session) return showToast('Admin login required', 'error')
+
+  const total  = bclNum('bcl-total')
+  const status = document.getElementById('bcl-status')?.value || 'Closed'
+  const notes  = (document.getElementById('bcl-notes')?.value || '').trim()
+
+  if (total == null) return showToast('Booking total is required', 'error')
+  if (total < 0)     return showToast('Total cannot be negative', 'error')
+  if (bcl.origTotal !== total && !notes) {
+    return showToast('Add a note explaining the price change', 'error')
+  }
+  if (status === 'Cancelled' && !notes) {
+    return showToast('Add a note explaining the cancellation', 'error')
+  }
+
+  const p_close = { total_amount: total, booking_status: status, close_notes: notes || null }
+  BCL_COST_FIELDS.forEach(f => { p_close[f.key] = bclNum('bcl-' + f.key) })
+
+  bcl.saving = true
+  const btn = document.getElementById('bcl-save-btn')
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…' }
+
+  try {
+    const { error } = await supabase.rpc('admin_close_booking', { p_booking_id: bcl.id, p_close })
+    if (error) throw error
+    bclCloseModal()
+    showToast(status === 'Cancelled' ? 'Booking cancelled' : 'Booking closed', 'success')
+    loadBookings()
+    loadQueries()
+  } catch (err) {
+    console.error('admin_close_booking failed:', err)
+    showToast(err.message || 'Failed to close booking', 'error')
+    bcl.saving = false
+    if (btn) { btn.disabled = false; btn.textContent = 'Save & close booking' }
+  }
+}
+window.bclSave = bclSave
 
 // Render menu links
 function renderMenuLinks(links) {

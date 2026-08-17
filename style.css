@@ -10320,3 +10320,157 @@ textarea.abk-input { resize: vertical; min-height: 60px; }
 @media (max-width: 480px) {
   .abk-row2 { flex-direction: column; gap: 16px; }
 }
+
+/* ═══════════════════════════════════════════════════════
+   ADMIN — Close Booking (bcl)
+   Namespaced away from the Add Booking module (abk).
+═══════════════════════════════════════════════════════ */
+
+/* --- card status: closed / cancelled ------------------------------- */
+.adm-status-dot--closed    { background: #6b8f71; }
+.adm-status-dot--cancelled { background: #a9a29c; }
+
+.adm-badge--closed {
+  background: #e8f1ea; color: #3f6b4a; border: 1px solid #cfe0d4;
+}
+.adm-badge--cancelled {
+  background: #f0eeec; color: #7a716b; border: 1px solid #ddd7d2;
+}
+
+.adm-card--cancelled { opacity: .68; }
+.adm-card--cancelled .adm-name { text-decoration: line-through; }
+
+/* --- the per-row button -------------------------------------------- */
+.bcl-open-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 999px;
+  font-family: inherit; font-size: 12px; font-weight: 600; line-height: 1.4;
+  cursor: pointer;
+  background: var(--boho-accent-rose, #c4607a);
+  border: 1.5px solid var(--boho-accent-rose, #c4607a);
+  color: #fff;
+}
+.bcl-open-btn:hover { filter: brightness(1.06); }
+.bcl-open-btn--done {
+  background: transparent;
+  border-color: var(--boho-border, #e3dcd5);
+  color: var(--boho-text-medium, #8a7864);
+}
+
+/* --- the summary strip on a closed card ---------------------------- */
+.bcl-summary {
+  margin-top: 10px; padding: 10px 12px;
+  background: #faf7f4;
+  border: 1px solid var(--boho-border, #e3dcd5);
+  border-radius: 10px;
+}
+.bcl-sum-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.bcl-sum-title {
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--boho-text-medium, #8a7864);
+}
+.bcl-sum-when { font-size: 11.5px; color: var(--boho-text-light, #a2958a); }
+.bcl-sum-items { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.bcl-sum-item {
+  font-size: 12px; padding: 2px 8px; border-radius: 999px;
+  background: #fff; border: 1px solid var(--boho-border, #e3dcd5);
+  color: var(--boho-text-medium, #8a7864);
+}
+.bcl-sum-totals { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12.5px; color: var(--boho-text-medium, #8a7864); }
+.bcl-sum-totals b { font-size: 13.5px; }
+.bcl-sum-note {
+  margin-top: 8px; padding-top: 8px; font-size: 12.5px; font-style: italic;
+  color: var(--boho-text-medium, #8a7864);
+  border-top: 1px dashed var(--boho-border, #e3dcd5);
+}
+.bcl-pos { color: #3f6b4a; }
+.bcl-neg { color: #b3453f; }
+
+/* --- the modal ------------------------------------------------------ */
+.bcl-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(40, 30, 26, 0.55);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 40px 16px; overflow-y: auto;
+  backdrop-filter: blur(2px);
+}
+.bcl-modal {
+  background: var(--boho-cream, #fff);
+  border-radius: 16px; width: 100%; max-width: 520px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  overflow: hidden;
+  animation: bclIn .18s ease;
+}
+@keyframes bclIn { from { opacity: 0; transform: translateY(-8px) } to { opacity: 1; transform: none } }
+
+.bcl-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid var(--boho-border, #e3dcd5);
+}
+.bcl-head h3 { margin: 0; font-size: 16px; color: var(--boho-text-dark, #3a2f2a); }
+.bcl-x {
+  border: none; background: transparent; cursor: pointer;
+  font-size: 24px; line-height: 1; color: var(--boho-text-medium, #8a7864); padding: 0 4px;
+}
+
+.bcl-body { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+.bcl-meta { font-size: 12.5px; color: var(--boho-text-medium, #8a7864); }
+
+.bcl-warn {
+  padding: 9px 12px; border-radius: 9px; font-size: 12.5px; line-height: 1.5;
+  background: #fdf6e7; border: 1px solid #ecd9ac; color: #7a5c1e;
+}
+
+.bcl-label-row {
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--boho-text-medium, #8a7864); margin-top: 2px;
+}
+
+.bcl-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+.bcl-field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 140px; }
+.bcl-field--full { flex-basis: 100%; }
+.bcl-field span { font-size: 12px; font-weight: 600; color: var(--boho-text-medium, #8a7864); }
+
+.bcl-input {
+  font-family: inherit; font-size: 14px; width: 100%;
+  padding: 8px 10px; border-radius: 8px;
+  border: 1.5px solid var(--boho-border, #e3dcd5);
+  background: #fff; color: var(--boho-text-dark, #3a2f2a);
+}
+.bcl-input:focus { outline: none; border-color: var(--boho-accent-rose, #c4607a); }
+textarea.bcl-input { resize: vertical; }
+
+.bcl-live {
+  display: flex; flex-wrap: wrap; gap: 18px;
+  padding: 9px 12px; border-radius: 9px;
+  background: #f4efe9; font-size: 12.5px; color: var(--boho-text-medium, #8a7864);
+}
+.bcl-live b { font-size: 14px; }
+
+.bcl-hint { margin: -6px 0 0; font-size: 12px; color: var(--boho-text-light, #a2958a); }
+.bcl-req {
+  font-style: normal; font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: #b3453f; margin-left: 6px;
+}
+
+.bcl-foot {
+  display: flex; justify-content: flex-end; gap: 10px;
+  padding: 14px 20px; border-top: 1px solid var(--boho-border, #e3dcd5);
+}
+.bcl-cancel, .bcl-save {
+  padding: 9px 18px; border-radius: 9px; font-size: 14px; font-weight: 600;
+  cursor: pointer; font-family: inherit;
+  border: 1.5px solid var(--boho-border, #e3dcd5);
+}
+.bcl-cancel { background: transparent; color: var(--boho-text-medium, #8a7864); }
+.bcl-save {
+  background: var(--boho-accent-rose, #c4607a);
+  border-color: var(--boho-accent-rose, #c4607a);
+  color: #fff;
+}
+.bcl-save--danger { background: #b3453f; border-color: #b3453f; }
+.bcl-save:disabled { opacity: .6; cursor: default; }
+
+@media (max-width: 480px) {
+  .bcl-field { flex-basis: 100%; }
+}
