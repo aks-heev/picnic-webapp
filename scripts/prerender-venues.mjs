@@ -1179,7 +1179,7 @@ async function main() {
     `\n</urlset>\n`
   writeFileSync(resolve(DIST, 'sitemap.xml'), sitemap)
   writeFileSync(resolve(DIST, 'robots.txt'),
-    `User-agent: *\nAllow: /\nDisallow: /admin\nSitemap: ${SITE}/sitemap.xml\n`)
+    `User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /staff\nSitemap: ${SITE}/sitemap.xml\n`)
 
   console.log(`[prerender] wrote ${seen.size} venue pages + ${cityPageCount} city pages + ${packagesPage ? 1 : 0} packages page + ${blogPosts.length} blog posts (+ index) + sitemap (${urls.length} urls)`)
 }

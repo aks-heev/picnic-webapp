@@ -10474,3 +10474,95 @@ textarea.bcl-input { resize: vertical; }
 @media (max-width: 480px) {
   .bcl-field { flex-basis: 100%; }
 }
+
+/* ================================================================
+   ADMIN — Staff Ops (stt)
+   ================================================================
+   Owner-side half of the token-gated /staff tool. Namespaced `stt` so it
+   cannot collide with the in-flight Close Booking (bcl) or Add Booking (abk)
+   work. Plan: docs/STAFF_STATUS_TOOL_PLAN.md — Phase 4. */
+
+.stt-muted { color: var(--boho-text-medium, #6b5c4c); font-size: 14px; }
+.stt-notstarted { font-style: italic; }
+
+.stt-card {
+  border: 1px solid var(--boho-border, #e8ddd0);
+  border-radius: 12px;
+  background: #fff;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+.stt-card-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 6px;
+}
+
+.stt-badge {
+  font-size: 12px; font-weight: 600;
+  padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+}
+.stt-badge--wait { background: #fdf6e3; border: 1px solid #eddfb8; color: #8a6d1f; }
+.stt-badge--done { background: #eef2e9; border: 1px solid #556343; color: #556343; }
+
+.stt-money {
+  font-size: 14px;
+  color: var(--boho-text-medium, #6b5c4c);
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--boho-border, #e8ddd0);
+  margin-bottom: 10px;
+}
+
+.stt-timeline { list-style: none; margin: 0; padding: 0; }
+.stt-timeline li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px; align-items: baseline;
+  font-size: 14px; padding: 3px 0;
+}
+.stt-tick { color: #556343; font-weight: 600; }
+.stt-when { color: #9c8b7d; font-size: 12px; white-space: nowrap; }
+.stt-note { grid-column: 2 / -1; color: #8c3f56; font-size: 13px; }
+
+.stt-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.stt-chip {
+  font-size: 12px; padding: 3px 10px; border-radius: 999px;
+  background: #f7f1ea; border: 1px solid var(--boho-border, #e8ddd0);
+  color: var(--boho-text-medium, #6b5c4c);
+}
+
+/* Only rendered when staff logged a payment AND the books still disagree. */
+.stt-reconcile {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  margin-top: 12px; padding: 12px;
+  background: #fdf6e3; border: 1px solid #eddfb8; border-radius: 8px;
+  font-size: 14px; color: #6b5c4c;
+}
+
+.stt-last { margin: 10px 0 0; font-size: 12px; }
+
+.stt-access-head { margin-top: 28px; }
+.stt-issue { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.stt-name-input { max-width: 280px; }
+
+/* Shown once and never recoverable — only the sha256 hash is stored. */
+.stt-reveal {
+  border: 2px solid #556343; background: #eef2e9;
+  border-radius: 10px; padding: 14px; margin-bottom: 16px;
+}
+.stt-reveal-warn { margin: 0 0 8px; font-weight: 600; color: #3f4a32; }
+.stt-reveal-link {
+  display: block; word-break: break-all;
+  background: #fff; border: 1px solid var(--boho-border, #e8ddd0);
+  border-radius: 6px; padding: 10px; font-size: 13px; margin-bottom: 10px;
+}
+.stt-reveal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.stt-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.stt-table th, .stt-table td {
+  text-align: left; padding: 8px 10px;
+  border-bottom: 1px solid var(--boho-border, #e8ddd0);
+}
+.stt-table th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: #9c8b7d; }
+.stt-row--off { opacity: .5; }
+.stt-small { padding: 4px 10px; font-size: 13px; }

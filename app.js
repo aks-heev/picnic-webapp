@@ -6933,6 +6933,358 @@ function copyBookingMenuLink(bookingId) {
   }
 }
 
+// ================================================================
+// STAFF OPS (stt)
+// ================================================================
+// Owner-side half of the staff live event-status tool.
+// Plan: docs/STAFF_STATUS_TOOL_PLAN.md — Phase 4.
+//
+// Two panels:
+//   1. Today — every one of today's picnics with its booking_event_log
+//      timeline, plus a reconcile button for what staff logged as collected.
+//   2. Staff access — issue / list / deactivate tokens.
+//
+// Reads booking_event_log and staff_tokens DIRECTLY under the existing admin
+// RLS. The admin never goes through staff_today / staff_log_step — those exist
+// solely to give an unauthenticated phone a narrow slice.
+//
+// Namespaced `stt` on purpose: the Close Booking (`bcl`) and Add Booking (`abk`)
+// modules have uncommitted work in flight and none of these three may share
+// state or CSS.
+
+const STT_SPINE = ['reached', 'setup_done', 'payment_received', 'wrapped']
+const STT_CHIPS = ['guests_arrived', 'guests_left']
+const STT_STEP_LABEL = {
+  reached:          'Reached venue',
+  setup_done:       'Setup done',
+  payment_received: 'Payment received',
+  wrapped:          'Wrap-up done',
+  guests_arrived:   'Guests arrived',
+  guests_left:      'Guests left',
+}
+
+let stt = { loading: false, busyBooking: null }
+
+// The staff tool's day boundary is Asia/Kolkata, not UTC and not the browser's
+// zone. en-CA formats as YYYY-MM-DD, which is what the date column wants.
+function sttIstToday() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date())
+}
+
+function sttMoney(n) {
+  return '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })
+}
+
+function sttClock(iso) {
+  if (!iso) return ''
+  try {
+    return new Date(iso).toLocaleTimeString('en-IN', {
+      hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata',
+    })
+  } catch { return '' }
+}
+
+function sttSlot(b) {
+  const t = s => {
+    if (!s) return null
+    const [h, m] = String(s).split(':')
+    let hh = parseInt(h, 10)
+    if (Number.isNaN(hh)) return null
+    const ap = hh >= 12 ? 'PM' : 'AM'
+    hh = hh % 12 || 12
+    return `${hh}:${m} ${ap}`
+  }
+  const a = t(b.slot_start_time), z = t(b.slot_end_time)
+  if (a && z) return `${a} – ${z}`
+  if (a) return a
+  return b.time_slot ? String(b.time_slot).replace(/^\w/, c => c.toUpperCase()) : 'Time not set'
+}
+
+function sttLogOf(b) {
+  const raw = b && b.booking_event_log
+  if (!raw) return []
+  const rows = Array.isArray(raw) ? raw.slice() : [raw]
+  rows.sort((x, y) => new Date(x.at) - new Date(y.at))
+  return rows
+}
+
+// ---------------------------------------------------------------- load
+
+async function loadStaffOps() {
+  if (!appState.session) return
+  if (stt.loading) return
+  stt.loading = true
+  const todayEl = document.getElementById('stt-today')
+  if (todayEl) todayEl.innerHTML = '<p class="stt-muted">Loading…</p>'
+
+  try {
+    const [events, tokens] = await Promise.all([
+      supabase
+        .from('bookings')
+        .select('id, full_name, mobile_number, guest_count, children_count, preferred_date, ' +
+                'time_slot, slot_start_time, slot_end_time, total_amount, advance_amount, ' +
+                'booking_status, venues(name, area, city), ' +
+                'booking_event_log(step, at, by_name, note, amount)')
+        .eq('preferred_date', sttIstToday())
+        .eq('confirmed', true)
+        .is('checkout_date', null)
+        .or('booking_status.is.null,booking_status.neq.Cancelled')
+        .order('slot_start_time', { ascending: true, nullsFirst: false }),
+      supabase
+        .from('staff_tokens')
+        .select('id, staff_name, is_active, created_at, last_used_at')
+        .order('created_at', { ascending: true }),
+    ])
+
+    if (events.error) throw events.error
+    if (tokens.error) throw tokens.error
+
+    sttRenderToday(events.data || [])
+    sttRenderTokens(tokens.data || [])
+  } catch (err) {
+    console.error('loadStaffOps failed:', err)
+    showToast(err.message || 'Failed to load staff ops', 'error')
+    if (todayEl) todayEl.innerHTML = '<p class="stt-muted">Could not load. Try refresh.</p>'
+  } finally {
+    stt.loading = false
+  }
+}
+
+// ---------------------------------------------------------------- today
+
+function sttRenderToday(rows) {
+  const host = document.getElementById('stt-today')
+  if (!host) return
+
+  if (!rows.length) {
+    host.innerHTML = '<p class="stt-muted">No picnics scheduled today.</p>'
+    return
+  }
+
+  host.innerHTML = rows.map(b => {
+    const log = sttLogOf(b)
+    const done = new Set(log.map(r => r.step))
+    const next = STT_SPINE.find(s => !done.has(s))
+    const last = log.length ? log[log.length - 1] : null
+
+    const total   = Number(b.total_amount || 0)
+    const advance = Number(b.advance_amount || 0)
+    const balance = Math.max(total - advance, 0)
+
+    const payRow = log.find(r => r.step === 'payment_received')
+    const claimed = payRow ? Number(payRow.amount || 0) : null
+
+    // The reconcile prompt only appears when staff actually logged a payment
+    // AND the books still disagree with what they said they collected.
+    const needsReconcile = payRow && claimed !== null && Math.abs(advance - claimed) > 0.5
+
+    const timeline = log.length
+      ? `<ul class="stt-timeline">${log.map(r => `
+          <li>
+            <span class="stt-tick">✓</span>
+            <span>${escapeHtml(STT_STEP_LABEL[r.step] || r.step)}${
+              r.step === 'payment_received' && Number(r.amount) > 0
+                ? ' · ' + escapeHtml(sttMoney(r.amount)) : ''
+            }</span>
+            <span class="stt-when">${escapeHtml(sttClock(r.at))}${
+              r.by_name ? ' · ' + escapeHtml(r.by_name) : ''
+            }</span>
+            ${r.note ? `<span class="stt-note">${escapeHtml(r.note)}</span>` : ''}
+          </li>`).join('')}</ul>`
+      : '<p class="stt-muted stt-notstarted">Not started — nothing logged yet.</p>'
+
+    const status = next
+      ? `<span class="stt-badge stt-badge--wait">Waiting: ${escapeHtml(STT_STEP_LABEL[next])}</span>`
+      : '<span class="stt-badge stt-badge--done">All done</span>'
+
+    const chips = STT_CHIPS.filter(c => done.has(c))
+      .map(c => `<span class="stt-chip">${escapeHtml(STT_STEP_LABEL[c])}</span>`).join('')
+
+    return `
+      <div class="stt-card">
+        <div class="stt-card-head">
+          <div>
+            <strong>${escapeHtml(b.full_name)}</strong>
+            <span class="stt-muted"> · ${escapeHtml(sttSlot(b))} · ${
+              escapeHtml((b.venues && b.venues.name) || 'Venue not set')
+            }</span>
+          </div>
+          ${status}
+        </div>
+
+        <div class="stt-money">
+          Total ${escapeHtml(sttMoney(total))} ·
+          Received ${escapeHtml(sttMoney(advance))} ·
+          Balance <strong>${escapeHtml(sttMoney(balance))}</strong>
+          ${claimed !== null ? ` · Staff logged <strong>${escapeHtml(sttMoney(claimed))}</strong>` : ''}
+        </div>
+
+        ${timeline}
+        ${chips ? `<div class="stt-chips">${chips}</div>` : ''}
+
+        ${needsReconcile ? `
+          <div class="stt-reconcile">
+            <span>Staff collected ${escapeHtml(sttMoney(claimed))}; the booking still records
+              ${escapeHtml(sttMoney(advance))} received.</span>
+            <button type="button" class="btn btn--primary stt-apply-btn"
+                    data-booking-id="${escapeHtml(b.id)}" data-amount="${escapeHtml(claimed)}"
+                    onclick="sttApplyPayment(${b.id}, ${claimed})">
+              Record ${escapeHtml(sttMoney(claimed))} to booking
+            </button>
+          </div>` : ''}
+
+        ${last ? `<p class="stt-muted stt-last">Last update ${escapeHtml(sttClock(last.at))}</p>` : ''}
+      </div>`
+  }).join('')
+}
+
+// Turns what staff SAY they collected into the books. Deliberately a separate,
+// explicit admin action — staff_log_step can never write a money column.
+async function sttApplyPayment(bookingId, amount) {
+  if (!appState.session) return showToast('Admin login required', 'error')
+  if (stt.busyBooking === bookingId) return
+  if (!confirm(`Set amount received on booking #${bookingId} to ${sttMoney(amount)}?`)) return
+
+  stt.busyBooking = bookingId
+  const btn = document.querySelector(`.stt-apply-btn[data-booking-id="${bookingId}"]`)
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…' }
+
+  try {
+    const { data, error } = await supabase.rpc('admin_apply_staff_payment', {
+      p_booking_id: bookingId, p_amount: amount,
+    })
+    if (error) throw error
+    showToast(data && data.fully_paid ? 'Recorded — booking is fully paid' : 'Payment recorded', 'success')
+    await loadStaffOps()
+    loadBookings()
+  } catch (err) {
+    console.error('admin_apply_staff_payment failed:', err)
+    showToast(err.message || 'Failed to record payment', 'error')
+    if (btn) { btn.disabled = false; btn.textContent = `Record ${sttMoney(amount)} to booking` }
+  } finally {
+    stt.busyBooking = null
+  }
+}
+window.sttApplyPayment = sttApplyPayment
+
+// ---------------------------------------------------------------- tokens
+
+function sttRenderTokens(list) {
+  const host = document.getElementById('stt-tokens')
+  if (!host) return
+
+  if (!list.length) {
+    host.innerHTML = '<p class="stt-muted">No staff links yet. Issue one above.</p>'
+    return
+  }
+
+  host.innerHTML = `
+    <table class="stt-table">
+      <thead><tr><th>Name</th><th>Last opened</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        ${list.map(t => `
+          <tr class="${t.is_active ? '' : 'stt-row--off'}">
+            <td>${escapeHtml(t.staff_name)}</td>
+            <td>${t.last_used_at
+                  ? escapeHtml(new Date(t.last_used_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }))
+                  : '<span class="stt-muted">never</span>'}</td>
+            <td>${t.is_active ? 'Active' : 'Deactivated'}</td>
+            <td>${t.is_active
+                  ? `<button type="button" class="btn btn--secondary stt-small"
+                       onclick="sttDeactivateToken(${t.id})">Deactivate</button>`
+                  : ''}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`
+}
+
+async function sttIssueToken() {
+  if (!appState.session) return showToast('Admin login required', 'error')
+  const input = document.getElementById('stt-new-name')
+  const name = (input?.value || '').trim()
+  if (!name) return showToast('Enter the staff member’s name', 'error')
+
+  const btn = document.getElementById('stt-issue-btn')
+  if (btn) { btn.disabled = true; btn.textContent = 'Issuing…' }
+
+  try {
+    const { data, error } = await supabase.rpc('admin_issue_staff_token', { p_staff_name: name })
+    if (error) throw error
+
+    // 🔴 Only the sha256 hash is stored, so this link can NEVER be shown again.
+    // The reveal box stays on screen until dismissed — do not auto-hide it, and
+    // do not "improve" this by re-rendering the token list over the top.
+    const link = `${window.location.origin}/staff?t=${data.token}`
+    const box = document.getElementById('stt-reveal')
+    if (box) {
+      box.hidden = false
+      box.innerHTML = `
+        <p class="stt-reveal-warn">This link is shown once and cannot be recovered.
+          Send it to ${escapeHtml(data.staff_name)} now.</p>
+        <code class="stt-reveal-link" id="stt-reveal-link">${escapeHtml(link)}</code>
+        <div class="stt-reveal-actions">
+          <button type="button" class="btn btn--primary" onclick="sttCopyLink()">Copy link</button>
+          <a class="btn btn--secondary" target="_blank" rel="noopener"
+             href="https://wa.me/?text=${encodeURIComponent('Your Picnic Stories staff link: ' + link)}">Send on WhatsApp</a>
+          <button type="button" class="btn btn--secondary" onclick="document.getElementById('stt-reveal').hidden = true">Done</button>
+        </div>`
+    }
+    if (input) input.value = ''
+    loadStaffOps()
+  } catch (err) {
+    console.error('admin_issue_staff_token failed:', err)
+    showToast(err.message || 'Failed to issue link', 'error')
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Issue link' }
+  }
+}
+window.sttIssueToken = sttIssueToken
+
+function sttCopyLink() {
+  const node = document.getElementById('stt-reveal-link')
+  if (!node) return
+  const text = node.textContent
+  const done = () => showToast('Link copied', 'success')
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => sttFallbackCopy(text, done))
+  } else {
+    sttFallbackCopy(text, done)
+  }
+}
+window.sttCopyLink = sttCopyLink
+
+// clipboard API needs a secure context; keep a path that works over plain http
+// on a LAN preview build.
+function sttFallbackCopy(text, done) {
+  const ta = document.createElement('textarea')
+  ta.value = text
+  ta.setAttribute('readonly', '')
+  ta.style.position = 'fixed'
+  ta.style.opacity = '0'
+  document.body.appendChild(ta)
+  ta.select()
+  try { document.execCommand('copy'); done() } catch { showToast('Copy failed — select it manually', 'error') }
+  document.body.removeChild(ta)
+}
+
+async function sttDeactivateToken(id) {
+  if (!appState.session) return showToast('Admin login required', 'error')
+  if (!confirm('Deactivate this staff link? It stops working immediately.')) return
+  try {
+    const { error } = await supabase.from('staff_tokens').update({ is_active: false }).eq('id', id)
+    if (error) throw error
+    showToast('Link deactivated', 'success')
+    loadStaffOps()
+  } catch (err) {
+    console.error('deactivate staff token failed:', err)
+    showToast(err.message || 'Failed to deactivate', 'error')
+  }
+}
+window.sttDeactivateToken = sttDeactivateToken
+
+
 // Tab switching
 function switchTab(tabName) {
   document.querySelectorAll('.tab-content').forEach(content => {
@@ -6977,6 +7329,8 @@ function switchTab(tabName) {
     loadHeroImageAdminPreview()
   } else if (tabName === 'teams') {
     loadTeamsManager()
+  } else if (tabName === 'staff-ops') {
+    loadStaffOps()
   }
 }
 

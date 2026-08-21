@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self';
+             script-src 'self' 'unsafe-inline';
+             connect-src https://*.supabase.co ws://localhost:* wss://localhost:*;
+             style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com;
+             font-src https://fonts.gstatic.com;
+             img-src 'self' data:;">
+  <title>Today · The Picnic Stories</title>
+  <!-- Staff tool is private and token-gated: keep it out of search engines and AI crawlers. -->
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#a84d66">
+  <link rel="stylesheet" href="staff.css">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@500;600&family=Be+Vietnam+Pro:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <header class="stf-header">
+    <div class="stf-header-row">
+      <div class="stf-brand">
+        <img src="/logo-mark.png" alt="" class="stf-logo" width="34" height="34">
+        <div>
+          <h1>Today</h1>
+          <p id="stf-subtitle" class="stf-subtitle">Loading&hellip;</p>
+        </div>
+      </div>
+      <button id="stf-refresh" class="stf-refresh" type="button" aria-label="Refresh">
+        <span id="stf-sync-pip" class="stf-sync-pip" data-state="idle" aria-hidden="true"></span>
+        <span class="stf-refresh-icon" aria-hidden="true">&#8635;</span>
+      </button>
+    </div>
+    <p id="stf-sync-note" class="stf-sync-note" role="status" aria-live="polite" hidden></p>
+  </header>
+
+  <main id="stf-main" class="stf-main">
+    <div id="stf-skeleton" class="stf-empty">
+      <p class="stf-empty-title">Loading today&rsquo;s events&hellip;</p>
+    </div>
+  </main>
+
+  <!-- No-access screen: shown when there is no token, or the token is rejected. -->
+  <section id="stf-noaccess" class="stf-noaccess" hidden>
+    <img src="/logo-mark.png" alt="" width="56" height="56">
+    <h2>This link isn&rsquo;t working</h2>
+    <p>Ask Aksheev to send you a fresh link. Your old one may have been turned off.</p>
+  </section>
+
+  <!-- Payment sheet -->
+  <div id="stf-pay-overlay" class="stf-overlay" hidden>
+    <div class="stf-sheet" role="dialog" aria-modal="true" aria-labelledby="stf-pay-title">
+      <h2 id="stf-pay-title">Payment received</h2>
+      <p id="stf-pay-guest" class="stf-sheet-sub"></p>
+      <label class="stf-label" for="stf-pay-amount">Amount collected (&#8377;)</label>
+      <input id="stf-pay-amount" class="stf-input" type="number" inputmode="decimal" min="0" step="1">
+      <p class="stf-hint">Pre-filled with the balance due. Change it if they paid a different amount.</p>
+      <div class="stf-sheet-actions">
+        <button id="stf-pay-cancel" class="stf-btn stf-btn--ghost" type="button">Cancel</button>
+        <button id="stf-pay-confirm" class="stf-btn stf-btn--primary" type="button">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="stf-toast" class="stf-toast" role="status" aria-live="polite" hidden></div>
+
+  <script type="module" src="staff.js"></script>
+</body>
+</html>

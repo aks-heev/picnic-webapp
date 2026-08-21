@@ -83,6 +83,7 @@
                 <button class="tab-btn" data-tab="packages" role="tab" aria-selected="false">Packages</button>
                 <button class="tab-btn" data-tab="hero-image" role="tab" aria-selected="false">Hero Image</button>
                 <button class="tab-btn" data-tab="teams" role="tab" aria-selected="false">Teams</button>
+                <button class="tab-btn" data-tab="staff-ops" role="tab" aria-selected="false">Staff Ops</button>
             </div>
 
             <!-- Queries Tab -->
@@ -557,6 +558,27 @@
                     <!-- Populated by renderTeamsManager() -->
                 </div>
             </div>
+
+            <!-- Staff Ops: owner-side half of the token-gated /staff tool -->
+            <div id="staff-ops-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="tab-header">
+                    <h3>Today</h3>
+                    <button type="button" class="btn btn--secondary" onclick="loadStaffOps()">Refresh</button>
+                </div>
+                <div id="stt-today"></div>
+
+                <div class="tab-header stt-access-head">
+                    <h3>Staff access</h3>
+                </div>
+                <div class="stt-issue">
+                    <input id="stt-new-name" class="form-control stt-name-input" type="text"
+                           placeholder="Staff member's name" autocomplete="off" maxlength="60">
+                    <button id="stt-issue-btn" type="button" class="btn btn--primary" onclick="sttIssueToken()">Issue link</button>
+                </div>
+                <div id="stt-reveal" class="stt-reveal" hidden></div>
+                <div id="stt-tokens"></div>
+            </div>
+
         </div>
     </section>
 
