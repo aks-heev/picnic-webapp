@@ -64,7 +64,10 @@ const LS_TAB   = 'pst_staff_tab'
 const SPINE = ['reached', 'setup_done', 'payment_received', 'wrapped']
 const CHIPS = ['guests_arrived', 'guests_left']
 // Stays have their own spine. payment_received is the only shared step, and it
-// only ever appears for a DIRECT booking with a balance — Airbnb collects its own.
+// appears only when the server says money is actually outstanding
+// (collect_on_arrival). That flag is derived from total - advance, NOT from the
+// channel: external_booking_ref is free text ('WhatsApp', 'direct-extension',
+// real HM… codes) and must never gate a money decision.
 const STAY_SPINE = ['checked_in', 'payment_received', 'checked_out']
 
 const STEP_LABEL = {
@@ -448,7 +451,7 @@ function stayCardHtml (st) {
          <div>
            <div class="stf-money-label">Payment</div>
            <div class="stf-money-value" data-zero="1">${
-             st.source === 'airbnb' ? 'Paid via Airbnb' : 'Nothing to collect'
+             st.source === 'airbnb' ? 'Paid via Airbnb' : 'Fully paid'
            }</div>
          </div>
          ${st.mobile ? `<a class="stf-call" href="tel:${esc(st.mobile)}">Call</a>` : ''}
@@ -501,6 +504,7 @@ function stayUpcomingHtml (list) {
         <div class="stf-up-venue">${esc((st.venue && st.venue.name) || 'Venue not set')}</div>
         <div class="stf-up-bits">${st.nights} night${st.nights === 1 ? '' : 's'} \u00b7 ${
           st.source === 'airbnb' ? 'Airbnb' : 'Direct'}</div>
+        ${st.will_collect ? '<div class="stf-up-due">Balance due on arrival</div>' : ''}
         ${st.special_requirements ? `<div class="stf-up-note">Note: ${esc(st.special_requirements)}</div>` : ''}
       </li>`).join('')
   return `<section class="stf-upcoming">

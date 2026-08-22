@@ -450,3 +450,13 @@ html, body {
 
 /* iCal-blocked nights with no booking row */
 .stf-occ-row { border-style: dashed; }
+
+/* Upcoming stay that will need money collected on arrival — flagged without
+   the figure, matching the no-money rule for all read-only sections. */
+.stf-up-due {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 13px; font-weight: 600;
+  padding: 2px 9px; border-radius: 999px;
+  background: #fdf6e3; border: 1px solid #eddfb8; color: #8a6d1f;
+}
