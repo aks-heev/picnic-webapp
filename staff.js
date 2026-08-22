@@ -59,9 +59,13 @@ function rpc (fn, body, timeoutMs = 12000) {
 const LS_TOKEN = 'pst_staff_token'
 const LS_CACHE = 'pst_staff_cache'
 const LS_QUEUE = 'pst_staff_queue'
+const LS_TAB   = 'pst_staff_tab'
 
 const SPINE = ['reached', 'setup_done', 'payment_received', 'wrapped']
 const CHIPS = ['guests_arrived', 'guests_left']
+// Stays have their own spine. payment_received is the only shared step, and it
+// only ever appears for a DIRECT booking with a balance — Airbnb collects its own.
+const STAY_SPINE = ['checked_in', 'payment_received', 'checked_out']
 
 const STEP_LABEL = {
   reached:          'Reached venue',
@@ -69,26 +73,31 @@ const STEP_LABEL = {
   payment_received: 'Payment received',
   wrapped:          'Wrap-up done',
   guests_arrived:   'Guests arrived',
-  guests_left:      'Guests left'
+  guests_left:      'Guests left',
+  checked_in:       'Guest checked in',
+  checked_out:      'Guest checked out'
 }
 
 const ACTION_LABEL = {
   reached:          'Mark reached',
   setup_done:       'Setup done',
   payment_received: 'Payment received',
-  wrapped:          'Wrap-up done'
+  wrapped:          'Wrap-up done',
+  checked_in:       'Guest checked in',
+  checked_out:      'Guest checked out'
 }
 
 // Errors that will never succeed on retry — drop these from the queue instead
 // of spinning forever. Anything else (network, 5xx) stays queued.
-const TERMINAL_ERRORS = new Set(['unknown_step', 'not_today', 'bad_amount', 'out_of_order', 'invalid_token'])
+const TERMINAL_ERRORS = new Set(['unknown_step', 'not_today', 'bad_amount', 'out_of_order', 'invalid_token', 'wrong_kind'])
 
 const ERROR_TEXT = {
   invalid_token: 'This link is no longer valid.',
   unknown_step:  'Unknown step — reload the page.',
   not_today:     'That booking is not on today’s list any more.',
   bad_amount:    'Amount cannot be negative.',
-  out_of_order:  'Do the previous step first.'
+  out_of_order:  'Do the previous step first.',
+  wrong_kind:    'That step does not apply to this booking.'
 }
 
 /* -------------------------------------------------------------------- state */
@@ -98,6 +107,7 @@ let payload = null            // last staff_today response
 let queue = load(LS_QUEUE, [])
 let flushing = false
 let refreshTimer = null
+let tab = load(LS_TAB, 'picnic')   // 'picnic' | 'airbnb'
 
 /* --------------------------------------------------------------- dom lookup */
 
@@ -226,6 +236,7 @@ function doneSteps (ev) { return new Set(mergedLog(ev).map(r => r.step)) }
 function applyServerLog (bookingId, log) {
   if (!payload || !Array.isArray(log)) return
   const ev = (payload.events || []).find(e => e.id === bookingId)
+          || (payload.stays || []).find(e => e.id === bookingId)
   if (!ev) return
   ev.log = log
   save(LS_CACHE, payload)
@@ -234,6 +245,15 @@ function applyServerLog (bookingId, log) {
 function nextSpineStep (ev) {
   const done = doneSteps(ev)
   return SPINE.find(s => !done.has(s)) || null
+}
+
+/* Stay spine. payment_received is skipped entirely unless this is a direct
+   booking with money still owed — an Airbnb guest has already paid Airbnb, and
+   showing staff a "collect payment" button there would be actively wrong. */
+function nextStayStep (st) {
+  const done = doneSteps(st)
+  const steps = st.collect_on_arrival ? STAY_SPINE : STAY_SPINE.filter(x => x !== 'payment_received')
+  return steps.find(x => !done.has(x)) || null
 }
 
 /* -------------------------------------------------------------------- render */
@@ -248,15 +268,32 @@ function render () {
     : ''
   el.subtitle.textContent = [staffName, dateText].filter(Boolean).join(' · ')
 
-  const todayHtml = events.length
-    ? events.map(cardHtml).join('')
-    : '<div class="stf-empty">' +
-      '<p class="stf-empty-title">No events today</p>' +
-      '<p>Nothing is scheduled. Tap refresh if you were expecting something.</p>' +
-      '</div>'
-
-  el.main.innerHTML = todayHtml + upcomingHtml(payload.upcoming || [])
+  paintTabs()
+  el.main.innerHTML = tab === 'airbnb' ? airbnbTabHtml() : picnicTabHtml()
   wireCards()
+}
+
+/* Food & drinks get their own row rather than a grey tag among the add-ons.
+   It is the thing staff most need to know before they leave — whether the
+   hamper has to be picked up at all, and how many items are in it. Always
+   rendered, including the negative case, so silence never means "maybe". */
+function foodHtml (ev) {
+  if (!ev.includes_food) {
+    return '<div class="stf-food stf-food--none">' +
+           '<span class="stf-food-icon" aria-hidden="true">\u2715</span>' +
+           '<span><strong>No food or drinks</strong> included</span></div>'
+  }
+  const f = Number(ev.food_items_count || 0)
+  const b = Number(ev.beverage_items_count || 0)
+  const parts = []
+  if (f) parts.push(`${f} food item${f === 1 ? '' : 's'}`)
+  if (b) parts.push(`${b} drink${b === 1 ? '' : 's'}`)
+  const detail = parts.length
+    ? parts.join(' + ')
+    : 'count not recorded'          // includes_food true but no counts entered
+  return '<div class="stf-food stf-food--yes">' +
+         '<span class="stf-food-icon" aria-hidden="true">\u2713</span>' +
+         `<span><strong>Food &amp; drinks included</strong> \u00b7 ${esc(detail)}</span></div>`
 }
 
 function cardHtml (ev) {
@@ -265,19 +302,13 @@ function cardHtml (ev) {
   const next = nextSpineStep(ev)
   const allDone = !next
 
-  const guests = ev.guests + ' guests' + (ev.children ? ` · ${ev.children} kids` : '')
+  const guests = ev.guests + ' guests' + (ev.children ? ` \u00b7 ${ev.children} kid${ev.children === 1 ? '' : 's'}` : '')
   const venueBits = [ev.venue && ev.venue.name, ev.venue && ev.venue.area].filter(Boolean).join(', ')
   const mapsUrl = ev.venue && ev.venue.maps_url
 
   const tags = []
   if (ev.package_name) tags.push(esc(ev.package_name))
   if (ev.occasion) tags.push(esc(ev.occasion))
-  if (ev.includes_food) {
-    const f = []
-    if (ev.food_items_count) f.push(`${ev.food_items_count} food`)
-    if (ev.beverage_items_count) f.push(`${ev.beverage_items_count} drinks`)
-    tags.push(f.length ? esc(f.join(' + ')) : 'Food included')
-  }
   for (const a of (ev.add_ons || [])) tags.push(esc(a.name))
 
   const balance = Number(ev.balance_due || 0)
@@ -317,6 +348,7 @@ function cardHtml (ev) {
     }</p>
     ${tags.length ? `<div class="stf-meta">${tags.map(t => `<span class="stf-tag">${t}</span>`).join('')}</div>` : ''}
     ${ev.special_requirements ? `<div class="stf-meta"><span class="stf-tag stf-tag--note">Note: ${esc(ev.special_requirements)}</span></div>` : ''}
+    ${foodHtml(ev)}
     <div class="stf-money">
       <div>
         <div class="stf-money-label">Balance to collect</div>
@@ -330,6 +362,172 @@ function cardHtml (ev) {
     ${action}
     <div class="stf-chips">${chips}</div>
   </article>`
+}
+
+/* --------------------------------------------------------------------- tabs */
+
+function paintTabs () {
+  const p = (payload.events || []).length
+  const a = (payload.stays || []).length
+  const setBtn = (id, active, count) => {
+    const b = document.getElementById(id)
+    if (!b) return
+    b.setAttribute('aria-selected', active ? 'true' : 'false')
+    b.dataset.on = active ? '1' : '0'
+    const badge = b.querySelector('.stf-tabcount')
+    if (badge) { badge.textContent = count; badge.hidden = !count }
+  }
+  setBtn('stf-tab-picnic', tab !== 'airbnb', p)
+  setBtn('stf-tab-airbnb', tab === 'airbnb', a)
+}
+
+function switchTab (next) {
+  if (tab === next) return
+  tab = next
+  save(LS_TAB, tab)
+  render()
+  window.scrollTo({ top: 0 })
+}
+
+function picnicTabHtml () {
+  const events = payload.events || []
+  const todayHtml = events.length
+    ? events.map(cardHtml).join('')
+    : '<div class="stf-empty">' +
+      '<p class="stf-empty-title">No picnics today</p>' +
+      '<p>Nothing is scheduled. Tap refresh if you were expecting something.</p>' +
+      '</div>'
+  return todayHtml + upcomingHtml(payload.upcoming || [])
+}
+
+function airbnbTabHtml () {
+  const stays = payload.stays || []
+  const todayHtml = stays.length
+    ? stays.map(stayCardHtml).join('')
+    : '<div class="stf-empty">' +
+      '<p class="stf-empty-title">Nobody staying today</p>' +
+      '<p>No check-ins, check-outs or guests in house.</p>' +
+      '</div>'
+  return todayHtml + stayUpcomingHtml(payload.stays_upcoming || []) + occupancyHtml(payload.occupancy || [])
+}
+
+/* ------------------------------------------------------------- stay cards */
+
+const PHASE_LABEL = { arriving: 'Arriving today', departing: 'Leaving today', in_house: 'In house' }
+
+function stayCardHtml (st) {
+  const log = mergedLog(st)
+  const next = nextStayStep(st)
+  const allDone = !next
+
+  const nights = Number(st.nights || 0)
+  const guests = st.guests + ' guests' + (st.children ? ` \u00b7 ${st.children} kid${st.children === 1 ? '' : 's'}` : '')
+  const venueBits = [st.venue && st.venue.name, st.venue && st.venue.area].filter(Boolean).join(', ')
+
+  const timeline = log.map(r => `
+      <li data-pending="${r.pending ? '1' : '0'}">
+        <span class="stf-tick">${r.pending ? '\u25cb' : '\u2713'}</span>
+        <span class="stf-step-name">${esc(STEP_LABEL[r.step] || r.step)}${
+          r.step === 'payment_received' && Number(r.amount) > 0 ? ' \u00b7 ' + esc(money(r.amount)) : ''
+        }</span>
+        <span class="stf-step-time">${r.pending ? 'syncing\u2026' : esc(clockOf(r.at))}</span>
+      </li>`).join('')
+
+  /* Money on a stay is not the picnic case. The server sends balance_due only
+     for a direct booking; an Airbnb reservation is paid through Airbnb and must
+     never show staff an amount to collect. */
+  const moneyRow = st.collect_on_arrival
+    ? `<div class="stf-money stf-money--due">
+         <div>
+           <div class="stf-money-label">Collect on arrival</div>
+           <div class="stf-money-value">${esc(money(st.balance_due))}</div>
+         </div>
+         ${st.mobile ? `<a class="stf-call" href="tel:${esc(st.mobile)}">Call</a>` : ''}
+       </div>`
+    : `<div class="stf-money">
+         <div>
+           <div class="stf-money-label">Payment</div>
+           <div class="stf-money-value" data-zero="1">${
+             st.source === 'airbnb' ? 'Paid via Airbnb' : 'Nothing to collect'
+           }</div>
+         </div>
+         ${st.mobile ? `<a class="stf-call" href="tel:${esc(st.mobile)}">Call</a>` : ''}
+       </div>`
+
+  const action = allDone
+    ? '<div class="stf-alldone">All done \u2713</div>'
+    : `<button class="stf-btn stf-btn--primary" data-act="step" data-id="${st.id}" data-step="${next}"
+               data-kind="stay">${
+         next === 'payment_received'
+           ? `Payment ${esc(money(st.balance_due))} received`
+           : esc(ACTION_LABEL[next])
+       }</button>`
+
+  return `
+  <article class="stf-card" data-done="${allDone ? '1' : '0'}" data-id="${st.id}" data-kind="stay">
+    <div class="stf-card-top">
+      <span class="stf-phase stf-phase--${esc(st.phase)}">${esc(PHASE_LABEL[st.phase] || st.phase)}</span>
+      <span class="stf-guests">${esc(guests)}</span>
+    </div>
+    <h2 class="stf-name">${esc(st.guest_name)}</h2>
+    <p class="stf-venue">${esc(venueBits || 'Venue not set')}</p>
+    <div class="stf-stayline">
+      ${esc(dayShort(st.check_in))} \u2192 ${esc(dayShort(st.check_out))}
+      <span class="stf-nights">${nights} night${nights === 1 ? '' : 's'}</span>
+      <span class="stf-src stf-src--${esc(st.source)}">${st.source === 'airbnb' ? 'Airbnb' : 'Direct'}</span>
+    </div>
+    ${st.special_requirements ? `<div class="stf-meta"><span class="stf-tag stf-tag--note">Note: ${esc(st.special_requirements)}</span></div>` : ''}
+    ${moneyRow}
+    ${log.length ? `<ul class="stf-timeline">${timeline}</ul>` : ''}
+    ${action}
+  </article>`
+}
+
+function dayShort (d) {
+  try {
+    return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+  } catch { return d }
+}
+
+function stayUpcomingHtml (list) {
+  if (!list.length) return ''
+  const rows = list.map(st => `
+      <li class="stf-up-row">
+        <div class="stf-up-line">
+          <span class="stf-up-time">${esc(dayShort(st.check_in))} \u2192 ${esc(dayShort(st.check_out))}</span>
+          <span class="stf-up-guests">${esc(st.guests + ' guests')}</span>
+        </div>
+        <div class="stf-up-name">${esc(st.guest_name)}</div>
+        <div class="stf-up-venue">${esc((st.venue && st.venue.name) || 'Venue not set')}</div>
+        <div class="stf-up-bits">${st.nights} night${st.nights === 1 ? '' : 's'} \u00b7 ${
+          st.source === 'airbnb' ? 'Airbnb' : 'Direct'}</div>
+        ${st.special_requirements ? `<div class="stf-up-note">Note: ${esc(st.special_requirements)}</div>` : ''}
+      </li>`).join('')
+  return `<section class="stf-upcoming">
+      <h2 class="stf-section-title">Coming up <span class="stf-count">${list.length}</span></h2>
+      <ul class="stf-up-list">${rows}</ul>
+    </section>`
+}
+
+/* Nights Airbnb has blocked that have no booking row here — i.e. someone IS
+   staying and the details were never entered. Read-only by necessity: with no
+   booking_id there is nothing to log a step against. Shown rather than hidden
+   because a silently short list is worse than an honest gap. */
+function occupancyHtml (list) {
+  if (!list.length) return ''
+  const rows = list.map(o => `
+      <li class="stf-up-row stf-occ-row">
+        <div class="stf-up-line">
+          <span class="stf-up-time">${esc(dayShort(o.from_date))} \u2013 ${esc(dayShort(o.to_date))}</span>
+          <span class="stf-up-guests">${o.nights} night${o.nights === 1 ? '' : 's'}</span>
+        </div>
+        <div class="stf-up-name">${esc(o.venue_name)}</div>
+        <div class="stf-up-note">Blocked on Airbnb \u2014 no guest details entered</div>
+      </li>`).join('')
+  return `<section class="stf-upcoming">
+      <h2 class="stf-section-title">Booked, details missing <span class="stf-count">${list.length}</span></h2>
+      <ul class="stf-up-list">${rows}</ul>
+    </section>`
 }
 
 /* Read-only planning list. Deliberately has no buttons: staff_log_step only
@@ -351,9 +549,12 @@ function upcomingHtml (list) {
       const bits = []
       if (ev.package_name) bits.push(esc(ev.package_name))
       for (const a of (ev.add_ons || [])) bits.push(esc(a.name))
-      if (ev.includes_food) bits.push('Food')
+      if (ev.includes_food) {
+        const ff = Number(ev.food_items_count || 0), bb = Number(ev.beverage_items_count || 0)
+        bits.push(ff || bb ? `Food ${ff}+${bb}` : 'Food incl.')
+      } else bits.push('No food')
       if (ev.occasion) bits.push(esc(ev.occasion))
-      const guests = ev.guests + ' guests' + (ev.children ? ` · ${ev.children} kids` : '')
+      const guests = ev.guests + ' guests' + (ev.children ? ` · ${ev.children} kid${ev.children === 1 ? '' : 's'}` : '')
       return `
         <li class="stf-up-row">
           <div class="stf-up-line">
@@ -405,7 +606,10 @@ function wireCards () {
 let paying = null
 
 function openPaySheet (bookingId) {
+  // Must search stays as well as picnics — a direct stay can carry a balance
+  // collected at check-in, and it uses the same sheet.
   const ev = (payload.events || []).find(e => e.id === bookingId)
+          || (payload.stays || []).find(e => e.id === bookingId)
   if (!ev) return
   paying = bookingId
   el.payGuest.textContent = `${ev.guest_name} · balance ${money(ev.balance_due)}`
@@ -561,6 +765,9 @@ async function refresh (quiet) {
 /* ---------------------------------------------------------------------- boot */
 
 el.refresh.addEventListener('click', () => { refresh(false); flush() })
+const tabPicnic = $('stf-tab-picnic'), tabAirbnb = $('stf-tab-airbnb')
+if (tabPicnic) tabPicnic.addEventListener('click', () => switchTab('picnic'))
+if (tabAirbnb) tabAirbnb.addEventListener('click', () => switchTab('airbnb'))
 
 // Coming back to the tab is the most common "is it still accurate?" moment.
 document.addEventListener('visibilitychange', () => {

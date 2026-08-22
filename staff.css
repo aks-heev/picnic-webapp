@@ -377,3 +377,76 @@ html, body {
 .stf-up-venue { font-size: 15px; color: var(--boho-text-medium); }
 .stf-up-bits  { font-size: 13px; color: var(--boho-text-light); margin-top: 4px; }
 .stf-up-note  { font-size: 13px; color: #8c3f56; margin-top: 4px; }
+
+/* ---------- tabs (Picnic / Airbnb) ---------- */
+.stf-tabs { display: flex; gap: 8px; margin-top: 10px; }
+.stf-tab {
+  flex: 1 1 0;
+  min-height: 46px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  border: 1px solid var(--boho-border);
+  border-radius: var(--radius-sm);
+  background: var(--boho-warm-white);
+  color: var(--boho-text-medium);
+  font-family: var(--font-sans);
+  font-size: 16px; font-weight: 600;
+  cursor: pointer;
+}
+.stf-tab[data-on="1"] {
+  background: var(--boho-accent-rose);
+  border-color: var(--boho-accent-rose);
+  color: #fff;
+}
+.stf-tabcount {
+  min-width: 22px; padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(45,31,20,.10);
+  font-size: 13px; font-weight: 600;
+}
+.stf-tab[data-on="1"] .stf-tabcount { background: rgba(255,255,255,.25); }
+
+/* ---------- food & drinks row (picnic) ---------- */
+.stf-food {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 11px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  margin-bottom: 12px;
+  border: 1px solid;
+}
+.stf-food--yes  { background: #eef2e9; border-color: var(--boho-accent-sage); color: #3f4a32; }
+.stf-food--none { background: var(--boho-warm-white); border-color: var(--boho-border); color: var(--boho-text-medium); }
+.stf-food-icon { font-weight: 700; line-height: 1.4; flex: none; }
+.stf-food--yes  .stf-food-icon { color: var(--boho-accent-sage); }
+.stf-food--none .stf-food-icon { color: var(--boho-text-light); }
+
+/* ---------- stay cards ---------- */
+.stf-phase {
+  font-size: 13px; font-weight: 600;
+  padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+}
+.stf-phase--arriving  { background: #eef2e9; color: #3f4a32; border: 1px solid var(--boho-accent-sage); }
+.stf-phase--departing { background: #fdf6e3; color: #8a6d1f; border: 1px solid #eddfb8; }
+.stf-phase--in_house  { background: #f7f1ea; color: var(--boho-text-medium); border: 1px solid var(--boho-border); }
+
+.stf-stayline {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  font-size: 15px; color: var(--boho-text-medium);
+  margin-bottom: 12px;
+}
+.stf-nights, .stf-src {
+  font-size: 12px; padding: 2px 9px; border-radius: 999px;
+  border: 1px solid var(--boho-border); background: #f7f1ea;
+}
+.stf-src--airbnb { background: #fdf0f3; border-color: rgba(196,96,122,.3); color: #8c3f56; }
+.stf-src--direct { background: #eef2e9; border-color: var(--boho-accent-sage); color: #3f4a32; }
+
+/* a real balance to collect is the one thing on a stay card that must shout */
+.stf-money--due {
+  background: #fdf6e3;
+  border-color: #eddfb8;
+}
+.stf-money--due .stf-money-value { color: #8a6d1f; }
+
+/* iCal-blocked nights with no booking row */
+.stf-occ-row { border-style: dashed; }
