@@ -448,6 +448,30 @@ html, body {
 }
 .stf-money--due .stf-money-value { color: #8a6d1f; }
 
+/* Money already taken. The balance figures come from `bookings`, which the
+   staff RPCs never write to, so this state is driven entirely by the event log
+   — see moneyRowHtml() in staff.js. Sage rather than amber, so a settled card
+   stops reading as an instruction to collect. */
+.stf-money--paid {
+  background: #f2f5ec;
+  border-color: #d3ddc4;
+}
+.stf-money--paid .stf-money-value { color: var(--boho-accent-sage); }
+
+/* Part payment. Stays amber, because money is still owed and there is no
+   second payment_received row coming to correct it. */
+.stf-money--paid[data-short="1"] {
+  background: #fdf6e3;
+  border-color: #eddfb8;
+}
+.stf-money--paid[data-short="1"] .stf-money-value { color: #8a6d1f; }
+.stf-money-short {
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #8a6d1f;
+}
+
 /* iCal-blocked nights with no booking row */
 .stf-occ-row { border-style: dashed; }
 

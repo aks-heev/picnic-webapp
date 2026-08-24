@@ -299,6 +299,57 @@ function foodHtml (ev) {
          `<span><strong>Food &amp; drinks included</strong> \u00b7 ${esc(detail)}</span></div>`
 }
 
+/* --------------------------------------------------------------- money row */
+
+/* The money figures come from `bookings` (total − advance), and staff_log_step
+   deliberately never writes back to `bookings` — a token surface does not move
+   money. So `balance_due` / `collect_on_arrival` read exactly the same after
+   cash is taken as before it, and the card used to show an amber "collect this"
+   instruction sitting directly on top of its own "✓ Payment received" line.
+   The log is the only record that money changed hands, so the row settles from
+   the log rather than from the balance.
+
+   Partial payments deliberately stay unsettled: booking_event_log has UNIQUE
+   (booking_id, step), so a second payment_received row can never arrive, and
+   showing a bare "Collected" would hide a real shortfall. */
+function moneyRowHtml (ev, log, opts) {
+  const due  = Number(opts.due || 0)
+  const call = ev.mobile ? `<a class="stf-call" href="tel:${esc(ev.mobile)}">Call</a>` : ''
+
+  // Nothing was ever owed here — no log entry can change that.
+  if (due <= 0) {
+    return `<div class="stf-money">
+      <div>
+        <div class="stf-money-label">${esc(opts.zeroLabel)}</div>
+        <div class="stf-money-value" data-zero="1">${esc(opts.zeroValue)}</div>
+      </div>
+      ${call}
+    </div>`
+  }
+
+  const paid = log.find(r => r.step === 'payment_received')
+  if (!paid) {
+    return `<div class="stf-money${opts.dueClass ? ' ' + opts.dueClass : ''}">
+      <div>
+        <div class="stf-money-label">${esc(opts.dueLabel)}</div>
+        <div class="stf-money-value">${esc(money(due))}</div>
+      </div>
+      ${call}
+    </div>`
+  }
+
+  const got   = Number(paid.amount || 0)
+  const short = Math.max(due - got, 0)
+  return `<div class="stf-money stf-money--paid" data-short="${short > 0 ? '1' : '0'}">
+      <div>
+        <div class="stf-money-label">Collected${paid.pending ? ' \u00b7 syncing\u2026' : ''}</div>
+        <div class="stf-money-value">${esc(money(got))}</div>
+        ${short > 0 ? `<div class="stf-money-short">${esc(money(short))} still to collect</div>` : ''}
+      </div>
+      ${call}
+    </div>`
+}
+
 function cardHtml (ev) {
   const log = mergedLog(ev)
   const done = new Set(log.map(r => r.step))
@@ -352,15 +403,12 @@ function cardHtml (ev) {
     ${tags.length ? `<div class="stf-meta">${tags.map(t => `<span class="stf-tag">${t}</span>`).join('')}</div>` : ''}
     ${ev.special_requirements ? `<div class="stf-meta"><span class="stf-tag stf-tag--note">Note: ${esc(ev.special_requirements)}</span></div>` : ''}
     ${foodHtml(ev)}
-    <div class="stf-money">
-      <div>
-        <div class="stf-money-label">Balance to collect</div>
-        <div class="stf-money-value" data-zero="${balance > 0 ? '0' : '1'}">${
-          balance > 0 ? esc(money(balance)) : 'Fully paid'
-        }</div>
-      </div>
-      ${ev.mobile ? `<a class="stf-call" href="tel:${esc(ev.mobile)}">Call</a>` : ''}
-    </div>
+    ${moneyRowHtml(ev, log, {
+      due:        balance,
+      dueLabel:   'Balance to collect',
+      zeroLabel:  'Balance to collect',
+      zeroValue:  'Fully paid'
+    })}
     ${log.length ? `<ul class="stf-timeline">${timeline}</ul>` : ''}
     ${action}
     <div class="stf-chips">${chips}</div>
@@ -439,23 +487,13 @@ function stayCardHtml (st) {
   /* Money on a stay is not the picnic case. The server sends balance_due only
      for a direct booking; an Airbnb reservation is paid through Airbnb and must
      never show staff an amount to collect. */
-  const moneyRow = st.collect_on_arrival
-    ? `<div class="stf-money stf-money--due">
-         <div>
-           <div class="stf-money-label">Collect on arrival</div>
-           <div class="stf-money-value">${esc(money(st.balance_due))}</div>
-         </div>
-         ${st.mobile ? `<a class="stf-call" href="tel:${esc(st.mobile)}">Call</a>` : ''}
-       </div>`
-    : `<div class="stf-money">
-         <div>
-           <div class="stf-money-label">Payment</div>
-           <div class="stf-money-value" data-zero="1">${
-             st.source === 'airbnb' ? 'Paid via Airbnb' : 'Fully paid'
-           }</div>
-         </div>
-         ${st.mobile ? `<a class="stf-call" href="tel:${esc(st.mobile)}">Call</a>` : ''}
-       </div>`
+  const moneyRow = moneyRowHtml(st, log, {
+    due:       st.collect_on_arrival ? st.balance_due : 0,
+    dueLabel:  'Collect on arrival',
+    dueClass:  'stf-money--due',
+    zeroLabel: 'Payment',
+    zeroValue: st.source === 'airbnb' ? 'Paid via Airbnb' : 'Fully paid'
+  })
 
   const action = allDone
     ? '<div class="stf-alldone">All done \u2713</div>'
