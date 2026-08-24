@@ -10471,6 +10471,48 @@ textarea.bcl-input { resize: vertical; }
 .bcl-save--danger { background: #b3453f; border-color: #b3453f; }
 .bcl-save:disabled { opacity: .6; cursor: default; }
 
+/* --- the payment leg ------------------------------------------------
+   advance_amount is overloaded as "money received"; this block is the only
+   place in the close form that writes it. Hidden entirely once a booking is
+   settled, so a fully-paid close stays a two-field form. */
+.bcl-pay {
+  margin-top: 4px; padding: 11px 12px 9px;
+  border: 1px solid var(--boho-border, #e3dcd5);
+  border-radius: 10px;
+  background: #faf7f4;
+}
+.bcl-pay-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap; margin-bottom: 9px;
+}
+.bcl-pay-title {
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--boho-text-medium, #8a7864);
+}
+.bcl-pay-state { font-size: 12.5px; font-weight: 600; }
+.bcl-pay-row { display: flex; gap: 8px; align-items: stretch; }
+.bcl-pay-row .bcl-input { flex: 1 1 auto; min-width: 0; }
+.bcl-fill {
+  flex: 0 0 auto; white-space: nowrap;
+  padding: 0 12px; border-radius: 9px;
+  font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  background: #fff;
+  border: 1.5px solid var(--boho-border, #e3dcd5);
+  color: var(--boho-text-medium, #8a7864);
+}
+.bcl-fill:hover { border-color: var(--boho-accent-rose, #c4607a); color: var(--boho-accent-rose, #c4607a); }
+.bcl-pay-hint { margin: 8px 0 0; line-height: 1.45; }
+.bcl-pay-hint.bcl-neg, .bcl-pay-hint.bcl-pos { font-weight: 600; }
+/* .bcl-hint sets a muted colour and is declared later in the file, so the
+   status colours have to be restated at equal-or-higher specificity. */
+.bcl-pay-hint.bcl-neg { color: #b3453f; }
+.bcl-pay-hint.bcl-pos { color: #3f6b4a; }
+
+@media (max-width: 480px) {
+  .bcl-pay-row { flex-wrap: wrap; }
+  .bcl-fill { width: 100%; padding: 9px 12px; }
+}
+
 @media (max-width: 480px) {
   .bcl-field { flex-basis: 100%; }
 }

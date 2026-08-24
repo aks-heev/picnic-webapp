@@ -5363,7 +5363,9 @@ async function renderMyBookings() {
           <div class="mbk-card-details">
             <span>📅 ${dateStr}${checkoutStr}${slot}</span>
             <span>👥 ${b.guest_count} guest${b.guest_count !== 1 ? 's' : ''}</span>
-            ${b.confirmed && b.advance_amount > 0 ? `<span>💰 ₹${Number(b.advance_amount).toLocaleString('en-IN')} advance paid</span>` : ''}
+            ${b.confirmed && b.advance_amount > 0 ? `<span>💰 ₹${Number(b.advance_amount).toLocaleString('en-IN')} ${
+              b.total_amount != null && Number(b.advance_amount) >= Number(b.total_amount) ? 'paid in full' : 'advance paid'
+            }</span>` : ''}
           </div>
           ${b.special_requirements ? `<p class="mbk-card-note">"${escapeHtml(b.special_requirements)}"</p>` : ''}
         </div>
@@ -6283,7 +6285,7 @@ const BCL_COST_FIELDS = [
   { key: 'cost_vendor_photo', label: 'Vendor / photo'},
 ]
 
-let bcl = { id: null, saving: false, origTotal: null }
+let bcl = { id: null, saving: false, origTotal: null, received: 0 }
 
 // PostgREST returns a one-to-one embed as an object, but older versions (and
 // some relationship shapes) hand back a single-element array. Accept both.
@@ -6305,6 +6307,8 @@ function bclSummaryHtml(booking, cost) {
   const spend  = Number(cost.total_cost || 0)
   const net    = total - spend
   const margin = total > 0 ? (net / total) * 100 : null
+  const had    = Number(booking.advance_amount || 0)
+  const owed   = Math.round((total - had) * 100) / 100
   const parts  = BCL_COST_FIELDS
     .filter(f => cost[f.key] != null)
     .map(f => `<span class="bcl-sum-item">${escapeHtml(f.label)} ${bclMoney(cost[f.key])}</span>`)
@@ -6320,6 +6324,9 @@ function bclSummaryHtml(booking, cost) {
       </div>
       ${parts ? `<div class="bcl-sum-items">${parts}</div>` : '<div class="bcl-sum-items"><span class="bcl-sum-item">No costs entered</span></div>'}
       <div class="bcl-sum-totals">
+        <span>Received <b class="${owed > 0 ? 'bcl-neg' : 'bcl-pos'}">${bclMoney(had)}</b>${
+          owed > 0 ? ` <span class="bcl-neg">(${bclMoney(owed)} due)</span>` : ''
+        }</span>
         <span>Spend <b>${bclMoney(spend)}</b></span>
         <span>Net <b class="${net < 0 ? 'bcl-neg' : 'bcl-pos'}">${bclMoney(net)}</b></span>
         ${margin === null ? '' : `<span>Margin <b class="${net < 0 ? 'bcl-neg' : 'bcl-pos'}">${margin.toFixed(1)}%</b></span>`}
@@ -6337,7 +6344,14 @@ function bclOpen(id) {
   const cost        = bclCostsOf(booking)
   const isCancelled = booking.booking_status === 'Cancelled'
   const total       = booking.total_amount
-  bcl = { id: booking.id, saving: false, origTotal: total == null ? null : Number(total) }
+  bcl = {
+    id: booking.id, saving: false,
+    origTotal: total == null ? null : Number(total),
+    // advance_amount is overloaded as MONEY RECEIVED (see admin_apply_staff_payment).
+    // The form collects the balance, but always submits the absolute figure, so a
+    // retry after a failed save cannot double-count.
+    received: Number(booking.advance_amount || 0),
+  }
 
   // The event date drives a warning, not a gate: cancelling is something you do
   // BEFORE the date, so locking the button until the date passes would put the
@@ -6400,6 +6414,37 @@ function bclOpen(id) {
         </label>
         ${booking.confirmed ? '' : '<p class="bcl-hint">This booking isn’t confirmed, so it can only be recorded as Cancelled.</p>'}
 
+        <div class="bcl-pay">
+          <div class="bcl-pay-head">
+            <span class="bcl-pay-title">Payment</span>
+            <span class="bcl-pay-state" id="bcl-pay-state"></span>
+          </div>
+
+          <div id="bcl-pay-collect">
+            <label class="bcl-field bcl-field--full">
+              <span>Balance received (₹)</span>
+              <div class="bcl-pay-row">
+                <input id="bcl-balance" class="bcl-input" type="number" min="0" step="0.01" inputmode="decimal"
+                       placeholder="—" oninput="bclRecalc()">
+                <button type="button" class="bcl-fill" id="bcl-fill-btn" onclick="bclFillBalance()">Received in full</button>
+              </div>
+            </label>
+          </div>
+
+          <div id="bcl-pay-refund" style="display:none">
+            <label class="bcl-field bcl-field--full">
+              <span>Amount refunded (₹)</span>
+              <div class="bcl-pay-row">
+                <input id="bcl-refund" class="bcl-input" type="number" min="0" step="0.01" inputmode="decimal"
+                       placeholder="—" oninput="bclRecalc()">
+                <button type="button" class="bcl-fill" id="bcl-refund-btn" onclick="bclFillRefund()">Refunded in full</button>
+              </div>
+            </label>
+          </div>
+
+          <p class="bcl-hint bcl-pay-hint" id="bcl-pay-hint"></p>
+        </div>
+
         <label class="bcl-field bcl-field--full">
           <span>Notes <em id="bcl-note-req" class="bcl-req" style="display:none">required</em></span>
           <textarea id="bcl-notes" class="bcl-input" rows="2" placeholder="Why the price changed, what went wrong, anything worth remembering">${escapeHtml((cost && cost.close_notes) || '')}</textarea>
@@ -6418,7 +6463,7 @@ window.bclOpen = bclOpen
 
 function bclCloseModal() {
   document.getElementById('bcl-overlay')?.remove()
-  bcl = { id: null, saving: false, origTotal: null }
+  bcl = { id: null, saving: false, origTotal: null, received: 0 }
 }
 window.bclCloseModal = bclCloseModal
 
@@ -6453,6 +6498,8 @@ function bclRecalc() {
   // Mirror the RPC's rule in the UI: total moved, or cancelling => note needed.
   const status     = document.getElementById('bcl-status')?.value || 'Closed'
   const moved      = bcl.origTotal !== (total == null ? null : Number(total))
+
+  bclRecalcPayment(total, status)
   const noteNeeded = moved || status === 'Cancelled'
   const req = document.getElementById('bcl-note-req')
   if (req) req.style.display = noteNeeded ? '' : 'none'
@@ -6460,6 +6507,100 @@ function bclRecalc() {
   if (saveBtn) saveBtn.classList.toggle('bcl-save--danger', status === 'Cancelled')
 }
 window.bclRecalc = bclRecalc
+
+// The money leg of the close. `bcl.received` is what the booking already records
+// as received (bookings.advance_amount, overloaded); the Closed form asks only for
+// the BALANCE on top of it, while the Cancelled form asks for the absolute figure
+// retained so a refund can be recorded by lowering it. Both resolve to one absolute
+// number, which is what goes to the RPC.
+function bclReceivedNow(total, status) {
+  const had = Number(bcl.received || 0)
+  // Both money inputs are DELTAS against what is already on record — one adds,
+  // one subtracts. Never an absolute figure: two adjacent inputs that look alike
+  // but mean different things is how a wrong number gets typed.
+  const val = status === 'Cancelled'
+    ? had - (bclNum('bcl-refund') || 0)
+    : had + (bclNum('bcl-balance') || 0)
+  return Math.round(val * 100) / 100
+}
+
+function bclRecalcPayment(total, status) {
+  const had      = Number(bcl.received || 0)
+  const now      = bclReceivedNow(total, status)
+  const isCancel = status === 'Cancelled'
+  const owedBefore = total == null ? null : Math.round((total - had) * 100) / 100
+  const owedAfter  = total == null ? null : Math.round((total - now) * 100) / 100
+
+  const collect = document.getElementById('bcl-pay-collect')
+  const refund  = document.getElementById('bcl-pay-refund')
+  if (collect) collect.style.display = (!isCancel && owedBefore !== null && owedBefore > 0) ? '' : 'none'
+  // Nothing was ever received => nothing can be refunded.
+  if (refund)  refund.style.display  = (isCancel && had > 0) ? '' : 'none'
+
+  // The state line tracks what WOULD be on record after saving, with the
+  // current figure in brackets, so the header and the hint never disagree.
+  const state = document.getElementById('bcl-pay-state')
+  if (state) {
+    const was = now === had ? '' : ` (was ${bclMoney(had)})`
+    if (isCancel) {
+      // An over-refund is an invalid entry, not a negative balance: leave the
+      // header on what is actually recorded and let the hint carry the error.
+      state.textContent = now < 0 ? `${bclMoney(had)} retained` : `${bclMoney(now)} retained${was}`
+      state.className = 'bcl-pay-state' + (now < had ? ' bcl-neg' : '')
+    } else if (total == null) {
+      state.textContent = `${bclMoney(now)} received${was}`
+      state.className = 'bcl-pay-state'
+    } else {
+      state.textContent = `${bclMoney(now)} of ${bclMoney(total)} received${was}`
+      state.className = 'bcl-pay-state' + (owedAfter > 0 ? ' bcl-neg' : ' bcl-pos')
+    }
+  }
+
+  const hint = document.getElementById('bcl-pay-hint')
+  if (hint) {
+    let txt = '', cls = ''
+    if (total != null && now > total) {
+      txt = `That is ${bclMoney(now - total)} more than the booking total. Raise the total, or record an on-site upsell as a negative discount instead.`
+      cls = 'bcl-neg'
+    } else if (isCancel) {
+      if (had <= 0)      { txt = 'Nothing was received on this booking, so there is nothing to refund.' }
+      else if (now < 0)  { txt = `That is more than the ${bclMoney(had)} received.`; cls = 'bcl-neg' }
+      else if (now < had){ txt = `Records ${bclMoney(had - now)} refunded \u2014 ${bclMoney(now)} retained.`; cls = 'bcl-neg' }
+      else               { txt = `${bclMoney(had)} stays recorded as received. Leave blank if nothing was refunded.` }
+    } else if (owedAfter === null) {
+      txt = 'Set a booking total to record payment against it.'
+    } else if (owedAfter > 0) {
+      txt = `${bclMoney(owedAfter)} would still be outstanding \u2014 a booking cannot be closed until it is recorded here, or written off by lowering the total.`
+      cls = 'bcl-neg'
+    } else {
+      txt = `Settled \u2014 ${bclMoney(now)} received in full.`
+      cls = 'bcl-pos'
+    }
+    hint.textContent = txt
+    hint.className = 'bcl-hint bcl-pay-hint' + (cls ? ' ' + cls : '')
+  }
+
+  const fill = document.getElementById('bcl-fill-btn')
+  if (fill && owedBefore !== null) fill.textContent = `Received in full (${bclMoney(owedBefore)})`
+  const rbtn = document.getElementById('bcl-refund-btn')
+  if (rbtn) rbtn.textContent = `Refunded in full (${bclMoney(had)})`
+}
+
+function bclFillRefund() {
+  const el = document.getElementById('bcl-refund')
+  if (el) el.value = String(Number(bcl.received || 0))
+  bclRecalc()
+}
+window.bclFillRefund = bclFillRefund
+
+function bclFillBalance() {
+  const total = bclNum('bcl-total')
+  const owed  = total == null ? null : Math.round((total - Number(bcl.received || 0)) * 100) / 100
+  const el    = document.getElementById('bcl-balance')
+  if (el && owed !== null && owed > 0) el.value = String(owed)
+  bclRecalc()
+}
+window.bclFillBalance = bclFillBalance
 
 async function bclSave() {
   if (!bcl.id || bcl.saving) return
@@ -6478,7 +6619,20 @@ async function bclSave() {
     return showToast('Add a note explaining the cancellation', 'error')
   }
 
-  const p_close = { total_amount: total, booking_status: status, close_notes: notes || null }
+  // Money. The RPC re-checks all three of these; the toasts just read better
+  // than a raw Postgres exception.
+  const received = bclReceivedNow(total, status)
+  if (received < 0) {
+    return showToast(`Refund is more than the ${bclMoney(bcl.received || 0)} received`, 'error')
+  }
+  if (total != null && received > total) {
+    return showToast(`Received (${bclMoney(received)}) is more than the total (${bclMoney(total)})`, 'error')
+  }
+  if (status === 'Closed' && total != null && received < total) {
+    return showToast(`${bclMoney(total - received)} is still outstanding \u2014 record it or lower the total`, 'error')
+  }
+
+  const p_close = { total_amount: total, booking_status: status, close_notes: notes || null, amount_received: received }
   BCL_COST_FIELDS.forEach(f => { p_close[f.key] = bclNum('bcl-' + f.key) })
 
   bcl.saving = true
