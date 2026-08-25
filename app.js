@@ -6232,33 +6232,6 @@ function renderBookings(bookings) {
       ${airbnbHtml}
       ${ordersHtml}
       ${bclSummaryHtml(booking, bCost)}
-
-      <div class="adm-menu-section">
-        <div class="adm-menu-header">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-          Menu Link
-        </div>
-        <div class="adm-menu-controls">
-          <label class="adm-menu-field">
-            <span>Food</span>
-            <input class="adm-menu-input" type="number" id="food-count-${escapeHtml(booking.id)}" value="3" min="1" max="15">
-          </label>
-          <label class="adm-menu-field">
-            <span>Drinks</span>
-            <input class="adm-menu-input" type="number" id="bev-count-${escapeHtml(booking.id)}" value="2" min="1" max="10">
-          </label>
-          <button class="generate-menu-btn adm-generate-btn" data-booking-id="${escapeHtml(booking.id)}">
-            Generate Link
-          </button>
-        </div>
-        <div class="adm-generated-link" id="generated-link-${escapeHtml(booking.id)}" style="display:none">
-          <input class="adm-link-input" type="text" id="menu-url-${escapeHtml(booking.id)}" readonly>
-          <button class="copy-menu-btn adm-copy-btn" data-booking-id="${escapeHtml(booking.id)}">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-            Copy
-          </button>
-        </div>
-      </div>
     </div>`
   }).join('')
 }
@@ -7029,61 +7002,6 @@ async function recheckHold(queryId, venueId, preferredDate, checkoutDate, btn) {
     setResult('adm-hold-recheck--bad', '⚠ Re-check failed — try again.')
   } finally {
     if (btn) btn.disabled = false
-  }
-}
-
-// Generate menu link for booking
-async function generateBookingMenuLink(bookingId) {
-  if (!appState.session) return showToast('Admin login required', 'error')
-  const foodCountInput = document.getElementById(`food-count-${bookingId}`)
-  const bevCountInput = document.getElementById(`bev-count-${bookingId}`)
-  
-  const foodCount = parseInt(foodCountInput.value, 10)
-  const bevCount = parseInt(bevCountInput.value, 10)
-  
-  if (foodCount < 1 || foodCount > 15 || bevCount < 1 || bevCount > 10) {
-    showToast('Food items must be 1-15, beverages 1-10', 'error')
-    return
-  }
-  
-  try {
-    const menuLink = {
-      booking_id: parseInt(bookingId, 10),  // persist FK — fixes orphaned-order gap
-      max_food_items: foodCount,
-      max_bev_items: bevCount,
-      created_at: new Date().toISOString(),
-    }
-
-    const { data, error } = await supabase.from('menu_links').insert([menuLink]).select()
-    if (error) throw error
-
-    const generatedLinkDiv = document.getElementById(`generated-link-${bookingId}`)
-    const linkInput = document.getElementById(`menu-url-${bookingId}`)
-    
-    if (generatedLinkDiv && linkInput) {
-      const fullUrl = `${window.location.origin}?menu=${data[0].token}&booking=${bookingId}`
-      linkInput.value = fullUrl
-      generatedLinkDiv.style.display = 'block'
-    }
-    
-    showToast('Menu link generated for booking!', 'success')
-    loadMenuLinks()
-    
-  } catch (error) {
-    console.error(error)
-    showToast('Failed to generate menu link', 'error')
-  }
-}
-
-// Copy booking menu link
-function copyBookingMenuLink(bookingId) {
-  const linkInput = document.getElementById(`menu-url-${bookingId}`)
-  if (linkInput && linkInput.value) {
-    navigator.clipboard.writeText(linkInput.value).then(() => {
-      showToast('Menu link copied to clipboard', 'success')
-    }).catch(() => {
-      showToast('Failed to copy link', 'error')
-    })
   }
 }
 
