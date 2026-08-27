@@ -5534,7 +5534,7 @@ async function loadBookings() {
       .from('bookings')
       // booking_costs is admin-only by RLS; for any other signed-in user the
       // embed simply comes back empty rather than erroring.
-      .select('*, venues(name, type, area, team_id), booking_costs(closed_at, closed_by, close_notes, total_cost, quoted_total_amount, cost_food, cost_fruits, cost_flowers, cost_decor_other, cost_vendor_photo)')
+      .select('*, venues(name, type, area, team_id), booking_costs(closed_at, closed_by, close_notes, total_cost, quoted_total_amount, cost_food, cost_fruits, cost_flowers, cost_decor_other, cost_vendor_photo), booking_event_log(step, at, by_name, amount)')
       // Cancelling clears confirmed, so a cancelled booking would drop off both
       // tabs. Keep it visible here, greyed out, instead of losing the record.
       .or('confirmed.eq.true,booking_status.eq.Cancelled')
@@ -6322,11 +6322,24 @@ function bclOpen(id) {
   bcl = {
     id: booking.id, saving: false,
     origTotal: total == null ? null : Number(total),
-    // advance_amount is overloaded as MONEY RECEIVED (see admin_apply_staff_payment).
-    // The form collects the balance, but always submits the absolute figure, so a
-    // retry after a failed save cannot double-count.
+    // advance_amount is overloaded as MONEY RECEIVED. The form collects the
+    // balance, but always submits the absolute figure, so a retry after a failed
+    // save cannot double-count.
     received: Number(booking.advance_amount || 0),
   }
+
+  // What staff reported collecting on the day. This is a REPORT, never a write:
+  // staff_log_step cannot touch bookings, and there is deliberately no second
+  // path that moves it into the books. It lands here, as the default balance on
+  // the one form that sets money, so the admin confirms a true number instead of
+  // a stale deposit. Booking #100 was closed at 5,000 on 2026-08-24 while staff
+  // had logged 6,900 that morning — that is the hole this closes.
+  const staffPay    = (booking.booking_event_log || []).find(r => r && r.step === 'payment_received')
+  const staffLogged = staffPay ? Number(staffPay.amount || 0) : 0
+  const owedNow     = total == null ? 0 : Math.round((Number(total) - bcl.received) * 100) / 100
+  // Never prefill more than is actually outstanding: once the money is on record
+  // the balance field goes empty again by itself.
+  const staffPrefill = staffLogged > 0 && owedNow > 0 ? Math.min(staffLogged, owedNow) : 0
 
   // The event date drives a warning, not a gate: cancelling is something you do
   // BEFORE the date, so locking the button until the date passes would put the
@@ -6400,10 +6413,15 @@ function bclOpen(id) {
               <span>Balance received (₹)</span>
               <div class="bcl-pay-row">
                 <input id="bcl-balance" class="bcl-input" type="number" min="0" step="0.01" inputmode="decimal"
-                       placeholder="—" oninput="bclRecalc()">
+                       placeholder="—" value="${staffPrefill > 0 ? escapeHtml(String(staffPrefill)) : ''}" oninput="bclRecalc()">
                 <button type="button" class="bcl-fill" id="bcl-fill-btn" onclick="bclFillBalance()">Received in full</button>
               </div>
             </label>
+            ${staffLogged > 0 ? `<p class="bcl-hint bcl-hint--staff">${
+              escapeHtml((staffPay && staffPay.by_name) || 'Staff')
+            } logged ${escapeHtml(bclMoney(staffLogged))} collected${
+              staffPay && staffPay.at ? ' at ' + escapeHtml(new Date(staffPay.at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })) : ''
+            }.${staffPrefill > 0 ? ' Prefilled above — change it if that is not what came in.' : ' Already on record.'}</p>` : ''}
           </div>
 
           <div id="bcl-pay-refund" style="display:none">
@@ -7150,9 +7168,6 @@ function sttRenderToday(rows) {
     const payRow = log.find(r => r.step === 'payment_received')
     const claimed = payRow ? Number(payRow.amount || 0) : null
 
-    // The reconcile prompt only appears when staff actually logged a payment
-    // AND the books still disagree with what they said they collected.
-    const needsReconcile = payRow && claimed !== null && Math.abs(advance - claimed) > 0.5
 
     const timeline = log.length
       ? `<ul class="stt-timeline">${log.map(r => `
@@ -7199,50 +7214,17 @@ function sttRenderToday(rows) {
         ${timeline}
         ${chips ? `<div class="stt-chips">${chips}</div>` : ''}
 
-        ${needsReconcile ? `
-          <div class="stt-reconcile">
-            <span>Staff collected ${escapeHtml(sttMoney(claimed))}; the booking still records
-              ${escapeHtml(sttMoney(advance))} received.</span>
-            <button type="button" class="btn btn--primary stt-apply-btn"
-                    data-booking-id="${escapeHtml(b.id)}" data-amount="${escapeHtml(claimed)}"
-                    onclick="sttApplyPayment(${b.id}, ${claimed})">
-              Record ${escapeHtml(sttMoney(claimed))} to booking
-            </button>
-          </div>` : ''}
-
         ${last ? `<p class="stt-muted stt-last">Last update ${escapeHtml(sttClock(last.at))}</p>` : ''}
       </div>`
   }).join('')
 }
 
-// Turns what staff SAY they collected into the books. Deliberately a separate,
-// explicit admin action — staff_log_step can never write a money column.
-async function sttApplyPayment(bookingId, amount) {
-  if (!appState.session) return showToast('Admin login required', 'error')
-  if (stt.busyBooking === bookingId) return
-  if (!confirm(`Set amount received on booking #${bookingId} to ${sttMoney(amount)}?`)) return
-
-  stt.busyBooking = bookingId
-  const btn = document.querySelector(`.stt-apply-btn[data-booking-id="${bookingId}"]`)
-  if (btn) { btn.disabled = true; btn.textContent = 'Saving…' }
-
-  try {
-    const { data, error } = await supabase.rpc('admin_apply_staff_payment', {
-      p_booking_id: bookingId, p_amount: amount,
-    })
-    if (error) throw error
-    showToast(data && data.fully_paid ? 'Recorded — booking is fully paid' : 'Payment recorded', 'success')
-    await loadStaffOps()
-    loadBookings()
-  } catch (err) {
-    console.error('admin_apply_staff_payment failed:', err)
-    showToast(err.message || 'Failed to record payment', 'error')
-    if (btn) { btn.disabled = false; btn.textContent = `Record ${sttMoney(amount)} to booking` }
-  } finally {
-    stt.busyBooking = null
-  }
-}
-window.sttApplyPayment = sttApplyPayment
+// Staff REPORT what they collected; they never move money. Turning that into
+// the books is done in ONE place — the Close Booking form, which snapshots the
+// quote, demands notes when the total moves, and guards against overshooting it.
+// A second control here used to write bookings.advance_amount directly with none
+// of that, and with the wrong arithmetic (it replaced a cumulative figure with an
+// incremental one). It was removed 2026-08-27 along with admin_apply_staff_payment.
 
 // ---------------------------------------------------------------- tokens
 

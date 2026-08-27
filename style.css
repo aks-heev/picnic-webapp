@@ -7752,6 +7752,13 @@ body.menu-viewer-open {
 /* Booking / lead id. Shown so a card can be matched to a SQL result, a handoff
    note or a WhatsApp message without opening it. user-select:all so one click
    grabs the whole id, because the reason you look at it is to copy it. */
+/* Provenance for the prefilled balance: says who reported the money and when,
+   so the admin is confirming a figure with a source rather than a bare number. */
+.bcl-hint--staff {
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
 .adm-id {
   flex: none;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -10488,15 +10495,6 @@ textarea.bcl-input { resize: vertical; }
   font-size: 12px; padding: 3px 10px; border-radius: 999px;
   background: #f7f1ea; border: 1px solid var(--boho-border, #e8ddd0);
   color: var(--boho-text-medium, #6b5c4c);
-}
-
-/* Only rendered when staff logged a payment AND the books still disagree. */
-.stt-reconcile {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap;
-  margin-top: 12px; padding: 12px;
-  background: #fdf6e3; border: 1px solid #eddfb8; border-radius: 8px;
-  font-size: 14px; color: #6b5c4c;
 }
 
 .stt-last { margin: 10px 0 0; font-size: 12px; }

@@ -1,0 +1,27 @@
+-- Remove the second write path to bookings.advance_amount.
+--
+-- staff_log_step deliberately never touches bookings: staff REPORT what they
+-- collected into booking_event_log, and moving that into the books is an admin
+-- decision. That decision belongs to ONE function — admin_close_booking — which
+-- snapshots quoted_total_amount before overwriting, requires close_notes when
+-- the total moves, sets booking_status, and releases venue_availability.
+--
+-- admin_apply_staff_payment did none of that, and its arithmetic was wrong:
+-- `set advance_amount = p_amount` REPLACED a cumulative figure (advance_amount is
+-- overloaded as "total money received") with an incremental one (what staff
+-- logged that day). On booking #100 -- total 11,900, advance 5,000, staff logged
+-- 6,900 -- the admin panel offered "Record ₹6,900", which would have left a fully
+-- collected booking reporting ₹5,000 outstanding. Its needsReconcile test
+-- compared the same two incompatible quantities, so the prompt never cleared:
+-- #106 sat fully paid at 8,300/8,300 and still offered to set it back to 4,300.
+--
+-- Replaced by: the Close Booking form now prefills its balance-received field
+-- from the staff-logged amount, capped at what is actually outstanding, with the
+-- reporter's name and time shown beside it. The admin still types the final
+-- number; the default is simply true instead of a stale deposit.
+--
+-- Only caller was app.js (sttApplyPayment), removed in the same change.
+--
+-- ROLLBACK: recreate from supabase/migrations/20260821_admin_apply_staff_payment.sql
+-- (the original definition), but re-read the arithmetic before trusting it.
+drop function if exists public.admin_apply_staff_payment(bigint, numeric);
