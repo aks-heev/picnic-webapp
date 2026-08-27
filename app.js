@@ -6281,7 +6281,9 @@ function bclSummaryHtml(booking, cost) {
   const total  = Number(booking.total_amount || 0)
   const spend  = Number(cost.total_cost || 0)
   const net    = total - spend
-  const margin = total > 0 ? (net / total) * 100 : null
+  // Same rule as the live form: a close saved with no costs has no margin.
+  const anyCost = BCL_COST_FIELDS.some(f => cost[f.key] != null)
+  const margin  = (total > 0 && anyCost) ? (net / total) * 100 : null
   const had    = Number(booking.advance_amount || 0)
   const owed   = Math.round((total - had) * 100) / 100
   const parts  = BCL_COST_FIELDS
@@ -6408,6 +6410,12 @@ function bclOpen(id) {
             <span class="bcl-pay-state" id="bcl-pay-state"></span>
           </div>
 
+          ${staffLogged > 0 ? `<p class="bcl-hint bcl-hint--staff">${
+            escapeHtml((staffPay && staffPay.by_name) || 'Staff')
+          } logged ${escapeHtml(bclMoney(staffLogged))} collected${
+            staffPay && staffPay.at ? ' at ' + escapeHtml(new Date(staffPay.at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })) : ''
+          }${staffPrefill > 0 ? ', prefilled below — change it if that is not what came in.' : ' — already on record.'}</p>` : ''}
+
           <div id="bcl-pay-collect">
             <label class="bcl-field bcl-field--full">
               <span>Balance received (₹)</span>
@@ -6417,11 +6425,6 @@ function bclOpen(id) {
                 <button type="button" class="bcl-fill" id="bcl-fill-btn" onclick="bclFillBalance()">Received in full</button>
               </div>
             </label>
-            ${staffLogged > 0 ? `<p class="bcl-hint bcl-hint--staff">${
-              escapeHtml((staffPay && staffPay.by_name) || 'Staff')
-            } logged ${escapeHtml(bclMoney(staffLogged))} collected${
-              staffPay && staffPay.at ? ' at ' + escapeHtml(new Date(staffPay.at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })) : ''
-            }.${staffPrefill > 0 ? ' Prefilled above — change it if that is not what came in.' : ' Already on record.'}</p>` : ''}
           </div>
 
           <div id="bcl-pay-refund" style="display:none">
@@ -6475,7 +6478,10 @@ function bclRecalc() {
   const spend  = BCL_COST_FIELDS.reduce((a, f) => a + (bclNum('bcl-' + f.key) || 0), 0)
   const total  = bclNum('bcl-total')
   const net    = (total || 0) - spend
-  const margin = total ? (net / total) * 100 : null
+  // No cost entered yet => no margin. Otherwise every untouched booking reads
+  // "Margin 100.0%", which looks like a finding and is just an empty form.
+  const anyCost = BCL_COST_FIELDS.some(f => bclNum('bcl-' + f.key) != null)
+  const margin  = (total && anyCost) ? (net / total) * 100 : null
 
   const set = (id, txt, cls) => {
     const el = document.getElementById(id)
