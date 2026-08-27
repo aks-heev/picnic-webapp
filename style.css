@@ -7749,6 +7749,21 @@ body.menu-viewer-open {
 }
 
 /* Timestamp */
+/* Booking / lead id. Shown so a card can be matched to a SQL result, a handoff
+   note or a WhatsApp message without opening it. user-select:all so one click
+   grabs the whole id, because the reason you look at it is to copy it. */
+.adm-id {
+  flex: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  background: var(--color-secondary);
+  border-radius: 5px;
+  padding: 1px 6px;
+  user-select: all;
+}
+
 .adm-timestamp {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);

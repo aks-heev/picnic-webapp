@@ -5998,6 +5998,7 @@ function renderQueries(queries) {
       <div class="adm-card-header">
         <div class="adm-card-header-name">
           ${queryStatusSelectHtml(query)}
+          <span class="adm-id" title="Lead ID">#${escapeHtml(query.id)}</span>
           <span class="adm-name">${escapeHtml(query.full_name)}</span>
         </div>
         <div class="adm-card-header-meta">
@@ -6191,6 +6192,7 @@ function renderBookings(bookings) {
       <div class="adm-card-header">
         <div class="adm-card-header-name">
           <span class="adm-status-dot adm-status-dot--${statusMod}"></span>
+          <span class="adm-id" title="Booking ID">#${escapeHtml(booking.id)}</span>
           <span class="adm-name">${escapeHtml(booking.full_name)}</span>
         </div>
         <div class="adm-card-header-meta">
@@ -7178,6 +7180,7 @@ function sttRenderToday(rows) {
       <div class="stt-card">
         <div class="stt-card-head">
           <div>
+            <span class="adm-id" title="Booking ID">#${escapeHtml(b.id)}</span>
             <strong>${escapeHtml(b.full_name)}</strong>
             <span class="stt-muted"> · ${escapeHtml(sttSlot(b))} · ${
               escapeHtml((b.venues && b.venues.name) || 'Venue not set')
