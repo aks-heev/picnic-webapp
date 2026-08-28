@@ -10099,7 +10099,7 @@ async function loadAddBookingForm() {
   try {
     const [venueRes, addonRes, vaRes, pkgRes, vpRes] = await Promise.all([
       supabase.from('venues')
-        .select('id, name, type, base_price, packages_enabled, max_concurrent_setups, parent_venue_id, metadata, free_guests_upto, overage_per_person')
+        .select('id, name, type, region, base_price, packages_enabled, max_concurrent_setups, parent_venue_id, metadata, free_guests_upto, overage_per_person')
         .eq('is_active', true).order('type', { ascending: true }).order('id', { ascending: true }),
       supabase.from('add_ons').select('id, name, price, category, requires_confirmation').eq('is_active', true).order('sort_order', { ascending: true }),
       supabase.from('venue_add_ons').select('venue_id, addon_id'),
@@ -10307,7 +10307,7 @@ function renderAddBookingForm() {
   const venues = abkVenuesForType()
 
   const venueOptions = ['<option value="">Select a venue…</option>']
-    .concat(venues.map(vn => `<option value="${vn.id}" ${Number(abk.venueId) === vn.id ? 'selected' : ''}>${abkText(vn.name)} · ${abkText(vn.type)}</option>`))
+    .concat(venues.map(vn => `<option value="${vn.id}" ${Number(abk.venueId) === vn.id ? 'selected' : ''}>${abkText(vn.name)} · ${abkText(vn.type === 'custom' ? (STT_REGION_LABEL[vn.region] || vn.region) : vn.type)}</option>`))
     .join('')
 
   const isCustom = v && v.type === 'custom'
@@ -10859,7 +10859,13 @@ async function handleCustomPicnicSubmit(e) {
   if (!location)                  { showToast('Please describe your spot', 'error'); return }
   if (isNaN(guests) || guests < 1){ showToast('Please enter a valid guest count', 'error'); return }
 
-  const customVenue = appState.venues.find(v => v.type === 'custom')
+  // One custom venue row per region (5 = jaipur, 26 = ncr). Pick the row that
+  // matches the city the customer just chose, so bookings_set_region() derives
+  // the right region -- a custom booking carries no other region signal, and
+  // before this every custom booking silently derived 'jaipur' from venue 5.
+  const customVenue = appState.venues.find(
+    v => v.type === 'custom' && v.region === (city === 'jaipur' ? 'jaipur' : 'ncr')
+  )
   if (!customVenue) { showToast('Something went wrong', 'error'); return }
 
   // Route to the right team by city selection

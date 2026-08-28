@@ -1,11 +1,45 @@
 # Staff Access Links — Location Scoping
 
-**Written**: 2026-08-25 · **Status**: plan only, nothing built · **Owner**: Aksheev (business calls, git) / Claude (implementation)
+**Written**: 2026-08-25 · **Status**: **Phases 1, 2 and 4 SHIPPED. Phase 3 shipped narrower than planned. Phase 5 half done.** See §0.1. · **Owner**: Aksheev (business calls, git) / Claude (implementation)
 **Revision**: v3 — rewritten after live verification corrected three load-bearing claims in v2. See §10.
 
 Extends `docs/STAFF_STATUS_TOOL_PLAN.md`; its "Settled, do not relitigate" still holds.
 
 **Settled by Aksheev, 2026-08-25**: exactly **two** locations — **Jaipur** and **NCR**. Every booking belongs to one of them, custom-address bookings included. No third bucket, no "visible to everyone".
+
+---
+
+## 0.1 Status — as built (live-verified 2026-08-28)
+
+Everything below §0.1 is the **plan as written on 2026-08-25**, kept verbatim for its reasoning. Where the build diverged, the phase's own status line says so. Trust this section and the live database over the phase text.
+
+| Phase | Status | Live migration(s) |
+|---|---|---|
+| 1 — schema + trigger | ✅ **SHIPPED** 2026-08-27 | `20260827161542_region_scoping_phase1` + `20260827161711_region_scoping_phase1_revoke_trigger_fn` |
+| 2 — scope the five helpers | ✅ **SHIPPED** 2026-08-28 | `20260828054442_region_scoping_phase2_scope_staff_helpers` |
+| 3 — region required at confirmation | ⚠️ **PARTIAL — DB guard only** | `20260828055533_region_scoping_phase3_require_region_on_confirm` |
+| 4 — token issuing + admin UI | ✅ **SHIPPED** 2026-08-28 | `20260828060038_region_scoping_phase4_issue_token_with_region` |
+| 5 — cut over | ⚠️ **HALF DONE — the old all-access token is still live** | — |
+
+**Live state, probed 2026-08-28**
+
+- Five helpers, all `pronargs = 1` — no zero-arg variant survived. `admin_issue_staff_token` `pronargs = 2`, exactly one row.
+- `staff_today` and `staff_log_step` both reference `region`; `admin_apply_staff_payment` no longer exists (dropped for unrelated reasons, `20260827171844`).
+- `bookings`: 58 rows, `ncr` 52 / `jaipur` 6 / NULL 0. **`confirmed and region is null` = 0.**
+- `staff_tokens`: `10 Sunny region NULL is_active true` · `26 Sunny ncr active` · `27 Adhiraj jaipur active`.
+
+🔴 **Scoping is therefore built but not yet enforced.** Token 10 has no region, so it still returns every booking in the country. Phase 5 step 2 is the only thing standing between this plan and its stated goal, and it is Aksheev's call — deferred by him on 2026-08-28.
+
+🔴 **What Phase 3 actually shipped.** Neither `admin_add_manual_booking` nor `admin_edit_booking` was touched — `pg_get_functiondef` on both contains no `region` at all — because both already `raise exception 'Venue is required'`. What shipped instead is a single branch inside `bookings_set_region()`: confirming a row with no venue **and** no region raises.
+
+🔴 **The gap Phase 3 left was NOT what an earlier draft of this section claimed. Corrected 2026-08-28 after live probing; F4 in §1 is also wrong and is annotated there.**
+
+- Public custom bookings do **not** store `venue_id IS NULL`. `app.js:4274` is the *main* booking form; custom picnics go through `handleCustomPicnicSubmit`, which sends `p_venue_id: customVenue.id`. Bookings with a NULL `venue_id`: **0**, ever.
+- The admin lead-confirm path is `app.js:6829`, a **direct PostgREST `.update({confirmed:true, …})`** — not an RPC. `Venue is required` never runs there.
+- The trigger's `confirmed and region is null` raise is therefore **unreachable**. Correct, but dead.
+- **The real bug**: one custom venue row existed — id 5, city Jaipur, region `jaipur`. Both paths stored `venue_id = 5`, so **every custom booking silently derived `jaipur`**, NCR ones included. An NCR custom picnic would have surfaced on Adhiraj's link and been invisible on Sunny's. Not "cannot confirm" — "confirms fine, files wrong."
+
+✅ **FIXED 2026-08-28** — migration `custom_venue_per_region`, repo file `supabase/migrations/20260828_custom_venue_per_region.sql`. One custom venue **per region**: venue 5 stays Jaipur, new **venue 26** is city `Gurugram` / region `ncr` / team 2 / sort_order 26. Region derives from the venue like every other booking. `app.js`: the public modal picks the custom row matching the `cpm-city` value it already collects, the `abk` venue fetch gained `region` to its narrow column list, and the `abk` dropdown labels custom options by region. Assertions A–E passed rolled-back (including venue-move 5 → 26 re-deriving to `ncr`); 58 existing bookings unchanged; `node --check` and `vite build` clean. **Rollback is `is_active = false`, never `DELETE` — `bookings_venue_id_fkey` is `ON DELETE SET NULL`.** The `abk` region control and the RPC jsonb key are now redundant, not owed.
 
 ---
 
@@ -33,7 +67,7 @@ All probed live against `evmftrogyzoudiccqkya` on 2026-08-25. Re-probe before bu
 | F1 | `venues.city` has **three** values: `Gurugram`, `Delhi`, `Jaipur`. The Sunroom (18) is **Delhi**. | Scoping on `city = 'Gurugram'` would have hidden booking #100 — the first event ever taken through a full spine. Region, not city. |
 | F2 | The four id helpers (`staff_event_ids_active/upcoming`, `staff_stay_ids_active/upcoming`) are `LANGUAGE sql STABLE SECURITY DEFINER`, select **from `bookings` only** — **no join to `venues`**. | v2 claimed they joined venues. They don't. Any venue-derived filter needs a *new* join, and it must be a LEFT join (see F4) or bookings vanish. §3 avoids the join entirely. |
 | F3 | All four helpers filter `b.confirmed = true`. `staff_occupancy_upcoming` joins `venues` and excludes `type = 'combo'`. | The staff tool never sees an unconfirmed lead. This is what lets §4 defer region assignment to confirmation time. |
-| F4 | Public site: `if (venue.type !== 'custom') lead.venue_id = venue.id` — a public custom booking is stored with **`venue_id IS NULL`**. Admin `abk` sets `venue_id: v.id` → venue 5, which is `city = 'Jaipur'`. | There is no venue row to derive a region from on the public path, and a misleading one on the admin path. Region must live on the booking. |
+| F4 | 🔴 **WRONG — disproved live 2026-08-28, see §0.1.** Public site: `if (venue.type !== 'custom') lead.venue_id = venue.id` — a public custom booking is stored with **`venue_id IS NULL`**. *(It is not: that line is the main booking form; the custom modal sends `p_venue_id: customVenue.id`, and zero NULL-venue bookings have ever existed.)* Admin `abk` sets `venue_id: v.id` → venue 5, which is `city = 'Jaipur'`. | There is no venue row to derive a region from on the public path, and a misleading one on the admin path. Region must live on the booking. |
 | F5 | `admin_add_manual_booking(p_booking jsonb, p_add_ons jsonb)` and `admin_edit_booking(p_booking_id bigint, p_booking jsonb, p_add_ons jsonb)` take **jsonb payloads**. | Adding a region needs a new jsonb key, **not** a signature change. v2 wrongly costed these as drop-and-recreate. No PostgREST overload risk. |
 | F6 | `submit_booking_intent` has **20 positional parameters**; the spare `p_advance_amount` is `numeric` and cannot carry a region string. | Changing it *would* be a real signature change. §4 avoids needing to. |
 | F7 | `bookings` has three triggers, all **AFTER** (`on_booking_insert_notify`, `on_booking_insert_confirmed`, `on_booking_confirmed_notify`). No BEFORE trigger exists. | A BEFORE trigger to materialise region is unoccupied ground and runs ahead of all three. |
@@ -128,6 +162,8 @@ v2 costed Phase 3 as "two admin RPCs + the public booking path + `app.js`, its o
 
 ### Phase 1 — Schema + trigger (additive; no read path changes)
 
+> ✅ **SHIPPED 2026-08-27**, as planned. Backfill landed venues ncr=6/jaipur=19, bookings ncr=52/jaipur=6, zero confirmed rows with a NULL region. Inertness proved by `staff_today` payload md5 `7c546a97d4f65167bc00e2f62a7eb5c8` identical before and after. Six trigger branches passed in a rolled-back `DO $$`. One deviation: `bookings_set_region()` kept SECURITY DEFINER but needed `revoke all … from public, anon, authenticated` — `get_advisors` flagged it as PostgREST-reachable, which the plan had not anticipated.
+
 §3.1, §3.2, §3.3, plus the venue backfill and this booking backfill:
 
 ```sql
@@ -148,6 +184,8 @@ update public.bookings b set region = v.region
 ---
 
 ### Phase 2 — Scope the five helpers
+
+> ✅ **SHIPPED 2026-08-28**, as planned, including the step-3 drop. Every exit assertion passed, The Sunroom (18, city `Delhi`) present for `ncr` among them. NULL-region payload md5 `f1096d54…` identical to the Phase 1 capture. `pg_proc` returns five rows, all `pronargs = 1`.
 
 Four id helpers get exactly one clause, no join:
 
@@ -183,6 +221,8 @@ Step 3 is not optional. A surviving zero-arg helper silently bypasses scoping an
 
 ### Phase 3 — Admin: assign region, and make region-less confirmation impossible
 
+> ⚠️ **SHIPPED NARROW, 2026-08-28.** Only the second half exists. The `raise` lives in `bookings_set_region()`, not in the two admin RPCs — both were left untouched because each already refuses a venue-less booking with `Venue is required`, so the extra jsonb key would have been unreachable. **The `abk` region control was NOT built**, and the `picnic-live-verify` backstop reads 0 but was added as a manual query, not wired into the skill. **The gap this left was misdiagnosed and is now FIXED** by the custom-venue-per-region split (migration `custom_venue_per_region`, 2026-08-28) — read §0.1, which corrects three claims that were wrong here.
+
 - **`admin_add_manual_booking`** and **`admin_edit_booking`**: read `p_booking->>'region'`. Validate against `('ncr','jaipur')`. **Raise** if the resulting row would be `confirmed = true` with a NULL region. jsonb key only — no signature change (F5).
 - **`abk` form**: a required NCR / Jaipur control, shown whenever the chosen venue is `type = 'custom'` or no venue is chosen. Pre-select from the venue's region otherwise, so normal bookings are unchanged.
 - **Confirming a lead from the admin panel**: same gate — a custom lead cannot be confirmed until a region is chosen.
@@ -194,6 +234,8 @@ Step 3 is not optional. A surviving zero-arg helper silently bypasses scoping an
 ---
 
 ### Phase 4 — Token issuing and admin UI
+
+> ✅ **SHIPPED 2026-08-28**, as planned. `admin_issue_staff_token(text)` dropped, recreated as `(p_staff_name text, p_region text default null)` raising on anything outside `('ncr','jaipur')`. `stt` UI has the region select (defaulting to no selection), the per-row region pill with a distinct **All locations** badge, and a Location column. `staff_today` now returns `staff.region`, and `staff.js` prints it in the page header. Tokens 26 (Sunny/ncr) and 27 (Adhiraj/jaipur) were issued from the UI and both opened.
 
 ```sql
 drop function public.admin_issue_staff_token(text);
@@ -211,6 +253,8 @@ UI, namespaced `stt`: a region select on the issue form defaulting to no selecti
 ---
 
 ### Phase 5 — Cut over
+
+> ⚠️ **HALF DONE.** Step 1 is complete: tokens 26 and 27 are issued, sent and confirmed working. **Step 2 is not** — `staff_tokens.id = 10` is still `is_active = true`, so the all-access link keeps working and nothing is actually contained yet. Aksheev deferred this on 2026-08-28 ("will deactivate it later"). Until he runs it, this whole plan has shipped its machinery and none of its benefit.
 
 1. Issue an `ncr` token for Sunny, send the link, confirm **on his actual phone** that it loads and shows today's NCR events.
 2. Only then `update staff_tokens set is_active = false where id = 10`.
@@ -271,4 +315,10 @@ Net effect: the same security outcome, one fewer failure mode, and roughly a ses
 
 ## 11. First action
 
-Settle §8, then Phase 1 only, under `picnic-backend-ship`. Re-probe F1–F9 before writing SQL. Do not start Phase 2 in the same session.
+~~Settle §8, then Phase 1 only, under `picnic-backend-ship`. Re-probe F1–F9 before writing SQL. Do not start Phase 2 in the same session.~~ **Done 2026-08-27/28** — Phases 1, 2 and 4 as written, Phase 3 narrowed (§0.1).
+
+**Next action, in this order:**
+
+1. **Aksheev** — `update public.staff_tokens set is_active = false where id = 10;`. Nothing in this plan pays off until that runs. Tokens 26 and 27 have already been confirmed working on real phones, so the Phase 5 ordering rule has been satisfied.
+2. ~~**Claude, when the first venue-less booking appears** — close the Phase 3 hole.~~ **Done 2026-08-28**, and the diagnosis behind it was wrong: there are no venue-less bookings and there never were. Fixed instead by splitting the custom venue per region (§0.1). What remains is the end-to-end acceptance test — a real custom enquiry per city, confirmed, checked against both staff links, then deleted.
+3. **Either** — wire the `confirmed and region is null` backstop into `picnic-live-verify` properly rather than leaving it as a query in this document.
