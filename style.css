@@ -7759,6 +7759,25 @@ body.menu-viewer-open {
   font-style: italic;
 }
 
+/* Staff-link location. An all-access link is styled MORE prominently than a
+   scoped one, because it is the one worth noticing in a list. */
+.stt-region {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--font-size-sm);
+  background: var(--color-secondary);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+.stt-region--all {
+  background: #fdf6e3;
+  border: 1px solid #eddfb8;
+  color: #8a6d1f;
+  font-weight: var(--font-weight-semibold);
+}
+.stt-region-select { max-width: 200px; }
+
 .adm-id {
   flex: none;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

@@ -573,6 +573,14 @@
                 <div class="stt-issue">
                     <input id="stt-new-name" class="form-control stt-name-input" type="text"
                            placeholder="Staff member's name" autocomplete="off" maxlength="60">
+                    <!-- No pre-selected value on purpose: an all-locations link must be a
+                         deliberate choice, never what you get by not looking. -->
+                    <select id="stt-new-region" class="form-control stt-region-select">
+                        <option value="">Which location?</option>
+                        <option value="ncr">Gurugram + Delhi</option>
+                        <option value="jaipur">Jaipur</option>
+                        <option value="__all">All locations</option>
+                    </select>
                     <button id="stt-issue-btn" type="button" class="btn btn--primary" onclick="sttIssueToken()">Issue link</button>
                 </div>
                 <div id="stt-reveal" class="stt-reveal" hidden></div>

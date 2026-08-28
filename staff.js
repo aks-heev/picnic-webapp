@@ -70,6 +70,9 @@ const CHIPS = ['guests_arrived', 'guests_left']
 // real HM… codes) and must never gate a money decision.
 const STAY_SPINE = ['checked_in', 'payment_received', 'checked_out']
 
+// A token with no region sees every location; only a scoped one names itself.
+const REGION_LABEL = { ncr: 'Gurugram + Delhi', jaipur: 'Jaipur' }
+
 const STEP_LABEL = {
   reached:          'Reached venue',
   setup_done:       'Setup done',
@@ -269,7 +272,11 @@ function render () {
     ? new Date(payload.date + 'T00:00:00').toLocaleDateString('en-IN',
         { weekday: 'short', day: 'numeric', month: 'short' })
     : ''
-  el.subtitle.textContent = [staffName, dateText].filter(Boolean).join(' · ')
+  // Region in the header so a wrong link is obvious on sight, rather than after
+  // someone has driven to the wrong city's event.
+  const regionCode = payload.staff && payload.staff.region
+  const regionText = regionCode ? (REGION_LABEL[regionCode] || regionCode) : ''
+  el.subtitle.textContent = [staffName, regionText, dateText].filter(Boolean).join(' · ')
 
   paintTabs()
   el.main.innerHTML = tab === 'airbnb' ? airbnbTabHtml() : picnicTabHtml()

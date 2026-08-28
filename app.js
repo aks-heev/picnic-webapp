@@ -7132,7 +7132,7 @@ async function loadStaffOps() {
         .order('slot_start_time', { ascending: true, nullsFirst: false }),
       supabase
         .from('staff_tokens')
-        .select('id, staff_name, is_active, created_at, last_used_at')
+        .select('id, staff_name, region, is_active, created_at, last_used_at')
         .order('created_at', { ascending: true }),
     ])
 
@@ -7234,6 +7234,17 @@ function sttRenderToday(rows) {
 
 // ---------------------------------------------------------------- tokens
 
+// NULL region means the link sees every location. That is a real capability, so
+// it is rendered as a distinct badge rather than an empty cell — an all-access
+// link should never be the one that looks like nothing was set.
+const STT_REGION_LABEL = { ncr: 'Gurugram + Delhi', jaipur: 'Jaipur' }
+
+function sttRegionPill(region) {
+  return region
+    ? `<span class="stt-region">${escapeHtml(STT_REGION_LABEL[region] || region)}</span>`
+    : '<span class="stt-region stt-region--all">All locations</span>'
+}
+
 function sttRenderTokens(list) {
   const host = document.getElementById('stt-tokens')
   if (!host) return
@@ -7245,11 +7256,12 @@ function sttRenderTokens(list) {
 
   host.innerHTML = `
     <table class="stt-table">
-      <thead><tr><th>Name</th><th>Last opened</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Location</th><th>Last opened</th><th>Status</th><th></th></tr></thead>
       <tbody>
         ${list.map(t => `
           <tr class="${t.is_active ? '' : 'stt-row--off'}">
             <td>${escapeHtml(t.staff_name)}</td>
+            <td>${sttRegionPill(t.region)}</td>
             <td>${t.last_used_at
                   ? escapeHtml(new Date(t.last_used_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }))
                   : '<span class="stt-muted">never</span>'}</td>
@@ -7269,11 +7281,17 @@ async function sttIssueToken() {
   const name = (input?.value || '').trim()
   if (!name) return showToast('Enter the staff member’s name', 'error')
 
+  // '' = nothing chosen (refuse), '__all' = deliberately every location (send null).
+  const sel = document.getElementById('stt-new-region')
+  const regionChoice = sel?.value || ''
+  if (!regionChoice) return showToast('Pick which location this link is for', 'error')
+  const region = regionChoice === '__all' ? null : regionChoice
+
   const btn = document.getElementById('stt-issue-btn')
   if (btn) { btn.disabled = true; btn.textContent = 'Issuing…' }
 
   try {
-    const { data, error } = await supabase.rpc('admin_issue_staff_token', { p_staff_name: name })
+    const { data, error } = await supabase.rpc('admin_issue_staff_token', { p_staff_name: name, p_region: region })
     if (error) throw error
 
     // 🔴 Only the sha256 hash is stored, so this link can NEVER be shown again.
@@ -7286,6 +7304,9 @@ async function sttIssueToken() {
       box.innerHTML = `
         <p class="stt-reveal-warn">This link is shown once and cannot be recovered.
           Send it to ${escapeHtml(data.staff_name)} now.</p>
+        <p class="stt-muted">Shows ${data.region
+          ? escapeHtml(STT_REGION_LABEL[data.region] || data.region)
+          : '<strong>every location</strong>'} only.</p>
         <code class="stt-reveal-link" id="stt-reveal-link">${escapeHtml(link)}</code>
         <div class="stt-reveal-actions">
           <button type="button" class="btn btn--primary" onclick="sttCopyLink()">Copy link</button>
@@ -7295,6 +7316,7 @@ async function sttIssueToken() {
         </div>`
     }
     if (input) input.value = ''
+    if (sel) sel.value = ''
     loadStaffOps()
   } catch (err) {
     console.error('admin_issue_staff_token failed:', err)
