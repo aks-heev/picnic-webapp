@@ -179,7 +179,7 @@ function buildPage(template, v) {
   // for the first element with a 'vd-' class that app.js injects.
   const loader = `
 <div id="pr-loader" aria-hidden="true" style="position:fixed;inset:0;z-index:99999;background:#fdfaf7;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem">
-  <img src="/logo3.png" alt="" style="height:56px;width:auto" id="pr-logo">
+  <img src="/logo-footer.webp" alt="" style="height:56px;width:auto" id="pr-logo">
   <div style="width:40px;height:3px;border-radius:2px;background:#e8e0d8;overflow:hidden">
     <div id="pr-bar" style="height:100%;width:0%;background:#a84d66;border-radius:2px;transition:width .1s linear"></div>
   </div>
@@ -477,7 +477,7 @@ function buildCityPages(template, allVenues, urls) {
   <header class="site-header">
     <div class="header-inner">
       <a href="/" class="header-brand">
-        <img src="/logo3.png" alt="The Picnic Stories logo">
+        <img src="/logo-nav.webp" alt="The Picnic Stories logo">
         The Picnic Stories
       </a>
       <nav class="header-sections" aria-label="Jump to section">
@@ -788,7 +788,7 @@ async function buildPackagesPage(supabase, template, blogPosts = []) {
 
   const loader = `
 <div id="pr-loader" aria-hidden="true" style="position:fixed;inset:0;z-index:99999;background:#fdfaf7;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem">
-  <img src="/logo3.png" alt="" style="height:56px;width:auto" id="pr-logo">
+  <img src="/logo-footer.webp" alt="" style="height:56px;width:auto" id="pr-logo">
   <div style="width:40px;height:3px;border-radius:2px;background:#e8e0d8;overflow:hidden">
     <div id="pr-bar" style="height:100%;width:0%;background:#a84d66;border-radius:2px;transition:width .1s linear"></div>
   </div>
@@ -993,7 +993,7 @@ function blogShell({ title, desc, canonical, jsonLd, heroBlock, mainHtml, ogType
 <body>
   <header class="site-header">
     <div class="header-inner">
-      <a href="/" class="header-brand"><img src="/logo3.png" alt="The Picnic Stories logo">The Picnic Stories</a>
+      <a href="/" class="header-brand"><img src="/logo-nav.webp" alt="The Picnic Stories logo">The Picnic Stories</a>
       <nav class="header-nav" aria-label="Site">
         <a href="/blog" class="sec-pill">All posts</a>
         <a href="/packages" class="sec-pill">Packages</a>
