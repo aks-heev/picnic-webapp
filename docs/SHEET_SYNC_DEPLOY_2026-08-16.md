@@ -6,8 +6,12 @@ into **both** workbooks, with `LOCATION` set differently in each.
 
 | Workbook | `LOCATION` | ID |
 |---|---|---|
-| The_Picnic_Stories_-_Jaipur | `'jaipur'` | `12y1-Y_F6KsiypdWzvFyAu_B3N8L24I_UNzXTN2io-kM` |
-| The_Picnic_Stories_-_Gurugram___Delhi | `'ncr'` | `15DzEVgYaeDoeDvxDQA_V3HClCvn9mfS7ryLIvOPXrgE` |
+| The_Picnic_Stories_-_Jaipur | `'jaipur'` | `12y1-Y_F6KsiypdWzvFyAu_B3N8L24I_UNzXTN2io-kM` *(unverified — see below)* |
+| NCR — live, titled `THEPIC~3` | `'ncr'` | `1wOUzB2Y3HgQ3FnJrRmJrY7oB2zVDVeEhECjc8fjQipY` |
+
+🔴 **Corrected 2026-08-27.** The NCR id previously recorded here, `15DzEVgYaeDoeDvxDQA_V3HClCvn9mfS7ryLIvOPXrgE`, is a **stale duplicate**: it holds two sample rows (Garima, Rohan Mehta) that exist in no database, and has not been touched since 2026-06-23. The live workbook is the one above — 11 picnic bookings and 26 Airbnb stays as of 2026-08-27, `_bkid` populated, `Source = Website` rows carrying Razorpay refs.
+
+A full session was spent on 2026-08-27 concluding "the sync is dead" from the stale copy's Drive timestamp. **Resolve the workbook by opening it and looking for a populated `_bkid` column — never by trusting an id written in a doc, this one included.** The Jaipur id above has NOT been re-checked and may be stale in the same way.
 
 The repo copy ships with `LOCATION = 'ncr'`. Change it to `'jaipur'` in the Jaipur workbook after
 pasting — this is the single easiest thing to get wrong, and getting it wrong means each workbook
@@ -15,7 +19,12 @@ deletes the other region's rows on the next run.
 
 ---
 
-## 0. First: the sync is dead, and it isn't a data problem
+## 0. Historical: the 2026-08-16 "sync is dead" diagnosis (superseded)
+
+🔴 The section below was written against the stale duplicate workbook and its
+conclusion does not hold. As of 2026-08-27 the live NCR workbook is syncing. Keep
+the troubleshooting table — it is still the right decision tree if the sync DOES
+stop — but do not treat "both workbooks last modified 2026-06-23" as a finding.
 
 Both workbooks were last modified **2026-06-23**. The earliest booking inside the script's 90-day
 lookback window is **2026-06-25** — i.e. every booking created since the last successful run is
