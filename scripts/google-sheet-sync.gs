@@ -18,11 +18,46 @@
  *   Row deletes are collected and applied last (bottom-up) so row numbers
  *   captured for in-place updates stay valid during the pass.
  *
+ * 2026-08-16 change (Close Booking):
+ *   - Pulls the new `booking_costs` table (per-booking direct costs, written
+ *     by the admin panel's Close Booking form) and stamps the five
+ *     `Cost: * (₹)` cells, plus `Closed On` / `Close Notes`.
+ *     COST CELLS ARE ONLY WRITTEN WHEN A booking_costs ROW EXISTS, so
+ *     hand-entered costs on a not-yet-closed booking are never blanked.
+ *     `Total Cost`, `Net Profit` and `Margin %` stay SHEET FORMULAS — the
+ *     sync deliberately does not write them.
+ *   - Pulls `bookings.booking_status` and honours the terminal states.
+ *     'Cancelled' is written through as-is. 'Closed' is written as
+ *     'Completed' because the sheet's Booking Status dropdown has no
+ *     'Closed' entry; the `Closed On` column is what marks it reconciled.
+ *   - Cancelled bookings are now included in the fetch (they have
+ *     confirmed=false, so the old filter dropped them and left a stale
+ *     "Confirmed" row on the sheet forever).
+ *   - `Base Package (₹)` = total - add-ons + discount, i.e. the LIST base
+ *     before add-ons and before any discount / on-day extra. The sheet does
+ *         Total Amount = Base Package + Add-ons Total - Discount Applied
+ *     so the discount is supplied once by its own column and must NOT also be
+ *     baked into Base.
+ *     REVERTED (2026-08-24): an earlier "fix" changed this to (total - add-ons),
+ *     on the mistaken belief that the sheet's total was just Base + Add-ons.
+ *     It is not — it subtracts Discount Applied as well. That change left the
+ *     extra inside Base AND added it again via the column, overstating booking
+ *     #60 as ₹20,804 against a true ₹17,852. Keep the `+ discount`.
+ *   - BUG FIX: `Nightly Rate (₹)` is no longer rounded to whole rupees. The
+ *     sheet derives a stay's Total Amount as Nightly Rate x Nights, so rounding
+ *     the rate first made that total miss the real one by up to ₹5.27, with the
+ *     error growing on longer stays. 14 confirmed stays were affected. Only
+ *     stays had this problem — the picnic branch writes `Base Package (₹)` from
+ *     the real total and never round-trips through a per-night figure.
+ *     If the column now shows long decimals, fix it with cell number formatting
+ *     (Format > Number), NOT by re-rounding here — the precision is the fix.
+ *
  * SETUP (see SETUP_google_sheet_sync.md):
  *   1. Extensions > Apps Script, paste this file, Save.
  *   2. Project Settings > Script properties: SUPABASE_SERVICE_KEY = <service_role key>.
  *   3. Set LOCATION below: 'jaipur' in the Jaipur sheet, 'ncr' in the Gurugram & Delhi sheet.
- *   4. Run syncBookings once to authorize, then add a 30-min time trigger.
+ *   4. Run ensureSheetColumns() ONCE per workbook (adds the new columns).
+ *   5. Run syncBookings once to authorize, then add a 30-min time trigger.
  ***********************************************************************/
 
 const SUPABASE_URL  = 'https://evmftrogyzoudiccqkya.supabase.co';
@@ -33,6 +68,15 @@ const STAY_TYPES    = ['self_managed', 'partner_bnb', 'combo'];  // else (cafe/c
 const PICNIC_TAB    = 'Picnic Bookings';
 const AIRBNB_TAB    = 'Airbnb Bookings';
 const BKID_HEADER   = '_bkid';
+
+// booking_costs column -> sheet header. Same five on both tabs.
+const COST_COL = {
+  cost_food:         'Cost: Food (₹)',
+  cost_fruits:       'Cost: Fruits (₹)',
+  cost_flowers:      'Cost: Flowers (₹)',
+  cost_decor_other:  'Cost: Decor/Other (₹)',
+  cost_vendor_photo: 'Cost: Vendor/Photo (₹)'
+};
 
 // addon_id -> picnic sheet column (short header, before the "\n₹price"). Covers old + current catalog ids.
 const ADDON_COL = {
@@ -64,18 +108,24 @@ function syncBookings() {
   JSON.parse(get(`${SUPABASE_URL}/rest/v1/venues?select=id,name,city,type`, H))
     .forEach(v => venues[v.id] = v);
 
-  // Bookings within the lookback window, with add-ons embedded — one request, no full-table scan.
+  // Bookings within the lookback window, with add-ons and costs embedded —
+  // one request, no full-table scan. booking_costs is admin-only under RLS, but
+  // this script authenticates with the service_role key, which bypasses RLS.
   const cutoff = getCutoffDate();
   const select = [
     'id', 'full_name', 'mobile_number', 'email_address', 'guest_count', 'children_count',
     'preferred_date', 'checkout_date', 'time_slot', 'occasion', 'board', 'special_requirements',
-    'advance_amount', 'total_amount', 'discount_amount', 'payment_status', 'razorpay_payment_id', 'confirmed', 'venue_id',
-    'booking_add_ons(addon_id,price_at_booking)'   // embedded — scoped to this booking set only
+    'advance_amount', 'total_amount', 'discount_amount', 'payment_status', 'razorpay_payment_id',
+    'confirmed', 'booking_status', 'venue_id', 'created_at',
+    'booking_add_ons(addon_id,price_at_booking)',   // embedded — scoped to this booking set only
+    'booking_costs(cost_food,cost_fruits,cost_flowers,cost_decor_other,cost_vendor_photo,close_notes,closed_at)'
   ].join(',');
   const rows = JSON.parse(get(
     `${SUPABASE_URL}/rest/v1/bookings` +
     `?select=${select}` +
-    `&or=(confirmed.eq.true,payment_status.eq.paid)` +
+    // Cancelled bookings have confirmed=false. Without the third clause they drop
+    // out of the fetch and their sheet row is left saying "Confirmed" forever.
+    `&or=(confirmed.eq.true,payment_status.eq.paid,booking_status.eq.Cancelled)` +
     `&preferred_date=gte.${cutoff}` +
     `&order=id.asc`, H));
 
@@ -86,7 +136,7 @@ function syncBookings() {
   // Row numbers to delete once the update/append pass is done (applied bottom-up).
   const del = { picnic: new Set(), airbnb: new Set() };
 
-  let added = 0, updated = 0, moved = 0, removed = 0, skipped = 0;
+  let added = 0, updated = 0, moved = 0, removed = 0, skipped = 0, closed = 0;
 
   rows.forEach(b => {
     const v = venues[b.venue_id];
@@ -117,7 +167,10 @@ function syncBookings() {
       ids: adItems.map(a => a.addon_id)
     };
 
-    const values = buildRowValues(b, v, isStay, ad);
+    const cost = costsOf(b);
+    if (cost) closed++;
+
+    const values = buildRowValues(b, v, isStay, ad, cost);
 
     if (targetRow) {
       // FULL-ROW UPDATE in place (row number unchanged by writes).
@@ -141,36 +194,67 @@ function syncBookings() {
 
   Logger.log(
     `Sync ${LOCATION} (from ${cutoff}): +${added} new, ${updated} updated, ` +
-    `${moved} moved-tab, ${removed} removed, ${skipped} other-region, ${rows.length} candidates.`);
+    `${moved} moved-tab, ${removed} removed, ${skipped} other-region, ` +
+    `${closed} with costs, ${rows.length} candidates.`);
 }
 
 /* ---- row construction ---- */
 
+// PostgREST returns a one-to-one embed as an object; some versions return a
+// single-element array. Accept either, and treat "no row" as not-yet-closed.
+function costsOf(b) {
+  const raw = b && b.booking_costs;
+  if (!raw) return null;
+  const row = Object.prototype.toString.call(raw) === '[object Array]' ? (raw[0] || null) : raw;
+  return row || null;
+}
+
 // Build the full column->value object for a booking row (picnic or stay).
-// Mirrors the historical inline objects exactly; add-on "Y" cells are handled
-// separately by applyPicnicAddons so removals can be cleared on update.
-function buildRowValues(b, v, isStay, ad) {
-  const total  = (b.total_amount == null) ? null : Number(b.total_amount);
-  // Signed adjustment: + = discount that lowered the total, - = on-site extra that
-  // raised it. total_amount already includes it, so back it out of the base:
-  //   base = total - add-ons + discount  (mirrors the sheet's Total = Base + Add-ons - Discount).
+// Add-on "Y" cells are handled separately by applyPicnicAddons so removals can
+// be cleared on update.
+//
+// KEYS ABSENT FROM THIS OBJECT ARE NEVER WRITTEN (see writeRow), which is how
+// the cost cells are left alone for a booking that has not been closed yet.
+function buildRowValues(b, v, isStay, ad, cost) {
+  const total    = (b.total_amount == null) ? null : Number(b.total_amount);
   const discount = Number(b.discount_amount) || 0;
   const common = {
     'Mobile': b.mobile_number || '', 'Email': b.email_address || '',
-    'City': v.city || '', 'Payment Status': payStatus(b)
+    'City': v.city || '', 'Payment Status': payStatus(b),
+    'Discount Applied (₹)': discount ? discount : ''
   };
+
+  // Costs: only stamped once the booking has actually been closed in the admin
+  // panel. A null cost field clears its cell — the close form always submits all
+  // five, so "null" there means "cleared", not "unknown".
+  if (cost) {
+    Object.keys(COST_COL).forEach(k => {
+      common[COST_COL[k]] = (cost[k] == null) ? '' : Number(cost[k]);
+    });
+    common['Closed On']   = cost.closed_at ? String(cost.closed_at).slice(0, 10) : '';
+    common['Close Notes'] = cost.close_notes || '';
+  }
+
   if (isStay) {
     const nights = nightsBetween(b.preferred_date, b.checkout_date);
     return Object.assign(common, {
       'Channel': 'Airbnb', 'Property': v.name, 'Guest Name': b.full_name || '',
       'Check-in': b.preferred_date || '', 'Check-out': b.checkout_date || '',
       'Guests': b.guest_count || '',
-      'Nightly Rate (₹)': (total != null && nights > 0) ? Math.round(total / nights) : '',
+      // Full precision, deliberately NOT rounded. The sheet derives a stay's
+      // Total Amount as Nightly Rate x Nights, so a rounded rate multiplied back
+      // up drifts away from the real total — and the error scales with the number
+      // of nights (#86, 15 nights: +₹5.27; #115, 7 nights: −₹3.00). Cell
+      // number-formatting controls how many decimals are DISPLAYED; the stored
+      // value stays exact so the derived total lands on total_amount.
+      'Nightly Rate (₹)': (total != null && nights > 0) ? (total / nights) : '',
       'Advance / Prepaid (₹)': b.advance_amount || '',
+      'Booked On': bookedOnDate(b.created_at),
       'Booking Status': bookingStatus(b),
       'Notes': b.special_requirements || ''
     });
   }
+
   const board = b.board || {};
   return Object.assign(common, {
     'Source': 'Website', 'Venue': v.name, 'Customer Name': b.full_name || '',
@@ -178,9 +262,24 @@ function buildRowValues(b, v, isStay, ad) {
     'Adults': b.guest_count || '', 'Children': b.children_count || 0,
     'Occasion': b.occasion || '', 'Board Type': capit(board.type) || 'None',
     'Board Message': board.message || '', 'Special Requirements': b.special_requirements || '',
+    // Base Package is the LIST base — the setup price before add-ons and before
+    // any discount/on-day extra. The sheet reconstructs the booking as
+    //     Total Amount = Base Package + Add-ons Total - Discount Applied
+    // so the discount must be backed OUT here and supplied exactly once by the
+    // `Discount Applied (₹)` column. Since total_amount already includes the
+    // extra, backing it out means `+ discount` (discount is negative for an extra).
+    //
+    // Worked example, booking #60 (Harshit): total 17852, add-ons 6000,
+    // discount -2952  ->  Base = 17852 - 6000 + (-2952) = 8900, which matches
+    // compute_booking_total(venue 14, 2 guests, evening, no add-ons) = 8900.
+    // Sheet then shows 8900 + 6000 - (-2952) = 17852. Correct.
+    //
+    // Do NOT "simplify" this to (total - ad.sum). That yields 11852, which still
+    // contains the extra, and the sheet's formula then adds it a second time —
+    // that is exactly the 20804 regression this line was reverted to fix.
     'Base Package (₹)': (total != null) ? (total - ad.sum + discount) : '',
-    'Discount (₹)': discount ? discount : '',
     'Advance Received (₹)': b.advance_amount || '', 'Payment Ref': b.razorpay_payment_id || '',
+    'Booked On': bookedOnDate(b.created_at),
     'Booking Status': bookingStatus(b)
   });
 }
@@ -200,6 +299,65 @@ function applyDeletes(sheet, rowSet) {
   Array.from(rowSet).sort((a, b) => b - a).forEach(r => sheet.deleteRow(r));
 }
 
+/* ---- one-time column setup ---------------------------------------------
+ * Run this ONCE per workbook after pasting, before the first sync. Safe to
+ * re-run: it only ever adds headers that are missing.
+ *
+ * On the Airbnb tab the four missing cost columns are INSERTED just before
+ * 'Cost: Vendor/Photo (₹)' so they sit together as a cost block. Apps Script
+ * shifts existing formula references automatically on insert — but it does NOT
+ * widen them, so the tab's 'Net Profit (₹)' formula still subtracts only
+ * Cost: Vendor/Photo. Update that one formula by hand afterwards.
+ * ----------------------------------------------------------------------- */
+function ensureSheetColumns() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const log = [];
+
+  const picnic = ss.getSheetByName(PICNIC_TAB);
+  if (!picnic) throw new Error('Tab not found: ' + PICNIC_TAB);
+  ['Discount Applied (₹)', 'Closed On', 'Close Notes', 'Booked On'].forEach(h => {
+    if (appendHeader(picnic, h)) log.push(PICNIC_TAB + ': +' + h);
+  });
+
+  const airbnb = ss.getSheetByName(AIRBNB_TAB);
+  if (!airbnb) throw new Error('Tab not found: ' + AIRBNB_TAB);
+  ['Cost: Food (₹)', 'Cost: Fruits (₹)', 'Cost: Flowers (₹)', 'Cost: Decor/Other (₹)']
+    .forEach(h => {
+      if (insertHeaderBefore(airbnb, h, 'Cost: Vendor/Photo (₹)')) log.push(AIRBNB_TAB + ': +' + h);
+    });
+  ['Discount Applied (₹)', 'Closed On', 'Close Notes', 'Booked On'].forEach(h => {
+    if (appendHeader(airbnb, h)) log.push(AIRBNB_TAB + ': +' + h);
+  });
+
+  Logger.log(log.length ? log.join('\n') : 'Nothing to add — all columns already present.');
+}
+
+function headerIndex(sheet) {
+  const head = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const col = {};
+  head.forEach((h, i) => { if (h !== '') col[String(h).split('\n')[0].trim()] = i + 1; });
+  return col;
+}
+
+// Appends a header at the far right. The hidden _bkid column is kept last.
+function appendHeader(sheet, header) {
+  const col = headerIndex(sheet);
+  if (col[header]) return false;
+  const at = col[BKID_HEADER] ? col[BKID_HEADER] : sheet.getLastColumn() + 1;
+  if (col[BKID_HEADER]) sheet.insertColumnBefore(at);
+  sheet.getRange(1, at).setValue(header);
+  return true;
+}
+
+function insertHeaderBefore(sheet, header, beforeHeader) {
+  const col = headerIndex(sheet);
+  if (col[header]) return false;
+  if (!col[beforeHeader]) return appendHeader(sheet, header);
+  sheet.insertColumnBefore(col[beforeHeader]);
+  sheet.getRange(1, col[beforeHeader]).setValue(header);
+  return true;
+}
+
 /* ---- helpers ---- */
 function get(url, headers) {
   const res = UrlFetchApp.fetch(url, { method: 'get', headers: headers, muteHttpExceptions: true });
@@ -210,6 +368,18 @@ function locationOf(city) {
   if (city === 'Jaipur') return 'jaipur';
   if (NCR_CITIES.indexOf(city) !== -1) return 'ncr';
   return null;
+}
+/* `Booked On` — the date the booking was CREATED, as opposed to the date the
+   event happens. Lets a report separate cash-basis (when revenue was committed)
+   from accrual (when it is delivered): an Airbnb stay booked in August for
+   September belongs to August on one basis and September on the other.
+   created_at is a UTC timestamptz; shift to IST before taking the date, or
+   anything created after 18:30 UTC files under the wrong day. */
+function bookedOnDate(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return '';
+  return new Date(d.getTime() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
 }
 function nightsBetween(a, b) {
   if (!a || !b) return 0;
@@ -250,12 +420,19 @@ function payStatus(b) {
   const adv   = Number(b && b.advance_amount) || 0;
   return (total > 0 && adv >= total) ? 'Paid' : 'Advance Paid';
 }
-// Booking Status the sheet should show. Enquiry until confirmed; once confirmed, a
-// PAST event auto-reads Completed (picnic: the day is over; stay: guest has checked
-// out), otherwise Confirmed. Date-based so it self-maintains on every sync — no manual
-// re-marking. NOTE: the DB has no Cancelled state, so a cancelled booking must be
-// un-confirmed (-> Enquiry) or removed; it can't be represented as "Cancelled" here.
+// Booking Status the sheet should show.
+//
+// Terminal states now live in the DB (bookings.booking_status, written only by
+// admin_close_booking) and win outright:
+//   'Cancelled' -> 'Cancelled'  (already in the sheet's dropdown)
+//   'Closed'    -> 'Completed'  (the dropdown has no 'Closed'; the Closed On
+//                                column is what marks a booking reconciled)
+// Everything else stays derived so it self-maintains on every sync: Enquiry
+// until confirmed; once confirmed, a PAST event auto-reads Completed (picnic:
+// the day is over; stay: guest has checked out), otherwise Confirmed.
 function bookingStatus(b) {
+  if (b.booking_status === 'Cancelled') return 'Cancelled';
+  if (b.booking_status === 'Closed')    return 'Completed';
   if (!b.confirmed) return 'Enquiry';
   var eventEnd = b.checkout_date || b.preferred_date;   // stay ends at checkout; picnic is the day
   var todayIso = new Date().toISOString().slice(0, 10);
