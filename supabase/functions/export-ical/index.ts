@@ -63,6 +63,17 @@
 // Public on purpose: Airbnb fetches it anonymously. It only reveals
 // which dates a venue is busy — the same information already shown on
 // the public website calendar.
+//
+// v13 (2026-08-31) Fail closed on the venue's OWN confirmed-bookings query.
+//            bookingsRes.error was the only one of the four parallel
+//            queries never checked; on a transient read failure
+//            `bookingsRes.data || []` silently treated it as "no confirmed
+//            bookings", which could publish a feed missing real busy
+//            nights and let Airbnb accept a reservation on an
+//            already-booked night. Never reproduced live — found in
+//            source review — but the same fail-closed pattern already
+//            used for adminRes/kidsRes/childBlocksRes/childBookingsRes
+//            belongs here too.
 // =================================================================
 
 import { createClient } from "jsr:@supabase/supabase-js@2"
@@ -122,6 +133,10 @@ Deno.serve(async (req) => {
     // Fail closed: if we can't determine this venue's children, don't emit a
     // feed that might be silently missing child-driven unavailability.
     if (kidsRes.error) throw kidsRes.error
+    // Fail closed: a booking-query error must not silently degrade to "no
+    // confirmed bookings" via `bookingsRes.data || []` below — that would
+    // publish a feed missing real busy nights and risk a double-booking.
+    if (bookingsRes.error) throw bookingsRes.error
 
     // deno-lint-ignore no-explicit-any
     const childIds = (kidsRes.data || []).map((k: any) => k.id as number)
