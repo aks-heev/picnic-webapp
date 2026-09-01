@@ -108,8 +108,18 @@ function venueJsonLd(v, url, image) {
       url,
     }
   }
+  const citySlug = CITY_CONFIG[v.city]?.slug || slugify(v.city)
+  const breadcrumb = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: SITE },
+      { '@type': 'ListItem', position: 2, name: `Venues in ${v.city}`, item: `${SITE}/picnic-venues-${citySlug}` },
+      { '@type': 'ListItem', position: 3, name: v.name, item: url },
+    ],
+  }
   // Escape "<" so the JSON can never terminate the <script> element early.
-  return JSON.stringify(ld, null, 2).replaceAll('<', '\\u003c')
+  return JSON.stringify([ld, breadcrumb], null, 2).replaceAll('<', '\\u003c')
 }
 
 /** Duplicate-content fix (SEO_GROWTH_PLAN Phase 1): prerendered non-home pages
@@ -335,8 +345,9 @@ function buildCityPages(template, allVenues, urls) {
       {
         '@context': 'https://schema.org',
         '@type': 'LocalBusiness',
+        '@id': `${SITE}/#${cfg.slug}-business`,
         name: `The Picnic Stories — ${city}`,
-        url: 'https://www.picnicstories.com',
+        url: pageUrl,
         telephone: cfg.phone,
         address: {
           '@type': 'PostalAddress',
@@ -346,6 +357,14 @@ function buildCityPages(template, allVenues, urls) {
         },
         areaServed: { '@type': 'City', name: city },
         serviceType: 'Picnic Experience & Overnight Stays',
+      },
+      {
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Home', item: SITE },
+          { '@type': 'ListItem', position: 2, name: city, item: pageUrl },
+        ],
       },
     ], null, 2).replaceAll('<', '\\u003c')
 
@@ -673,7 +692,15 @@ function packagesJsonLd(pageUrl, tiers, fromPriceByTier) {
       url: `${pageUrl}?tier=${encodeURIComponent(t.key)}`,
     })),
   }
-  return JSON.stringify(ld, null, 2).replaceAll('<', '\\u003c')
+  const breadcrumb = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: SITE },
+      { '@type': 'ListItem', position: 2, name: 'Packages', item: pageUrl },
+    ],
+  }
+  return JSON.stringify([ld, breadcrumb], null, 2).replaceAll('<', '\\u003c')
 }
 
 /** Generate the /packages landing page: SPA shell (like buildPage) with
@@ -1042,21 +1069,32 @@ function buildBlogPages(urls) {
 
   for (const p of posts) {
     const readMins = Math.max(1, Math.round(p.words / 220))
-    const jsonLd = JSON.stringify({
-      '@context': 'https://schema.org',
-      '@type': 'BlogPosting',
-      headline: p.h1,
-      description: p.desc,
-      image: p.hero || HERO_FALLBACK,
-      datePublished: p.published,
-      dateModified: p.published,
-      mainEntityOfPage: p.url,
-      author: { '@type': 'Organization', name: 'The Picnic Stories' },
-      publisher: {
-        '@type': 'Organization', name: 'The Picnic Stories', url: SITE,
-        logo: { '@type': 'ImageObject', url: `${SITE}/logo3.png` },
+    const jsonLd = JSON.stringify([
+      {
+        '@context': 'https://schema.org',
+        '@type': 'BlogPosting',
+        headline: p.h1,
+        description: p.desc,
+        image: p.hero || HERO_FALLBACK,
+        datePublished: p.published,
+        dateModified: p.published,
+        mainEntityOfPage: p.url,
+        author: { '@type': 'Organization', name: 'The Picnic Stories' },
+        publisher: {
+          '@type': 'Organization', name: 'The Picnic Stories', url: SITE,
+          logo: { '@type': 'ImageObject', url: `${SITE}/logo3.png` },
+        },
       },
-    }, null, 2).replaceAll('<', '\\u003c')
+      {
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Home', item: SITE },
+          { '@type': 'ListItem', position: 2, name: 'Blog', item: `${SITE}/blog` },
+          { '@type': 'ListItem', position: 3, name: p.h1, item: p.url },
+        ],
+      },
+    ], null, 2).replaceAll('<', '\\u003c')
 
     const heroBlock = `
   <div class="post-hero">
@@ -1081,13 +1119,23 @@ ${p.hero ? `      <img class="lead-img" src="${esc(p.hero)}" alt="${esc(p.h1)}">
 
   // /blog index
   const indexUrl = `${SITE}/blog`
-  const indexLd = JSON.stringify({
-    '@context': 'https://schema.org',
-    '@type': 'Blog',
-    name: 'The Picnic Stories Blog',
-    url: indexUrl,
-    blogPost: posts.map(p => ({ '@type': 'BlogPosting', headline: p.h1, url: p.url, datePublished: p.published })),
-  }, null, 2).replaceAll('<', '\\u003c')
+  const indexLd = JSON.stringify([
+    {
+      '@context': 'https://schema.org',
+      '@type': 'Blog',
+      name: 'The Picnic Stories Blog',
+      url: indexUrl,
+      blogPost: posts.map(p => ({ '@type': 'BlogPosting', headline: p.h1, url: p.url, datePublished: p.published })),
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: SITE },
+        { '@type': 'ListItem', position: 2, name: 'Blog', item: indexUrl },
+      ],
+    },
+  ], null, 2).replaceAll('<', '\\u003c')
 
   const cards = posts
     .slice().sort((a, b) => b.published.localeCompare(a.published))
