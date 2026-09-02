@@ -10352,11 +10352,11 @@ function renderAddBookingForm() {
       <div class="abk-row2">
         <div class="abk-field">
           <label class="abk-label" for="abk-checkin">Check-in</label>
-          <input type="date" id="abk-checkin" class="abk-input" value="${abkText(abk.checkin)}" onchange="abkChanged()" />
+          <input type="date" id="abk-checkin" class="abk-input" value="${abkText(abk.checkin)}" onchange="abkChangedKeepTotal()" />
         </div>
         <div class="abk-field">
           <label class="abk-label" for="abk-checkout">Check-out</label>
-          <input type="date" id="abk-checkout" class="abk-input" value="${abkText(abk.checkout)}" onchange="abkChanged()" />
+          <input type="date" id="abk-checkout" class="abk-input" value="${abkText(abk.checkout)}" onchange="abkChangedKeepTotal()" />
         </div>
       </div>
       <p class="abk-nights">${nights > 0 ? `${nights} night${nights !== 1 ? 's' : ''}` : 'Pick check-in and check-out dates'}</p>`
