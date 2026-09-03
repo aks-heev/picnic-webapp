@@ -4,6 +4,23 @@
 // T1 is skipped for confirmed inserts (they get T3 from notify-booking-confirmed),
 // for rows with send_guest_email=false, and for rows without an email address
 // (admin manual entries).
+//
+// Changed 2026-09-03 (v32): surface the two per-booking override fields added by
+// migration 20260815_booking_food_inclusions_and_slot_times, so the admin alert
+// shows what was actually entered without anyone opening the panel.
+//   • TIME row — this email never had one, nor a TIME_SLOTS constant. Added to
+//     both the guest ack and the admin alert, preferring the booking's explicit
+//     slot_start_time/slot_end_time and falling back to the slot's default window.
+//   • INCLUDED row — food/beverage counts, mirroring notify-booking-confirmed v30
+//     EXACTLY: the BOOKING is the only source of truth. There is deliberately no
+//     venue metadata.food_multiplier fallback here; false and null both mean
+//     "render nothing". Do not reintroduce a venue default without changing that
+//     business rule first (Aksheev 2026-09-02: "venues do not include food or
+//     beverages, the booking does").
+// Note: T1 only fires on UNCONFIRMED inserts, which come from the public site,
+// and submit_booking_intent never sets these fields — so in practice the guest
+// ack renders neither row. It is wired anyway for the rare admin-entered
+// unconfirmed row, and so the two templates cannot drift apart later.
 
 import { sendEmail } from "./_shared/resend.ts"
 import { getVenueInfo } from "./_shared/venue.ts"
@@ -16,6 +33,14 @@ const LOGO_URL =
   "https://cdn-reach.hostinger.com/settings/0a27628d960484a8a3d2b3e50518a32b/307542/logo_1780982818.png"
 const HERO_IMG =
   "https://images.hostinger.com/94826b0b-025f-4661-94d7-3e767b98d39d.png"
+
+// Default slot windows. Kept byte-identical to the same constant in
+// notify-booking-confirmed — if one changes, change both.
+const TIME_SLOTS: Record<string, string> = {
+  morning:   "9 AM – 12 PM",
+  afternoon: "1 PM – 4 PM",
+  evening:   "5 PM – 8 PM",
+}
 
 const QUERY_HEADINGS: Record<string, string> = {
   "Birthday":      "ALMOST TIME TO CELEBRATE",
@@ -37,6 +62,40 @@ function formatDate(d: string | null | undefined): string {
   if (!d) return "—"
   const dt = new Date(d + "T00:00:00")
   return dt.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
+}
+
+// Formats a Postgres `time` value ("HH:MM:SS", as PostgREST/pg_net serialise it
+// in the trigger payload) as "9:00 AM". Copied verbatim from
+// notify-booking-confirmed v28 so the two emails cannot render a time differently.
+function formatTime(t: string): string {
+  const [hStr, mStr] = t.split(":")
+  let h = Number(hStr)
+  if (!Number.isFinite(h)) return t
+  const m = (mStr ?? "00").padStart(2, "0")
+  const ampm = h >= 12 ? "PM" : "AM"
+  h = h % 12
+  if (h === 0) h = 12
+  return `${h}:${m} ${ampm}`
+}
+
+// The booking's own start/end wins; otherwise the slot's default window; otherwise
+// nothing (a stay has no slot, and the row is omitted rather than showing "—").
+function slotTimeText(record: Record<string, unknown>): string {
+  const s = record.slot_start_time as string | null | undefined
+  const e = record.slot_end_time as string | null | undefined
+  if (s && e) return `${formatTime(String(s))} – ${formatTime(String(e))}`
+  const slot = record.time_slot as string | null
+  return (slot && TIME_SLOTS[slot]) ? TIME_SLOTS[slot] : ""
+}
+
+// Mirrors notify-booking-confirmed v30 exactly. No venue-multiplier fallback:
+// includes_food false OR null both render nothing.
+function inclusionText(record: Record<string, unknown>): string {
+  if (!record.includes_food) return ""
+  const foodCt = Number(record.food_items_count || 0)
+  const bevCt = Number(record.beverage_items_count || 0)
+  if (!foodCt && !bevCt) return ""
+  return `${foodCt} food item${foodCt !== 1 ? "s" : ""} · ${bevCt} beverage${bevCt !== 1 ? "s" : ""}`
 }
 
 function esc(s: unknown): string {
@@ -234,6 +293,8 @@ function buildGuestHtml(
   const guests      = kidsCount
     ? `${guestCount - kidsCount} Adults · ${kidsCount} Child${kidsCount !== 1 ? "ren" : ""} (free)`
     : `${guestCount} ${guestCount === 1 ? "Person" : "Persons"}`
+  const timeText    = slotTimeText(record)
+  const inclText    = inclusionText(record)
 
   // Package: name/tagline are a snapshot taken at booking time (see
   // submit_booking_intent), so a later rename in admin never rewrites what
@@ -320,10 +381,12 @@ function buildGuestHtml(
                   <table border="0" cellpadding="0" cellspacing="0" width="100%">
                     <tbody>
                       ${reservationRow("DATE", date)}
+                      ${timeText ? reservationRow("TIME", timeText) : ""}
                       ${reservationRow("GUESTS", guests)}
                       ${reservationRow("LOCATION", location)}
                       ${record.occasion ? reservationRow("OCCASION", esc(record.occasion)) : ""}
                       ${boardText(record.board) ? reservationRow("BOARD", boardText(record.board)) : ""}
+                      ${inclText ? reservationRow("INCLUDED", inclText) : ""}
                       ${record.special_requirements ? reservationRow("SPECIAL REQUESTS", esc(record.special_requirements as string)) : ""}
                     </tbody>
                   </table>
@@ -439,6 +502,8 @@ Deno.serve(async (req) => {
     const addons = await getAddOns(record.id)
     const bundledIds = await getBundledAddonIds(record.package_key)
     const waHref = waReplyLink(record.mobile_number, record.full_name, record.occasion)
+    const timeText = slotTimeText(record)
+    const inclText = inclusionText(record)
 
     const kids = Number(record.children_count || 0)
     const guestStr = kids
@@ -512,7 +577,9 @@ Deno.serve(async (req) => {
             ${record.email_address ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Email</strong></td><td style="padding: 8px; border: 1px solid #ddd;"><a href="mailto:${esc(record.email_address)}" style="color:#2d6a4f;">${esc(record.email_address)}</a></td></tr>` : `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Email</strong></td><td style="padding: 8px; border: 1px solid #ddd; color:#888;">— not provided</td></tr>`}
             <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Phone</strong></td><td style="padding: 8px; border: 1px solid #ddd;"><a href="tel:${esc(record.mobile_number)}" style="color:#2d6a4f; font-weight:bold;">${esc(record.mobile_number)}</a></td></tr>
             <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Date</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${record.preferred_date}${record.checkout_date ? ` → ${record.checkout_date}` : ""}</td></tr>
+            ${timeText ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Time</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${esc(timeText)}${(record.slot_start_time && record.slot_end_time) ? ` <span style="color:#888;font-size:12px;">(set on this booking)</span>` : ""}</td></tr>` : ""}
             <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Guests</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${guestStr}</td></tr>
+            ${inclText ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Includes</strong></td><td style="padding: 8px; border: 1px solid #ddd;">🍽️ ${esc(inclText)}</td></tr>` : ""}
             ${record.package_name ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Package</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${esc(record.package_name)}${record.package_tagline ? ` — <em>${esc(record.package_tagline)}</em>` : ""}</td></tr>` : ""}
             ${venueLabel ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Location</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${venueLabel}</td></tr>` : ""}
             ${record.external_booking_ref ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Reference</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${esc(record.external_booking_ref)}</td></tr>` : ""}
