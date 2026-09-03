@@ -67,6 +67,7 @@ const NCR_CITIES    = ['Delhi', 'Gurugram', 'Noida', 'Faridabad'];
 const STAY_TYPES    = ['self_managed', 'partner_bnb', 'combo'];  // else (cafe/custom) = picnic
 const PICNIC_TAB    = 'Picnic Bookings';
 const AIRBNB_TAB    = 'Airbnb Bookings';
+const EXPENSES_TAB  = 'Expenses';
 const BKID_HEADER   = '_bkid';
 
 // booking_costs column -> sheet header. Same five on both tabs.
@@ -196,6 +197,108 @@ function syncBookings() {
     `Sync ${LOCATION} (from ${cutoff}): +${added} new, ${updated} updated, ` +
     `${moved} moved-tab, ${removed} removed, ${skipped} other-region, ` +
     `${closed} with costs, ${rows.length} candidates.`);
+
+  // Mirror the Expenses tab into Supabase for the hosted dashboard. DELIBERATELY
+  // LAST and DELIBERATELY WRAPPED: the booking sync above is load-bearing and runs
+  // every 30 minutes. If this push fails — network blip, schema drift, a malformed
+  // row — it must log and move on, never abort the sheet writes that already
+  // succeeded. A broken dashboard is an inconvenience; a stalled booking sync is a
+  // double-booked venue.
+  try {
+    pushExpenses(H);
+  } catch (err) {
+    Logger.log('Expenses push FAILED (booking sync above was unaffected): ' + err);
+  }
+}
+
+/* ---- expenses mirror ----------------------------------------------------
+ * The dashboard needs one thing that exists only in this workbook: the Expenses
+ * tab. Bookings, venues and per-booking costs are already in Supabase, so
+ * mirroring expenses lets a dashboard hosted outside Cowork read a SINGLE source
+ * under RLS — no service key in a browser, no serverless proxy.
+ *
+ * Upserts on sheet_row_key so a re-run updates in place. Without that key every
+ * 30-minute run would append another copy of the rent line and the P&L would
+ * drift upward forever.
+ * ----------------------------------------------------------------------- */
+function expenseRowKey(parts) {
+  const raw = parts.join('|');
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, raw, Utilities.Charset.UTF_8);
+  return bytes.map(b => ((b & 0xFF) + 0x100).toString(16).slice(1)).join('').slice(0, 32);
+}
+
+function pushExpenses(H) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(EXPENSES_TAB);
+  if (!sheet) { Logger.log('Expenses: tab not found, skipped.'); return; }
+
+  const values = sheet.getDataRange().getValues();
+  if (values.length < 2) { Logger.log('Expenses: nothing to push.'); return; }
+
+  // Locate the header by content — the tab has spacer rows above it, exactly like
+  // the booking tabs, so row 0 is not reliably the header.
+  let h = -1;
+  for (let i = 0; i < Math.min(values.length, 12); i++) {
+    const row = values[i].map(c => String(c).toLowerCase().trim());
+    if (row.indexOf('description') !== -1 && row.indexOf('category') !== -1 && row.indexOf('amount (₹)') !== -1) { h = i; break; }
+  }
+  if (h === -1) { Logger.log('Expenses: header row not found, skipped.'); return; }
+
+  const head = values[h].map(c => String(c).trim());
+  const ix = name => head.findIndex(c => c.toLowerCase().indexOf(name.toLowerCase()) === 0);
+  const cDate = ix('Date'), cBiz = ix('Business'), cCity = ix('City'),
+        cCat = ix('Category'), cDesc = ix('Description'), cAmt = ix('Amount'),
+        cPaid = ix('Paid By'), cNotes = ix('Notes');
+
+  const payload = [];
+  const seen = {};
+  for (let r = h + 1; r < values.length; r++) {
+    const row = values[r];
+    const amount = Number(String(row[cAmt]).replace(/[₹,\s]/g, ''));
+    if (!(amount > 0)) continue;                     // skip the workbook's blank/zero spacer rows
+
+    const d = row[cDate];
+    const iso = (d instanceof Date && !isNaN(d.getTime()))
+      ? Utilities.formatDate(d, 'Asia/Kolkata', 'yyyy-MM-dd')
+      : (String(d).trim() ? String(d).trim() : null);
+
+    const desc = String(row[cDesc] || '').trim();
+    const biz  = String(row[cBiz]  || '').trim();
+    const cat  = String(row[cCat]  || '').trim();
+    let key = expenseRowKey([iso, biz, cat, desc, amount]);
+    // Two identical spends on the same day (same category, same description, same
+    // amount) are legitimate — suffix the key so the second is not swallowed by the
+    // first's upsert.
+    if (seen[key]) { key = expenseRowKey([iso, biz, cat, desc, amount, ++seen[key]]); } else { seen[key] = 1; }
+
+    payload.push({
+      spend_date: iso, business: biz || null, city: String(row[cCity] || '').trim() || null,
+      category: cat || null, description: desc || null, amount: amount,
+      paid_by: cPaid !== -1 ? (String(row[cPaid] || '').trim() || null) : null,
+      notes:  cNotes !== -1 ? (String(row[cNotes] || '').trim() || null) : null,
+      sheet_row_key: key, synced_at: new Date().toISOString()
+    });
+  }
+
+  if (!payload.length) { Logger.log('Expenses: no priced rows to push.'); return; }
+
+  const res = UrlFetchApp.fetch(`${SUPABASE_URL}/rest/v1/expenses?on_conflict=sheet_row_key`, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: Object.assign({}, H, { Prefer: 'resolution=merge-duplicates,return=minimal' }),
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+  const code = res.getResponseCode();
+  if (code < 200 || code >= 300) throw new Error('expenses upsert ' + code + ': ' + res.getContentText());
+
+  // Rows deleted from the sheet should disappear from the mirror too, or the P&L
+  // keeps subtracting a spend that no longer exists. Scoped to keys we just sent.
+  const keys = payload.map(p => '"' + p.sheet_row_key + '"').join(',');
+  const cleanup = UrlFetchApp.fetch(
+    `${SUPABASE_URL}/rest/v1/expenses?sheet_row_key=not.in.(${keys})`,
+    { method: 'delete', headers: Object.assign({}, H, { Prefer: 'return=minimal' }), muteHttpExceptions: true });
+  const cc = cleanup.getResponseCode();
+  Logger.log(`Expenses: upserted ${payload.length} row(s); stale-row cleanup HTTP ${cc}.`);
 }
 
 /* ---- row construction ---- */
