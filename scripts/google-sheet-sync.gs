@@ -352,6 +352,17 @@ function buildRowValues(b, v, isStay, ad, cost) {
     });
     common['Closed On']   = cost.closed_at ? String(cost.closed_at).slice(0, 10) : '';
     common['Close Notes'] = cost.close_notes || '';
+
+    // 🔴 The picnic tab's hand-entered `Adhiraj(₹)` column predates booking_costs
+    // and is summed by the sheet's own Total Cost formula, but NOTHING in COST_COL
+    // maps to it. Once a booking_costs row exists that row is the whole truth about
+    // this booking's costs — an Adhiraj amount now lives inside cost_decor_other
+    // (Aksheev 2026-09-03: "add the adhiraj cost as the cost only"). Leaving the
+    // old cell populated makes Total Cost count the same rupees twice: it briefly
+    // did, reading ₹11,228 against a true ₹10,228 on booking #151. Clearing it
+    // here is what stops that recurring the next time someone types in it.
+    // No-op on the Airbnb tab, which has no such column.
+    common['Adhiraj(₹)'] = '';
   }
 
   if (isStay) {
