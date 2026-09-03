@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow" />
+<title>The Picnic Stories — Business Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f8f4ee;
+    --bg-2: #f1ebe2;
+    --card: #ffffff;
+    --ink: #2a2521;
+    --ink-2: #4f463d;
+    --muted: #6b6259;
+    --hair: #e6ddd1;
+    --hair-2: #efe8de;
+    --terracotta: #b8552a;
+    --terracotta-2: #d8794f;
+    --terracotta-bg: #fbeee5;
+    --olive: #5c6b42;
+    --olive-bg: #e9eedd;
+    --amber: #8f6512;
+    --amber-bg: #fbf0d3;
+    --red: #a43520;
+    --red-bg: #fbe7e2;
+    --blue: #385a7a;
+    --blue-bg: #e5eef5;
+    --serif: Georgia, "Times New Roman", "Iowan Old Style", "Palatino Linotype", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --r: 14px;
+    --r-sm: 9px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--ink); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 22px 22px 64px; }
+
+  /* ---------- masthead ---------- */
+  .mast { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px 22px; margin-bottom: 18px; }
+  .brand h1 { font-family: var(--serif); font-size: 28px; font-weight: 400; margin: 0; letter-spacing: -.01em; color: var(--ink); }
+  .brand h1 em { font-style: italic; color: var(--terracotta); }
+  .brand .scope { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+  .mast-ctl { margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+  .ctl { display: flex; flex-direction: column; gap: 4px; }
+  .ctl label { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  select, input[type="search"] {
+    font: inherit; font-size: 13px; padding: 7px 10px; min-height: 36px;
+    border: 1px solid var(--hair); border-radius: var(--r-sm); background: var(--card); color: var(--ink); min-width: 128px;
+  }
+  select:focus, input:focus, button:focus-visible { outline: 2px solid var(--terracotta); outline-offset: 1px; }
+  #f-basis { border-color: var(--terracotta); color: var(--terracotta); font-weight: 600; }
+  .btn { font: inherit; font-size: 13px; padding: 8px 13px; min-height: 36px; border: 1px solid var(--hair); border-radius: var(--r-sm); background: var(--card); color: var(--ink-2); cursor: pointer; }
+  .btn:hover { border-color: var(--terracotta); color: var(--terracotta); }
+  .btn.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .stamp { width: 100%; font-size: 12px; color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; }
+  .stamp span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; background: var(--olive); }
+  .dot.bad { background: var(--red); }
+
+  /* ---------- hero ---------- */
+  .hero { display: grid; grid-template-columns: repeat(3, 1fr) 1.25fr; gap: 14px; margin-bottom: 16px; }
+  @media (max-width: 980px) { .hero { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 560px) { .hero { grid-template-columns: 1fr; } }
+  .hcard { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r); padding: 18px 20px 16px; display: flex; flex-direction: column; min-height: 178px; }
+  .hcard.accent { background: var(--terracotta); border-color: var(--terracotta); color: #fff; }
+  .hcard .l { font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase; font-weight: 600; color: var(--muted); }
+  .hcard.accent .l { color: rgba(255,255,255,.82); }
+  .hcard .v { font-family: var(--serif); font-size: 38px; line-height: 1.05; margin: 8px 0 6px; letter-spacing: -.015em; color: var(--ink); }
+  .hcard.accent .v { color: #fff; }
+  .hcard .s { font-size: 12.5px; color: var(--muted); }
+  .hcard.accent .s { color: rgba(255,255,255,.85); }
+  .hcard .foot { margin-top: auto; padding-top: 10px; font-size: 12.5px; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 20px; font-size: 12px; font-weight: 600; white-space: nowrap; vertical-align: middle; }
+  .chip.up { background: var(--olive-bg); color: var(--olive); }
+  .chip.down { background: var(--red-bg); color: var(--red); }
+  .chip.flat { background: var(--bg-2); color: var(--muted); }
+  .hcard.accent .chip.up { background: rgba(255,255,255,.18); color: #fff; }
+  .hcard.accent .chip.down { background: rgba(0,0,0,.18); color: #fff; }
+  .hcard.accent .chip.flat { background: rgba(255,255,255,.14); color: #fff; }
+  .debt { list-style: none; margin: 8px 0 0; padding: 0; font-size: 12.5px; }
+  .debt li { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-top: 1px solid var(--hair-2); }
+  .debt li span:last-child { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .hcard.accent .debt li { border-top-color: rgba(255,255,255,.22); }
+  .hcard[role="button"] { cursor: pointer; transition: background .12s, box-shadow .12s; }
+  .hcard.accent[role="button"]:hover { background: #a94c25; }
+  .hcard.accent.on { box-shadow: 0 0 0 3px rgba(184,85,42,.4); }
+  .hcard[role="button"]:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .cue { font-size: 12px; opacity: .85; display: flex; align-items: center; gap: 5px; }
+
+  .next { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r); padding: 16px 18px 12px; }
+  .next h3 { font-family: var(--serif); font-weight: 400; font-size: 19px; margin: 0 0 8px; }
+  .next h3 small { font-family: var(--sans); font-size: 12px; color: var(--muted); margin-left: 8px; }
+  .nrow { display: grid; grid-template-columns: 62px 1fr auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--hair-2); font-size: 13px; }
+  .nrow:first-of-type { border-top: none; }
+  .nrow .d { font-family: var(--serif); font-size: 15px; line-height: 1.1; }
+  .nrow .d small { display: block; font-family: var(--sans); font-size: 11.5px; color: var(--muted); }
+  .nrow .who { min-width: 0; }
+  .nrow .who b { font-weight: 600; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nrow .who span { color: var(--muted); font-size: 12px; }
+  .nrow .amt { text-align: right; font-variant-numeric: tabular-nums; font-size: 12.5px; }
+  .nrow .amt b { display: block; color: var(--amber); }
+  .nrow .amt i { font-style: normal; color: var(--muted); }
+  .flag { background: var(--red-bg); border-radius: 6px; }
+  .empty { padding: 22px 12px; text-align: center; color: var(--muted); font-size: 13px; }
+
+  /* ---------- sections ---------- */
+  .sec { display: flex; align-items: baseline; gap: 10px; margin: 26px 0 12px; }
+  .sec h2 { font-family: var(--serif); font-weight: 400; font-size: 21px; margin: 0; }
+  .sec .hint { font-size: 12.5px; color: var(--muted); }
+  .sec .right { margin-left: auto; font-size: 12.5px; color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r); margin-bottom: 14px; }
+  .card-h { padding: 14px 18px 0; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .card-h h3 { font-size: 14px; margin: 0; font-weight: 600; }
+  .card-h p { font-size: 12.5px; color: var(--muted); margin: 0; }
+  .card-b { padding: 12px 18px 16px; }
+  .grid2 { display: grid; grid-template-columns: 1.6fr 1fr; gap: 14px; }
+  @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+  .chart-box { position: relative; height: 300px; }
+  .chart-box.sm { height: 260px; }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 8px; }
+  .kpi { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r-sm); padding: 12px 14px; transition: border-color .12s; }
+  .kpi .l { font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+  .kpi .v { font-size: 21px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+  .kpi .s { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .kpi.click { cursor: pointer; }
+  .kpi.click:hover { border-color: var(--terracotta); }
+  .kpi.click .l::after { content: "›"; margin-left: 5px; opacity: .4; }
+  .kpi.on { border-color: var(--terracotta); background: var(--terracotta-bg); }
+  .kpi.on .l { color: var(--terracotta); }
+  .kpi.on .l::after { content: "✕"; opacity: .75; font-size: 10px; }
+  .kpi.red .v { color: var(--red); } .kpi.olive .v { color: var(--olive); } .kpi.amber .v { color: var(--amber); }
+
+  /* ---------- data health strip ---------- */
+  .health { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border-radius: var(--r-sm); font-size: 13px; margin-bottom: 14px; border: 1px solid; }
+  .health.ok { background: var(--olive-bg); border-color: #d6dfc0; color: var(--olive); }
+  .health.warn { background: var(--amber-bg); border-color: #efd9a3; color: var(--amber); }
+  .health b { font-weight: 600; }
+  .health .btn { margin-left: auto; min-height: 30px; padding: 5px 10px; font-size: 12px; }
+  .alert { border-radius: var(--r-sm); padding: 12px 14px; margin-bottom: 10px; border: 1px solid; display: flex; gap: 10px; align-items: flex-start; font-size: 13px; }
+  .alert.warn { background: var(--red-bg); border-color: #efc9c0; }
+  .alert.info { background: var(--blue-bg); border-color: #cddbe8; }
+  .alert h4 { margin: 0 0 3px; font-size: 13.5px; }
+  .alert.warn h4 { color: var(--red); } .alert.info h4 { color: var(--blue); }
+  .alert p { margin: 0; color: var(--ink-2); }
+  .alert ul { margin: 6px 0 0; padding-left: 17px; color: var(--ink-2); }
+
+  /* ---------- filters disclosure ---------- */
+  details.filters { margin-bottom: 14px; }
+  details.filters summary { cursor: pointer; font-size: 13px; color: var(--ink-2); padding: 8px 0; list-style: none; display: inline-flex; gap: 8px; align-items: center; }
+  details.filters summary::-webkit-details-marker { display: none; }
+  details.filters summary::before { content: "▸"; color: var(--muted); }
+  details.filters[open] summary::before { content: "▾"; }
+  .fbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; padding: 10px 0 4px; }
+
+  /* ---------- tables ---------- */
+  .tscroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { text-align: left; padding: 10px 11px; white-space: nowrap; border-bottom: 1.5px solid var(--hair); color: var(--muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; cursor: pointer; user-select: none; }
+  thead th:hover { color: var(--terracotta); }
+  thead th .ar { font-size: 9px; margin-left: 3px; }
+  tbody td { padding: 9px 11px; border-bottom: 1px solid var(--hair-2); white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #fbf8f3; }
+  tbody tr.flagged { background: #fdf3ef; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .strong { font-weight: 600; }
+  .split { font-size: 11.5px; color: var(--blue); font-weight: 600; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+  .b-paid { background: var(--olive-bg); color: var(--olive); }
+  .b-pending { background: var(--amber-bg); color: var(--amber); }
+  .b-plain { background: var(--bg-2); color: var(--muted); }
+  .b-live { background: var(--olive-bg); color: var(--olive); }
+  .b-sheet { background: var(--red-bg); color: var(--red); }
+  .b-airbnb { background: var(--blue-bg); color: var(--blue); }
+  .b-picnic { background: var(--terracotta-bg); color: var(--terracotta); }
+  .b-stay { background: var(--blue-bg); color: var(--blue); }
+
+  /* ---------- P&L ---------- */
+  .pnl { width: 100%; }
+  .pnl td { padding: 8px 6px; font-size: 13.5px; }
+  .pnl td:first-child { color: var(--ink-2); }
+  .pnl tr.total td { border-top: 2px solid var(--hair); font-family: var(--serif); font-size: 18px; padding-top: 10px; }
+  .note { font-size: 12.5px; color: var(--muted); margin: 10px 0 0; line-height: 1.55; }
+
+  .foot { font-size: 12px; color: var(--muted); line-height: 1.65; margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--hair); }
+  .foot code { background: var(--bg-2); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; }
+  /* ---- sign-in ---- */
+  .signin-wrap { min-height: 76vh; display: flex; align-items: center; justify-content: center; padding: 24px 0; }
+  .signin-card { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r); padding: 34px 30px 26px; width: 100%; max-width: 380px; box-shadow: 0 1px 2px rgba(42,37,33,.04), 0 8px 28px rgba(42,37,33,.06); }
+  .signin-brand { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--terracotta); font-weight: 600; }
+  .signin-card h1 { font-size: 22px; margin: 10px 0 2px; color: var(--ink); letter-spacing: -.01em; }
+  .signin-sub { color: var(--muted); font-size: 13px; margin: 0 0 22px; }
+  .signin-card label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-2); margin: 0 0 5px; }
+  .signin-card input { width: 100%; box-sizing: border-box; padding: 10px 12px; font: inherit; font-size: 14px; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--hair); border-radius: 9px; margin-bottom: 14px; }
+  .signin-card input:focus { outline: 2px solid var(--terracotta); outline-offset: 1px; border-color: transparent; }
+  .signin-card button { width: 100%; padding: 11px 14px; font: inherit; font-size: 14px; font-weight: 600; color: #fff;
+    background: var(--terracotta); border: 0; border-radius: 9px; cursor: pointer; margin-top: 4px; }
+  .signin-card button:disabled { opacity: .6; cursor: default; }
+  .signin-msg { min-height: 18px; margin-top: 12px; font-size: 12.5px; color: var(--red); text-align: center; }
+  .stamp .who a { color: var(--terracotta); text-decoration: none; }
+  .stamp .who a:hover { text-decoration: underline; }
+
+  .state { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r); padding: 32px; text-align: center; color: var(--muted); }
+  .state.err { text-align: left; border-color: #efc9c0; background: var(--red-bg); color: var(--ink-2); }
+  .state.err strong { color: var(--red); display: block; margin-bottom: 5px; font-size: 14px; }
+  .detail-only { display: none; }
+  body.detail .detail-only { display: revert; }
+  body.detail .present-only { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="root"><div class="state">Loading…</div></div>
+</div>
+
+<script>
+/* ============================================================
+   SOURCE — Supabase, and nothing else.
+
+   The Cowork build of this dashboard read the Google Sheet "THEPIC~3" as its
+   book of record and used the database only to cross-check it. A browser cannot
+   read a Drive document without Google OAuth, so the hosted build inverts that:
+   the database is the single source.
+
+   That is safe because of the 2026-09-03 backfill. The four sheet-only bookings
+   (Danyela, Aman, Harshit Agarwal, Siddhart Kanungoo) are now rows 150-153,
+   per-booking costs live in booking_costs, and the workbook's Expenses tab is
+   mirrored into public.expenses by the sync. Verified live before this rewrite:
+
+       picnic  13 bookings  revenue 193,014  cost 56,918  profit 136,096
+       stay    28 bookings  revenue 302,842  cost  1,855  profit 300,987
+
+   — identical to the workbook's own Dashboard tab. Nothing is lost by dropping
+   the sheet leg. What IS gone is the sheet-vs-live reconciliation: with one
+   source there is nothing to reconcile, so the mismatch and unsynced machinery
+   below is inert by construction rather than by luck.
+
+   SECURITY — read this before changing any query.
+   The anon key below is public by design; it is the browser's ticket to the API,
+   not a credential. Every byte of protection comes from RLS, verified live
+   2026-09-03 against the REST endpoint and by simulating a session in Postgres:
+
+       anon                          bookings 0   expenses 0   costs 0
+       authenticated, non-admin      bookings 3   expenses 0   costs 0
+                                     (their OWN rows, via customer_select_own_bookings)
+       authenticated, admin          bookings 67  expenses 6
+
+   Only auth.email() = 'aksh.eeev@gmail.com' can read the business data.
+   🔴 Adding an anon SELECT policy to bookings or expenses would make customer
+   names, phones, emails and revenue world-readable at this URL. Don't.
+   ============================================================ */
+const SUPABASE_URL  = 'https://evmftrogyzoudiccqkya.supabase.co';
+const SUPABASE_ANON  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2bWZ0cm9neXpvdWRpY2Nxa3lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTM5OTUsImV4cCI6MjA5NTI4OTk5NX0.ka2tLAY7xpe08X8TlNVgft4V__Qv7Ol27rd0daOtI4I';
+
+/* Region scope: this dashboard is the Gurugram & Delhi book. Jaipur has its own. */
+const CITIES = ['Gurugram', 'Delhi'];
+/* Standing exclusions (CLAUDE.md §8): team phones + Test* names. */
+const TEAM_PHONES = ['7742363777', '7425055501'];
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+  auth: { persistSession: true, autoRefreshToken: true },
+});
+
+const MONTHS = { Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5, Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11 };
+const MON_LBL = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const TODAY = (() => { const d = new Date(); d.setHours(0,0,0,0); return d; })();
+
+/* ---------- primitives ---------- */
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function money(v) {
+  if (v == null) return 0;
+  const s = String(v).replace(/₹/g, '').replace(/,/g, '').trim();
+  if (s === '' || s === '-' || s === '—') return 0;
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+function inr(n) { const v = Math.round(Number(n) || 0); return '₹' + v.toLocaleString('en-IN'); }
+function inrShort(n) {
+  const v = Math.round(Number(n) || 0);
+  if (Math.abs(v) >= 100000) return '₹' + (v/100000).toFixed(1).replace(/\.0$/,'') + 'L';
+  if (Math.abs(v) >= 1000) return '₹' + (v/1000).toFixed(1).replace(/\.0$/,'') + 'k';
+  return '₹' + v;
+}
+/* Sheet dates are "13-Jun-2026"; DB dates and the Booked On column are ISO "2026-06-13". */
+function parseDate(s) {
+  if (!s) return null;
+  const t = String(s).trim();
+  let m = t.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
+  if (m && MONTHS[m[2]] !== undefined) return new Date(Number(m[3]), MONTHS[m[2]], Number(m[1]));
+  m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return null;
+}
+function fmtDate(d) { return d ? `${String(d.getDate()).padStart(2,'0')} ${MON_LBL[d.getMonth()]} ${d.getFullYear()}` : '—'; }
+function fmtShort(d) { return d ? `${String(d.getDate()).padStart(2,'0')} ${MON_LBL[d.getMonth()]}` : '—'; }
+function monthKey(d) { return d ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` : ''; }
+function monthLabel(k) { const [y,m] = k.split('-'); return `${MON_LBL[Number(m)-1]} ${y}`; }
+function prevMonthKey(k) { const [y,m] = k.split('-').map(Number); const d = new Date(y, m - 2, 1); return monthKey(d); }
+function daysFromToday(d) { return d ? Math.round((d - TODAY) / 86400000) : null; }
+function isoDate(d) { return d ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` : ''; }
+/* The Drive markdown-table parser and the MCP response unwrappers that used to
+   live here are gone with the sheet leg — supabase-js returns parsed JSON. */
+
+/* ---------- state ---------- */
+const S = {
+  records: [], dbRows: [], dbOk: false, sheetOk: false, dbErr: '',
+  filters: { basis: 'event', month: 'all', type: 'all', venue: 'all', channel: 'all', status: 'all', q: '', upcoming: false, owing: false, exposed: false },
+  detail: false,          // presentation mode is the default; detail reveals ops plumbing
+  healthOpen: false,
+  // Owed-to-me is a VIEW of the bookings table, not a filter. It deliberately sits
+  // outside S.filters so opening it can never re-scope the hero metrics or charts —
+  // profit and revenue must keep answering for the period you selected.
+  owedOpen: false,
+  charts: {},
+};
+
+/* ---------- load ----------
+   One round trip per table, in parallel. Every one of these is RLS-gated to the
+   admin email, so an unauthenticated or non-admin session gets [] rather than an
+   error — which is why load() checks for an empty bookings set explicitly. */
+async function load() {
+  const [bkRes, costRes, addRes, expRes] = await Promise.all([
+    sb.from('bookings')
+      .select('id, full_name, mobile_number, preferred_date, checkout_date, time_slot, occasion, ' +
+              'total_amount, advance_amount, payment_status, entry_source, external_booking_ref, ' +
+              'created_at, venues!inner(name, city, type)')
+      .eq('confirmed', true)
+      .in('venues.city', CITIES)
+      .order('preferred_date', { ascending: false }),
+    sb.from('booking_costs').select('booking_id, total_cost, closed_at, close_notes'),
+    sb.from('booking_add_ons').select('booking_id, name, price_at_booking'),
+    sb.from('expenses').select('spend_date, business, city, category, description, amount'),
+  ]);
+
+  for (const [label, res] of [['bookings', bkRes], ['costs', costRes], ['add-ons', addRes], ['expenses', expRes]]) {
+    if (res.error) throw new Error(`Could not read ${label} — ${res.error.message}`);
+  }
+  const raw = bkRes.data || [];
+  if (!raw.length) throw new Error('Signed in, but no bookings came back. This account does not have read access to the business data.');
+  S.dbOk = true; S.sheetOk = true;
+
+  const costBy = new Map();
+  (costRes.data || []).forEach(c => costBy.set(String(c.booking_id), c));
+  const addBy = new Map();
+  (addRes.data || []).forEach(a => {
+    const k = String(a.booking_id);
+    if (!addBy.has(k)) addBy.set(k, []);
+    addBy.get(k).push(a);
+  });
+
+  S.expenses = (expRes.data || [])
+    .filter(e => money(e.amount) > 0)
+    .map(e => ({
+      date: parseDate(e.spend_date),
+      business: String(e.business || '').trim() || '—',
+      city: String(e.city || '').trim(),
+      category: String(e.category || '').trim() || '—',
+      description: String(e.description || '').trim(),
+      amount: money(e.amount),
+    }));
+
+  /* Standing exclusions (CLAUDE.md §8) applied client-side rather than in the
+     query, so the filter lives next to the comment explaining it. */
+  const kept = raw.filter(r =>
+    !TEAM_PHONES.includes(String(r.mobile_number || '').trim()) &&
+    !/^test/i.test(String(r.full_name || '').trim()));
+
+  const recs = kept.map(r => {
+    const isStay = !!r.checkout_date;
+    const start = parseDate(r.preferred_date);
+    const end = isStay ? parseDate(r.checkout_date) : null;
+    const nights = (isStay && start && end) ? Math.max(0, Math.round((end - start) / 86400000)) : 0;
+    const total = money(r.total_amount);
+    const advance = money(r.advance_amount);
+    const cost = money((costBy.get(String(r.id)) || {}).total_cost);
+
+    /* Channel. external_booking_ref is free text and mixes two different things:
+       real Airbnb confirmation codes (HM + 8 alphanumerics, sometimes with an
+       AIRBNB- prefix) and hand-typed provenance notes — "WhatsApp", "Direct",
+       "direct-extension", and the bare word "Airbnb".
+       🔴 The code test alone is not enough: bookings #142 and #143 are genuine
+       platform stays whose ref is literally "Airbnb", and a code-only check
+       filed both under Direct. Both forms have to be accepted. */
+    const ref = String(r.external_booking_ref || '').trim();
+    const bare = ref.replace(/^AIRBNB-/i, '');
+    const viaAirbnb = isStay && (/^HM[A-Z0-9]{8}$/i.test(bare) || /^airbnb$/i.test(ref));
+    const channel = isStay
+      ? (viaAirbnb ? 'Airbnb' : 'Direct')
+      : (String(r.entry_source || '') === 'admin' ? 'Direct' : 'Website');
+
+    return {
+      kind: isStay ? 'stay' : 'picnic',
+      bookingId: '#' + r.id,
+      venue: (r.venues && r.venues.name) || '—',
+      city: (r.venues && r.venues.city) || '',
+      name: r.full_name || '',
+      phone: r.mobile_number || '',
+      date: start, endDate: end, nights,
+      /* created_at is UTC; the business runs on IST, and a booking made at
+         02:00 IST belongs to that day, not the previous one. */
+      bookedOn: r.created_at ? new Date(new Date(r.created_at).getTime() + 5.5 * 3600000) : null,
+      occasion: r.occasion || '',
+      channel,
+      total, advance,
+      balance: Math.max(0, total - advance),
+      netProfit: total - cost,
+      cost,
+      addOns: addBy.get(String(r.id)) || [],
+      /* 🔴 payment_status is NOT the truth flag. CLAUDE.md §6: admin-entered and
+         offline-collected bookings stay 'pending' forever by design, so keying
+         "paid" off it would report every manual booking as owing. The money
+         columns are the truth — advance_amount is raised to total_amount when a
+         booking is settled. This reproduces the workbook's ₹38,600 outstanding
+         exactly (Amy 15,200 + Simran 14,900 + Nitij 8,500), verified 2026-09-03. */
+      payment: advance >= total && total > 0 ? 'Paid' : 'Advance Paid',
+      status: (start && start < TODAY) ? 'Completed' : 'Confirmed',
+      bkid: String(r.id),
+    };
+  });
+  // Fold venue spelling variants onto the most common form.
+  const variants = new Map();
+  recs.forEach(r => {
+    const k = String(r.venue || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!k) return;
+    if (!variants.has(k)) variants.set(k, new Map());
+    const c = variants.get(k); c.set(r.venue, (c.get(r.venue) || 0) + 1);
+  });
+  const canonical = new Map();
+  variants.forEach((counts, k) => { let best = null, n = -1; counts.forEach((cnt, name) => { if (cnt > n) { n = cnt; best = name; } }); canonical.set(k, best); });
+  recs.forEach(r => { const k = String(r.venue || '').toLowerCase().replace(/\s+/g, ' ').trim(); if (canonical.has(k)) r.venue = canonical.get(k); });
+
+  // Payment Status is authoritative: Paid => fully collected, zero balance.
+  recs.forEach(r => {
+    r.paid = (r.payment || '').trim().toLowerCase() === 'paid';
+    r.collected = r.paid ? r.total : r.advance;
+    r.balance = r.paid ? 0 : Math.max(0, r.total - r.advance);
+    r.share = 1; r.shareNights = r.nights;
+  });
+  S.records = recs;
+
+  /* --- reconciliation: nothing to reconcile ---
+     The Cowork build compared each sheet row against the live booking it matched
+     (by _bkid, else phone+date) and raised a mismatch when the two totals
+     disagreed. With the database as the only source, a row cannot disagree with
+     itself. These fields stay on every record because the renderer reads them;
+     they are now constants rather than findings, and the Data health strip has
+     been reworded to say so instead of claiming a clean reconciliation it never
+     performed. */
+  S.dbRows = recs;
+  S.records.forEach(r => {
+    r.live = r; r.linkedBy = 'db'; r.mismatch = null;
+    r.expectedLive = true; r.unsynced = false;
+    r.future = r.date ? r.date >= TODAY : false;
+    r.exposed = false;
+  });
+  S.orphans = [];
+  S.dupWarnings = [];
+
+  // Default the month to the latest month that has bookings, so the hero opens
+  // on a real period rather than an all-time blur. 'All months' stays available.
+  const mk = months().filter(k => k <= monthKey(TODAY));
+  if (mk.length) S.filters.month = mk[0];
+}
+
+/* ---------- reporting basis ----------
+   'event'  — when delivered. Stays are split PER NIGHT across the months they cover.
+   'booked' — when committed (sheet `Booked On`, from bookings.created_at, IST).
+   Returns [{ k, share, nights }]; shares sum to 1 across the returned months. */
+function spans(r, basisOverride) {
+  const basis = basisOverride || S.filters.basis || 'event';
+  const whole = (d, n) => { const k = monthKey(d); return k ? [{ k, share: 1, nights: n || 0 }] : []; };
+  if (basis === 'booked') return whole(r.bookedOn || r.date, r.nights);   // hand-entered rows fall back to event date
+  if (r.kind !== 'stay' || !r.date || !r.endDate) return whole(r.date, r.nights);
+  const n = Math.round((r.endDate - r.date) / 86400000);
+  if (!(n > 0)) return whole(r.date, r.nights);
+  const per = {}; const d = new Date(r.date.getTime());
+  for (let i = 0; i < n; i++) { const k = monthKey(d); if (k) per[k] = (per[k] || 0) + 1; d.setDate(d.getDate() + 1); }
+  const keys = Object.keys(per).sort();
+  if (!keys.length) return whole(r.date, r.nights);
+  return keys.map(k => ({ k, share: per[k] / n, nights: per[k] }));
+}
+function bookedOnGaps() { return S.records.filter(r => !r.bookedOn).length; }
+
+/* ---------- filtering ---------- */
+function months() {
+  const set = new Set();
+  S.records.forEach(r => spans(r).forEach(s => { if (s.k) set.add(s.k); }));
+  (S.expenses || []).forEach(e => { const k = monthKey(e.date); if (k) set.add(k); });
+  return Array.from(set).sort().reverse();
+}
+function uniq(fn) { return Array.from(new Set(S.records.map(fn).filter(v => v && String(v).trim()))).sort(); }
+function view(overrides) {
+  const f = overrides ? Object.assign({}, S.filters, overrides) : S.filters;
+  const q = (f.q || '').trim().toLowerCase();
+  return S.records.filter(r => {
+    if (f.month !== 'all') {
+      const hit = spans(r, f.basis).find(s => s.k === f.month);
+      if (!hit) return false;
+      r.share = hit.share; r.shareNights = hit.nights;
+    } else { r.share = 1; r.shareNights = r.nights; }
+    if (f.type !== 'all' && r.kind !== f.type) return false;
+    if (f.venue !== 'all' && r.venue !== f.venue) return false;
+    if (f.channel !== 'all' && r.channel !== f.channel) return false;
+    if (f.status !== 'all') {
+      const p = (r.payment || '').toLowerCase(), b = (r.status || '').toLowerCase();
+      if (f.status === 'paid' && p !== 'paid') return false;
+      if (f.status === 'pending' && p === 'paid') return false;
+      if (f.status === 'confirmed' && b !== 'confirmed') return false;
+      if (f.status === 'completed' && b !== 'completed') return false;
+    }
+    if (f.upcoming && !r.future) return false;
+    if (f.owing && !(r.balance > 0)) return false;
+    if (f.exposed && !r.exposed) return false;
+    if (q) { const hay = [r.name, r.venue, r.bookingId, r.occasion, r.channel, r.phone].join(' ').toLowerCase(); if (!hay.includes(q)) return false; }
+    return true;
+  });
+}
+function filtered() { return view(); }
+function sumShare(rows, fn) { return rows.reduce((s, r) => s + (Number(fn(r)) || 0) * (r.share == null ? 1 : r.share), 0); }
+function expFiltered() { const f = S.filters; return (S.expenses || []).filter(e => !(f.month !== 'all' && monthKey(e.date) !== f.month)); }
+
+/* Month-on-month. Compares the selected month with the immediately preceding
+   calendar month on the SAME basis and the same non-month filters, so the two
+   figures are like-for-like. Returns null when no month is selected or the prior
+   month has nothing — a fake "+100%" against an empty month is worse than silence. */
+function monthTotals(k) {
+  const rows = view({ month: k });
+  return { revenue: sumShare(rows, r => r.total), profit: sumShare(rows, r => r.netProfit), count: rows.length };
+}
+function mom(metric) {
+  const f = S.filters;
+  if (f.month === 'all') return null;
+  const cur = monthTotals(f.month), prev = monthTotals(prevMonthKey(f.month));
+  if (!prev.count) return { first: true };
+  const a = cur[metric], b = prev[metric];
+  if (!b) return { first: true };
+  return { pct: (a - b) / Math.abs(b) * 100, abs: a - b, prevLabel: monthLabel(prevMonthKey(f.month)) };
+}
+function chip(d) {
+  if (!d) return '';
+  if (d.first) return `<span class="chip flat">first month</span>`;
+  const up = d.abs >= 0, cls = Math.abs(d.pct) < 0.5 ? 'flat' : (up ? 'up' : 'down');
+  const arrow = cls === 'flat' ? '—' : (up ? '▲' : '▼');
+  return `<span class="chip ${cls}" title="vs ${esc(d.prevLabel)}: ${up ? '+' : '−'}${inr(Math.abs(d.abs))}">${arrow} ${Math.abs(d.pct).toFixed(0)}%</span>`;
+}
+
+function pnlSummary() {
+  const tb = view({ type: 'all' });
+  const picnicProfit = sumShare(tb.filter(r => r.kind === 'picnic'), r => r.netProfit);
+  const stayProfit   = sumShare(tb.filter(r => r.kind === 'stay'), r => r.netProfit);
+  const exp = expFiltered();
+  const expTotal = exp.reduce((s, e) => s + e.amount, 0);
+  const bizTot = key => exp.filter(e => String(e.business).toLowerCase().includes(key)).reduce((s, e) => s + e.amount, 0);
+  const expPicnic = bizTot('picnic'), expAirbnb = bizTot('airbnb'), expShared = bizTot('shared');
+  return { picnicProfit, stayProfit, exp, expTotal, expPicnic, expAirbnb, expShared, expOther: expTotal - expPicnic - expAirbnb - expShared, overallNet: picnicProfit + stayProfit - expTotal };
+}
+function toggleFilter(key, value) {
+  if (key === 'type') S.filters.type = (S.filters.type === value) ? 'all' : value;
+  else S.filters[key] = !S.filters[key];
+  render();
+}
+window.toggleFilter = toggleFilter;
+window.toggleDetail = () => { S.detail = !S.detail; document.body.classList.toggle('detail', S.detail); render(); };
+window.toggleHealth = () => { S.healthOpen = !S.healthOpen; render(); };
+/* Owed-to-me card: swaps the bookings table for every booking carrying a balance,
+   across all periods. It touches NO filter state — the hero cards, charts, KPIs and
+   P&L keep answering for the period and filters you chose. */
+window.showOwed = () => {
+  S.owedOpen = !S.owedOpen;
+  render();
+  if (S.owedOpen) { const el = document.getElementById('t-all'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+};
+
+/* ---------- table renderer ---------- */
+function makeTable(mount, rows, cols, defIdx, defDir, emptyMsg) {
+  let si = defIdx, sd = defDir || 1;
+  function draw() {
+    if (!rows.length) { mount.innerHTML = `<div class="empty">${esc(emptyMsg || 'No bookings match these filters.')}</div>`; return; }
+    const sorted = rows.slice().sort((a, b) => {
+      const c = cols[si];
+      let av = c.sort ? c.sort(a) : a[c.key], bv = c.sort ? c.sort(b) : b[c.key];
+      if (av == null) av = ''; if (bv == null) bv = '';
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * sd;
+      return String(av).localeCompare(String(bv)) * sd;
+    });
+    mount.innerHTML = '<div class="tscroll"><table><thead><tr>' +
+      cols.map((c, i) => `<th data-i="${i}" class="${c.num ? 'num' : ''}">${esc(c.label)}${si === i ? `<span class="ar">${sd === 1 ? '▲' : '▼'}</span>` : ''}</th>`).join('') +
+      '</tr></thead><tbody>' +
+      sorted.map(r => `<tr class="${r.exposed && S.detail ? 'flagged' : ''}">` + cols.map(c => `<td class="${c.num ? 'num' : ''}">${c.render ? c.render(r) : esc(r[c.key])}</td>`).join('') + '</tr>').join('') +
+      '</tbody></table></div>';
+    mount.querySelectorAll('th').forEach(th => th.addEventListener('click', () => { const i = Number(th.dataset.i); if (si === i) sd *= -1; else { si = i; sd = 1; } draw(); }));
+  }
+  draw();
+}
+function payBadge(r) {
+  const p = (r.payment || '').trim().toLowerCase();
+  if (p === 'paid') return '<span class="badge b-paid">Paid</span>';
+  if (p === 'pending') return '<span class="badge b-pending">Pending</span>';
+  if (p === 'advance paid' || p === 'partial') return `<span class="badge b-pending">${esc(r.payment)}</span>`;
+  return `<span class="badge b-plain">${esc(r.payment || '—')}</span>`;
+}
+/* Was a sync badge: sheet row vs live row, and how they were matched. With one
+   source every row would read the same thing, so it now carries the booking's
+   channel instead — which is the question a partner actually asks of a row. */
+function syncBadge(r) {
+  if (r.channel === 'Airbnb') return '<span class="badge b-airbnb">Airbnb</span>';
+  if (r.channel === 'Website') return '<span class="badge b-live">Website</span>';
+  return '<span class="badge b-plain">Direct</span>';
+}
+function kindBadge(r) { return r.kind === 'picnic' ? '<span class="badge b-picnic">Picnic</span>' : '<span class="badge b-stay">Stay</span>'; }
+
+/* ---------- render ---------- */
+function render() {
+  const rows = filtered();
+  const root = document.getElementById('root');
+  const f = S.filters, D = S.detail;
+  const byBooked = f.basis === 'booked';
+  const monthScoped = f.month !== 'all';
+  const period = monthScoped ? monthLabel(f.month) : 'all time';
+
+  const upcoming = S.records.filter(r => r.future).sort((a, b) => a.date - b.date);   // always from the full set — the calendar doesn't care about the month filter
+  const exposed = rows.filter(r => r.exposed);
+  const revenue = sumShare(rows, r => r.total);
+  const collected = sumShare(rows, r => r.collected);
+  const profit = sumShare(rows, r => r.netProfit);
+  const margin = revenue ? Math.round(profit / revenue * 100) : null;
+  const owedRows = S.records.filter(r => r.balance > 0).sort((a, b) => b.balance - a.balance);   // owed is a whole-booking fact, never prorated
+  const owed = owedRows.reduce((s, r) => s + r.balance, 0);
+  const owedPic = owedRows.filter(r => r.kind === 'picnic'), owedSt = owedRows.filter(r => r.kind === 'stay');
+  const owedPicSum = owedPic.reduce((s, r) => s + r.balance, 0), owedStSum = owedSt.reduce((s, r) => s + r.balance, 0);
+  const owedActive = S.owedOpen;
+  // The owed table shows whole-booking balances across all periods, so its amounts
+  // are never prorated — unlike the period-scoped table it replaces.
+  const tableRows = owedActive ? owedRows : rows;
+  const stays = rows.filter(r => r.kind === 'stay');
+  const nights = stays.reduce((s, r) => s + (r.shareNights == null ? r.nights : r.shareNights), 0);
+  const mismatches = rows.filter(r => r.mismatch);
+  const splitRows = monthScoped ? rows.filter(r => r.share > 0 && r.share < 1) : [];
+  const pnl = pnlSummary();
+  const typeBase = view({ type: 'all' });
+  const nPicnic = typeBase.filter(r => r.kind === 'picnic').length, nStay = typeBase.filter(r => r.kind === 'stay').length;
+  const picnicRev = sumShare(typeBase.filter(r => r.kind === 'picnic'), r => r.total);
+  const stayRev = sumShare(typeBase.filter(r => r.kind === 'stay'), r => r.total);
+  const gaps = bookedOnGaps();
+  const healthItems = exposed.length + mismatches.length + (S.dupWarnings || []).length + (S.dbOk ? (S.orphans || []).length : 0);
+
+  const clickKpi = (key, val, on, cls, label, value, sub) => `
+    <div class="kpi click ${cls || ''} ${on ? 'on' : ''}" role="button" tabindex="0" aria-pressed="${on}"
+         onclick="toggleFilter('${key}'${val !== undefined ? `,'${val}'` : ''})"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleFilter('${key}'${val !== undefined ? `,'${val}'` : ''})}">
+      <div class="l">${label}</div><div class="v">${value}</div><div class="s">${sub}</div></div>`;
+  const kpi = (cls, label, value, sub) => `<div class="kpi ${cls || ''}"><div class="l">${label}</div><div class="v">${value}</div><div class="s">${sub}</div></div>`;
+  const opt = (v, l, cur) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${esc(l)}</option>`;
+  const pnlLine = n => (n < 0 ? '− ' : '+ ') + inr(Math.abs(n));
+
+  const nextRows = upcoming.slice(0, 5).map(r => `
+    <div class="nrow ${r.exposed && D ? 'flag' : ''}">
+      <div class="d">${fmtShort(r.date)}<small>${daysFromToday(r.date) === 0 ? 'today' : 'in ' + daysFromToday(r.date) + 'd'}</small></div>
+      <div class="who"><b>${esc(r.name)}</b><span>${esc(r.venue)}${r.kind === 'stay' && r.endDate ? ' · ' + r.nights + ' night' + (r.nights === 1 ? '' : 's') : ''}</span></div>
+      <div class="amt">${r.balance > 0 ? `<b>${inr(r.balance)}</b><i>due</i>` : `<i>${inr(r.total)}</i><i>settled</i>`}</div>
+    </div>`).join('');
+
+  root.innerHTML = `
+    <div class="mast">
+      <div class="brand">
+        <h1>The Picnic <em>Stories</em></h1>
+        <div class="scope">Gurugram &amp; Delhi · ${period} · ${byBooked ? 'by date booked' : 'by event date'}</div>
+      </div>
+      <div class="mast-ctl">
+        <div class="ctl"><label for="f-basis">Basis</label><select id="f-basis" title="Event date places money in the month the booking happens (stays split per night). Booked on places it in the month the booking was made.">${opt('event', 'Event date', f.basis)}${opt('booked', 'Booked on', f.basis)}</select></div>
+        <div class="ctl"><label for="f-month">Period</label><select id="f-month">${opt('all', 'All months', f.month)}${months().map(m => opt(m, monthLabel(m), f.month)).join('')}</select></div>
+        <button type="button" class="btn ${D ? 'on' : ''}" onclick="toggleDetail()" aria-pressed="${D}">${D ? 'Hide detail' : 'Show detail'}</button>
+        <button type="button" class="btn" onclick="refresh()" title="Re-read the booking system">Refresh</button>
+      </div>
+      <div class="stamp">
+        <span><i class="dot ${S.dbOk ? '' : 'bad'}"></i> Live system ${S.dbOk ? `connected · ${S.dbRows.length} confirmed` : 'unavailable'}</span>
+        <span>Updated ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+        <span class="who">${esc(S.email || '')} · <a href="#" onclick="signOut();return false;">Sign out</a></span>
+      </div>
+    </div>
+
+    <div class="hero">
+      <div class="hcard accent ${owedActive ? 'on' : ''}" role="button" tabindex="0" aria-pressed="${owedActive}"
+           onclick="showOwed()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showOwed()}"
+           title="${owedActive ? 'Clear this filter' : 'Show every booking with a balance outstanding'}">
+        <div class="l">Owed to me</div>
+        <div class="v">${inrShort(owed)}</div>
+        <div class="s">${owedRows.length} booking${owedRows.length === 1 ? '' : 's'} · all periods</div>
+        ${owedRows.length ? `<ul class="debt">
+          <li><span>Picnics · ${owedPic.length}</span><span>${inr(owedPicSum)}</span></li>
+          <li><span>Airbnb &amp; stays · ${owedSt.length}</span><span>${inr(owedStSum)}</span></li>
+        </ul>` : `<ul class="debt"><li><span>Nothing outstanding</span><span>—</span></li></ul>`}
+        <div class="foot cue">${owedActive ? '↩ Tap to clear' : owedRows.length ? '→ Tap to see all ' + owedRows.length : ''}</div>
+      </div>
+      <div class="hcard">
+        <div class="l">Booking profit</div>
+        <div class="v">${inrShort(profit)}</div>
+        <div class="s">${margin != null ? margin + '% margin' : '—'} · before overhead ${chip(mom('profit'))}</div>
+        <div class="foot"><span style="color:var(--muted)">Overall net after expenses</span> <b style="color:var(--${pnl.overallNet < 0 ? 'red' : 'olive'})">${(pnl.overallNet < 0 ? '−' : '') + inrShort(Math.abs(pnl.overallNet))}</b></div>
+      </div>
+      <div class="hcard">
+        <div class="l">Revenue</div>
+        <div class="v">${inrShort(revenue)}</div>
+        <div class="s">${rows.length} booking${rows.length === 1 ? '' : 's'}${splitRows.length ? ' · ' + splitRows.length + ' part-month' : ''} ${chip(mom('revenue'))}</div>
+        <div class="foot"><span style="color:var(--muted)">Collected</span> <b>${inrShort(collected)}</b> <span style="color:var(--muted)">· picnics ${inrShort(picnicRev)} · stays ${inrShort(stayRev)}</span></div>
+      </div>
+      <div class="next">
+        <h3>Next up<small>${upcoming.length} upcoming</small></h3>
+        ${nextRows || '<div class="empty">Nothing scheduled.</div>'}
+      </div>
+    </div>
+
+    <div id="health"></div>
+
+    <details class="filters" ${(f.type !== 'all' || f.venue !== 'all' || f.channel !== 'all' || f.status !== 'all' || f.q || f.upcoming || f.owing || f.exposed) ? 'open' : ''}>
+      <summary>Filters${(f.type !== 'all' || f.venue !== 'all' || f.channel !== 'all' || f.status !== 'all' || f.q) ? ' · active' : ''}</summary>
+      <div class="fbar">
+        <div class="ctl"><label for="f-type">Type</label><select id="f-type">${opt('all', 'All', f.type)}${opt('picnic', 'Picnic', f.type)}${opt('stay', 'Stay', f.type)}</select></div>
+        <div class="ctl"><label for="f-venue">Venue</label><select id="f-venue">${opt('all', 'All venues', f.venue)}${uniq(r => r.venue).map(v => opt(v, v, f.venue)).join('')}</select></div>
+        <div class="ctl"><label for="f-channel">Channel</label><select id="f-channel">${opt('all', 'All channels', f.channel)}${uniq(r => r.channel).map(v => opt(v, v, f.channel)).join('')}</select></div>
+        <div class="ctl"><label for="f-status">Status</label><select id="f-status">${opt('all', 'Any status', f.status)}${opt('paid', 'Paid', f.status)}${opt('pending', 'Advance paid', f.status)}${opt('confirmed', 'Confirmed', f.status)}${opt('completed', 'Completed', f.status)}</select></div>
+        <div class="ctl"><label for="f-q">Search</label><input type="search" id="f-q" placeholder="Guest, venue, ID…" value="${esc(f.q)}" /></div>
+        <button type="button" class="btn" id="f-reset">Clear</button>
+      </div>
+    </details>
+
+    <div class="sec"><h2>Revenue</h2><span class="hint">${period} · ${byBooked ? 'by the date each booking was made' : 'by event date, stays split across the months they cover'}</span></div>
+    <div class="grid2">
+      <div class="card"><div class="card-h"><h3>By month</h3><p>Picnic vs stay · line is the 3-month rolling average</p></div>
+        <div class="card-b"><div class="chart-box"><canvas id="c-month"></canvas></div></div></div>
+      <div class="card"><div class="card-h"><h3>By venue</h3><p>${period}</p></div>
+        <div class="card-b"><div class="chart-box sm"><canvas id="c-venue"></canvas></div></div></div>
+    </div>
+
+    <div class="kpis">
+      ${clickKpi('type', 'picnic', f.type === 'picnic', '', 'Picnics', nPicnic, inrShort(picnicRev))}
+      ${clickKpi('type', 'stay', f.type === 'stay', '', 'Stays', nStay, Math.round(nights) + ' night' + (Math.round(nights) === 1 ? '' : 's') + ' · ' + inrShort(stayRev))}
+      ${clickKpi('owing', undefined, f.owing, owed > 0 ? 'amber' : '', 'Awaiting balance', owedRows.filter(r => rows.includes(r)).length, 'in this period')}
+      ${D ? clickKpi('exposed', undefined, f.exposed, exposed.length ? 'red' : 'olive', 'Unprotected dates', exposed.length, exposed.length ? 'not blocking the calendar' : 'all future dates covered') : ''}
+    </div>
+
+    <div class="sec"><h2>Profit &amp; loss</h2><span class="hint">${period} · expenses are month-scoped by their own date</span></div>
+    <div class="grid2">
+      <div class="card"><div class="card-b">
+        <table class="pnl"><tbody>
+          <tr><td>Picnic booking profit</td><td class="num strong" style="color:var(--olive)">${pnlLine(pnl.picnicProfit)}</td></tr>
+          <tr><td>Airbnb net earnings</td><td class="num strong" style="color:var(--olive)">${pnlLine(pnl.stayProfit)}</td></tr>
+          <tr><td>Operating expenses <span style="color:var(--muted);font-size:12px">· ${pnl.exp.length} item${pnl.exp.length === 1 ? '' : 's'}</span></td><td class="num strong" style="color:var(--red)">${pnlLine(-pnl.expTotal)}</td></tr>
+          <tr class="total"><td>Overall net</td><td class="num" style="color:var(--${pnl.overallNet < 0 ? 'red' : 'olive'})">${(pnl.overallNet < 0 ? '− ' : '') + inr(Math.abs(pnl.overallNet))}</td></tr>
+        </tbody></table>
+        <p class="note">Booking profit is per-event margin before overhead. Picnic and Airbnb are kept on separate lines so operating expenses — mostly Airbnb rent — don’t make the picnic side read as unprofitable. Single-digit monthly volume: treat every rate as directional.</p>
+      </div></div>
+      <div class="card"><div class="card-h"><h3>Expenses by category</h3><p>${period}</p></div>
+        <div class="card-b"><div class="chart-box sm"><canvas id="c-expcat"></canvas></div></div></div>
+    </div>
+    <div class="card detail-only"><div class="card-h"><h3>Expense line items</h3><p>Synced nightly from the workbook’s Expenses tab</p></div><div class="card-b" style="padding-top:6px"><div id="t-exp"></div></div></div>
+
+    <div class="sec"><h2>${owedActive ? 'Awaiting payment' : 'Bookings'}</h2><span class="hint">${owedActive ? `${owedRows.length} booking${owedRows.length === 1 ? '' : 's'} with a balance · all periods · full amounts, not split` : `${rows.length} in ${period} · click a column to sort`}</span>${owedActive ? `<span class="right"><button type="button" class="btn" onclick="showOwed()">Back to ${esc(period)}</button></span>` : ''}</div>
+    <div class="card"><div class="card-b" style="padding-top:6px"><div id="t-all"></div></div></div>
+
+    <div class="foot">
+      <strong>Basis.</strong> <em>Event date</em> places money in the month the booking is delivered and splits a stay across the months its nights fall in — a 31 Aug → 7 Sep stay puts 1 night in August and 6 in September. <em>Booked on</em> places the whole booking in the month it was created. Owed-to-me is never split: a balance is due in full regardless of period.
+      <span class="detail-only"><br><strong>Sources.</strong> Google Sheet “THEPIC~3” plus the live Supabase <code>bookings</code> table, re-read on every open; team numbers and <code>Test*</code> names excluded.
+      <strong>Channel.</strong> <span class="badge b-live">Website</span> booked through picnicstories.com · <span class="badge b-plain">Direct</span> entered by the team — WhatsApp, walk-in or a direct extension · <span class="badge b-airbnb">Airbnb</span> came through the platform and carries its confirmation code.</span>
+    </div>`;
+
+  // controls
+  const bind = (id, key) => { const el = document.getElementById(id); if (el) el.addEventListener('change', e => { S.filters[key] = e.target.value; render(); }); };
+  bind('f-basis', 'basis'); bind('f-month', 'month'); bind('f-type', 'type'); bind('f-venue', 'venue'); bind('f-channel', 'channel'); bind('f-status', 'status');
+  const q = document.getElementById('f-q');
+  if (q) q.addEventListener('input', e => { S.filters.q = e.target.value; render(); const n = document.getElementById('f-q'); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } });
+  const reset = document.getElementById('f-reset');
+  if (reset) reset.addEventListener('click', () => { Object.assign(S.filters, { type: 'all', venue: 'all', channel: 'all', status: 'all', q: '', upcoming: false, owing: false, exposed: false }); render(); });
+
+  renderHealth(exposed, mismatches, splitRows, gaps, healthItems);
+
+  const cols = [
+    { key: 'date', label: 'Date', render: r => r.kind === 'stay' && r.endDate ? `<span class="strong">${fmtShort(r.date)}</span> → ${fmtShort(r.endDate)}` : `<span class="strong">${fmtDate(r.date)}</span>`, sort: r => r.date ? r.date.getTime() : 0 },
+    { key: 'name', label: 'Guest' },
+    { key: 'venue', label: 'Venue' },
+    { key: 'kind', label: 'Type', render: kindBadge },
+    { key: 'total', label: (monthScoped && !owedActive) ? 'Total (in period)' : 'Total', num: true,
+      render: r => {
+        // In the owed view every figure is the whole booking — a balance is due in
+        // full regardless of which months the stay spans.
+        const share = owedActive ? 1 : (r.share == null ? 1 : r.share);
+        const tag = share < 1 ? ` <span class="split" title="${esc(inr(r.total))} over ${r.nights} nights">${Math.round(share * 100)}%</span>` : '';
+        const mm = D && r.mismatch ? ` <span class="badge b-sheet" title="${esc(r.mismatch)}">≠ live</span>` : '';
+        return inr(r.total * share) + tag + mm;
+      }, sort: r => r.total * (owedActive ? 1 : (r.share == null ? 1 : r.share)) },
+    { key: 'balance', label: 'Balance', num: true, render: r => r.balance > 0 ? `<span class="strong" style="color:var(--amber)">${inr(r.balance)}</span>` : '<span style="color:var(--muted)">—</span>', sort: r => r.balance },
+    { key: 'payment', label: 'Payment', render: payBadge },
+    { key: 'status', label: 'Status', render: r => `<span class="badge b-plain">${esc(r.status || '—')}</span>` },
+  ];
+  if (D) cols.push(
+    { key: 'bookingId', label: 'ID' },
+    { key: 'channel', label: 'Channel' },
+    { key: 'phone', label: 'Phone' },
+    { key: 'bookedOn', label: 'Booked on', render: r => r.bookedOn ? fmtDate(r.bookedOn) : '<span style="color:var(--muted)">—</span>', sort: r => r.bookedOn ? r.bookedOn.getTime() : 0 },
+    { key: 'advance', label: 'Advance', num: true, render: r => inr(r.advance), sort: r => r.advance },
+    { key: 'bkid', label: 'Live system', render: syncBadge, sort: r => r.live ? 2 : (r.expectedLive ? 0 : 1) },
+  );
+  makeTable(document.getElementById('t-all'), tableRows, cols, owedActive ? 5 : 0, -1, owedActive ? 'Nothing outstanding — every booking is settled.' : undefined);
+
+  if (D) makeTable(document.getElementById('t-exp'), pnl.exp, [
+    { key: 'date', label: 'Date', render: e => fmtDate(e.date), sort: e => e.date ? e.date.getTime() : 0 },
+    { key: 'business', label: 'Business', render: e => `<span class="badge b-plain">${esc(e.business)}</span>` },
+    { key: 'category', label: 'Category' },
+    { key: 'description', label: 'Description' },
+    { key: 'amount', label: 'Amount', num: true, render: e => inr(e.amount), sort: e => e.amount },
+  ], 4, -1, 'No expenses logged in this period.');
+
+  drawCharts(rows);
+}
+
+/* Data health: one calm line by default; the full alerts only on request or in
+   detail view.
+   🔴 The Cowork build could honestly say "reconciled" because it held two sources
+   and compared them. This build has one, so the strip states the source instead.
+   Do not restore the word "reconciled" here unless a second source comes back. */
+function renderHealth(exposed, mismatches, splitRows, gaps, n) {
+  const host = document.getElementById('health');
+  const f = S.filters, open = S.healthOpen || S.detail;
+  let strip = '';
+  if (!n) strip = `<div class="health ok"><b>✓ Live</b> read directly from the booking system${splitRows.length ? ` · ${splitRows.length} stay${splitRows.length === 1 ? '' : 's'} split across the month boundary` : ''}${f.basis === 'booked' && gaps ? ` · ${gaps} row${gaps === 1 ? '' : 's'} counted by event date` : ''}</div>`;
+  else strip = `<div class="health warn"><b>Data health · ${n} item${n === 1 ? '' : 's'}</b> to tidy in the workbook — the figures above already count each booking once${splitRows.length ? ` · ${splitRows.length} split stay${splitRows.length === 1 ? '' : 's'}` : ''}<button type="button" class="btn" onclick="toggleHealth()">${open ? 'Hide' : 'Show'}</button></div>`;
+  let detail = '';
+  if (open) {
+    if (exposed.length) detail += `<div class="alert warn"><div>⚠️</div><div><h4>${exposed.length} upcoming booking${exposed.length === 1 ? '' : 's'} not in the live system</h4><p>These exist only in the sheet, so nothing stops the website taking another booking on the same date and slot.</p><ul>${exposed.map(r => `<li><strong>${esc(r.name)}</strong> — ${esc(r.venue)}, ${fmtDate(r.date)}</li>`).join('')}</ul></div></div>`;
+    if (mismatches.length) detail += `<div class="alert warn"><div>🔢</div><div><h4>${mismatches.length} amount mismatch${mismatches.length === 1 ? '' : 'es'}</h4><ul>${mismatches.map(r => `<li><strong>${esc(r.name)}</strong> — ${esc(r.mismatch)}</li>`).join('')}</ul></div></div>`;
+    if (S.dupWarnings && S.dupWarnings.length) detail += `<div class="alert warn"><div>👥</div><div><h4>${S.dupWarnings.length} booking${S.dupWarnings.length === 1 ? '' : 's'} on more than one sheet row</h4><ul>${S.dupWarnings.map(w => `<li><strong>${esc(w.keep.name)}</strong> · live #${esc(w.liveId)} — keep <strong>${esc(w.keep.bookingId || '—')}</strong>, delete ${w.dups.map(d => `<strong>${esc(d.bookingId || '—')}</strong>`).join(', ')}</li>`).join('')}</ul></div></div>`;
+    if (S.dbOk && S.orphans && S.orphans.length) detail += `<div class="alert warn"><div>📄</div><div><h4>${S.orphans.length} confirmed live booking${S.orphans.length === 1 ? '' : 's'} missing from the sheet</h4><ul>${S.orphans.map(r => `<li><strong>${esc(r.full_name)}</strong> — ${esc(r.venue_name || '—')}, ${fmtDate(parseDate(r.preferred_date))} · ${inr(money(r.total_amount))} <span style="color:var(--muted)">(live #${esc(r.id)})</span></li>`).join('')}</ul></div></div>`;
+    if (splitRows.length) detail += `<div class="alert info"><div>✂️</div><div><h4>${splitRows.length} stay${splitRows.length === 1 ? '' : 's'} split across the month boundary</h4><ul>${splitRows.map(r => `<li><strong>${esc(r.name)}</strong> — ${fmtShort(r.date)} → ${fmtShort(r.endDate)} · ${r.shareNights} of ${r.nights} nights · ${inr(r.total * r.share)} of ${inr(r.total)}</li>`).join('')}</ul></div></div>`;
+    if (f.basis === 'booked' && gaps) detail += `<div class="alert info"><div>🗓️</div><div><h4>${gaps} row${gaps === 1 ? '' : 's'} have no booked-on date</h4><p>Hand-entered rows carry no <code>_bkid</code>, so the sync never stamped one. They are counted under their event date instead of being dropped.</p></div></div>`;
+  }
+  host.innerHTML = strip + detail;
+}
+
+function drawCharts(rows) {
+  Object.values(S.charts).forEach(c => { try { c.destroy(); } catch (e) {} });
+  S.charts = {};
+  const axis = { grid: { color: '#ede6db', drawBorder: false }, ticks: { color: '#6b6259', font: { size: 11.5 } } };
+  const f = S.filters;
+
+  // Revenue by month — always the full timeline so the trend reads even when a
+  // single period is selected; the selected month is highlighted.
+  const base = view({ month: 'all' });
+  const acc = {};
+  base.forEach(r => spans(r).forEach(s => { if (!acc[s.k]) acc[s.k] = { picnic: 0, stay: 0 }; acc[s.k][r.kind] += r.total * s.share; }));
+  const mk = Object.keys(acc).sort();
+  const pic = mk.map(k => acc[k].picnic), sta = mk.map(k => acc[k].stay);
+  const tot = mk.map((k, i) => pic[i] + sta[i]);
+  const roll = tot.map((_, i) => { const w = tot.slice(Math.max(0, i - 2), i + 1); return w.reduce((a, b) => a + b, 0) / w.length; });
+  const sel = k => (f.month === 'all' || f.month === k);
+  const cm = document.getElementById('c-month');
+  if (cm && mk.length) {
+    S.charts.month = new Chart(cm.getContext('2d'), {
+      data: { labels: mk.map(monthLabel), datasets: [
+        { type: 'bar', label: 'Picnic', data: pic, backgroundColor: mk.map(k => sel(k) ? '#b8552a' : '#e6c2b0'), borderRadius: 4, stack: 'r', order: 2 },
+        { type: 'bar', label: 'Stay', data: sta, backgroundColor: mk.map(k => sel(k) ? '#5c6b42' : '#c9d0b8'), borderRadius: 4, stack: 'r', order: 2 },
+        { type: 'line', label: '3-mo avg', data: roll, borderColor: '#2a2521', borderWidth: 1.5, pointRadius: 2.5, pointBackgroundColor: '#2a2521', tension: .3, fill: false, order: 1 } ] },
+      options: { responsive: true, maintainAspectRatio: false,
+        scales: { x: { ...axis, stacked: true }, y: { ...axis, stacked: true, beginAtZero: true, ticks: { ...axis.ticks, callback: v => inrShort(v) } } },
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 11, font: { size: 11.5 }, color: '#4f463d' } },
+          tooltip: { callbacks: { label: c => `${c.dataset.label}: ${inr(c.parsed.y)}` } } } }
+    });
+  } else if (cm) cm.parentElement.innerHTML = '<div class="empty">No data in range.</div>';
+
+  const byV = {};
+  rows.forEach(r => { byV[r.venue] = (byV[r.venue] || 0) + r.total * (r.share == null ? 1 : r.share); });
+  const vk = Object.keys(byV).sort((a, b) => byV[b] - byV[a]);
+  const cv = document.getElementById('c-venue');
+  if (cv && vk.length) {
+    S.charts.venue = new Chart(cv.getContext('2d'), { type: 'bar',
+      data: { labels: vk, datasets: [{ label: 'Revenue', data: vk.map(k => byV[k]), backgroundColor: '#b8552a', borderRadius: 4 }] },
+      options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        scales: { x: { ...axis, beginAtZero: true, ticks: { ...axis.ticks, callback: v => inrShort(v) } }, y: axis },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => inr(c.parsed.x) } } } } });
+  } else if (cv) cv.parentElement.innerHTML = '<div class="empty">No data in range.</div>';
+
+  const exp = expFiltered(); const byC = {};
+  exp.forEach(e => { byC[e.category] = (byC[e.category] || 0) + e.amount; });
+  const eck = Object.keys(byC).sort((a, b) => byC[b] - byC[a]);
+  const ce = document.getElementById('c-expcat');
+  if (ce && eck.length) {
+    S.charts.expcat = new Chart(ce.getContext('2d'), { type: 'bar',
+      data: { labels: eck, datasets: [{ label: 'Expense', data: eck.map(k => byC[k]), backgroundColor: '#a43520', borderRadius: 4 }] },
+      options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        scales: { x: { ...axis, beginAtZero: true, ticks: { ...axis.ticks, callback: v => inrShort(v) } }, y: axis },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => inr(c.parsed.x) } } } } });
+  } else if (ce) ce.parentElement.innerHTML = '<div class="empty">No expenses in range.</div>';
+}
+
+/* ---------- auth gate ----------
+   This is a front door, not a lock. The lock is RLS on the database: signing in
+   as anyone other than the admin returns zero rows, and not signing in at all
+   returns zero rows. The gate exists so the page says "sign in" instead of
+   showing an empty dashboard, and so supabase-js has a session to attach. */
+function signInScreen(message) {
+  document.getElementById('root').innerHTML = `
+    <div class="signin-wrap">
+      <div class="signin-card">
+        <div class="signin-brand">The Picnic Stories</div>
+        <h1>Business dashboard</h1>
+        <p class="signin-sub">Gurugram &amp; Delhi</p>
+        <form id="signin-form" autocomplete="on">
+          <label for="si-email">Email</label>
+          <input id="si-email" type="email" autocomplete="username" required />
+          <label for="si-pass">Password</label>
+          <input id="si-pass" type="password" autocomplete="current-password" required />
+          <button type="submit" id="si-go">Sign in</button>
+        </form>
+        <div id="si-msg" class="signin-msg">${message ? esc(message) : ''}</div>
+      </div>
+    </div>`;
+  const form = document.getElementById('signin-form');
+  const msg = document.getElementById('si-msg');
+  form.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const btn = document.getElementById('si-go');
+    btn.disabled = true; btn.textContent = 'Signing in…'; msg.textContent = '';
+    const { error } = await sb.auth.signInWithPassword({
+      email: document.getElementById('si-email').value.trim(),
+      password: document.getElementById('si-pass').value,
+    });
+    if (error) {
+      btn.disabled = false; btn.textContent = 'Sign in';
+      msg.textContent = error.message || 'Sign-in failed.';
+      return;
+    }
+    boot();
+  });
+}
+
+async function signOut() {
+  await sb.auth.signOut();
+  location.reload();
+}
+
+/* Re-read the data without throwing away what the user is looking at. load()
+   defaults the period to the latest month with bookings, which is right on first
+   open and wrong on a refresh — so the current filters are restored afterwards. */
+window.refresh = async function () {
+  const keep = { ...S.filters }, keepDetail = S.detail, keepOwed = S.owedOpen;
+  try {
+    await load();
+    S.filters = keep; S.detail = keepDetail; S.owedOpen = keepOwed;
+    render();
+  } catch (err) {
+    document.getElementById('root').innerHTML = `<div class="state err"><strong>Couldn’t refresh.</strong><div>${esc(err.message || String(err))}</div></div>`;
+  }
+};
+
+/* ---------- boot ---------- */
+/* The database decides what anyone can READ; this list only decides who gets
+   shown a dashboard. They must agree — it mirrors the RLS policies, which grant
+   read to auth.email() = 'aksh.eeev@gmail.com' and nobody else.
+   🔴 Without this check a signed-in CUSTOMER lands on a working-looking
+   dashboard built from their own bookings: customer_select_own_bookings lets
+   them read their rows, and booking_costs/expenses return [] rather than an
+   error, so nothing else here would catch it. Not a leak — it is their own
+   data — but it would look like the business dashboard, and it isn't.
+   Widening this list alone does NOT grant a partner access; the RLS policies
+   have to change too, or they will sign in and see zero rows. */
+const ALLOWED = ['aksh.eeev@gmail.com'];
+
+async function boot() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { signInScreen(''); return; }
+  S.email = (session.user && session.user.email) || '';
+  if (!ALLOWED.includes(S.email.trim().toLowerCase())) {
+    await sb.auth.signOut();
+    signInScreen('That account does not have access to this dashboard.');
+    return;
+  }
+  document.getElementById('root').innerHTML = '<div class="state">Loading…</div>';
+  try {
+    await load();
+    render();
+  } catch (err) {
+    const m = err && err.message ? err.message : String(err);
+    /* A signed-in account with no read access is a wrong-account problem, not a
+       broken dashboard — send them back to the door rather than to an error. */
+    if (/does not have read access/i.test(m)) {
+      await sb.auth.signOut();
+      signInScreen('That account cannot see the business data. Sign in with the owner account.');
+      return;
+    }
+    document.getElementById('root').innerHTML = `<div class="state err"><strong>Couldn’t load the dashboard.</strong><div>${esc(m)}</div><div style="margin-top:9px; font-size:12px;">Reload the page to retry, or <a href="#" onclick="signOut();return false;">sign out</a>.</div></div>`;
+  }
+}
+boot();
+</script>
+</body>
+</html>
