@@ -231,6 +231,10 @@ function pushExpenses(H) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(EXPENSES_TAB);
   if (!sheet) { Logger.log('Expenses: tab not found, skipped.'); return; }
 
+  // ONE timestamp for the whole run — it doubles as the cleanup watermark below,
+  // so every row written by this run must carry the identical value.
+  const runStamp = new Date().toISOString();
+
   const values = sheet.getDataRange().getValues();
   if (values.length < 2) { Logger.log('Expenses: nothing to push.'); return; }
 
@@ -275,7 +279,7 @@ function pushExpenses(H) {
       category: cat || null, description: desc || null, amount: amount,
       paid_by: cPaid !== -1 ? (String(row[cPaid] || '').trim() || null) : null,
       notes:  cNotes !== -1 ? (String(row[cNotes] || '').trim() || null) : null,
-      sheet_row_key: key, synced_at: new Date().toISOString()
+      sheet_row_key: key, synced_at: runStamp
     });
   }
 
@@ -290,15 +294,27 @@ function pushExpenses(H) {
   });
   const code = res.getResponseCode();
   if (code < 200 || code >= 300) throw new Error('expenses upsert ' + code + ': ' + res.getContentText());
+  Logger.log(`Expenses: upserted ${payload.length} row(s).`);
 
-  // Rows deleted from the sheet should disappear from the mirror too, or the P&L
-  // keeps subtracting a spend that no longer exists. Scoped to keys we just sent.
-  const keys = payload.map(p => '"' + p.sheet_row_key + '"').join(',');
+  // Rows deleted from the sheet must disappear from the mirror too, or the P&L
+  // keeps subtracting a spend that no longer exists.
+  //
+  // Watermark, not a key list. Every row this run touched carries synced_at =
+  // runStamp, so anything older is a row the sheet no longer has. The previous
+  // version listed every key in the URL as not.in.("a","b",...), which UrlFetchApp
+  // rejected outright — a double quote is not a legal URL character — and which
+  // would have outgrown the URL length limit as expenses accumulated anyway.
   const cleanup = UrlFetchApp.fetch(
-    `${SUPABASE_URL}/rest/v1/expenses?sheet_row_key=not.in.(${keys})`,
+    `${SUPABASE_URL}/rest/v1/expenses?synced_at=lt.${encodeURIComponent(runStamp)}`,
     { method: 'delete', headers: Object.assign({}, H, { Prefer: 'return=minimal' }), muteHttpExceptions: true });
   const cc = cleanup.getResponseCode();
-  Logger.log(`Expenses: upserted ${payload.length} row(s); stale-row cleanup HTTP ${cc}.`);
+  if (cc < 200 || cc >= 300) {
+    // Non-fatal: the upsert already succeeded, so the mirror is current — it may
+    // just carry a stale row. Log loudly rather than throwing away a good sync.
+    Logger.log(`Expenses: stale-row cleanup FAILED HTTP ${cc}: ${cleanup.getContentText()}`);
+  } else {
+    Logger.log('Expenses: stale-row cleanup OK.');
+  }
 }
 
 /* ---- row construction ---- */
