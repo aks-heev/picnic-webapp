@@ -36,9 +36,10 @@ Jul 24 – Sep 2 ads-off natural experiment.
 
 ---
 
-## 2. Two facts that shaped the architecture
+## 2. Facts that shaped the architecture
 
-Both verified live 2026-09-05.
+All verified live 2026-09-05 — against the Meta connector, the Supabase project, and the
+deployed `lead-digest` function.
 
 1. **`balance` is NOT available through the Meta MCP connector.**
    `ads_get_field_context` returns it in `unknown_fields`, along with `account_status`.
@@ -84,6 +85,50 @@ for all five jobs while every edge function returned 402 at the gateway. An ads 
 living entirely inside Supabase inherits that blind spot. Hence the external watchdog
 in §6.
 
+### Deployment reality — verified against the LIVE `lead-digest` function 2026-09-05
+
+Four things that are not what the repo suggests. All confirmed via
+`get_edge_function('lead-digest')` and `cron.job`.
+
+1. 🔴 **`config.toml` is NOT the source of truth for Dashboard-deployed functions.**
+   It has no `[functions.lead-digest]` block at all, yet the deployed function reports
+   `verify_jwt: false`. The Dashboard toggle is what actually applies. Adding a
+   `config.toml` entry is good hygiene for the repo but changes nothing at deploy time —
+   **set the toggle in the Dashboard and then re-read `list_edge_functions` to confirm.**
+
+2. 🔴 **The cron jobs send NO `Authorization` header.** Both `lead-digest-daily` and
+   `post-event-nudge-daily` post with `headers := '{"Content-Type": "application/json"}'`
+   and nothing else. So a cron-called function MUST be `verify_jwt = false`. (The
+   `config.toml` comment on `sync-ical` claiming "the pg_cron caller passes the
+   service-role key as a bearer token" is true for `sync-ical` only, not for these.)
+
+3. 🔴 **LIVE LANDMINE — do not set a `CRON_SECRET` function secret.** `lead-digest` and
+   `post-event-nudge` both contain:
+   ```ts
+   if (CRON_SECRET) {
+     if (req.headers.get("Authorization") !== `Bearer ${CRON_SECRET}`) return 401
+   }
+   ```
+   Since the cron sends no `Authorization` header, **setting that secret would silently
+   401 both daily jobs**, and `cron.job_run_details` would keep reporting `succeeded` —
+   the exact blindness documented in the August outage. The guard is dead code that only
+   ever fires as a foot-gun. `sync-meta-ads` should NOT copy it.
+
+4. 🔴 **`_shared/` is duplicated into each deployed bundle, and the copies have drifted.**
+   `lead-digest/index.ts` imports `"./_shared/resend.ts"`, but in the repo `_shared/` is a
+   **sibling** of `lead-digest/`, so that path is wrong on disk and correct only in the
+   deployed bundle, which carries its own `_shared/resend.ts` file. The two copies are
+   **not identical** — the repo version supports `cc?: string | string[]`, the deployed
+   version does not.
+   **Consequences for this build:** a local `deno check` or esbuild run against the repo
+   file will fail on a *correct* function; bundle-check on a `/tmp` copy with `_shared/`
+   placed as a child, mirroring the deployed layout. And when deploying, remember to
+   attach `_shared/resend.ts` as a file inside the function's own bundle.
+
+Useful to lift verbatim from `lead-digest`: `istToday()` —
+`new Date(Date.now() + 5.5*3600*1000).toISOString().slice(0,10)` — and the `rest()`
+service-role fetch helper.
+
 ---
 
 ## 3. Phase 1 — Tables (½ day) · Claude applies, Aksheev commits
@@ -116,8 +161,10 @@ rows_upserted int, ok boolean, error text
 Written on **every** run, successes and failures alike. This is what the dashboard's
 "last synced" badge reads, and what the §6 watchdog queries.
 
-**RLS:** clone the `public.expenses` policies exactly — four admin-only policies keyed
-on `auth.email()`. 🔴 **Zero anon policies, SELECT included.**
+**RLS on BOTH tables** — `ad_insights` *and* `ad_sync_runs`: clone the
+`public.expenses` policies exactly — four admin-only policies keyed on `auth.email()`.
+🔴 **Zero anon policies, SELECT included.** `ad_sync_runs` is easy to forget because it
+looks like plumbing; it leaks your spend cadence if left open.
 
 **Exit condition:** RLS proven in a rolled-back transaction the way `expenses` was —
 anon 0 · authenticated non-admin 0 · admin N. Zero test residue.
@@ -150,9 +197,15 @@ anon 0 · authenticated non-admin 0 · admin N. Zero test residue.
 - `verify_jwt = false` (cron-called). `config.toml` already pins this for the `notify-*`
   functions; add this one.
 
-**pg_cron job** `sync-meta-ads-daily` at `0 5 * * *` UTC (10:30 IST) — clear of the four
-existing jobs (`15 3`, `30 3`, `30 4`, `0 *`, `30 20`), and late enough that Meta's
-previous day has settled.
+**pg_cron job** `sync-meta-ads-daily` at **`20 5 * * *` UTC (10:50 IST)**.
+
+⚠️ **Not `0 5`** — `sync-ical-hourly` runs at `0 * * * *`, so every `:00` minute is
+already taken and `sync-ical` takes 5–8s. Minute 20 is clear of all five existing jobs
+(`15 3`, `30 3`, `30 4`, `0 *`, `30 20`) and late enough that Meta's previous
+Asia/Kolkata day has settled.
+
+Copy the header shape from `lead-digest-daily` exactly — `Content-Type` only, no
+`Authorization` (see §2.2), and no `CRON_SECRET` guard in the function (see §2.3).
 
 ### 🔴 Deployment constraints — read before starting
 
@@ -164,6 +217,11 @@ previous day has settled.
   the picker only offers `hzkrqpdoipkhfsewhpou` and `jizthenzqaonxcxncyvs`.
 - **=> Deploy goes through the Supabase Dashboard**, as was done for
   `notify-booking-received` v32.
+- 🔴 **The same applies to SECRETS.** `supabase secrets set` needs the same CLI login that
+  is unavailable, so `META_ACCESS_TOKEN` (and `META_AD_ACCOUNT_ID`) must be added under
+  **Dashboard → Edge Functions → Secrets** by Aksheev. A function deployed without its
+  secret returns 500 on every cron fire while `cron.job_run_details` reports `succeeded`.
+  Set the secret **before** enabling the cron job.
 
 ### Token
 
@@ -186,6 +244,24 @@ numbers confidently — the exact failure this whole project exists to prevent.
 
 **Rollback:** disable the cron job. The table keeps its last good rows.
 
+### Phase 2b — One-time 90-day backfill (30 min) · Claude
+
+The daily job only ever fetches a trailing 30 days, so history has to be loaded once.
+This step was referenced by the Phase 2 regression test but never specified — it is a
+real step, not a side effect.
+
+- Invoke the deployed function manually with an override window covering
+  **2026-06-01 → today** (build it to accept `{"since":"...","until":"..."}` in the POST
+  body, defaulting to the trailing 30 days when absent — this is also how you re-run a
+  repair later without touching the cron).
+- Meta caps `time_increment=1` requests; if a 90-day window errors or truncates, page it
+  in 30-day chunks. The upsert makes re-runs free.
+
+**Exit:** `select count(*), min(date), max(date) from ad_insights` covers the full window
+with no gaps, **and** every date from 2026-07-24 to 2026-09-02 shows ₹0 for the active
+campaign. That window is the known-bad ground truth — if it does not read ₹0, the sync is
+wrong, not Meta.
+
 ---
 
 ## 5. Phase 3 — `ads.html` (1 day) · Claude writes, Aksheev pushes
@@ -195,6 +271,14 @@ A new page in the **existing `picnic-dashboard` Vercel project**
 git-linked to `aks-heev/picnic-webapp` on `main` — a push redeploys it).
 
 🔴 **Not** a new Vercel project, and **never** a route inside `picnic-webapp`.
+
+🔴 **Cross-dependency — the page will be unreachable when it ships.** That project has
+Vercel **SSO protection ON** (`ssoProtection.enabled: true`,
+`deploymentType: all_except_custom_domains`), so every `*.vercel.app` URL demands a Vercel
+login on Aksheev's team *before* the Supabase login screen renders. `ads.html` inherits
+this. Either accept that only he can open it, or attach a custom domain — that setting
+exempts custom domains, which is the intended fix for `index.html` too. Decide this once,
+for both pages.
 
 Share the auth snippet with `index.html` but do not edit that file — its money logic
 carries inline comments about traps it was written around.
@@ -238,6 +322,12 @@ for now; note it rather than forgetting it.
   are ~5 MB/year. The binding quota on this project is cached **egress**, driven by
   oversized site images, and it is still unaddressed. It caused an 11-day outage in August
   and will recur.
+- **`config.toml` is not the source of truth** for anything deployed via the Dashboard;
+  `list_edge_functions` is. Same class of drift as `edge-fn-drift` in project memory.
+- **Alert recipient:** `team@picnicstories.com`, via the `TEAM_EMAIL` env with that value
+  as the default — the same address `lead-digest` has been mailing daily, so the mailbox
+  is known to accept mail. Reuse `_shared/resend.ts`'s `sendEmail`; do not invent a
+  second sender path.
 - Claude never runs `git`. Every session ends with a paste-ready block.
 
 ---
