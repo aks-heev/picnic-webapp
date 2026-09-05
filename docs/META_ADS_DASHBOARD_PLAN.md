@@ -1,6 +1,13 @@
 # Meta Ads Spend-Control Dashboard — Build Plan
 
-Written 2026-09-05. Status: **NOT STARTED** — nothing in this plan has been built.
+Written 2026-09-05.
+
+**Status: Phase 1 SHIPPED 2026-09-05.** `public.ad_insights` and `public.ad_sync_runs` are
+live, RLS-verified, empty. Phases 2 / 2b / 3 not started — all blocked on a Meta API token
+(see §4). One deliberate deviation from the spec below: the status column shipped as
+**`effective_status_at_sync`**, not `effective_status`, because every run restamps the whole
+trailing window with the campaign's *current* status — the longer name stops a future
+session reading it as history.
 
 ---
 
