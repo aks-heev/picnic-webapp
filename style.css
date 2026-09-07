@@ -8759,6 +8759,37 @@ body.menu-viewer-open {
   color: #fff;
 }
 
+/* ── Bookings tab — grouped filter row (Team / When / Type in one row) ── */
+/* Pure layout wrapper: the pill classes/onclick handlers above are unchanged. */
+.adm-filter-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(196, 96, 122, 0.12);
+}
+.adm-filter-group .adm-team-pills,
+.adm-filter-group .adm-date-filters,
+.adm-filter-group .adm-type-filters {
+  margin-bottom: 0;
+}
+.adm-filter-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--boho-text-light);
+  margin-bottom: 6px;
+}
+.adm-filter-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--boho-border);
+  margin-top: 20px;
+}
+
 /* ── Inline query status selector (card header) ────────── */
 .adm-status-select {
   font-family: inherit;

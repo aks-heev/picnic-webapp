@@ -130,20 +130,33 @@
                     <h3>Confirmed Bookings</h3>
                     <p>Bookings that have been confirmed with advance payment</p>
                 </div>
-                <div class="adm-team-pills" role="group" aria-label="Filter by team">
-                    <button class="adm-team-pill active" onclick="setAdminTeamFilter(null, this)">All</button>
-                    <button class="adm-team-pill" onclick="setAdminTeamFilter('jaipur', this)">Jaipur</button>
-                    <button class="adm-team-pill" onclick="setAdminTeamFilter('gurugram', this)">Gurugram</button>
-                </div>
-                <div class="adm-date-filters" role="group" aria-label="Filter by date">
-                    <button class="adm-date-filter-pill active" onclick="setBookingsDateFilter('upcoming', this)">Upcoming</button>
-                    <button class="adm-date-filter-pill" onclick="setBookingsDateFilter('past', this)">Past</button>
-                    <button class="adm-date-filter-pill" onclick="setBookingsDateFilter('all', this)">All</button>
-                </div>
-                <div class="adm-type-filters" role="group" aria-label="Filter by type">
-                    <button class="adm-type-filter-pill active" onclick="setBookingsTypeFilter('all', this)">All types</button>
-                    <button class="adm-type-filter-pill" onclick="setBookingsTypeFilter('stay', this)">🏡 Stay</button>
-                    <button class="adm-type-filter-pill" onclick="setBookingsTypeFilter('picnic', this)">🧺 Picnic</button>
+                <div class="adm-filter-row">
+                    <div class="adm-filter-group">
+                        <div class="adm-filter-label">Team</div>
+                        <div class="adm-team-pills" role="group" aria-label="Filter by team">
+                            <button class="adm-team-pill active" onclick="setAdminTeamFilter(null, this)">All</button>
+                            <button class="adm-team-pill" onclick="setAdminTeamFilter('jaipur', this)">Jaipur</button>
+                            <button class="adm-team-pill" onclick="setAdminTeamFilter('gurugram', this)">Gurugram</button>
+                        </div>
+                    </div>
+                    <span class="adm-filter-divider"></span>
+                    <div class="adm-filter-group">
+                        <div class="adm-filter-label">When</div>
+                        <div class="adm-date-filters" role="group" aria-label="Filter by date">
+                            <button class="adm-date-filter-pill active" onclick="setBookingsDateFilter('upcoming', this)">Upcoming</button>
+                            <button class="adm-date-filter-pill" onclick="setBookingsDateFilter('past', this)">Past</button>
+                            <button class="adm-date-filter-pill" onclick="setBookingsDateFilter('all', this)">All</button>
+                        </div>
+                    </div>
+                    <span class="adm-filter-divider"></span>
+                    <div class="adm-filter-group">
+                        <div class="adm-filter-label">Type</div>
+                        <div class="adm-type-filters" role="group" aria-label="Filter by type">
+                            <button class="adm-type-filter-pill active" onclick="setBookingsTypeFilter('all', this)">All types</button>
+                            <button class="adm-type-filter-pill" onclick="setBookingsTypeFilter('stay', this)">🏡 Stay</button>
+                            <button class="adm-type-filter-pill" onclick="setBookingsTypeFilter('picnic', this)">🧺 Picnic</button>
+                        </div>
+                    </div>
                 </div>
                 <div id="bookings-container" class="data-container">
                     <!-- Bookings will be populated here by JavaScript -->
