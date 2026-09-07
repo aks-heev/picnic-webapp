@@ -673,9 +673,14 @@ function venueCardHtml(venue, opts = {}) {
 function carouselSlidesHtml(imgs, name) {
   return imgs.map((img, i) => {
     const alt = escapeHtml(img.alt || name || '')
+    // Cards render at ~400px CSS wide, so the 800px `thumb` variant is the
+    // right source here - `url` is the 1600px one, kept for the detail hero.
+    // Falls back to url for refs with no thumb (inactive venues, whose images
+    // were never re-encoded).
+    const src = escapeHtml(img.thumb || img.url)
     return i === 0
-      ? `<img src="${escapeHtml(img.url)}" alt="${alt}">`
-      : `<img data-src="${escapeHtml(img.url)}" alt="${alt}" loading="lazy">`
+      ? `<img src="${src}" alt="${alt}">`
+      : `<img data-src="${src}" alt="${alt}" loading="lazy">`
   }).join('')
 }
 
@@ -969,7 +974,7 @@ function renderVenueDetail(venue, addOns = []) {
           <button class="vd-gallery-thumb ${i === 0 ? 'vd-gallery-thumb--active' : ''}"
                   data-img-url="${escapeHtml(img.url)}"
                   aria-label="View photo ${i + 1}">
-            <img src="${escapeHtml(img.url)}" alt="${escapeHtml(img.alt || venue.name)}" loading="lazy">
+            <img src="${escapeHtml(img.thumb || img.url)}" alt="${escapeHtml(img.alt || venue.name)}" loading="lazy">
           </button>`).join('')}
        </div>`
     : ''
