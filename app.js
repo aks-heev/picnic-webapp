@@ -162,6 +162,16 @@ function bookingBucket(b) {
   return endDate && endDate >= today ? 'upcoming' : 'past'
 }
 
+// Real Airbnb confirmation codes are 10 uppercase alphanumerics starting HM.
+// Mirrors public.staff_is_airbnb_ref() (20260822_staff_stay_channel_and_money_fix.sql)
+// exactly — external_booking_ref is free text ('WhatsApp', 'Direct',
+// 'direct-extension' all live there too), so a raw non-null check mislabels
+// direct bookings as Airbnb. Display-only: never gate a money decision on this.
+const AIRBNB_REF_RE = /^HM[A-Z0-9]{8}$/
+function isAirbnbRef(ref) {
+  return !!ref && AIRBNB_REF_RE.test(ref)
+}
+
 // Helper: escape HTML entities to prevent XSS when injecting into innerHTML
 function escapeHtml(str) {
   if (str == null) return ''
@@ -6283,8 +6293,10 @@ function renderBookings(bookings) {
       venueChip = `<span class="adm-chip adm-chip--venue">📍 ${escapeHtml(booking.venue_address)}</span>`
     }
 
-    const airbnbHtml = booking.external_booking_ref
-      ? `<div class="adm-airbnb-ref">🔗 Airbnb ref: <code>${escapeHtml(booking.external_booking_ref)}</code></div>`
+    const channelHtml = booking.external_booking_ref
+      ? (isAirbnbRef(booking.external_booking_ref)
+          ? `<div class="adm-airbnb-ref">🔗 Airbnb ref: <code>${escapeHtml(booking.external_booking_ref)}</code></div>`
+          : `<div class="adm-airbnb-ref">📌 Channel: <code>${escapeHtml(booking.external_booking_ref)}</code></div>`)
       : ''
 
     const reqHtml = booking.special_requirements
@@ -6340,8 +6352,11 @@ function renderBookings(bookings) {
       </div>
 
       <div class="adm-chips">
+        <span class="adm-chip">${booking.checkout_date ? '🏡 Stay' : '🧺 Picnic'}</span>
         ${venueChip}
-        <span class="adm-chip">📅 ${new Date(booking.preferred_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+        ${booking.checkout_date
+          ? (() => { const n = calcNights(booking.preferred_date, booking.checkout_date); return `<span class="adm-chip">📅 ${new Date(booking.preferred_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} → ${new Date(booking.checkout_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} · ${n} night${n !== 1 ? 's' : ''}</span>` })()
+          : `<span class="adm-chip">📅 ${new Date(booking.preferred_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>`}
         ${booking.time_slot ? (() => { const s = CAFE_SLOTS.find(sl => sl.key === booking.time_slot); return `<span class="adm-chip">${s ? s.icon : '⏰'} ${s ? s.label + ' · ' + s.time : escapeHtml(booking.time_slot)}</span>` })() : ''}
         <span class="adm-chip">👥 ${escapeHtml(booking.guest_count)} guest${booking.guest_count !== 1 ? 's' : ''}</span>
       </div>
@@ -6360,7 +6375,7 @@ function renderBookings(bookings) {
       ${reqHtml}
       ${occasionBoardHtml(booking)}
       ${booking.booking_add_ons?.length ? `<div class="adm-booking-addons">${booking.booking_add_ons.map(a => `<span class="adm-addon-pill">${escapeHtml(a.name || 'Add-on')} <span class="adm-addon-pill-price">+₹${Number(a.price_at_booking || 0).toLocaleString('en-IN')}</span>${a.requires_confirmation ? ' <span class="adm-addon-pill-tag">on req.</span>' : ''}</span>`).join('')}</div>` : ''}
-      ${airbnbHtml}
+      ${channelHtml}
       ${ordersHtml}
       ${bclSummaryHtml(booking, bCost)}
     </div>`
