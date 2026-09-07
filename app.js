@@ -139,14 +139,24 @@ function localDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-// Bucket a booking as 'upcoming' (includes an in-progress stay) or 'past'.
-// Checkout-aware on purpose: a multi-night stay isn't "past" until its
-// checkout_date clears, not the moment its check-in date does — otherwise an
-// in-house guest would wrongly disappear from the default view the day after
-// they arrive. Mirrors the same arriving/departing/in_house phase concept
-// staff_today already uses (see staff.js PHASE_LABEL), so admin and staff
-// never disagree about what counts as current.
+// Bucket a booking as 'upcoming' (still needs attention) or 'past'.
+// Two rules, in order:
+// 1. Closed or Cancelled always buckets 'past', even if its date hasn't
+//    technically passed — once resolved, there's nothing left to act on.
+//    (Confirmed booking #97: checkout_date is literally today, but it was
+//    closed out this morning, so it should drop out of Upcoming anyway.)
+// 2. Otherwise, checkout-aware on the date: a multi-night stay isn't "past"
+//    until its checkout_date clears, not the moment its check-in date does
+//    — otherwise an in-house guest would wrongly disappear from the default
+//    view the day after they arrive. Mirrors the same arriving/departing/
+//    in_house phase concept staff_today already uses (see staff.js
+//    PHASE_LABEL), so admin and staff never disagree about what's current.
+// Depends on bclCostsOf(), defined later in this file (CLOSE BOOKING
+// section) — safe due to function-declaration hoisting.
 function bookingBucket(b) {
+  const isCancelled = b.booking_status === 'Cancelled'
+  const isClosed = !isCancelled && !!bclCostsOf(b)
+  if (isCancelled || isClosed) return 'past'
   const today = localDateStr(new Date())
   const endDate = b.checkout_date || b.preferred_date
   return endDate && endDate >= today ? 'upcoming' : 'past'
