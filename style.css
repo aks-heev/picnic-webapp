@@ -7174,12 +7174,18 @@ body.menu-viewer-open {
 .vf-remove-btn:hover { background: #fee2e2; color: #b91c1c; }
 .vf-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 12px 20px;
   margin-top: 8px;
   padding-top: 16px;
   border-top: 1px solid var(--boho-border, #e8ddd0);
 }
+/* Push the submit button to the far right of whichever line it lands on.
+   Without flex-wrap above, the four toggle labels overflowed the row on
+   narrow screens and carried the Save button off-screen entirely. */
+.vf-actions .btn { margin-left: auto; }
 .vf-toggle-label {
   display: flex;
   align-items: center;
@@ -7256,6 +7262,21 @@ body.menu-viewer-open {
     align-items: center;
   }
   .vf-tier-row .vf-input { width: auto; min-width: 0; }
+
+  /* Stack the toggles and give Save a full-width tap target at the bottom,
+     so it is never pushed out of view on a phone. */
+  .vf-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+  .vf-actions .vf-toggle-label { justify-content: flex-start; }
+  .vf-actions .btn {
+    margin-left: 0;
+    width: 100%;
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
 }
 
 /* ================================================================

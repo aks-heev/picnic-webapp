@@ -3970,7 +3970,7 @@ async function showBookingForm(venue) {
                   <option value="white">White wooden arch board</option>
                 </select>
                 <div id="board-message-wrap" style="display:none; margin-top:8px;">
-                  <input class="vd-bf-input" type="text" name="board-message" maxlength="60"
+                  <input class="vd-bf-input" type="text" name="board-message" maxlength="100"
                          placeholder="Short one-liner only — e.g. Happy Birthday Aanya!">
                 </div>
               </div>
@@ -5851,7 +5851,7 @@ async function openQueryEdit(id) {
           <span>Celebration board</span>
           <select id="qe-board-type" onchange="document.getElementById('qe-board-msg-wrap').style.display = this.value ? '' : 'none'">${boardOptions}</select>
           <div id="qe-board-msg-wrap" style="${boardMsgStyle} margin-top:6px;">
-            <input id="qe-board-msg" type="text" maxlength="60" placeholder="Short one-liner — e.g. Happy Birthday Aanya!" value="${escapeHtml(boardMsg)}">
+            <input id="qe-board-msg" type="text" maxlength="100" placeholder="Short one-liner — e.g. Happy Birthday Aanya!" value="${escapeHtml(boardMsg)}">
           </div>
         </div>
         <label class="qedit-field qedit-field--full"><span>Special requirements</span>
@@ -10501,7 +10501,7 @@ function renderAddBookingForm() {
             <option value="black" ${abk.boardType === 'black' ? 'selected' : ''}>Black chalkboard</option>
             <option value="white" ${abk.boardType === 'white' ? 'selected' : ''}>White wooden arch board</option>
           </select>
-          ${abk.boardType ? `<input type="text" id="abk-board-message" class="abk-input" style="margin-top:8px" maxlength="60" placeholder="Board message (optional)" value="${abkText(abk.boardMessage)}" oninput="abkRead()" />` : ''}
+          ${abk.boardType ? `<input type="text" id="abk-board-message" class="abk-input" style="margin-top:8px" maxlength="100" placeholder="Board message (optional)" value="${abkText(abk.boardMessage)}" oninput="abkRead()" />` : ''}
         </div>`
     } else {
       extrasHtml = `
