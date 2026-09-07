@@ -1974,6 +1974,7 @@ function renderPkgAdmImages(pkgId, images) {
                  onchange="handlePkgAdmImageUpload(this, ${pkgId}, ${i})" style="display:none" />
         </label>
         <input type="hidden" class="vf-img-url" value="${escapeHtml(img.url || '')}" />
+        <input type="hidden" class="vf-img-thumburl" value="${escapeHtml(img.thumb || '')}" />
         <input type="hidden" class="vf-img-name" value="${escapeHtml(filename)}" />
         <input type="text" class="vf-input vf-img-alt" placeholder="Alt text / caption" value="${escapeHtml(img.alt || '')}" />
       </div>
@@ -2014,11 +2015,20 @@ function renderPkgAdmImages(pkgId, images) {
 
 function readPkgAdmImages(pkgId) {
   const rows = document.querySelectorAll(`#pkg-adm-images-${pkgId} .vf-image-row`)
-  return Array.from(rows).map(row => ({
-    url: row.querySelector('.vf-img-url').value.trim(),
-    alt: row.querySelector('.vf-img-alt').value.trim(),
-    name: row.querySelector('.vf-img-name')?.value.trim() || '',
-  }))
+  // Preserve the opt/sm `thumb` key across an admin save. Without this the form
+  // rebuilds each image as {url,alt,name} and silently drops thumb, demoting
+  // cards from the 800px variant to the 1600px one - no visible symptom, so it
+  // goes unnoticed. Regression hit Beige Cafe 2026-09-07. See CLAUDE.md s14.
+  return Array.from(rows).map(row => {
+    const thumb = row.querySelector('.vf-img-thumburl')?.value.trim() || ''
+    const img = {
+      url: row.querySelector('.vf-img-url').value.trim(),
+      alt: row.querySelector('.vf-img-alt').value.trim(),
+      name: row.querySelector('.vf-img-name')?.value.trim() || '',
+    }
+    if (thumb) img.thumb = thumb
+    return img
+  })
 }
 
 // Downscale + re-encode an admin-picked image IN THE BROWSER before it is
@@ -8263,6 +8273,7 @@ function renderVfImages(images) {
                  onchange="handleVfImageUpload(this, ${i})" style="display:none" />
         </label>
         <input type="hidden" class="vf-img-url" value="${escapeHtml(img.url || '')}" />
+        <input type="hidden" class="vf-img-thumburl" value="${escapeHtml(img.thumb || '')}" />
         <input type="hidden" class="vf-img-name" value="${escapeHtml(filename)}" />
         <input type="text" class="vf-input vf-img-alt" placeholder="Alt text / caption" value="${escapeHtml(img.alt || '')}" />
       </div>
@@ -8348,11 +8359,20 @@ function removeVfImage(index) {
 
 function readVfImages() {
   const rows = document.querySelectorAll('#vf-images-list .vf-image-row')
-  return Array.from(rows).map(row => ({
-    url: row.querySelector('.vf-img-url').value.trim(),
-    alt: row.querySelector('.vf-img-alt').value.trim(),
-    name: row.querySelector('.vf-img-name')?.value.trim() || ''
-  }))
+  // Preserve the opt/sm `thumb` key across an admin save. Without this the form
+  // rebuilds each image as {url,alt,name} and silently drops thumb, demoting
+  // cards from the 800px variant to the 1600px one - no visible symptom, so it
+  // goes unnoticed. Regression hit Beige Cafe 2026-09-07. See CLAUDE.md s14.
+  return Array.from(rows).map(row => {
+    const thumb = row.querySelector('.vf-img-thumburl')?.value.trim() || ''
+    const img = {
+      url: row.querySelector('.vf-img-url').value.trim(),
+      alt: row.querySelector('.vf-img-alt').value.trim(),
+      name: row.querySelector('.vf-img-name')?.value.trim() || ''
+    }
+    if (thumb) img.thumb = thumb
+    return img
+  })
 }
 
 // ── Menu pages (mirrors the venue-images editor; reuses .vf-image-* styles
@@ -8384,6 +8404,7 @@ function renderVfMenuPages(pages) {
                  onchange="handleVfMenuUpload(this, ${i})" style="display:none" />
         </label>
         <input type="hidden" class="vf-img-url" value="${escapeHtml(img.url || '')}" />
+        <input type="hidden" class="vf-img-thumburl" value="${escapeHtml(img.thumb || '')}" />
         <input type="hidden" class="vf-img-name" value="${escapeHtml(filename)}" />
         <input type="text" class="vf-input vf-img-alt" placeholder="Alt text (e.g. Menu page 1)" value="${escapeHtml(img.alt || '')}" />
       </div>
@@ -8469,11 +8490,20 @@ function removeVfMenuPage(index) {
 
 function readVfMenuPages() {
   const rows = document.querySelectorAll('#vf-menu-list .vf-image-row')
-  return Array.from(rows).map(row => ({
-    url: row.querySelector('.vf-img-url').value.trim(),
-    alt: row.querySelector('.vf-img-alt').value.trim(),
-    name: row.querySelector('.vf-img-name')?.value.trim() || ''
-  }))
+  // Preserve the opt/sm `thumb` key across an admin save. Without this the form
+  // rebuilds each image as {url,alt,name} and silently drops thumb, demoting
+  // cards from the 800px variant to the 1600px one - no visible symptom, so it
+  // goes unnoticed. Regression hit Beige Cafe 2026-09-07. See CLAUDE.md s14.
+  return Array.from(rows).map(row => {
+    const thumb = row.querySelector('.vf-img-thumburl')?.value.trim() || ''
+    const img = {
+      url: row.querySelector('.vf-img-url').value.trim(),
+      alt: row.querySelector('.vf-img-alt').value.trim(),
+      name: row.querySelector('.vf-img-name')?.value.trim() || ''
+    }
+    if (thumb) img.thumb = thumb
+    return img
+  })
 }
 
 // Multi-file upload handler shared by venue images and menu pages.
