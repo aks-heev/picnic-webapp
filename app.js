@@ -133,6 +133,7 @@ let loadedQueries  = []
 let loadedBookings = []
 let adminTeamFilter = null   // null = all | 'jaipur' | 'gurugram'
 let adminBookingsDateFilter = 'upcoming'   // 'upcoming' | 'past' | 'all' — Bookings tab only
+let adminBookingsTypeFilter = 'all'        // 'all' | 'stay' | 'picnic' — Bookings tab only
 
 // Helper: format a Date object as a local YYYY-MM-DD string (avoids UTC offset shift from toISOString)
 function localDateStr(d) {
@@ -6260,6 +6261,13 @@ function renderBookings(bookings) {
     filtered = filtered.filter(b => bookingBucket(b) === adminBookingsDateFilter)
   }
 
+  // Type filter — Stay/Picnic, same checkout_date signal the card badge and
+  // bookingBucket() already use.
+  if (adminBookingsTypeFilter !== 'all') {
+    const wantStay = adminBookingsTypeFilter === 'stay'
+    filtered = filtered.filter(b => !!b.checkout_date === wantStay)
+  }
+
   // Upcoming: soonest event first. Past/All: unchanged, most-recently-booked first.
   if (adminBookingsDateFilter === 'upcoming') {
     filtered = [...filtered].sort((a, b) => (a.preferred_date || '').localeCompare(b.preferred_date || ''))
@@ -7650,6 +7658,14 @@ function setAdminTeamFilter(city, btn) {
 function setBookingsDateFilter(view, btn) {
   adminBookingsDateFilter = view || 'all'
   document.querySelectorAll('.adm-date-filter-pill').forEach(p => p.classList.remove('active'))
+  if (btn) btn.classList.add('active')
+  renderBookings(loadedBookings)
+}
+
+// Bookings-tab type filter (Stay/Picnic/All).
+function setBookingsTypeFilter(type, btn) {
+  adminBookingsTypeFilter = type || 'all'
+  document.querySelectorAll('.adm-type-filter-pill').forEach(p => p.classList.remove('active'))
   if (btn) btn.classList.add('active')
   renderBookings(loadedBookings)
 }
@@ -10186,6 +10202,7 @@ window.customerSignOut            = customerSignOut
 window.saveTeam                   = saveTeam
 window.setAdminTeamFilter         = setAdminTeamFilter
 window.setBookingsDateFilter      = setBookingsDateFilter
+window.setBookingsTypeFilter      = setBookingsTypeFilter
 
 function goToVenueSection(setting) {
   // Navigate home if not already there, then scroll to the outdoor/indoor section

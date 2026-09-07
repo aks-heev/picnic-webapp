@@ -140,6 +140,11 @@
                     <button class="adm-date-filter-pill" onclick="setBookingsDateFilter('past', this)">Past</button>
                     <button class="adm-date-filter-pill" onclick="setBookingsDateFilter('all', this)">All</button>
                 </div>
+                <div class="adm-type-filters" role="group" aria-label="Filter by type">
+                    <button class="adm-type-filter-pill active" onclick="setBookingsTypeFilter('all', this)">All types</button>
+                    <button class="adm-type-filter-pill" onclick="setBookingsTypeFilter('stay', this)">🏡 Stay</button>
+                    <button class="adm-type-filter-pill" onclick="setBookingsTypeFilter('picnic', this)">🧺 Picnic</button>
+                </div>
                 <div id="bookings-container" class="data-container">
                     <!-- Bookings will be populated here by JavaScript -->
                 </div>
