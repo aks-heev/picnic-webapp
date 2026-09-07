@@ -157,6 +157,16 @@
                             <button class="adm-type-filter-pill" onclick="setBookingsTypeFilter('picnic', this)">🧺 Picnic</button>
                         </div>
                     </div>
+                    <span class="adm-filter-divider"></span>
+                    <div class="adm-filter-group">
+                        <div class="adm-filter-label">Status</div>
+                        <div class="adm-bstatus-filters" role="group" aria-label="Filter by status">
+                            <button class="adm-bstatus-filter-pill active" onclick="setBookingsStatusFilter('all', this)">All</button>
+                            <button class="adm-bstatus-filter-pill" onclick="setBookingsStatusFilter('confirmed', this)">Confirmed</button>
+                            <button class="adm-bstatus-filter-pill" onclick="setBookingsStatusFilter('closed', this)">Closed</button>
+                            <button class="adm-bstatus-filter-pill" onclick="setBookingsStatusFilter('cancelled', this)">Cancelled</button>
+                        </div>
+                    </div>
                 </div>
                 <div id="bookings-container" class="data-container">
                     <!-- Bookings will be populated here by JavaScript -->

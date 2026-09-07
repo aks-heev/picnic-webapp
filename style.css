@@ -8734,13 +8734,13 @@ body.menu-viewer-open {
 /* ── Query status filter pills / Bookings-tab date filter pills ──────── */
 /* Same look, deliberately separate classes so toggling one tab's pills */
 /* never clears the other tab's (see the adminTeamFilter cross-tab bug). */
-.adm-status-filters, .adm-date-filters, .adm-type-filters {
+.adm-status-filters, .adm-date-filters, .adm-type-filters, .adm-bstatus-filters {
   display: flex;
   gap: 6px;
   margin-bottom: 18px;
   flex-wrap: wrap;
 }
-.adm-status-filter-pill, .adm-date-filter-pill, .adm-type-filter-pill {
+.adm-status-filter-pill, .adm-date-filter-pill, .adm-type-filter-pill, .adm-bstatus-filter-pill {
   padding: 4px 13px;
   border-radius: 20px;
   border: 1.5px solid var(--boho-border);
@@ -8752,8 +8752,8 @@ body.menu-viewer-open {
   transition: all .15s;
   font-family: inherit;
 }
-.adm-status-filter-pill:hover, .adm-date-filter-pill:hover, .adm-type-filter-pill:hover { border-color: var(--boho-accent-rose); color: var(--boho-accent-rose); }
-.adm-status-filter-pill.active, .adm-date-filter-pill.active, .adm-type-filter-pill.active {
+.adm-status-filter-pill:hover, .adm-date-filter-pill:hover, .adm-type-filter-pill:hover, .adm-bstatus-filter-pill:hover { border-color: var(--boho-accent-rose); color: var(--boho-accent-rose); }
+.adm-status-filter-pill.active, .adm-date-filter-pill.active, .adm-type-filter-pill.active, .adm-bstatus-filter-pill.active {
   background: var(--boho-text-dark, #3a2f2a);
   border-color: var(--boho-text-dark, #3a2f2a);
   color: #fff;
@@ -8772,7 +8772,8 @@ body.menu-viewer-open {
 }
 .adm-filter-group .adm-team-pills,
 .adm-filter-group .adm-date-filters,
-.adm-filter-group .adm-type-filters {
+.adm-filter-group .adm-type-filters,
+.adm-filter-group .adm-bstatus-filters {
   margin-bottom: 0;
 }
 .adm-filter-label {

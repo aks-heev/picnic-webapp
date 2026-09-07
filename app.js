@@ -134,6 +134,7 @@ let loadedBookings = []
 let adminTeamFilter = null   // null = all | 'jaipur' | 'gurugram'
 let adminBookingsDateFilter = 'upcoming'   // 'upcoming' | 'past' | 'all' — Bookings tab only
 let adminBookingsTypeFilter = 'all'        // 'all' | 'stay' | 'picnic' — Bookings tab only
+let adminBookingsStatusFilter = 'all'      // 'all' | 'confirmed' | 'closed' | 'cancelled' — Bookings tab only
 
 // Helper: format a Date object as a local YYYY-MM-DD string (avoids UTC offset shift from toISOString)
 function localDateStr(d) {
@@ -161,6 +162,17 @@ function bookingBucket(b) {
   const today = localDateStr(new Date())
   const endDate = b.checkout_date || b.preferred_date
   return endDate && endDate >= today ? 'upcoming' : 'past'
+}
+
+// Same isCancelled/isClosed formula the booking card badge uses (see the
+// card template further down) — shared here so the Status filter and the
+// badge it filters by can never drift apart. 'confirmed' | 'closed' | 'cancelled'.
+// Depends on bclCostsOf(), defined later in this file — safe due to
+// function-declaration hoisting (same as bookingBucket above).
+function bookingStatusMod(b) {
+  const isCancelled = b.booking_status === 'Cancelled'
+  const isClosed = !isCancelled && !!bclCostsOf(b)
+  return isCancelled ? 'cancelled' : isClosed ? 'closed' : 'confirmed'
 }
 
 // Real Airbnb confirmation codes are 10 uppercase alphanumerics starting HM.
@@ -6268,6 +6280,11 @@ function renderBookings(bookings) {
     filtered = filtered.filter(b => !!b.checkout_date === wantStay)
   }
 
+  // Status filter — Confirmed/Closed/Cancelled, same formula as the card badge.
+  if (adminBookingsStatusFilter !== 'all') {
+    filtered = filtered.filter(b => bookingStatusMod(b) === adminBookingsStatusFilter)
+  }
+
   // Upcoming: soonest event first. Past/All: unchanged, most-recently-booked first.
   if (adminBookingsDateFilter === 'upcoming') {
     filtered = [...filtered].sort((a, b) => (a.preferred_date || '').localeCompare(b.preferred_date || ''))
@@ -7671,6 +7688,16 @@ function setBookingsDateFilter(view, btn) {
 function setBookingsTypeFilter(type, btn) {
   adminBookingsTypeFilter = type || 'all'
   document.querySelectorAll('.adm-type-filter-pill').forEach(p => p.classList.remove('active'))
+  if (btn) btn.classList.add('active')
+  renderBookings(loadedBookings)
+}
+
+// Bookings-tab status filter (Confirmed/Closed/Cancelled/All). Scoped to its
+// own class (adm-bstatus-*) — the Queries tab already has an unrelated
+// .adm-status-filter-pill for query status, and these must not collide.
+function setBookingsStatusFilter(status, btn) {
+  adminBookingsStatusFilter = status || 'all'
+  document.querySelectorAll('.adm-bstatus-filter-pill').forEach(p => p.classList.remove('active'))
   if (btn) btn.classList.add('active')
   renderBookings(loadedBookings)
 }
@@ -10208,6 +10235,7 @@ window.saveTeam                   = saveTeam
 window.setAdminTeamFilter         = setAdminTeamFilter
 window.setBookingsDateFilter      = setBookingsDateFilter
 window.setBookingsTypeFilter      = setBookingsTypeFilter
+window.setBookingsStatusFilter    = setBookingsStatusFilter
 
 function goToVenueSection(setting) {
   // Navigate home if not already there, then scroll to the outdoor/indoor section
