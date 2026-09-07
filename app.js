@@ -7647,8 +7647,13 @@ async function saveTeam(id) {
 // Team filter pill handler (called from admin.html inline onclick)
 function setAdminTeamFilter(city, btn) {
   adminTeamFilter = city || null
-  document.querySelectorAll('.adm-team-pill').forEach(p => p.classList.remove('active'))
-  if (btn) btn.classList.add('active')
+  // Team pills exist on both the Queries and Bookings tabs (shared class,
+  // shared adminTeamFilter). Re-derive 'active' from the filter value itself
+  // via each pill's data-team, rather than only lighting up the clicked
+  // button - otherwise the *other* tab's row goes dark until clicked directly.
+  document.querySelectorAll('.adm-team-pill').forEach(p => {
+    p.classList.toggle('active', (p.dataset.team || null) === adminTeamFilter)
+  })
   renderQueries(loadedQueries)
   renderBookings(loadedBookings)
 }
