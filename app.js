@@ -2021,8 +2021,47 @@ function readPkgAdmImages(pkgId) {
   }))
 }
 
+// Downscale + re-encode an admin-picked image IN THE BROWSER before it is
+// uploaded. Uploads previously went up at full camera resolution - the library
+// averaged 869KB with a 4.58MB worst case, which is what produced the
+// 2026-09-06 cached-egress outage (HTTP 402 across storage, REST and auth for
+// ~6 hours). Fixing the existing images was a one-off migration; this is what
+// stops the next upload from rebuilding the problem. See CLAUDE.md s14.
+//
+// 1600px matches the opt/lg variant, so an uploaded image and a re-encoded one
+// agree on size. Bails out to the ORIGINAL file on any failure, on any
+// non-image, and if the result would be larger - an upload must never fail
+// because compression did.
+async function compressImageForUpload(file, maxEdge = 1600, quality = 0.78) {
+  if (!file || !file.type || !file.type.startsWith('image/')) return file
+  let bmp
+  try {
+    // createImageBitmap applies EXIF orientation, so portrait phone photos
+    // don't come out rotated the way a raw canvas draw would leave them.
+    bmp = await createImageBitmap(file)
+    const scale = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height))
+    if (scale === 1 && file.type === 'image/webp') return file
+    const w = Math.max(1, Math.round(bmp.width * scale))
+    const h = Math.max(1, Math.round(bmp.height * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    canvas.getContext('2d').drawImage(bmp, 0, 0, w, h)
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/webp', quality))
+    if (!blob || blob.size >= file.size) return file
+    const name = file.name.replace(/\.[^.]+$/, '') + '.webp'
+    console.log(`[img] ${file.name} ${(file.size/1024).toFixed(0)}KB -> ${name} ${(blob.size/1024).toFixed(0)}KB`)
+    return new File([blob], name, { type: 'image/webp' })
+  } catch (err) {
+    console.warn('[img] compression failed, uploading original', err)
+    return file
+  } finally {
+    if (bmp && bmp.close) bmp.close()
+  }
+}
+
 window.handlePkgAdmImageUpload = async function(input, pkgId, index) {
-  const file = input.files[0]
+  const file = await compressImageForUpload(input.files[0])
   if (!file) return
   if (!appState.session) return showToast('Admin login required', 'error')
 
@@ -2065,7 +2104,8 @@ window.addPkgAdmImagesMulti = async function(input, pkgId) {
 
   const list = document.getElementById(`pkg-adm-images-${pkgId}`)
 
-  await Promise.all(files.map(async (file, i) => {
+  await Promise.all(files.map(async (rawFile, i) => {
+    const file = await compressImageForUpload(rawFile)
     const rowIndex = startIndex + i
     const row   = list.querySelector(`.vf-image-row[data-index="${rowIndex}"]`)
     const label = row?.querySelector('.vf-img-upload-btn')
@@ -7704,7 +7744,7 @@ function renderAddOnsList() {
 }
 
 window.handleAfImageUpload = async function(input) {
-  const file = input.files[0]
+  const file = await compressImageForUpload(input.files[0])
   if (!file) return
   if (!appState.session) return showToast('Admin login required', 'error')
 
@@ -8264,7 +8304,7 @@ function renderVfImages(images) {
 }
 
 window.handleVfImageUpload = async function(input, index) {
-  const file = input.files[0]
+  const file = await compressImageForUpload(input.files[0])
   if (!file) return
   if (!appState.session) return showToast('Admin login required', 'error')
 
@@ -8385,7 +8425,7 @@ function renderVfMenuPages(pages) {
 }
 
 window.handleVfMenuUpload = async function(input, index) {
-  const file = input.files[0]
+  const file = await compressImageForUpload(input.files[0])
   if (!file) return
   if (!appState.session) return showToast('Admin login required', 'error')
 
@@ -8459,7 +8499,8 @@ window.addVfImagesMulti = async function(input, type) {
 
   const list = document.getElementById(listId)
 
-  await Promise.all(files.map(async (file, i) => {
+  await Promise.all(files.map(async (rawFile, i) => {
+    const file = await compressImageForUpload(rawFile)
     const rowIndex = startIndex + i
     const row   = list.querySelector(`.vf-image-row[data-index="${rowIndex}"]`)
     const label = row?.querySelector('.vf-img-upload-btn')
@@ -9797,7 +9838,7 @@ window.saveMobilePosition = async function() {
 }
 
 window.handleHeroImageUpload = async function(input, device = 'desktop') {
-  const file = input.files[0]
+  const file = await compressImageForUpload(input.files[0])
   if (!file) return
   if (!appState.session) return showToast('Admin login required', 'error')
 
@@ -9867,7 +9908,7 @@ window.handleHeroImageUpload = async function(input, device = 'desktop') {
 // backdrop is heavily blurred (see .pkgp-hero-backdrop) and framing barely
 // matters at that blur radius.
 window.handlePackagesHeroImageUpload = async function(input) {
-  const file = input.files[0]
+  const file = await compressImageForUpload(input.files[0])
   if (!file) return
   if (!appState.session) return showToast('Admin login required', 'error')
 
