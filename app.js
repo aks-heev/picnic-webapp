@@ -6195,14 +6195,14 @@ function paymentBadgeHtml(b) {
 function occasionBoardHtml(b) {
   let html = ''
   if (b.occasion) {
-    html += `<div class=”adm-detail-row”>🎉 <strong>Occasion:</strong> ${escapeHtml(b.occasion)}</div>`
+    html += `<div class="adm-detail-row">🎉 <strong>Occasion:</strong> ${escapeHtml(b.occasion)}</div>`
   }
   if (b.board && (b.board.type || b.board.message)) {
     const type  = b.board.type ? b.board.type.charAt(0).toUpperCase() + b.board.type.slice(1) + ' board' : 'Board'
     const msg   = b.board.message ? ` — “${escapeHtml(b.board.message)}”` : ''
-    html += `<div class=”adm-detail-row”>🪧 <strong>${escapeHtml(type)}:</strong>${msg}</div>`
+    html += `<div class="adm-detail-row">🪧 <strong>${escapeHtml(type)}:</strong>${msg}</div>`
   }
-  if (html) html = `<div class=”adm-detail-section”>${html}</div>`
+  if (html) html = `<div class="adm-detail-section">${html}</div>`
   return html
 }
 
