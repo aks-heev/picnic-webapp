@@ -7862,6 +7862,7 @@ body.menu-viewer-open {
 /* Occasion / board rows */
 .adm-detail-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 5px;
   font-size: 13px;
