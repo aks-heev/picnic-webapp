@@ -2073,7 +2073,7 @@ window.handlePkgAdmImageUpload = async function(input, pkgId, index) {
   label.textContent = 'Uploading…'
 
   try {
-    const { error: upErr } = await supabase.storage.from('package-images').upload(path, file, { upsert: true })
+    const { error: upErr } = await supabase.storage.from('package-images').upload(path, file, { upsert: true, cacheControl: '31536000' })
     if (upErr) throw upErr
     const { data: { publicUrl } } = supabase.storage.from('package-images').getPublicUrl(path)
 
@@ -2116,7 +2116,7 @@ window.addPkgAdmImagesMulti = async function(input, pkgId) {
       const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
       const path = `pkg-${pkgId}-${Date.now()}-${i}-${safe}`
 
-      const { error: upErr } = await supabase.storage.from('package-images').upload(path, file, { upsert: true })
+      const { error: upErr } = await supabase.storage.from('package-images').upload(path, file, { upsert: true, cacheControl: '31536000' })
       if (upErr) throw upErr
       const { data: { publicUrl } } = supabase.storage.from('package-images').getPublicUrl(path)
 
@@ -7754,7 +7754,7 @@ window.handleAfImageUpload = async function(input) {
   label.textContent = 'Uploading…'
 
   try {
-    const { error: upErr } = await supabase.storage.from('addon-images').upload(path, file, { upsert: true })
+    const { error: upErr } = await supabase.storage.from('addon-images').upload(path, file, { upsert: true, cacheControl: '31536000' })
     if (upErr) throw upErr
 
     const { data: { publicUrl } } = supabase.storage.from('addon-images').getPublicUrl(path)
@@ -8316,7 +8316,7 @@ window.handleVfImageUpload = async function(input, index) {
   label.textContent = 'Uploading…'
 
   try {
-    const { error: upErr } = await supabase.storage.from('venue-images').upload(path, file, { upsert: true })
+    const { error: upErr } = await supabase.storage.from('venue-images').upload(path, file, { upsert: true, cacheControl: '31536000' })
     if (upErr) throw upErr
 
     const { data: { publicUrl } } = supabase.storage.from('venue-images').getPublicUrl(path)
@@ -8437,7 +8437,7 @@ window.handleVfMenuUpload = async function(input, index) {
   label.textContent = 'Uploading…'
 
   try {
-    const { error: upErr } = await supabase.storage.from('venue-images').upload(path, file, { upsert: true })
+    const { error: upErr } = await supabase.storage.from('venue-images').upload(path, file, { upsert: true, cacheControl: '31536000' })
     if (upErr) throw upErr
 
     const { data: { publicUrl } } = supabase.storage.from('venue-images').getPublicUrl(path)
@@ -8511,7 +8511,7 @@ window.addVfImagesMulti = async function(input, type) {
       const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
       const path = `${prefix}-${Date.now()}-${i}-${safe}`
 
-      const { error: upErr } = await supabase.storage.from('venue-images').upload(path, file, { upsert: true })
+      const { error: upErr } = await supabase.storage.from('venue-images').upload(path, file, { upsert: true, cacheControl: '31536000' })
       if (upErr) throw upErr
 
       const { data: { publicUrl } } = supabase.storage.from('venue-images').getPublicUrl(path)
@@ -9857,7 +9857,7 @@ window.handleHeroImageUpload = async function(input, device = 'desktop') {
   try {
     const { error: upErr } = await supabase.storage
       .from('site-images')
-      .upload(storagePath, file, { upsert: true })
+      .upload(storagePath, file, { upsert: true, cacheControl: '31536000' })
     if (upErr) throw upErr
 
     const { data: { publicUrl } } = supabase.storage
@@ -9923,7 +9923,7 @@ window.handlePackagesHeroImageUpload = async function(input) {
   try {
     const { error: upErr } = await supabase.storage
       .from('site-images')
-      .upload(storagePath, file, { upsert: true })
+      .upload(storagePath, file, { upsert: true, cacheControl: '31536000' })
     if (upErr) throw upErr
 
     const { data: { publicUrl } } = supabase.storage

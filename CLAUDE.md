@@ -199,6 +199,53 @@ Run `picnic-session-handoff` at session end. Format contract:
 
 ---
 
+## 13. Todoist — every deferred item goes here, always
+
+**Anything we decide not to do now goes into Todoist before the conversation moves on.** Not into prose, not into a handoff bullet, not into "worth doing later" in a chat message. Those die. Tasks don't.
+
+This applies to work in progress too: track what we're doing, not only what we're deferring.
+
+- **`Picnic Webapp`** (id `6hPG6cjHF8PHHWgG`) — dev + ops for this repo. Sections: `To Do` / `In Progress` / `Done`.
+- **`Picnic Stories`** (id `6hPGH7jfr55GMH6J`) — business-wide (ops, marketing, SEO, bookings).
+
+Write the description so it is actionable months later by someone with no memory of the session: what to change, which file and line, why it matters, and what breaks if it is skipped. A task that just says "fix images" is worthless. Include the numbers that justified the priority.
+
+Useful labels so far: `egress`, `phase-c`, `monitoring`, `billing`, `cleanup`.
+
+Priorities: `p1` = protects the live site or prevents a repeat outage; `p2` = verification with a deadline; `p3` = real but latent waste; `p4` = housekeeping.
+
+---
+
+## 14. Images — the sm/lg variant pipeline (set up 2026-09-07)
+
+Storage serves **pre-encoded variants**, not originals. Do not point new code at an original path.
+
+- `opt/sm/<name>.webp` — 800px longest edge, WebP q78, ~56KB average
+- `opt/lg/<name>.webp` — 1600px longest edge, WebP q78, ~138KB average
+- Originals are retained, untouched, at their original keys. They are the re-encode source and the rollback.
+- All variants carry `cacheControl: 31536000`. The old `max-age=3600` default was making returning visitors re-download everything hourly.
+
+**Where each size belongs:**
+
+| Surface | Field | Variant |
+| --- | --- | --- |
+| Venue/package card carousels | `img.thumb \|\| img.url` | sm |
+| Venue detail gallery thumbs | `img.thumb \|\| img.url` | sm |
+| Venue detail hero, click-to-enlarge | `img.url` | lg |
+| `add_ons.image_url` | single column | sm |
+
+`venues.images` and `packages.images` carry both: `url` = lg, `thumb` = sm. `thumb` was added additively, so code that ignores it still works — **always fall back `img.thumb || img.url`**, because inactive-venue refs have no `thumb`.
+
+**Do not revert `carouselSlidesHtml` / `hydrateCarouselSlides` to eager slides.** The carousel tracks are `display:flex` with each slide at `flex: 0 0 100%`, so every slide sits inside the browser's lazy-load margin — `loading="lazy"` is present and *inert* there. With the 4.5s auto-advance, eager slides pulled ~75 distinct images (~55MB) per 2-3 minute visit. Slides beyond index 0 carry `data-src` and hydrate through `*CarouselGoTo`, which every nav path (dots, arrows, swipe, auto-advance) routes through.
+
+**Why this exists:** cached-egress overrun restricted the entire project on 2026-09-06 — HTTP 402 on storage, REST *and* auth for ~6 hours, with no warning email (the grace period was already spent). Measured result after the fix: a real phone session went from 55-62MB to **1.57MB**.
+
+Pipeline: `scripts/upload-optimized-images.mjs` (env-var service key, dry-run by default) + `supabase/migrations/20260907_repoint_images_to_optimized_variants.sql` (rollback SQL in its header). Rollback table: `public.image_refs_backup_20260907`.
+
+⚠️ **Enumerating images under the anon key silently misses rows.** `anon_select_add_ons` filters `is_active = true`, which is how add-on 31 got skipped. Use the service-role key for any pipeline re-run.
+
+---
+
 ## Latest Session Handoff — 2026-09-03 (Two sheet-formula bugs fixed and a third prevented; `public.expenses` mirror live so a dashboard can be hosted outside Cowork; four legacy bookings backfilled with zero emails; admin form no longer silently reprices a stay on a date edit. 🔴 Food/slot-time fields are live in DB + form; a PARALLEL session shipped them into `notify-booking-confirmed` v28–v30 the same night — `notify-booking-received` still renders neither.)
 
 The 2026-08-28 entry (region scoping Phases 2–4, `admin_apply_staff_payment` removal, custom-venue-per-region) is now at the TOP of `docs/HANDOFFS.md`.
