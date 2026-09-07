@@ -132,10 +132,24 @@ function packageFlowActive(venue) {
 let loadedQueries  = []
 let loadedBookings = []
 let adminTeamFilter = null   // null = all | 'jaipur' | 'gurugram'
+let adminBookingsDateFilter = 'upcoming'   // 'upcoming' | 'past' | 'all' — Bookings tab only
 
 // Helper: format a Date object as a local YYYY-MM-DD string (avoids UTC offset shift from toISOString)
 function localDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// Bucket a booking as 'upcoming' (includes an in-progress stay) or 'past'.
+// Checkout-aware on purpose: a multi-night stay isn't "past" until its
+// checkout_date clears, not the moment its check-in date does — otherwise an
+// in-house guest would wrongly disappear from the default view the day after
+// they arrive. Mirrors the same arriving/departing/in_house phase concept
+// staff_today already uses (see staff.js PHASE_LABEL), so admin and staff
+// never disagree about what counts as current.
+function bookingBucket(b) {
+  const today = localDateStr(new Date())
+  const endDate = b.checkout_date || b.preferred_date
+  return endDate && endDate >= today ? 'upcoming' : 'past'
 }
 
 // Helper: escape HTML entities to prevent XSS when injecting into innerHTML
@@ -6215,16 +6229,33 @@ function renderBookings(bookings) {
   const teamIdForFilter = adminTeamFilter
     ? (appState.teams.find(t => t.city === adminTeamFilter)?.id ?? null)
     : null
-  const filtered = teamIdForFilter !== null
+  let filtered = teamIdForFilter !== null
     ? (bookings || []).filter(b => b.venues?.team_id === teamIdForFilter)
     : (bookings || [])
 
+  // Date bucket filter — defaults to Upcoming so the tab isn't dominated by
+  // old bookings (created_at order otherwise buries the few that matter
+  // under everything that's already happened).
+  if (adminBookingsDateFilter !== 'all') {
+    filtered = filtered.filter(b => bookingBucket(b) === adminBookingsDateFilter)
+  }
+
+  // Upcoming: soonest event first. Past/All: unchanged, most-recently-booked first.
+  if (adminBookingsDateFilter === 'upcoming') {
+    filtered = [...filtered].sort((a, b) => (a.preferred_date || '').localeCompare(b.preferred_date || ''))
+  }
+
   if (!filtered.length) {
+    const emptyCopy = adminBookingsDateFilter === 'upcoming'
+      ? { title: 'No upcoming bookings', body: 'Nothing confirmed with a future date yet — check the Past or All view.' }
+      : adminBookingsDateFilter === 'past'
+      ? { title: 'No past bookings', body: 'Nothing here yet.' }
+      : { title: 'No confirmed bookings yet', body: 'Bookings confirmed with advance payment will appear here.' }
     container.innerHTML = `
       <div class="adm-empty">
         <div class="adm-empty-icon">🗓️</div>
-        <h3>No confirmed bookings yet</h3>
-        <p>Bookings confirmed with advance payment will appear here.</p>
+        <h3>${emptyCopy.title}</h3>
+        <p>${emptyCopy.body}</p>
       </div>`
     return
   }
@@ -7586,6 +7617,15 @@ function setAdminTeamFilter(city, btn) {
   document.querySelectorAll('.adm-team-pill').forEach(p => p.classList.remove('active'))
   if (btn) btn.classList.add('active')
   renderQueries(loadedQueries)
+  renderBookings(loadedBookings)
+}
+
+// Bookings-tab date bucket filter (Upcoming/Past/All). Scoped to its own
+// class so it doesn't collide with the Queries tab's status pills.
+function setBookingsDateFilter(view, btn) {
+  adminBookingsDateFilter = view || 'all'
+  document.querySelectorAll('.adm-date-filter-pill').forEach(p => p.classList.remove('active'))
+  if (btn) btn.classList.add('active')
   renderBookings(loadedBookings)
 }
 
@@ -10120,6 +10160,7 @@ window.copyMenuLink               = copyMenuLink
 window.customerSignOut            = customerSignOut
 window.saveTeam                   = saveTeam
 window.setAdminTeamFilter         = setAdminTeamFilter
+window.setBookingsDateFilter      = setBookingsDateFilter
 
 function goToVenueSection(setting) {
   // Navigate home if not already there, then scroll to the outdoor/indoor section

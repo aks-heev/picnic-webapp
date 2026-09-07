@@ -135,6 +135,11 @@
                     <button class="adm-team-pill" onclick="setAdminTeamFilter('jaipur', this)">Jaipur</button>
                     <button class="adm-team-pill" onclick="setAdminTeamFilter('gurugram', this)">Gurugram</button>
                 </div>
+                <div class="adm-date-filters" role="group" aria-label="Filter by date">
+                    <button class="adm-date-filter-pill active" onclick="setBookingsDateFilter('upcoming', this)">Upcoming</button>
+                    <button class="adm-date-filter-pill" onclick="setBookingsDateFilter('past', this)">Past</button>
+                    <button class="adm-date-filter-pill" onclick="setBookingsDateFilter('all', this)">All</button>
+                </div>
                 <div id="bookings-container" class="data-container">
                     <!-- Bookings will be populated here by JavaScript -->
                 </div>
