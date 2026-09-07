@@ -658,12 +658,45 @@ function venueCardHtml(venue, opts = {}) {
 // across every venueCardHtml call site (home gallery, /packages venue
 // picker, venue-first tier step) so none of them can drift from the others —
 // same reasoning as pkgCardMediaHtml.
+// Slide markup for BOTH carousels (.venue-card-media-track, .pkg-card-media-track).
+// Only slide 0 gets a real src; the rest carry data-src and are hydrated on
+// first approach by hydrateCarouselSlides().
+//
+// Why this exists: the tracks are `display:flex` with each img `flex:0 0 100%`,
+// so every slide sits a few hundred px to the right of the visible one - well
+// inside the browser's lazy-load margin. `loading="lazy"` was already on these
+// images and did nothing: every slide downloaded at full resolution on render.
+// Combined with the 4.5s auto-advance below, one 2-3 minute visit pulled ~75
+// distinct images (~55MB). Measured 2026-09-06 in edge logs.
+// Hydration is driven from *CarouselGoTo, the single choke point for dots,
+// arrows, swipe AND auto-advance - so no nav path can bypass it.
+function carouselSlidesHtml(imgs, name) {
+  return imgs.map((img, i) => {
+    const alt = escapeHtml(img.alt || name || '')
+    return i === 0
+      ? `<img src="${escapeHtml(img.url)}" alt="${alt}">`
+      : `<img data-src="${escapeHtml(img.url)}" alt="${alt}" loading="lazy">`
+  }).join('')
+}
+
+// Give the slide at `index` a real src, plus the one after it so the next
+// advance never animates in blank. Idempotent: data-src is removed once
+// consumed, so repeat calls are free.
+function hydrateCarouselSlides(track, index) {
+  if (!track) return
+  for (const i of [index, index + 1]) {
+    const img = track.children[i]
+    if (img && img.dataset && img.dataset.src) {
+      img.src = img.dataset.src
+      delete img.dataset.src
+    }
+  }
+}
+
 function venueCardMediaHtml(images, name) {
   const imgs = (images || []).filter(img => img?.url)
   if (!imgs.length) return `<div class="venue-card-placeholder"><span>${escapeHtml(name)}</span></div>`
-  const slides = imgs.map(img =>
-    `<img src="${escapeHtml(img.url)}" alt="${escapeHtml(img.alt || name || '')}" loading="lazy">`
-  ).join('')
+  const slides = carouselSlidesHtml(imgs, name)
   const controls = imgs.length > 1 ? `
       <button type="button" class="venue-card-media-arrow venue-card-media-arrow--prev" aria-label="Previous photo">&lsaquo;</button>
       <button type="button" class="venue-card-media-arrow venue-card-media-arrow--next" aria-label="Next photo">&rsaquo;</button>
@@ -682,6 +715,7 @@ function venueCarouselGoTo(mediaEl, index) {
   const total = track?.children.length || 0
   if (!track || !total) return
   const clamped = Math.max(0, Math.min(index, total - 1))
+  hydrateCarouselSlides(track, clamped)
   mediaEl.dataset.index = String(clamped)
   track.style.transform = `translateX(-${clamped * 100}%)`
   mediaEl.querySelectorAll('.venue-card-media-dot').forEach((dot, i) => {
@@ -2156,9 +2190,7 @@ function pkgTierIconHtml(key) {
 function pkgCardMediaHtml(images, name) {
   const imgs = (images || []).filter(img => img?.url)
   if (!imgs.length) return ''
-  const slides = imgs.map(img =>
-    `<img src="${escapeHtml(img.url)}" alt="${escapeHtml(img.alt || name || '')}" loading="lazy" />`
-  ).join('')
+  const slides = carouselSlidesHtml(imgs, name)
   const controls = imgs.length > 1 ? `
       <button type="button" class="pkg-card-media-arrow pkg-card-media-arrow--prev" aria-label="Previous photo">&lsaquo;</button>
       <button type="button" class="pkg-card-media-arrow pkg-card-media-arrow--next" aria-label="Next photo">&rsaquo;</button>
@@ -2195,6 +2227,7 @@ function pkgCarouselGoTo(mediaEl, index) {
   const total = track?.children.length || 0
   if (!track || !total) return
   const clamped = Math.max(0, Math.min(index, total - 1))
+  hydrateCarouselSlides(track, clamped)
   mediaEl.dataset.index = String(clamped)
   track.style.transform = `translateX(-${clamped * 100}%)`
   mediaEl.querySelectorAll('.pkg-card-media-dot').forEach((dot, i) => {
