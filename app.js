@@ -5581,8 +5581,15 @@ function applyAuthState(session) {
     loadMenuLinks()
     // Deep link: admin.html#add-booking lands the phone straight on the form
     // (Supabase session persists in localStorage, so a bookmarked link works).
+    // applyAuthState() re-runs on EVERY auth event, not just sign-in — Supabase
+    // refreshes the session (firing TOKEN_REFRESHED) whenever the tab regains
+    // visibility after being backgrounded, e.g. switching apps/tabs and coming
+    // back. Without clearing the hash, that kept yanking the admin back to
+    // Add Booking no matter which tab they'd since switched to. Consume the
+    // hash once so only the initial deep-link load honors it.
     if (typeof location !== 'undefined' && location.hash === '#add-booking') {
       switchTab('add-booking')
+      history.replaceState(null, '', location.pathname + location.search)
     }
   } else {
     appState.session = null   // never let a customer session bleed into admin state
