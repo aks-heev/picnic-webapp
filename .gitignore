@@ -40,3 +40,10 @@ hyperframes-reel-starter/
 storage-orphans-safe-to-delete.csv
 DSC03089.JPG
 _to_delete/
+
+.vercel
+.secrets/
+
+# Python bytecode from scripts/
+__pycache__/
+*.pyc

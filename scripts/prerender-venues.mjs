@@ -1220,10 +1220,9 @@ async function main() {
   writeFileSync(resolve(DIST, 'index.html'), homeHtml)
   console.log(`[prerender] homepage: injected ${venues.filter(v => v.type !== 'custom').length} real venue links into #venues-grid`)
 
-  const lastmod = new Date().toISOString().slice(0, 10)
   const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
-    urls.map(u => `  <url><loc>${u}</loc><lastmod>${lastmod}</lastmod></url>`).join('\n') +
+    urls.map(u => `  <url><loc>${u}</loc></url>`).join('\n') +
     `\n</urlset>\n`
   writeFileSync(resolve(DIST, 'sitemap.xml'), sitemap)
   writeFileSync(resolve(DIST, 'robots.txt'),

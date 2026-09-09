@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Picnic Stories Search Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root {
+  color-scheme: light;
+  --surface: #fcfcfb;
+  --plane: #f4f4f1;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --rule: rgba(11,11,11,.10);
+  --series-1: #2a78d6;
+  --warn: #b06a00;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface: #1a1a19; --plane: #0d0d0d; --ink: #fff; --ink-2: #c3c2b7;
+    --muted: #898781; --grid: #2c2c2a; --axis: #383835;
+    --rule: rgba(255,255,255,.12); --series-1: #3987e5; --warn: #eda100;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #1a1a19; --plane: #0d0d0d; --ink: #fff; --ink-2: #c3c2b7;
+  --muted: #898781; --grid: #2c2c2a; --axis: #383835;
+  --rule: rgba(255,255,255,.12); --series-1: #3987e5; --warn: #eda100;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--plane); color: var(--ink);
+  font-family: var(--sans); font-size: 15px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1040px; margin: 0 auto; padding: 32px 20px 64px; }
+header { border-bottom: 1px solid var(--rule); padding-bottom: 20px; margin-bottom: 28px; }
+h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; letter-spacing: -.01em; }
+.meta { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.meta strong { color: var(--ink-2); font-weight: 500; }
+h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em;
+     color: var(--ink-2); margin: 0 0 10px; }
+.block { margin-bottom: 34px; }
+.note { font-size: 13px; color: var(--muted); margin: -4px 0 12px; max-width: 62ch; }
+
+.scoreboard { background: var(--surface); border: 1px solid var(--rule);
+  border-left: 3px solid var(--series-1); padding: 20px 22px; margin-bottom: 22px; }
+.scoreboard .k { font-size: 12px; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--ink-2); font-weight: 600; }
+.big { font-family: var(--mono); font-size: 46px; font-weight: 500; line-height: 1.05;
+  margin: 6px 0 2px; }
+.scoreboard .sub { font-size: 13px; color: var(--muted); max-width: 60ch; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px;
+  background: var(--rule); border: 1px solid var(--rule); }
+.tile { background: var(--surface); padding: 14px 16px; }
+.tile .k { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.tile .v { font-family: var(--mono); font-size: 24px; margin-top: 3px; }
+.tile .n { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+
+.card { background: var(--surface); border: 1px solid var(--rule); padding: 16px 16px 8px; }
+.chart { width: 100%; height: auto; display: block; }
+.grid { stroke: var(--grid); stroke-width: 1; }
+.axis { stroke: var(--axis); stroke-width: 1; }
+.ytick { fill: var(--muted); font: 10px var(--mono); text-anchor: end; }
+.xtick { fill: var(--muted); font: 10px var(--mono); text-anchor: middle; }
+.empty { color: var(--muted); font-size: 13px; }
+
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-weight: 500; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--muted); padding: 7px 10px 7px 0;
+  border-bottom: 1px solid var(--rule); white-space: nowrap; }
+td { padding: 7px 10px 7px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+td.n { font-family: var(--mono); text-align: right; font-variant-numeric: tabular-nums;
+  white-space: nowrap; }
+th.n { text-align: right; }
+.q { font-family: var(--mono); font-size: 12.5px; }
+.badge { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px;
+  border: 1px solid var(--rule); color: var(--muted); white-space: nowrap; }
+.b-other { color: var(--series-1); border-color: var(--series-1); }
+
+details { margin-top: 10px; border-top: 1px solid var(--rule); padding-top: 8px; }
+summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+summary:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; }
+.reading { background: var(--surface); border: 1px solid var(--rule); padding: 18px 20px; }
+.reading li { margin-bottom: 8px; font-size: 13.5px; color: var(--ink-2); max-width: 70ch; }
+.reading code { font-family: var(--mono); font-size: 12px; }
+.flag { color: var(--warn); font-weight: 600; }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Picnic Stories Search Console</h1>
+  <div class="meta">
+    <strong>sc-domain:picnicstories.com</strong> &nbsp;·&nbsp; window 2026-08-10 to 2026-09-06
+    &nbsp;·&nbsp; generated 09 Sep 2026, 08:28 &nbsp;·&nbsp; GSC lags ~3 days
+  </div>
+</header>
+
+<div class="scoreboard">
+  <div class="k">Scoreboard — non-brand, non-venue clicks</div>
+  <div class="big">3</div>
+  <div class="sub">
+    On 94 impressions across 66 terms, in 28 days.
+    This is the only number that measures SEO progress here. Brand searches and
+    partner-venue names are demand you already had.
+  </div>
+</div>
+
+<div class="tiles block">
+  <div class="tile"><div class="k">Site clicks</div><div class="v">43</div>
+    <div class="n">28 days</div></div>
+  <div class="tile"><div class="k">Site impressions</div><div class="v">1302</div>
+    <div class="n">CTR 3.30%</div></div>
+  <div class="tile"><div class="k">Query coverage</div><div class="v">45%</div>
+    <div class="n">of impressions named</div></div>
+  <div class="tile"><div class="k">TerraCottage</div><div class="v">29</div>
+    <div class="n">impressions · 1 clicks</div></div>
+</div>
+
+<section class="block">
+  <h2>Daily clicks</h2>
+  <div class="card"><svg viewBox="0 0 720 154" class="chart" role="img" preserveAspectRatio="xMidYMid meet"><line x1="30" y1="132.0" x2="712" y2="132.0" class="grid"/><line x1="30" y1="73.3" x2="712" y2="73.3" class="grid"/><line x1="30" y1="0.0" x2="712" y2="0.0" class="grid"/><text x="24" y="135.5" class="ytick">0</text><text x="24" y="76.8" class="ytick">4</text><text x="24" y="3.5" class="ytick">9</text><rect x="30.0" y="102.7" width="22.4" height="29.3" rx="2" fill="var(--series-1)"><title>2026-08-10: 2</title></rect><rect x="54.4" y="132.0" width="22.4" height="0.8" rx="2" fill="var(--series-1)"><title>2026-08-11: 0</title></rect><rect x="78.7" y="132.0" width="22.4" height="0.8" rx="2" fill="var(--series-1)"><title>2026-08-12: 0</title></rect><rect x="103.1" y="132.0" width="22.4" height="0.8" rx="2" fill="var(--series-1)"><title>2026-08-13: 0</title></rect><rect x="127.4" y="102.7" width="22.4" height="29.3" rx="2" fill="var(--series-1)"><title>2026-08-14: 2</title></rect><rect x="151.8" y="117.3" width="22.4" height="14.7" rx="2" fill="var(--series-1)"><title>2026-08-15: 1</title></rect><rect x="176.1" y="132.0" width="22.4" height="0.8" rx="2" fill="var(--series-1)"><title>2026-08-16: 0</title></rect><rect x="200.5" y="117.3" width="22.4" height="14.7" rx="2" fill="var(--series-1)"><title>2026-08-17: 1</title></rect><rect x="224.9" y="88.0" width="22.4" height="44.0" rx="2" fill="var(--series-1)"><title>2026-08-18: 3</title></rect><rect x="249.2" y="132.0" width="22.4" height="0.8" rx="2" fill="var(--series-1)"><title>2026-08-19: 0</title></rect><rect x="273.6" y="132.0" width="22.4" height="0.8" rx="2" fill="var(--series-1)"><title>2026-08-20: 0</title></rect><rect x="297.9" y="132.0" width="22.4" height="0.8" rx="2" fill="var(--series-1)"><title>2026-08-21: 0</title></rect><rect x="322.3" y="117.3" width="22.4" height="14.7" rx="2" fill="var(--series-1)"><title>2026-08-22: 1</title></rect><rect x="346.6" y="117.3" width="22.4" height="14.7" rx="2" fill="var(--series-1)"><title>2026-08-23: 1</title></rect><rect x="371.0" y="102.7" width="22.4" height="29.3" rx="2" fill="var(--series-1)"><title>2026-08-24: 2</title></rect><rect x="395.4" y="88.0" width="22.4" height="44.0" rx="2" fill="var(--series-1)"><title>2026-08-25: 3</title></rect><rect x="419.7" y="132.0" width="22.4" height="0.8" rx="2" fill="var(--series-1)"><title>2026-08-26: 0</title></rect><rect x="444.1" y="102.7" width="22.4" height="29.3" rx="2" fill="var(--series-1)"><title>2026-08-27: 2</title></rect><rect x="468.4" y="132.0" width="22.4" height="0.8" rx="2" fill="var(--series-1)"><title>2026-08-28: 0</title></rect><rect x="492.8" y="117.3" width="22.4" height="14.7" rx="2" fill="var(--series-1)"><title>2026-08-29: 1</title></rect><rect x="517.1" y="132.0" width="22.4" height="0.8" rx="2" fill="var(--series-1)"><title>2026-08-30: 0</title></rect><rect x="541.5" y="132.0" width="22.4" height="0.8" rx="2" fill="var(--series-1)"><title>2026-08-31: 0</title></rect><rect x="565.9" y="117.3" width="22.4" height="14.7" rx="2" fill="var(--series-1)"><title>2026-09-01: 1</title></rect><rect x="590.2" y="102.7" width="22.4" height="29.3" rx="2" fill="var(--series-1)"><title>2026-09-02: 2</title></rect><rect x="614.6" y="58.7" width="22.4" height="73.3" rx="2" fill="var(--series-1)"><title>2026-09-03: 5</title></rect><rect x="638.9" y="58.7" width="22.4" height="73.3" rx="2" fill="var(--series-1)"><title>2026-09-04: 5</title></rect><rect x="663.3" y="0.0" width="22.4" height="132.0" rx="2" fill="var(--series-1)"><title>2026-09-05: 9</title></rect><rect x="687.6" y="102.7" width="22.4" height="29.3" rx="2" fill="var(--series-1)"><title>2026-09-06: 2</title></rect><text x="41.2" y="147.0" class="xtick">08-10</text><text x="211.7" y="147.0" class="xtick">08-17</text><text x="382.2" y="147.0" class="xtick">08-24</text><text x="552.7" y="147.0" class="xtick">08-31</text><text x="698.8" y="147.0" class="xtick">09-06</text><line x1="30" y1="132" x2="712" y2="132" class="axis"/></svg>
+    <details><summary>Table view</summary>
+      <div class="tablewrap"><table class=""><thead><tr><th>Date</th><th>Clicks</th><th>Impressions</th></tr></thead><tbody><tr><td>2026-08-10</td><td><span class="n">2</span></td><td><span class="n">12</span></td></tr><tr><td>2026-08-11</td><td><span class="n">0</span></td><td><span class="n">25</span></td></tr><tr><td>2026-08-12</td><td><span class="n">0</span></td><td><span class="n">11</span></td></tr><tr><td>2026-08-13</td><td><span class="n">0</span></td><td><span class="n">22</span></td></tr><tr><td>2026-08-14</td><td><span class="n">2</span></td><td><span class="n">19</span></td></tr><tr><td>2026-08-15</td><td><span class="n">1</span></td><td><span class="n">55</span></td></tr><tr><td>2026-08-16</td><td><span class="n">0</span></td><td><span class="n">37</span></td></tr><tr><td>2026-08-17</td><td><span class="n">1</span></td><td><span class="n">16</span></td></tr><tr><td>2026-08-18</td><td><span class="n">3</span></td><td><span class="n">39</span></td></tr><tr><td>2026-08-19</td><td><span class="n">0</span></td><td><span class="n">45</span></td></tr><tr><td>2026-08-20</td><td><span class="n">0</span></td><td><span class="n">49</span></td></tr><tr><td>2026-08-21</td><td><span class="n">0</span></td><td><span class="n">35</span></td></tr><tr><td>2026-08-22</td><td><span class="n">1</span></td><td><span class="n">51</span></td></tr><tr><td>2026-08-23</td><td><span class="n">1</span></td><td><span class="n">40</span></td></tr><tr><td>2026-08-24</td><td><span class="n">2</span></td><td><span class="n">38</span></td></tr><tr><td>2026-08-25</td><td><span class="n">3</span></td><td><span class="n">45</span></td></tr><tr><td>2026-08-26</td><td><span class="n">0</span></td><td><span class="n">24</span></td></tr><tr><td>2026-08-27</td><td><span class="n">2</span></td><td><span class="n">46</span></td></tr><tr><td>2026-08-28</td><td><span class="n">0</span></td><td><span class="n">18</span></td></tr><tr><td>2026-08-29</td><td><span class="n">1</span></td><td><span class="n">50</span></td></tr><tr><td>2026-08-30</td><td><span class="n">0</span></td><td><span class="n">47</span></td></tr><tr><td>2026-08-31</td><td><span class="n">0</span></td><td><span class="n">39</span></td></tr><tr><td>2026-09-01</td><td><span class="n">1</span></td><td><span class="n">58</span></td></tr><tr><td>2026-09-02</td><td><span class="n">2</span></td><td><span class="n">70</span></td></tr><tr><td>2026-09-03</td><td><span class="n">5</span></td><td><span class="n">109</span></td></tr><tr><td>2026-09-04</td><td><span class="n">5</span></td><td><span class="n">104</span></td></tr><tr><td>2026-09-05</td><td><span class="n">9</span></td><td><span class="n">90</span></td></tr><tr><td>2026-09-06</td><td><span class="n">2</span></td><td><span class="n">108</span></td></tr></tbody></table></div>
+    </details>
+  </div>
+</section>
+
+<section class="block">
+  <h2>Daily impressions</h2>
+  <p class="note">Plotted separately from clicks on purpose — one scale per chart. Two
+  measures of different magnitude on shared axes invents a correlation that isn't there.</p>
+  <div class="card"><svg viewBox="0 0 720 154" class="chart" role="img" preserveAspectRatio="xMidYMid meet"><line x1="30" y1="132.0" x2="712" y2="132.0" class="grid"/><line x1="30" y1="66.6" x2="712" y2="66.6" class="grid"/><line x1="30" y1="0.0" x2="712" y2="0.0" class="grid"/><text x="24" y="135.5" class="ytick">0</text><text x="24" y="70.1" class="ytick">54</text><text x="24" y="3.5" class="ytick">109</text><rect x="30.0" y="117.5" width="22.4" height="14.5" rx="2" fill="var(--series-1)"><title>2026-08-10: 12</title></rect><rect x="54.4" y="101.7" width="22.4" height="30.3" rx="2" fill="var(--series-1)"><title>2026-08-11: 25</title></rect><rect x="78.7" y="118.7" width="22.4" height="13.3" rx="2" fill="var(--series-1)"><title>2026-08-12: 11</title></rect><rect x="103.1" y="105.4" width="22.4" height="26.6" rx="2" fill="var(--series-1)"><title>2026-08-13: 22</title></rect><rect x="127.4" y="109.0" width="22.4" height="23.0" rx="2" fill="var(--series-1)"><title>2026-08-14: 19</title></rect><rect x="151.8" y="65.4" width="22.4" height="66.6" rx="2" fill="var(--series-1)"><title>2026-08-15: 55</title></rect><rect x="176.1" y="87.2" width="22.4" height="44.8" rx="2" fill="var(--series-1)"><title>2026-08-16: 37</title></rect><rect x="200.5" y="112.6" width="22.4" height="19.4" rx="2" fill="var(--series-1)"><title>2026-08-17: 16</title></rect><rect x="224.9" y="84.8" width="22.4" height="47.2" rx="2" fill="var(--series-1)"><title>2026-08-18: 39</title></rect><rect x="249.2" y="77.5" width="22.4" height="54.5" rx="2" fill="var(--series-1)"><title>2026-08-19: 45</title></rect><rect x="273.6" y="72.7" width="22.4" height="59.3" rx="2" fill="var(--series-1)"><title>2026-08-20: 49</title></rect><rect x="297.9" y="89.6" width="22.4" height="42.4" rx="2" fill="var(--series-1)"><title>2026-08-21: 35</title></rect><rect x="322.3" y="70.2" width="22.4" height="61.8" rx="2" fill="var(--series-1)"><title>2026-08-22: 51</title></rect><rect x="346.6" y="83.6" width="22.4" height="48.4" rx="2" fill="var(--series-1)"><title>2026-08-23: 40</title></rect><rect x="371.0" y="86.0" width="22.4" height="46.0" rx="2" fill="var(--series-1)"><title>2026-08-24: 38</title></rect><rect x="395.4" y="77.5" width="22.4" height="54.5" rx="2" fill="var(--series-1)"><title>2026-08-25: 45</title></rect><rect x="419.7" y="102.9" width="22.4" height="29.1" rx="2" fill="var(--series-1)"><title>2026-08-26: 24</title></rect><rect x="444.1" y="76.3" width="22.4" height="55.7" rx="2" fill="var(--series-1)"><title>2026-08-27: 46</title></rect><rect x="468.4" y="110.2" width="22.4" height="21.8" rx="2" fill="var(--series-1)"><title>2026-08-28: 18</title></rect><rect x="492.8" y="71.4" width="22.4" height="60.6" rx="2" fill="var(--series-1)"><title>2026-08-29: 50</title></rect><rect x="517.1" y="75.1" width="22.4" height="56.9" rx="2" fill="var(--series-1)"><title>2026-08-30: 47</title></rect><rect x="541.5" y="84.8" width="22.4" height="47.2" rx="2" fill="var(--series-1)"><title>2026-08-31: 39</title></rect><rect x="565.9" y="61.8" width="22.4" height="70.2" rx="2" fill="var(--series-1)"><title>2026-09-01: 58</title></rect><rect x="590.2" y="47.2" width="22.4" height="84.8" rx="2" fill="var(--series-1)"><title>2026-09-02: 70</title></rect><rect x="614.6" y="0.0" width="22.4" height="132.0" rx="2" fill="var(--series-1)"><title>2026-09-03: 109</title></rect><rect x="638.9" y="6.1" width="22.4" height="125.9" rx="2" fill="var(--series-1)"><title>2026-09-04: 104</title></rect><rect x="663.3" y="23.0" width="22.4" height="109.0" rx="2" fill="var(--series-1)"><title>2026-09-05: 90</title></rect><rect x="687.6" y="1.2" width="22.4" height="130.8" rx="2" fill="var(--series-1)"><title>2026-09-06: 108</title></rect><text x="41.2" y="147.0" class="xtick">08-10</text><text x="211.7" y="147.0" class="xtick">08-17</text><text x="382.2" y="147.0" class="xtick">08-24</text><text x="552.7" y="147.0" class="xtick">08-31</text><text x="698.8" y="147.0" class="xtick">09-06</text><line x1="30" y1="132" x2="712" y2="132" class="axis"/></svg></div>
+</section>
+
+
+
+<section class="block">
+  <h2>Where impressions came from</h2>
+  <p class="note">Split computed on the 45% of impressions GSC actually names.
+  The rest are anonymised long-tail queries — so treat these as shares of the visible
+  slice, never of the site.</p>
+  <div class="tablewrap"><table class=""><thead><tr><th>Group</th><th>Terms</th><th>Clicks</th><th>Impressions</th></tr></thead><tbody><tr><td>Brand</td><td><span class="n">7</span></td><td><span class="n">15</span></td><td><span class="n">108</span></td></tr><tr><td>Partner / venue names</td><td><span class="n">32</span></td><td><span class="n">0</span></td><td><span class="n">385</span></td></tr><tr><td>Non-brand, non-venue</td><td><span class="n">66</span></td><td><span class="n">3</span></td><td><span class="n">94</span></td></tr></tbody></table></div>
+</section>
+
+<section class="block">
+  <h2>Top queries</h2>
+  <div class="tablewrap"><table class=""><thead><tr><th>Query</th><th></th><th>Clicks</th><th>Impr.</th><th>Pos.</th></tr></thead><tbody><tr><td><span class="q">countryside offgrid</span></td><td><span class="badge b-venue">venue name</span></td><td><span class="n">0</span></td><td><span class="n">84</span></td><td><span class="n">12.6</span></td></tr><tr><td><span class="q">beige cafe leopard trail</span></td><td><span class="badge b-venue">venue name</span></td><td><span class="n">0</span></td><td><span class="n">64</span></td><td><span class="n">9.9</span></td></tr><tr><td><span class="q">the beige cafe</span></td><td><span class="badge b-venue">venue name</span></td><td><span class="n">0</span></td><td><span class="n">51</span></td><td><span class="n">10.3</span></td></tr><tr><td><span class="q">offgrid leopard trail</span></td><td><span class="badge b-venue">venue name</span></td><td><span class="n">0</span></td><td><span class="n">49</span></td><td><span class="n">10.2</span></td></tr><tr><td><span class="q">countryside offgrid prices</span></td><td><span class="badge b-venue">venue name</span></td><td><span class="n">0</span></td><td><span class="n">40</span></td><td><span class="n">9.1</span></td></tr><tr><td><span class="q">the picnic stories</span></td><td><span class="badge b-brand">brand</span></td><td><span class="n">10</span></td><td><span class="n">35</span></td><td><span class="n">1.4</span></td></tr><tr><td><span class="q">the picnic</span></td><td><span class="badge b-brand">brand</span></td><td><span class="n">1</span></td><td><span class="n">30</span></td><td><span class="n">7.4</span></td></tr><tr><td><span class="q">picnic story</span></td><td><span class="badge b-brand">brand</span></td><td><span class="n">3</span></td><td><span class="n">23</span></td><td><span class="n">12.7</span></td></tr><tr><td><span class="q">beige cafe leopard trail gurgaon</span></td><td><span class="badge b-venue">venue name</span></td><td><span class="n">0</span></td><td><span class="n">12</span></td><td><span class="n">11.6</span></td></tr><tr><td><span class="q">countryside offgrid leopard trail</span></td><td><span class="badge b-venue">venue name</span></td><td><span class="n">0</span></td><td><span class="n">11</span></td><td><span class="n">10.3</span></td></tr><tr><td><span class="q">picnic stories</span></td><td><span class="badge b-brand">brand</span></td><td><span class="n">1</span></td><td><span class="n">10</span></td><td><span class="n">2.8</span></td></tr><tr><td><span class="q">beige leopard trail</span></td><td><span class="badge b-venue">venue name</span></td><td><span class="n">0</span></td><td><span class="n">10</span></td><td><span class="n">11.7</span></td></tr><tr><td><span class="q">the picnic story</span></td><td><span class="badge b-brand">brand</span></td><td><span class="n">0</span></td><td><span class="n">8</span></td><td><span class="n">6.5</span></td></tr><tr><td><span class="q">birthday picnic setup</span></td><td><span class="badge b-other">non-brand</span></td><td><span class="n">1</span></td><td><span class="n">6</span></td><td><span class="n">4.7</span></td></tr></tbody></table></div>
+</section>
+
+<section class="block">
+  <h2>Top pages</h2>
+  <div class="tablewrap"><table class=""><thead><tr><th>Page</th><th>Clicks</th><th>Impr.</th><th>Pos.</th></tr></thead><tbody><tr><td><span class="q">/</span></td><td><span class="n">22</span></td><td><span class="n">293</span></td><td><span class="n">10.9</span></td></tr><tr><td><span class="q">/venues/countryside-offgrid</span></td><td><span class="n">0</span></td><td><span class="n">240</span></td><td><span class="n">10.6</span></td></tr><tr><td><span class="q">/venues/beige-cafe</span></td><td><span class="n">1</span></td><td><span class="n">237</span></td><td><span class="n">10.0</span></td></tr><tr><td><span class="q">http://www.picnicstories.com/</span></td><td><span class="n">4</span></td><td><span class="n">127</span></td><td><span class="n">8.4</span></td></tr><tr><td><span class="q">/blog/anniversary-celebration-ideas-delhi-ncr</span></td><td><span class="n">2</span></td><td><span class="n">87</span></td><td><span class="n">9.2</span></td></tr><tr><td><span class="q">/packages</span></td><td><span class="n">1</span></td><td><span class="n">79</span></td><td><span class="n">7.5</span></td></tr><tr><td><span class="q">/blog/picnic-proposal-ideas-gurugram-delhi-ncr</span></td><td><span class="n">5</span></td><td><span class="n">66</span></td><td><span class="n">9.8</span></td></tr><tr><td><span class="q">/blog/birthday-picnic-ideas-gurugram</span></td><td><span class="n">4</span></td><td><span class="n">66</span></td><td><span class="n">7.0</span></td></tr><tr><td><span class="q">/blog/romantic-picnic-date-gurugram</span></td><td><span class="n">0</span></td><td><span class="n">55</span></td><td><span class="n">8.9</span></td></tr><tr><td><span class="q">(non-www)/</span></td><td><span class="n">0</span></td><td><span class="n">51</span></td><td><span class="n">6.3</span></td></tr><tr><td><span class="q">/venues/castle-valley</span></td><td><span class="n">0</span></td><td><span class="n">48</span></td><td><span class="n">13.5</span></td></tr><tr><td><span class="q">/picnic-venues-jaipur</span></td><td><span class="n">0</span></td><td><span class="n">45</span></td><td><span class="n">38.9</span></td></tr></tbody></table></div>
+</section>
+
+<section class="block">
+  <h2>How to read this</h2>
+  <div class="reading">
+    <ul>
+      <li><span class="flag">Never quote site-level average position.</span> It moves with
+        the mix of what draws impressions, not with ranking. Partner-venue impressions
+        flooding in or draining out will swing it several places while nothing about your
+        rankings changed.</li>
+      <li><span class="flag">Always state coverage.</span> This window names
+        <code>45%</code> of impressions. Any percentage split above is a share
+        of that slice only.</li>
+      <li><span class="flag">A week is noise.</span> At this volume, week-over-week
+        movement is within normal variation. Compare 28-day windows, and compare a fixed
+        query set across them rather than the headline.</li>
+      <li><span class="flag">Clicks are not bookings.</span> Almost all confirmed bookings
+        never touched the site. Rising clicks do not imply rising revenue here.</li>
+    </ul>
+  </div>
+</section>
+
+<div class="meta">Source: Google Search Console API · built by
+<code>scripts/gsc-dashboard.py</code> from <code>docs/gsc/snapshots/</code> ·
+method in <code>docs/SEO_PLAN_2026-09-08.md</code></div>
+
+</div>
+</body>
+</html>

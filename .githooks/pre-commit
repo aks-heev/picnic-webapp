@@ -1,0 +1,41 @@
+#!/bin/sh
+# Blocks credentials from ever being committed.
+# Enabled per-clone with:  git config core.hooksPath .githooks
+#
+# .gitignore alone does not protect against `git add -f`, an edited .gitignore,
+# or `git stash -u`. This hook is the enforcement layer.
+
+fail=0
+
+# 1. Path-based: anything under a secrets dir, or a key/env file.
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+for f in $staged; do
+  case "$f" in
+    .secrets/*|*/.secrets/*|*.pem|*.p12|*.pfx|.env|.env.*|*service_account*.json|*serviceaccount*.json)
+      echo "BLOCKED (path): $f"
+      fail=1
+      ;;
+  esac
+done
+
+# 2. Content-based: catches a key committed under an innocent filename.
+for f in $staged; do
+  [ -f "$f" ] || continue
+  case "$f" in
+    *.json|*.txt|*.js|*.mjs|*.ts|*.env*|*.yml|*.yaml)
+      if git show ":$f" 2>/dev/null | grep -qE '"type"[[:space:]]*:[[:space:]]*"service_account"|-----BEGIN [A-Z ]*PRIVATE KEY-----'; then
+        echo "BLOCKED (content): $f contains a private key or service-account JSON"
+        fail=1
+      fi
+      ;;
+  esac
+done
+
+if [ "$fail" -ne 0 ]; then
+  echo ""
+  echo "Commit aborted: credentials must never enter this repo."
+  echo "Keep them in .secrets/ (gitignored) and leave them unstaged."
+  echo "If you are certain this is a false positive: git commit --no-verify"
+  exit 1
+fi
+exit 0

@@ -164,8 +164,33 @@ Run the `picnic-lead-ops` skill for lead/funnel/booking questions. Standing excl
 - Right after any backend deploy, or "test it live / verify the email fires" → `picnic-smoke-test`.
 - Leads, funnel, bookings, conversion, "mark lead #NN followed up" → `picnic-lead-ops`.
 - Session wrapping up (user says done, or context running low) → `picnic-session-handoff` proactively.
+- GSC / Search Console / impressions / clicks / positions / "how is SEO doing" → §10a below. 🔴 Do NOT invoke `claude-seo:seo-google` — its keywords match, but it wires the ephemeral cloud container and ends with the user re-uploading a private key.
 
 If a skill fails to load, §4/§5/§8/§12 above carry the critical steps — follow them.
+
+### 10a. Pulling Search Console data (set up 2026-09-09)
+
+Run on the USER'S machine via `device_bash`, never in the cloud container:
+
+```
+python3 -m pip install --quiet google-auth      # ~20s, gone each session, just redo it
+python3 scripts/gsc-pull.py --days 28 --dim query
+```
+
+Key lives at `.secrets/claude-seo-service-account.json` — gitignored, and `.githooks/pre-commit` blocks it by path AND by content. Never ask the user to upload it; the script finds it. Never move it, never print it, never stage it.
+
+`--dim` takes `query|page|date|device|country` (comma-separate to cross). `--out docs/gsc/gsc-YYYY-MM-DD.json` saves a pull for later comparison. Window ends 3 days back by default (GSC reporting lag) so two runs are comparable.
+
+A weekly scheduled task ("GSC weekly dashboard", Mondays 09:30 IST, bound to this computer) already does the pull, the rebuild and the republish. To do it by hand:
+
+```
+python3 scripts/gsc-dashboard.py                                               # standalone HTML
+python3 scripts/gsc-dashboard.py --artifact --out docs/gsc/dashboard.artifact.html
+```
+
+🔴 The dashboard is ONE artifact — URL in `docs/gsc/ARTIFACT.md`. Always pass it as the Artifact tool's `url`; publishing without it forks the history into a second artifact.
+
+🔴 Read output with `docs/SEO_PLAN_2026-09-08.md` §4 in hand: the scoreboard is non-brand non-venue clicks/28d, NOT site totals; never quote site-level average position (mix-shift artifact); always state the printed COVERAGE % before quoting any percentage split.
 
 ---
 

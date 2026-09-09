@@ -1,0 +1,273 @@
+{
+ "property": "sc-domain:picnicstories.com",
+ "start": "2026-08-10",
+ "end": "2026-09-06",
+ "dimension": "date",
+ "site_totals": {
+  "clicks": 43,
+  "impressions": 1302,
+  "ctr": 0.03302611367127496,
+  "position": 11.98310291858679
+ },
+ "coverage_pct": 100.0,
+ "pulled_at": "2026-09-09T08:25:22",
+ "totals": {
+  "clicks": 43,
+  "impressions": 1302,
+  "ctr": 3.3
+ },
+ "rows": [
+  {
+   "keys": [
+    "2026-08-10"
+   ],
+   "clicks": 2,
+   "impressions": 12,
+   "ctr": 0.16666666666666666,
+   "position": 11.333333333333334
+  },
+  {
+   "keys": [
+    "2026-08-11"
+   ],
+   "clicks": 0,
+   "impressions": 25,
+   "ctr": 0,
+   "position": 12.76
+  },
+  {
+   "keys": [
+    "2026-08-12"
+   ],
+   "clicks": 0,
+   "impressions": 11,
+   "ctr": 0,
+   "position": 22.818181818181817
+  },
+  {
+   "keys": [
+    "2026-08-13"
+   ],
+   "clicks": 0,
+   "impressions": 22,
+   "ctr": 0,
+   "position": 17.227272727272727
+  },
+  {
+   "keys": [
+    "2026-08-14"
+   ],
+   "clicks": 2,
+   "impressions": 19,
+   "ctr": 0.10526315789473684,
+   "position": 15.789473684210526
+  },
+  {
+   "keys": [
+    "2026-08-15"
+   ],
+   "clicks": 1,
+   "impressions": 55,
+   "ctr": 0.01818181818181818,
+   "position": 7.763636363636364
+  },
+  {
+   "keys": [
+    "2026-08-16"
+   ],
+   "clicks": 0,
+   "impressions": 37,
+   "ctr": 0,
+   "position": 14.324324324324325
+  },
+  {
+   "keys": [
+    "2026-08-17"
+   ],
+   "clicks": 1,
+   "impressions": 16,
+   "ctr": 0.0625,
+   "position": 12.9375
+  },
+  {
+   "keys": [
+    "2026-08-18"
+   ],
+   "clicks": 3,
+   "impressions": 39,
+   "ctr": 0.07692307692307693,
+   "position": 14.897435897435898
+  },
+  {
+   "keys": [
+    "2026-08-19"
+   ],
+   "clicks": 0,
+   "impressions": 45,
+   "ctr": 0,
+   "position": 20.622222222222224
+  },
+  {
+   "keys": [
+    "2026-08-20"
+   ],
+   "clicks": 0,
+   "impressions": 49,
+   "ctr": 0,
+   "position": 11.081632653061224
+  },
+  {
+   "keys": [
+    "2026-08-21"
+   ],
+   "clicks": 0,
+   "impressions": 35,
+   "ctr": 0,
+   "position": 9.257142857142858
+  },
+  {
+   "keys": [
+    "2026-08-22"
+   ],
+   "clicks": 1,
+   "impressions": 51,
+   "ctr": 0.0196078431372549,
+   "position": 11.588235294117647
+  },
+  {
+   "keys": [
+    "2026-08-23"
+   ],
+   "clicks": 1,
+   "impressions": 40,
+   "ctr": 0.025,
+   "position": 15.525
+  },
+  {
+   "keys": [
+    "2026-08-24"
+   ],
+   "clicks": 2,
+   "impressions": 38,
+   "ctr": 0.05263157894736842,
+   "position": 14
+  },
+  {
+   "keys": [
+    "2026-08-25"
+   ],
+   "clicks": 3,
+   "impressions": 45,
+   "ctr": 0.06666666666666667,
+   "position": 12.444444444444445
+  },
+  {
+   "keys": [
+    "2026-08-26"
+   ],
+   "clicks": 0,
+   "impressions": 24,
+   "ctr": 0,
+   "position": 18.625
+  },
+  {
+   "keys": [
+    "2026-08-27"
+   ],
+   "clicks": 2,
+   "impressions": 46,
+   "ctr": 0.043478260869565216,
+   "position": 10.673913043478262
+  },
+  {
+   "keys": [
+    "2026-08-28"
+   ],
+   "clicks": 0,
+   "impressions": 18,
+   "ctr": 0,
+   "position": 12.61111111111111
+  },
+  {
+   "keys": [
+    "2026-08-29"
+   ],
+   "clicks": 1,
+   "impressions": 50,
+   "ctr": 0.02,
+   "position": 23.6
+  },
+  {
+   "keys": [
+    "2026-08-30"
+   ],
+   "clicks": 0,
+   "impressions": 47,
+   "ctr": 0,
+   "position": 14.702127659574469
+  },
+  {
+   "keys": [
+    "2026-08-31"
+   ],
+   "clicks": 0,
+   "impressions": 39,
+   "ctr": 0,
+   "position": 11.564102564102564
+  },
+  {
+   "keys": [
+    "2026-09-01"
+   ],
+   "clicks": 1,
+   "impressions": 58,
+   "ctr": 0.017241379310344827,
+   "position": 9.517241379310345
+  },
+  {
+   "keys": [
+    "2026-09-02"
+   ],
+   "clicks": 2,
+   "impressions": 70,
+   "ctr": 0.02857142857142857,
+   "position": 8.9
+  },
+  {
+   "keys": [
+    "2026-09-03"
+   ],
+   "clicks": 5,
+   "impressions": 109,
+   "ctr": 0.045871559633027525,
+   "position": 9.541284403669724
+  },
+  {
+   "keys": [
+    "2026-09-04"
+   ],
+   "clicks": 5,
+   "impressions": 104,
+   "ctr": 0.04807692307692308,
+   "position": 8.538461538461538
+  },
+  {
+   "keys": [
+    "2026-09-05"
+   ],
+   "clicks": 9,
+   "impressions": 90,
+   "ctr": 0.1,
+   "position": 8.677777777777777
+  },
+  {
+   "keys": [
+    "2026-09-06"
+   ],
+   "clicks": 2,
+   "impressions": 108,
+   "ctr": 0.018518518518518517,
+   "position": 9.277777777777779
+  }
+ ]
+}
