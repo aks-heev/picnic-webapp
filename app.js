@@ -6384,7 +6384,7 @@ function renderBookings(bookings) {
       </div>
 
       <div class="adm-chips">
-        <span class="adm-chip">${booking.checkout_date ? '🏡 Stay' : '🧺 Picnic'}</span>
+        <span class="adm-chip">${abkKindLabel(booking)}</span>
         ${venueChip}
         ${booking.checkout_date
           ? (() => { const n = calcNights(booking.preferred_date, booking.checkout_date); return `<span class="adm-chip">📅 ${new Date(booking.preferred_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} → ${new Date(booking.checkout_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} · ${n} night${n !== 1 ? 's' : ''}</span>` })()
@@ -10305,6 +10305,8 @@ let abk = {
   externalRef: '', notes: '',
   name: '', phone: '', email: '',
   total: 0, advance: 0, discount: 0, totalTouched: false, advanceTouched: false,
+  // picnic_stay only: the ratio used to split the negotiated total into picnic vs stay revenue.
+  picnicAmount: '', stayAmount: '',
   includesFood: false, foodItems: '', bevItems: '',
   slotStart: '', slotEnd: '',
   sendEmail: true, emailToggleTouched: false,
@@ -10331,7 +10333,7 @@ async function loadAddBookingForm() {
   try {
     const [venueRes, addonRes, vaRes, pkgRes, vpRes] = await Promise.all([
       supabase.from('venues')
-        .select('id, name, type, region, base_price, packages_enabled, max_concurrent_setups, parent_venue_id, metadata, free_guests_upto, overage_per_person')
+        .select('id, name, type, region, base_price, packages_enabled, max_concurrent_setups, parent_venue_id, picnic_venue_id, metadata, free_guests_upto, overage_per_person')
         .eq('is_active', true).order('type', { ascending: true }).order('id', { ascending: true }),
       supabase.from('add_ons').select('id, name, price, category, requires_confirmation').eq('is_active', true).order('sort_order', { ascending: true }),
       supabase.from('venue_add_ons').select('venue_id, addon_id'),
@@ -10359,9 +10361,37 @@ async function loadAddBookingForm() {
 function abkVenue() { return abk.venues.find(v => v.id === Number(abk.venueId)) || null }
 
 function abkVenuesForType() {
+  // picnic_stay = a stay AND a picnic setup at the same property. It is offered only where the
+  // stay venue points at a picnic twin (venues.picnic_venue_id), because that twin is where the
+  // picnic half is priced from. Falls back to all stay venues if the column isn't loaded, so a
+  // missing select never empties the dropdown.
+  if (abk.type === 'picnic_stay') {
+    const stays = abk.venues.filter(v => ABK_STAY_TYPES.includes(v.type))
+    const withTwin = stays.filter(v => v.picnic_venue_id)
+    return withTwin.length ? withTwin : stays
+  }
   const types = abk.type === 'picnic' ? ABK_PICNIC_TYPES : ABK_STAY_TYPES
   return abk.venues.filter(v => types.includes(v.type))
 }
+
+// True for anything that carries a picnic setup (pure picnic or picnic_stay).
+function abkHasPicnic() { return abk.type === 'picnic' || abk.type === 'picnic_stay' }
+// True for anything that occupies nights (pure stay or picnic_stay).
+function abkHasStay()   { return abk.type === 'stay'   || abk.type === 'picnic_stay' }
+
+// Booking type label for admin lists. Reads bookings.booking_kind, which is the authoritative
+// column since 20260914. Falls back to the old checkout_date shape ONLY for rows predating it.
+// 🔴 Never infer from checkout_date alone: a picnic at a stay property carries a checkout_date
+// with no stay sold (that is what misclassified booking 172), and a picnic_stay carries one
+// with a stay sold. The shape cannot tell them apart — only booking_kind can.
+function abkKindLabel(b) {
+  const kind = b && b.booking_kind
+  if (kind === 'picnic_stay') return '🧺🏡 Picnic + Stay'
+  if (kind === 'picnic')      return '🧺 Picnic'
+  if (kind === 'stay')        return '🏡 Stay'
+  return (b && b.checkout_date) ? '🏡 Stay' : '🧺 Picnic'
+}
+window.abkKindLabel = abkKindLabel
 
 // Add-ons offered at a venue = the venue_add_ons junction ∩ active add_ons.
 function abkAddonsForVenue(venueId) {
@@ -10400,6 +10430,19 @@ function abkComputeTotal() {
   if (abk.type === 'picnic') {
     const pkgPrice = abk.packageKey ? abkVenuePackagePrice(v.id, abk.packageKey, adults) : null
     base = pkgPrice != null ? pkgPrice : getVenuePrice(v, adults)
+  } else if (abk.type === 'picnic_stay') {
+    // Mirrors compute_booking_total's picnic_stay branch: nights x this venue's nightly rate,
+    // PLUS the picnic priced off the twin (venues.picnic_venue_id). The twin is where the
+    // picnic rate and its packages live, so never re-derive a picnic price from the stay row.
+    const nights = calcNights(abk.checkin, abk.checkout) || 0
+    const stayPart = getVenuePrice(v, adults + children) * nights
+    const tw = abk.venues.find(x => x.id === Number(v.picnic_venue_id))
+    let picnicPart = 0
+    if (tw) {
+      const pkgPrice = abk.packageKey ? abkVenuePackagePrice(tw.id, abk.packageKey, adults) : null
+      picnicPart = pkgPrice != null ? pkgPrice : getVenuePrice(tw, adults)
+    }
+    base = stayPart + picnicPart
   } else {
     const nights = calcNights(abk.checkin, abk.checkout) || 0
     base = getVenuePrice(v, adults + children) * nights
@@ -10411,7 +10454,14 @@ function abkComputeTotal() {
   return Math.max(0, Math.round(base + extras))
 }
 
-function abkNights() { return abk.type === 'stay' ? (calcNights(abk.checkin, abk.checkout) || 0) : 0 }
+function abkNights() { return abkHasStay() ? (calcNights(abk.checkin, abk.checkout) || 0) : 0 }
+
+// The venue a picnic_stay's picnic half is priced from; null for other types.
+function abkPicnicTwin() {
+  if (abk.type !== 'picnic_stay') return null
+  const v = abkVenue()
+  return v && v.picnic_venue_id ? (abk.venues.find(x => x.id === Number(v.picnic_venue_id)) || null) : null
+}
 
 // Read current DOM inputs back into state (guarded so missing fields don't clobber).
 function abkRead() {
@@ -10429,6 +10479,8 @@ function abkRead() {
   if ((el = g('abk-board-type'))) abk.boardType = el.value
   if ((el = g('abk-board-message'))) abk.boardMessage = el.value
   if ((el = g('abk-external-ref'))) abk.externalRef = el.value
+  if ((el = g('abk-picnic-amount'))) abk.picnicAmount = el.value
+  if ((el = g('abk-stay-amount')))   abk.stayAmount   = el.value
   if ((el = g('abk-notes'))) abk.notes = el.value
   if ((el = g('abk-name'))) abk.name = el.value
   if ((el = g('abk-phone'))) abk.phone = el.value
@@ -10544,9 +10596,48 @@ function renderAddBookingForm() {
 
   const isCustom = v && v.type === 'custom'
 
-  // Dates block
+  // Dates block.
+  // picnic_stay needs BOTH: check-in/check-out for the nights AND a slot for the setup. That
+  // combination is exactly what compute_booking_total and the booking_kind trigger key on, so
+  // the form must be able to produce it — a two-way toggle structurally could not.
   let datesHtml = ''
-  if (isPicnic) {
+  if (abk.type === 'picnic_stay') {
+    const nights = abkNights()
+    const dayMap = abk.slotMap && abk.checkin ? abk.slotMap.get(abk.checkin) : null
+    const slotChips = CAFE_SLOTS.map(s => `
+        <label class="abk-slot ${abk.slot === s.key ? 'abk-slot--on' : ''}">
+          <input type="radio" name="abk-slot" value="${s.key}" ${abk.slot === s.key ? 'checked' : ''} onchange="abkChangedKeepTotal()" />
+          <span class="abk-slot-icon">${s.icon}</span>
+          <span class="abk-slot-label">${s.label}</span>
+          <span class="abk-slot-time">${s.time}</span>
+        </label>`).join('')
+    datesHtml = `
+      <div class="abk-row2">
+        <div class="abk-field">
+          <label class="abk-label" for="abk-checkin">Check-in</label>
+          <input type="date" id="abk-checkin" class="abk-input" value="${abkText(abk.checkin)}" onchange="abkChangedKeepTotal()" />
+        </div>
+        <div class="abk-field">
+          <label class="abk-label" for="abk-checkout">Check-out</label>
+          <input type="date" id="abk-checkout" class="abk-input" value="${abkText(abk.checkout)}" onchange="abkChangedKeepTotal()" />
+        </div>
+      </div>
+      <p class="abk-nights">${nights > 0 ? `${nights} night${nights !== 1 ? 's' : ''}` : 'Pick check-in and check-out dates'}</p>
+      <div class="abk-field">
+        <label class="abk-label">Setup time slot</label>
+        <div class="abk-slots">${slotChips}</div>
+        <span class="abk-hint">Which slot the picnic setup runs in, during the stay.</span>
+      </div>
+      ${abk.slot ? `
+      <div class="abk-field">
+        <label class="abk-label" for="abk-slot-start">Start &amp; end time</label>
+        <div class="abk-timerow">
+          <input type="time" id="abk-slot-start" class="abk-input abk-time" value="${abkText(abk.slotStart || (ABK_SLOT_TIMES[abk.slot] || ['', ''])[0])}" oninput="abkRead()" />
+          <span class="abk-time-sep">to</span>
+          <input type="time" id="abk-slot-end" class="abk-input abk-time" value="${abkText(abk.slotEnd || (ABK_SLOT_TIMES[abk.slot] || ['', ''])[1])}" oninput="abkRead()" />
+        </div>
+      </div>` : ''}`
+  } else if (isPicnic) {
     const dayMap = abk.slotMap && abk.date ? abk.slotMap.get(abk.date) : null
     const slotChips = CAFE_SLOTS.map(s => {
       const cnt = dayMap ? (dayMap.get(s.key) || 0) : 0
@@ -10597,7 +10688,42 @@ function renderAddBookingForm() {
   // Extras block (venue-dependent)
   let extrasHtml = ''
   if (v) {
-    if (isPicnic) {
+    if (abk.type === 'picnic_stay') {
+      // Packages come from the TWIN, not the stay row — the twin is where picnic pricing lives.
+      const tw = abkPicnicTwin()
+      const pkgs = tw ? abkPackagesForVenue(tw.id) : []
+      const pkgOptions = ['<option value="">No package</option>']
+        .concat(pkgs.map(p => `<option value="${abkText(p.key)}" ${abk.packageKey === p.key ? 'selected' : ''}>${abkText(p.name)}${p.occasion ? ' · ' + abkText(p.occasion) : ''}</option>`))
+        .join('')
+      const occOptions = ['<option value="">No occasion</option>']
+        .concat(OCCASIONS.map(o => `<option value="${abkText(o)}" ${abk.occasion === o ? 'selected' : ''}>${abkText(o)}</option>`))
+        .join('')
+      extrasHtml = `
+        ${!tw ? `<p class="abk-nights" style="color:#b42318">This venue has no picnic venue linked (venues.picnic_venue_id), so the picnic half can't be priced. Pick another venue or link one first.</p>` : ''}
+        ${pkgs.length ? `
+        <div class="abk-field">
+          <label class="abk-label" for="abk-package">Picnic package</label>
+          <select id="abk-package" class="abk-input" onchange="abkChanged()">${pkgOptions}</select>
+        </div>` : ''}
+        <div class="abk-field">
+          <label class="abk-label" for="abk-occasion">Occasion</label>
+          <select id="abk-occasion" class="abk-input" onchange="abkChangedKeepTotal()">${occOptions}</select>
+        </div>
+        ${abkAddonsHtml(v)}
+        <div class="abk-field">
+          <label class="abk-label" for="abk-board-type">Celebration board</label>
+          <select id="abk-board-type" class="abk-input" onchange="abkChangedKeepTotal()">
+            <option value="">No board</option>
+            <option value="black" ${abk.boardType === 'black' ? 'selected' : ''}>Black chalkboard</option>
+            <option value="white" ${abk.boardType === 'white' ? 'selected' : ''}>White wooden arch board</option>
+          </select>
+          ${abk.boardType ? `<input type="text" id="abk-board-message" class="abk-input" style="margin-top:8px" maxlength="100" placeholder="Board message (optional)" value="${abkText(abk.boardMessage)}" oninput="abkRead()" />` : ''}
+        </div>
+        <div class="abk-field">
+          <label class="abk-label" for="abk-external-ref">Reference <span class="abk-hint">(optional booking ref)</span></label>
+          <input type="text" id="abk-external-ref" class="abk-input" value="${abkText(abk.externalRef)}" placeholder="e.g. Airbnb HMXXXX / WhatsApp" oninput="abkRead()" />
+        </div>`
+    } else if (isPicnic) {
       const pkgs = abkPackagesForVenue(v.id)
       const pkgOptions = ['<option value="">No package</option>']
         .concat(pkgs.map(p => `<option value="${abkText(p.key)}" ${abk.packageKey === p.key ? 'selected' : ''}>${abkText(p.name)}${p.occasion ? ' · ' + abkText(p.occasion) : ''}</option>`))
@@ -10643,8 +10769,9 @@ function renderAddBookingForm() {
       ${abk.editingId ? `<div class="abk-edit-banner" style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#e7f1ff;border:1px solid #b6d4fe;color:#084298;padding:10px 14px;border-radius:8px;margin-bottom:14px;font-weight:600;">Editing booking #${abk.editingId}<button type="button" style="background:#fff;border:1px solid #b6d4fe;color:#084298;padding:4px 12px;border-radius:6px;cursor:pointer;font-weight:600;" onclick="abkCancelEdit()">Cancel edit</button></div>` : ''}
       <!-- Type toggle -->
       <div class="abk-type">
-        <button type="button" class="abk-type-btn ${isPicnic ? 'abk-type-btn--on' : ''}" onclick="abkSetType('picnic')">🧺 Picnic</button>
-        <button type="button" class="abk-type-btn ${!isPicnic ? 'abk-type-btn--on' : ''}" onclick="abkSetType('stay')">🏡 Stay</button>
+        <button type="button" class="abk-type-btn ${abk.type === 'picnic' ? 'abk-type-btn--on' : ''}" onclick="abkSetType('picnic')">🧺 Picnic</button>
+        <button type="button" class="abk-type-btn ${abk.type === 'stay' ? 'abk-type-btn--on' : ''}" onclick="abkSetType('stay')">🏡 Stay</button>
+        <button type="button" class="abk-type-btn ${abk.type === 'picnic_stay' ? 'abk-type-btn--on' : ''}" onclick="abkSetType('picnic_stay')">🧺🏡 Picnic + Stay</button>
       </div>
 
       <div class="abk-field">
@@ -10708,6 +10835,19 @@ function renderAddBookingForm() {
           ${abk.editingId && abk.existingPaid ? '<span class="abk-hint">Locked — paid online; the advance reflects the Razorpay charge and can’t be changed.</span>' : ''}
         </div>
       </div>
+
+      ${abk.type === 'picnic_stay' ? `
+      <div class="abk-row2">
+        <div class="abk-field">
+          <label class="abk-label" for="abk-picnic-amount">Picnic portion (₹)</label>
+          <input type="number" id="abk-picnic-amount" class="abk-input" min="0" step="100" value="${abkText(abk.picnicAmount)}" oninput="abkRead()" />
+        </div>
+        <div class="abk-field">
+          <label class="abk-label" for="abk-stay-amount">Stay portion (₹)</label>
+          <input type="number" id="abk-stay-amount" class="abk-input" min="0" step="100" value="${abkText(abk.stayAmount)}" oninput="abkRead()" />
+        </div>
+      </div>
+      <span class="abk-hint">These set the RATIO used to split the negotiated total between picnic and stay revenue — ads run on picnic only, so this is what makes the ad numbers right. They do NOT have to add up to the total: add-ons are credited to the picnic side first, then the rest is divided in this proportion. Leave both blank and the booking shows as an unsplit picnic+stay in reporting.</span>` : ''}
 
       <div class="abk-field">
         <label class="abk-label" for="abk-discount">Discount / on-site extra (₹) <span class="abk-hint">(optional)</span></label>
@@ -10777,6 +10917,13 @@ async function abkSave() {
     if (!abk.date) return showToast('Pick a date', 'error')
     if (!abk.slot) return showToast('Pick a time slot', 'error')
     preferredDate = abk.date; timeSlot = abk.slot
+  } else if (abk.type === 'picnic_stay') {
+    // Both halves are required: nights AND a setup slot. That pair is what tells the pricing
+    // function and the booking_kind trigger this is a picnic_stay rather than a plain stay.
+    if (!abk.checkin || !abk.checkout) return showToast('Pick check-in and check-out dates', 'error')
+    if (abkNights() < 1) return showToast('Check-out must be after check-in', 'error')
+    if (!abk.slot) return showToast('Pick the setup time slot for the picnic', 'error')
+    preferredDate = abk.checkin; checkoutDate = abk.checkout; timeSlot = abk.slot
   } else {
     if (!abk.checkin || !abk.checkout) return showToast('Pick check-in and check-out dates', 'error')
     if (abkNights() < 1) return showToast('Check-out must be after check-in', 'error')
@@ -10797,11 +10944,19 @@ async function abkSave() {
     checkout_date: checkoutDate,
     time_slot: timeSlot,
     special_requirements: String(abk.notes || '').trim() || null,
-    occasion: abk.type === 'picnic' ? (abk.occasion || null) : null,
-    board: (abk.type === 'picnic' && abk.boardType) ? { type: abk.boardType, message: String(abk.boardMessage || '').trim() } : null,
+    occasion: abkHasPicnic() ? (abk.occasion || null) : null,
+    board: (abkHasPicnic() && abk.boardType) ? { type: abk.boardType, message: String(abk.boardMessage || '').trim() } : null,
     venue_id: v.id,
     venue_address: v.type === 'custom' ? String(abk.venueAddress).trim() : null,
-    external_booking_ref: abk.type === 'stay' ? (String(abk.externalRef || '').trim() || null) : null,
+    external_booking_ref: abkHasStay() ? (String(abk.externalRef || '').trim() || null) : null,
+    // Explicit booking type. The DB trigger would derive this, but sending it means the admin's
+    // choice always wins and is never re-inferred from the row's shape.
+    booking_kind: abk.type,
+    // Ratio for splitting the negotiated total into picnic vs stay revenue. Null on a
+    // picnic_stay means "not split yet" — reporting flags it rather than guessing. The trigger
+    // fills these itself for pure picnic / pure stay, so only send them for the combined type.
+    picnic_amount: abk.type === 'picnic_stay' ? (abk.picnicAmount === '' ? null : Number(abk.picnicAmount)) : null,
+    stay_amount:   abk.type === 'picnic_stay' ? (abk.stayAmount   === '' ? null : Number(abk.stayAmount))   : null,
     advance_amount: Number(abk.advance) || 0,
     total_amount: abk.total === '' ? null : Number(abk.total),
     discount_amount: Number(abk.discount) || 0,
@@ -10811,7 +10966,7 @@ async function abkSave() {
     // Times only mean anything on a slot booking; the RPC clears them for stays anyway.
     slot_start_time: timeSlot ? (abk.slotStart || null) : null,
     slot_end_time:   timeSlot ? (abk.slotEnd   || null) : null,
-    package_key: abk.type === 'picnic' ? (abk.packageKey || null) : null,
+    package_key: abkHasPicnic() ? (abk.packageKey || null) : null,
     send_guest_email: email ? !!abk.sendEmail : false,
   }
 
@@ -10844,6 +10999,7 @@ async function abkSave() {
           showToast(`Booking #${editingId} saved, but the email couldn’t be sent`, 'error')
         }
       }
+      await abkSaveSplit(editingId)
       showToast(`Booking #${editingId} updated`, 'success')
       abkResetForm()
       switchTab('bookings')
@@ -10851,6 +11007,7 @@ async function abkSave() {
     } else {
       const { data, error } = await supabase.rpc('admin_add_manual_booking', { p_booking, p_add_ons })
       if (error) throw error
+      await abkSaveSplit(data)
       showToast(`Booking #${data} added`, 'success')
       abkResetForm()
       switchTab('bookings')
@@ -10864,6 +11021,27 @@ async function abkSave() {
 }
 window.abkSave = abkSave
 
+// Persist the picnic/stay split after the main save.
+// 🔴 This exists because admin_add_manual_booking and admin_edit_booking build their column
+// lists explicitly and DROP picnic_amount / stay_amount out of p_booking silently. Without this
+// call the split fields in the form would look like they saved and quietly do nothing.
+// A failure here must NOT be reported as a failed booking — the booking itself is already saved.
+async function abkSaveSplit(bookingId) {
+  if (abk.type !== 'picnic_stay' || !bookingId) return
+  const pa = abk.picnicAmount === '' || abk.picnicAmount == null ? null : Number(abk.picnicAmount)
+  const sa = abk.stayAmount   === '' || abk.stayAmount   == null ? null : Number(abk.stayAmount)
+  if (pa == null && sa == null) return   // left blank on purpose: reporting flags it as unsplit
+  try {
+    const { error } = await supabase.rpc('admin_set_booking_split', {
+      p_booking_id: bookingId, p_picnic_amount: pa, p_stay_amount: sa,
+    })
+    if (error) throw error
+  } catch (err) {
+    console.error('admin_set_booking_split failed:', err)
+    showToast(`Booking #${bookingId} saved, but the picnic/stay split didn’t — set it before trusting the ad numbers`, 'error')
+  }
+}
+
 // Reset the Add-Booking form back to a clean "new booking" state.
 function abkResetForm() {
   abk = { ...abk, editingId: null, existingPaid: false,
@@ -10871,6 +11049,7 @@ function abkResetForm() {
     adults: 2, children: 0, packageKey: '', addonIds: [], occasion: '', boardType: '', boardMessage: '',
     externalRef: '', notes: '', name: '', phone: '', email: '', total: 0, advance: 0, discount: 0,
     includesFood: false, foodItems: '', bevItems: '', slotStart: '', slotEnd: '',
+    picnicAmount: '', stayAmount: '',
     totalTouched: false, advanceTouched: false, sendEmail: true, emailToggleTouched: false,
     slotMap: null, slotVenueId: null, saving: false }
 }
@@ -10885,17 +11064,27 @@ async function abkStartEdit(id) {
       .eq('id', id).single()
     if (error) throw error
     const v = abk.venues.find(x => x.id === b.venue_id)
-    const isStay = !!b.checkout_date || (v && ABK_STAY_TYPES.includes(v.type))
+    // 🔴 Trust booking_kind, NOT the row's shape. The old rule here was
+    // `!!b.checkout_date || ABK_STAY_TYPES.includes(v.type)`, which opened a picnic_stay as a
+    // plain Stay and silently stripped its picnic half on save. It also mislabelled a picnic
+    // sold at a stay property (booking 172), which is why booking_kind exists at all.
+    // The shape fallback is kept only for rows created before the column landed.
+    const kind = b.booking_kind
+      || ((!!b.checkout_date || (v && ABK_STAY_TYPES.includes(v.type))) ? 'stay' : 'picnic')
+    const isStay = kind === 'stay'
+    const isCombo = kind === 'picnic_stay'
     const kids = Number(b.children_count || 0)
     abk.editingId = b.id
     abk.existingPaid = b.payment_status === 'paid'
-    abk.type = isStay ? 'stay' : 'picnic'
+    abk.type = kind
     abk.venueId = b.venue_id
     abk.venueAddress = b.venue_address || ''
-    abk.date = isStay ? '' : (b.preferred_date || '')
+    abk.date = (isStay || isCombo) ? '' : (b.preferred_date || '')
     abk.slot = b.time_slot || ''
-    abk.checkin = isStay ? (b.preferred_date || '') : ''
-    abk.checkout = isStay ? (b.checkout_date || '') : ''
+    abk.checkin = (isStay || isCombo) ? (b.preferred_date || '') : ''
+    abk.checkout = (isStay || isCombo) ? (b.checkout_date || '') : ''
+    abk.picnicAmount = b.picnic_amount == null ? '' : Number(b.picnic_amount)
+    abk.stayAmount   = b.stay_amount   == null ? '' : Number(b.stay_amount)
     abk.children = kids
     abk.adults = Math.max(1, Number(b.guest_count || 0) - kids)
     abk.packageKey = b.package_key || ''
