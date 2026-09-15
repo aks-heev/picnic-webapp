@@ -495,15 +495,34 @@ function months() {
   return Array.from(set).sort().reverse();
 }
 function uniq(fn) { return Array.from(new Set(S.records.map(fn).filter(v => v && String(v).trim()))).sort(); }
+/* 🔴 view() must NEVER write share/shareNights back onto the shared record.
+   It used to (`r.share = hit.share`), and every later view() with a different
+   month clobbered the share the table was about to render: mom() compares the
+   selected month against the previous one via view({month: prev}), and
+   drawCharts' base is view({month:'all'}). Last writer won. Booking #115
+   (Amy Bomjen, 31 Aug → 6 Sep, ₹19,000 / 6 nights) rendered inside the
+   September view with August's 1/6 share — ₹3,167 and a "17%" split tag —
+   instead of 5/6, ₹15,833, 83%. It silently understated every month that had a
+   boundary-straddling stay, in the amount column, the ✂️ split alert, the night
+   count and every sumShare() total. Each call now returns its own prorated
+   copies; S.records keeps share = 1 for good, which is what the never-prorated
+   owed/upcoming lists read. Found 2026-09-15. */
 function view(overrides) {
   const f = overrides ? Object.assign({}, S.filters, overrides) : S.filters;
   const q = (f.q || '').trim().toLowerCase();
-  return S.records.filter(r => {
+  const out = [];
+  S.records.forEach(r => {
+    let share = 1, shareNights = r.nights;
     if (f.month !== 'all') {
       const hit = spans(r, f.basis).find(s => s.k === f.month);
-      if (!hit) return false;
-      r.share = hit.share; r.shareNights = hit.nights;
-    } else { r.share = 1; r.shareNights = r.nights; }
+      if (!hit) return;
+      share = hit.share; shareNights = hit.nights;
+    }
+    if (keep(r)) out.push(Object.assign({}, r, { share, shareNights }));
+  });
+  return out;
+
+  function keep(r) {
     if (f.type !== 'all' && r.kind !== f.type) return false;
     if (f.venue !== 'all' && r.venue !== f.venue) return false;
     if (f.channel !== 'all' && r.channel !== f.channel) return false;
@@ -519,7 +538,7 @@ function view(overrides) {
     if (f.exposed && !r.exposed) return false;
     if (q) { const hay = [r.name, r.venue, r.bookingId, r.occasion, r.channel, r.phone].join(' ').toLowerCase(); if (!hay.includes(q)) return false; }
     return true;
-  });
+  }
 }
 function filtered() { return view(); }
 function sumShare(rows, fn) { return rows.reduce((s, r) => s + (Number(fn(r)) || 0) * (r.share == null ? 1 : r.share), 0); }
@@ -635,6 +654,9 @@ function render() {
   const owedPic = owedRows.filter(r => r.kind === 'picnic'), owedSt = owedRows.filter(r => r.kind === 'stay');
   const owedPicSum = owedPic.reduce((s, r) => s + r.balance, 0), owedStSum = owedSt.reduce((s, r) => s + r.balance, 0);
   const owedActive = S.owedOpen;
+  // rows holds prorated COPIES of the records, owedRows the originals, so this
+  // period-overlap test matches on booking id rather than object identity.
+  const rowIds = new Set(rows.map(r => r.bkid));
   // The owed table shows whole-booking balances across all periods, so its amounts
   // are never prorated — unlike the period-scoped table it replaces.
   const tableRows = owedActive ? owedRows : rows;
@@ -741,7 +763,7 @@ function render() {
     <div class="kpis">
       ${clickKpi('type', 'picnic', f.type === 'picnic', '', 'Picnics', nPicnic, inrShort(picnicRev))}
       ${clickKpi('type', 'stay', f.type === 'stay', '', 'Stays', nStay, Math.round(nights) + ' night' + (Math.round(nights) === 1 ? '' : 's') + ' · ' + inrShort(stayRev))}
-      ${clickKpi('owing', undefined, f.owing, owed > 0 ? 'amber' : '', 'Awaiting balance', owedRows.filter(r => rows.includes(r)).length, 'in this period')}
+      ${clickKpi('owing', undefined, f.owing, owed > 0 ? 'amber' : '', 'Awaiting balance', owedRows.filter(r => rowIds.has(r.bkid)).length, 'in this period')}
       ${D ? clickKpi('exposed', undefined, f.exposed, exposed.length ? 'red' : 'olive', 'Unprotected dates', exposed.length, exposed.length ? 'not blocking the calendar' : 'all future dates covered') : ''}
     </div>
 
