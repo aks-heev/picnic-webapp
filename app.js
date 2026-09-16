@@ -4452,6 +4452,17 @@ function handleInlineBookingSubmit(event) {
   if (lead.mobile_number) {
     identifyUser(lead.mobile_number, { name: lead.full_name, email: lead.email_address })
   }
+  // Meta Pixel Advanced Matching — re-init with plain em/ph (fbq hashes
+  // client-side) now that we have them. Fixes every website Custom Audience
+  // being stuck at Meta's ~20-person display floor — measured 2026-09-15,
+  // root-caused to the pixel never sending match keys (dataset quality
+  // returned zero EMQ scores; CAPI server_last_fired_time was epoch 0).
+  if (typeof fbq === 'function' && (lead.mobile_number || lead.email_address)) {
+    fbq('init', '1366746648648321', {
+      em: lead.email_address || undefined,
+      ph: lead.mobile_number || undefined,
+    })
+  }
   track('booking_form_submitted', {
     venue_id:     venue.id,
     venue_name:   venue.name,
@@ -4747,6 +4758,18 @@ async function submitBookingIntent(wantsToLock) {
     // fires the confirmation email), so an abandoned payment leaves a clean
     // "call me" lead the team can follow up on.
     if (wantsToLock && (lead.advance_amount ?? 0) > 0 && bookingRow.id) {
+      // Meta Pixel — InitiateCheckout event. Fires here, at the real checkout
+      // step (form submitted, "Lock my date" chosen, about to open Razorpay) —
+      // not on the earlier "Book Now" tap, which over-fired 23.8:1 vs actual
+      // submissions (measured 2026-09-15: 119 IC / 5 site bookings, 28d).
+      if (typeof fbq === 'function') {
+        fbq('track', 'InitiateCheckout', {
+          content_name: venue?.name || '',
+          content_ids:  venue?.id != null ? [String(venue.id)] : [],
+          currency:     'INR',
+          value:        Number(lead.advance_amount) || 0,
+        })
+      }
       await startRazorpayCheckout(bookingRow, lead, venue)
       return
     }
@@ -4868,7 +4891,7 @@ async function verifyAndFinish(resp, bookingRow, venue) {
       payment_id:  resp.razorpay_payment_id,
       venue_name:  venue?.name,
     })
-    finishBookingFlow(bookingRow, venue, true)
+    finishBookingFlow(bookingRow, venue, true, { paymentId: resp.razorpay_payment_id })
   } catch (err) {
     console.error('verifyAndFinish:', err)
     track('payment_verification_failed', {
@@ -4973,6 +4996,19 @@ async function handleEmailPayLink(bookingId) {
             'Payment received — you’ll get a confirmation email shortly. See you soon!',
             { href: '/', label: 'Back to The Picnic Stories' }
           )
+          // Meta Pixel — Purchase. This is the email-pay-link flow, the second
+          // payment-completion path that bypasses finishBookingFlow() entirely
+          // (the first is the on-site checkout, handled in submitBookingIntent /
+          // finishBookingFlow). Same event_id scheme as there so Meta dedupes
+          // against the razorpay-webhook CAPI event for the same payment instead
+          // of double-counting. order.amount is in paise (passed straight to
+          // Razorpay above) — divide by 100 for the Meta `value`.
+          if (typeof fbq === 'function') {
+            fbq('track', 'Purchase', {
+              value:    (Number(order.amount) || 0) / 100,
+              currency: order.currency || 'INR',
+            }, { eventID: `purchase_${bookingId}_${resp.razorpay_payment_id}` })
+          }
           history.replaceState({}, 'The Picnic Stories', '/')
           track('email_payment_confirmed', { booking_id: bookingId })
         } catch (err) {
@@ -5014,7 +5050,7 @@ async function handleEmailPayLink(bookingId) {
 }
 
 // Clear booking state and show the success page.
-function finishBookingFlow(bookingRow, venue, confirmed) {
+function finishBookingFlow(bookingRow, venue, confirmed, meta = {}) {
   const venueName = venue?.name || null
   const venueTeamId = venue?.team_id || null
 
@@ -5026,14 +5062,34 @@ function finishBookingFlow(bookingRow, venue, confirmed) {
     advance_amount: bookingRow?.advance_amount,
   })
 
-  // Meta Pixel — Lead event (every completed enquiry or confirmed booking)
+  // Meta Pixel — Purchase on a paid+confirmed booking, Lead on an unpaid
+  // enquiry. Previously this fired Lead unconditionally, including for
+  // confirmed==true, so a real sale looked identical to a "call me" lead and
+  // Purchase never fired (measured 2026-09-15: zero Purchase events, ever).
+  // event_id = `purchase_${booking_id}_${payment_id}` matches the CAPI event
+  // razorpay-webhook sends server-side for the same payment, so Meta dedupes
+  // browser+server into one event instead of double-counting.
   if (typeof fbq === 'function') {
-    fbq('track', 'Lead', {
-      content_category: bookingRow?.occasion || '',
-      content_name:     venue?.city || '',
-      num_items:        bookingRow?.guest_count || 0,
-      currency:         'INR',
-    })
+    if (confirmed) {
+      const paymentId = meta.paymentId || bookingRow?.razorpay_payment_id
+      const eventId = paymentId
+        ? `purchase_${bookingRow?.id}_${paymentId}`
+        : `purchase_${bookingRow?.id}`
+      fbq('track', 'Purchase', {
+        value:        Number(bookingRow?.advance_amount) || 0,
+        currency:     'INR',
+        content_name: venue?.name || '',
+        content_ids:  venue?.id != null ? [String(venue.id)] : [],
+        content_type: 'product',
+      }, { eventID: eventId })
+    } else {
+      fbq('track', 'Lead', {
+        content_category: bookingRow?.occasion || '',
+        content_name:     venue?.city || '',
+        num_items:        bookingRow?.guest_count || 0,
+        currency:         'INR',
+      })
+    }
   }
 
   appState.currentBooking      = null
@@ -11524,14 +11580,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isNaN(venueId)) return
     const venue = appState.venues.find(v => v.id === venueId)
     if (venue) {
-      // Meta Pixel — InitiateCheckout event (user taps an enabled Book Now button)
-      if (typeof fbq === 'function') {
-        fbq('track', 'InitiateCheckout', {
-          content_name: venue.name,
-          content_ids:  [String(venueId)],
-          currency:     'INR',
-        })
-      }
+      // Meta Pixel InitiateCheckout used to fire HERE (top-of-funnel "Book Now"
+      // tap) — measured 2026-09-15 at 119 IC events vs 5 real site bookings in
+      // the same 28d window (23.8:1 over-fire), because most taps never become
+      // a submission. Moved to submitBookingIntent(), gated on the same
+      // wantsToLock condition that actually starts Razorpay checkout — see
+      // that function for the fbq('track', 'InitiateCheckout', ...) call.
       if (appState.bookingStep === 'guests') {
         if (appState.changeMode === 'intent' && appState.changeModeData) {
           // Fast-resume: update date/slot on saved lead, skip the form entirely
