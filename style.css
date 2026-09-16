@@ -7867,6 +7867,7 @@ body.menu-viewer-open {
   transition: opacity 0.12s;
 }
 .adm-contact-link:hover { opacity: 0.72; text-decoration: underline; }
+.adm-contact-link--wa { color: #25d366; }
 
 /* Requirements quote */
 .adm-requirements {
