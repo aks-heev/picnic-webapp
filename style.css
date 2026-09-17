@@ -8832,6 +8832,14 @@ body.menu-viewer-open {
 }
 .adm-edit-btn:hover { border-color: var(--boho-accent-rose); color: var(--boho-accent-rose); background: rgba(168, 77, 102, 0.04); }
 
+.adm-wa-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 999px;
+  background: none; border: none; cursor: pointer;
+  color: #25d366; padding: 2px;
+}
+.adm-wa-btn:hover { background: rgba(37, 211, 102, 0.1); }
+
 /* ── Edit query modal ──────────────────────────────────── */
 .qedit-overlay {
   position: fixed;
