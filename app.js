@@ -6149,38 +6149,79 @@ function queryWhatsAppHref(query) {
   return `https://wa.me/91${digits}?text=${encodeURIComponent(buildAdminOutreachMessage(query))}`
 }
 
-// Pre-filled WhatsApp message for a confirmed booking — same idea as
-// buildAdminOutreachMessage but confirms rather than pitches, and includes
-// the checkout date / occasion / board details a query doesn't have yet.
-function buildBookingWhatsAppMessage(booking) {
-  const venueName = booking.venues?.name || booking.venue_address || ''
+// lowercase, abbreviated month — matches the house WhatsApp template
+// ("11 sept 2026"), not the Intl "Sep"/"Sept." forms.
+const BWA_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sept', 'oct', 'nov', 'dec']
+function bwaDate(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr + 'T00:00:00')
+  return `${d.getDate()} ${BWA_MONTHS[d.getMonth()]} ${d.getFullYear()}`
+}
 
-  let dateLine = ''
-  if (booking.preferred_date) {
-    const dIn = new Date(booking.preferred_date + 'T00:00:00')
-    const inStr = dIn.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
-    if (booking.checkout_date) {
-      const dOut = new Date(booking.checkout_date + 'T00:00:00')
-      const outStr = dOut.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
-      const n = calcNights(booking.preferred_date, booking.checkout_date)
-      dateLine = `📅 ${inStr} → ${outStr} · ${n} night${n !== 1 ? 's' : ''}`
-    } else {
-      const slot = CAFE_SLOTS.find(s => s.key === booking.time_slot)
-      dateLine = `📅 ${inStr}${slot ? ` · ${slot.label} (${slot.time})` : ''}`
-    }
+// "6 to 8:30pm" — round hours drop the ':00', and the am/pm marker is shown
+// once at the end when both ends of the slot fall in the same half of the
+// day (the common case), otherwise on each end so it stays unambiguous.
+// slot_start_time/slot_end_time (admin-set, may be a custom time) win over
+// the fixed CAFE_SLOTS window when present.
+function bwaTime(booking) {
+  const parse = s => {
+    if (!s) return null
+    const [h, m] = String(s).split(':').map(Number)
+    if (Number.isNaN(h)) return null
+    return { h, m: m || 0 }
   }
+  const fmt = (t, withPeriod) => {
+    const period = t.h >= 12 ? 'pm' : 'am'
+    const hh = t.h % 12 || 12
+    const mm = t.m ? `:${String(t.m).padStart(2, '0')}` : ''
+    return `${hh}${mm}${withPeriod ? period : ''}`
+  }
+  const a = parse(booking.slot_start_time), z = parse(booking.slot_end_time)
+  if (a && z) {
+    const samePeriod = (a.h >= 12) === (z.h >= 12)
+    return `${fmt(a, !samePeriod)} to ${fmt(z, true)}`
+  }
+  if (a) return fmt(a, true)
+  const slot = CAFE_SLOTS.find(s => s.key === booking.time_slot)
+  return slot ? slot.time : ''
+}
+
+// Pre-filled WhatsApp message for a confirmed booking — the house "BOOKING
+// CONFIRMED" template Aksheev sends by hand today. Amount/Advance/Remaining
+// come straight off the stored bookings columns (never re-derived — §7),
+// so a legacy row with no total_amount just drops that block rather than
+// guessing a total from the advance.
+function buildBookingWhatsAppMessage(booking) {
+  const dateLine = booking.checkout_date
+    ? `${bwaDate(booking.preferred_date)} to ${bwaDate(booking.checkout_date)}`
+    : bwaDate(booking.preferred_date)
+  const timeLine = bwaTime(booking)
+
+  const total    = booking.total_amount != null ? Number(booking.total_amount) : null
+  const advance  = booking.advance_amount != null ? Number(booking.advance_amount) : null
 
   const lines = [
-    `Hi ${booking.full_name || 'there'}! This is the Picnic Stories team 🌿`,
-    `Confirming the details for your booking #${booking.id}:`,
-    '',
+    'BOOKING CONFIRMED',
+    `Name - ${booking.full_name || ''}`,
+    `Contact - ${booking.email_address || booking.mobile_number || ''}`,
+    `Date - ${dateLine}`,
   ]
-  if (venueName) lines.push(`📍 Venue: ${venueName}`)
-  if (dateLine) lines.push(dateLine)
-  if (booking.guest_count) lines.push(`👥 Guests: ${booking.guest_count}`)
-  if (booking.occasion) lines.push(`🎉 Occasion: ${booking.occasion}`)
-  if (booking.board?.message) lines.push(`🪧 Board: "${booking.board.message}"`)
-  lines.push('', 'Let us know if you have any questions!')
+  if (timeLine) lines.push(`Time -  ${timeLine}`)
+  lines.push(`People - ${booking.guest_count ?? ''}`, '')
+  if (total != null) lines.push(`Amount - ${total}`)
+  if (advance != null) lines.push(`Advance - ${advance}`)
+  if (total != null && advance != null) lines.push(`Remaining -${total - advance}`)
+  lines.push(
+    '.',
+    'The Picnic Stories',
+    'Contact - 9266964666 | 9773703982 | 7073089512',
+    '',
+    '***',
+    '  • The advance amount is non-refundable in case of cancellation.',
+    '  • Slot timings are fixed. Any delay will not extend the slot, and extra hour charges will apply.',
+    '',
+    'Food and drinks will be ordered at the venue and will be charged as per menu.',
+  )
   return lines.join('\n')
 }
 
