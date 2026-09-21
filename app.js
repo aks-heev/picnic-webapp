@@ -159,6 +159,9 @@ function bookingBucket(b) {
   const isCancelled = b.booking_status === 'Cancelled'
   const isClosed = !isCancelled && !!bclCostsOf(b)
   if (isCancelled || isClosed) return 'past'
+  // Postponed has no live date yet (its old date is kept only as a record), so it
+  // must stay in Upcoming or it drops out of sight once that date passes.
+  if (b.booking_status === 'Postponed') return 'upcoming'
   const today = localDateStr(new Date())
   const endDate = b.checkout_date || b.preferred_date
   return endDate && endDate >= today ? 'upcoming' : 'past'
@@ -172,6 +175,7 @@ function bookingBucket(b) {
 function bookingStatusMod(b) {
   const isCancelled = b.booking_status === 'Cancelled'
   const isClosed = !isCancelled && !!bclCostsOf(b)
+  if (b.booking_status === 'Postponed') return 'postponed'
   return isCancelled ? 'cancelled' : isClosed ? 'closed' : 'confirmed'
 }
 
@@ -5759,7 +5763,21 @@ async function loadBookings() {
       : { data: [] }
     const addonsByBooking = (allAddons || []).reduce((acc, a) => { ;(acc[a.booking_id] ||= []).push(a); return acc }, {})
 
-    const bookingsWithOrders = bookings.map(b => ({ ...b, orders: ordersByBooking[b.id] || [], booking_add_ons: addonsByBooking[b.id] || [] }))
+    // Postponement history (admin-only table). Non-fatal: the tab still loads without it.
+    let postponementsByBooking = {}
+    try {
+      const { data: pps, error: ppErr } = bookingIds.length
+        ? await supabase.from('booking_postponements')
+            .select('booking_id, original_date, original_checkout_date, original_time_slot, credit_amount, reason, requested_at, postponed_at, follow_up_by, new_date, resolved_at')
+            .in('booking_id', bookingIds)
+        : { data: [] }
+      if (ppErr) throw ppErr
+      postponementsByBooking = (pps || []).reduce((acc, p) => { ;(acc[p.booking_id] ||= []).push(p); return acc }, {})
+    } catch (e) {
+      console.warn('booking_postponements fetch failed', e)
+    }
+
+    const bookingsWithOrders = bookings.map(b => ({ ...b, orders: ordersByBooking[b.id] || [], booking_add_ons: addonsByBooking[b.id] || [], postponements: postponementsByBooking[b.id] || [] }))
 
     loadedBookings = bookingsWithOrders
     renderBookings(loadedBookings)
@@ -6536,12 +6554,13 @@ function renderBookings(bookings) {
     const bCost       = bclCostsOf(booking)
     const isCancelled = booking.booking_status === 'Cancelled'
     const isClosed    = !isCancelled && !!bCost
-    const statusMod   = isCancelled ? 'cancelled' : isClosed ? 'closed' : 'confirmed'
-    const statusLabel = isCancelled ? 'Cancelled'  : isClosed ? 'Closed' : 'Confirmed'
-    const closeLabel  = bCost ? 'Edit close' : 'Close booking'
+    const isPostponed = booking.booking_status === 'Postponed'
+    const statusMod   = isCancelled ? 'cancelled' : isPostponed ? 'postponed' : isClosed ? 'closed' : 'confirmed'
+    const statusLabel = isCancelled ? 'Cancelled'  : isPostponed ? 'Postponed' : isClosed ? 'Closed' : 'Confirmed'
+    const closeLabel  = isPostponed ? 'Cancel booking' : bCost ? 'Edit close' : 'Close booking'
 
     return `
-    <div class="adm-card adm-card--booking${isCancelled ? ' adm-card--cancelled' : ''}" data-id="${escapeHtml(booking.id)}">
+    <div class="adm-card adm-card--booking${isCancelled ? ' adm-card--cancelled' : ''}${isPostponed ? ' adm-card--postponed' : ''}" data-id="${escapeHtml(booking.id)}">
       <div class="adm-card-header">
         <div class="adm-card-header-name">
           <span class="adm-status-dot adm-status-dot--${statusMod}"></span>
@@ -6560,6 +6579,7 @@ function renderBookings(bookings) {
           <a class="adm-wa-btn" href="${bookingWhatsAppHref(booking)}" target="_blank" rel="noopener noreferrer" title="Message on WhatsApp" aria-label="Message on WhatsApp">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>
           </a>` : ''}
+          ${ppHeaderButtons(booking, isPostponed, isCancelled, isClosed)}
           <button type="button" class="bcl-open-btn${bCost ? ' bcl-open-btn--done' : ''}" data-booking-id="${escapeHtml(booking.id)}" onclick="bclOpen(${booking.id})" title="${escapeHtml(closeLabel)}">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
             ${escapeHtml(closeLabel)}
@@ -6575,6 +6595,7 @@ function renderBookings(bookings) {
           : `<span class="adm-chip">📅 ${new Date(booking.preferred_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>`}
         ${booking.time_slot ? (() => { const s = CAFE_SLOTS.find(sl => sl.key === booking.time_slot); return `<span class="adm-chip">${s ? s.icon : '⏰'} ${s ? s.label + ' · ' + s.time : escapeHtml(booking.time_slot)}</span>` })() : ''}
         <span class="adm-chip">👥 ${escapeHtml(booking.guest_count)} guest${booking.guest_count !== 1 ? 's' : ''}</span>
+        ${ppReschedChip(booking)}
       </div>
 
       <div class="adm-contact-row">
@@ -6593,6 +6614,7 @@ function renderBookings(bookings) {
       ${booking.booking_add_ons?.length ? `<div class="adm-booking-addons">${booking.booking_add_ons.map(a => `<span class="adm-addon-pill">${escapeHtml(a.name || 'Add-on')} <span class="adm-addon-pill-price">+₹${Number(a.price_at_booking || 0).toLocaleString('en-IN')}</span>${a.requires_confirmation ? ' <span class="adm-addon-pill-tag">on req.</span>' : ''}</span>`).join('')}</div>` : ''}
       ${channelHtml}
       ${ordersHtml}
+      ${ppStripHtml(booking)}
       ${bclSummaryHtml(booking, bCost)}
     </div>`
   }).join('')
@@ -6672,6 +6694,254 @@ function bclSummaryHtml(booking, cost) {
     </div>`
 }
 
+// ═══════════════════════════════════════════════════════
+//  POSTPONE / RESCHEDULE  (pp)
+//  Status 'Postponed' = confirmed booking, date not yet re-fixed. The advance
+//  stays on the booking as credit (never refunded). All writes go through
+//  admin_postpone_booking / admin_reschedule_booking; the open/closed history
+//  lives in the admin-only booking_postponements table (b.postponements).
+// ═══════════════════════════════════════════════════════
+let pp = { id: null, mode: null, saving: false }
+
+function ppOpenRow(b) { return (b.postponements || []).find(p => !p.resolved_at) || null }
+function ppReschedulesUsed(b) { return (b.postponements || []).filter(p => p.resolved_at && p.new_date).length }
+function ppDateLabel(d) {
+  return d ? new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
+}
+function ppSlotLabel(key) {
+  if (!key) return ''
+  const s = CAFE_SLOTS.find(sl => sl.key === key)
+  return s ? s.label : String(key)
+}
+function ppNowLocalInput() {
+  const d = new Date()
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset())
+  return d.toISOString().slice(0, 16)
+}
+function ppAddDays(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00')
+  d.setDate(d.getDate() + n)
+  return localDateStr(d)
+}
+
+// Small chip for a booking that was moved to a new date and is live again.
+function ppReschedChip(b) {
+  if (b.booking_status === 'Postponed') return ''
+  const n = ppReschedulesUsed(b)
+  return n ? `<span class="adm-chip" title="Moved to this date after a postponement">↻ Rescheduled${n > 1 ? ' ×' + n : ''}</span>` : ''
+}
+
+// Header buttons for a live (confirmed, not closed/cancelled, not postponed) booking.
+function ppHeaderButtons(b, isPostponed, isCancelled, isClosed) {
+  if (isPostponed || isCancelled || isClosed || !b.confirmed) return ''
+  return `
+          <button type="button" class="pp-btn" onclick="ppOpen(${b.id}, 'postpone')" title="Postpone — keeps the advance as credit">Postpone</button>
+          <button type="button" class="pp-btn" onclick="ppOpen(${b.id}, 'reschedule')" title="Move to a new date">Reschedule</button>`
+}
+
+// The strip a Postponed booking carries: what's held, what it was, when to chase.
+function ppStripHtml(b) {
+  if (b.booking_status !== 'Postponed') return ''
+  const row = ppOpenRow(b)
+  const credit = Number(row ? row.credit_amount : b.advance_amount) || 0
+  const was = row
+    ? [ppDateLabel(row.original_date), ppSlotLabel(row.original_time_slot)].filter(Boolean).join(' · ')
+    : ppDateLabel(b.preferred_date)
+  const today = localDateStr(new Date())
+  const fu = row && row.follow_up_by ? String(row.follow_up_by).slice(0, 10) : ''
+  const overdue = fu && fu < today
+  const since = row && row.postponed_at ? ppDateLabel(row.postponed_at) : ''
+  const used = ppReschedulesUsed(b)
+  return `
+      <div class="pp-strip">
+        <div class="pp-strip-head">
+          <span class="pp-strip-title">Postponed — no new date</span>
+          ${since ? `<span class="pp-strip-when">since ${escapeHtml(since)}</span>` : ''}
+          <button type="button" class="pp-btn pp-btn--solid" onclick="ppOpen(${b.id}, 'reschedule')">Set new date</button>
+        </div>
+        <div class="pp-strip-items">
+          <span>Credit held <b>₹${credit.toLocaleString('en-IN')}</b> <em>(no refund)</em></span>
+          ${was ? `<span>Was <b>${escapeHtml(was)}</b></span>` : ''}
+          <span>Follow up <b class="${overdue ? 'pp-overdue' : ''}">${fu ? escapeHtml(ppDateLabel(fu)) + (overdue ? ' · overdue' : '') : 'not set'}</b></span>
+          <span>Reschedules used <b>${used}</b></span>
+        </div>
+        ${row && row.reason ? `<div class="pp-strip-note">${escapeHtml(row.reason)}</div>` : ''}
+      </div>`
+}
+
+function ppOpen(id, mode) {
+  if (!appState.session) return showToast('Admin login required', 'error')
+  const b = (loadedBookings || []).find(x => String(x.id) === String(id))
+  if (!b) return showToast('Booking not found — reload the tab', 'error')
+  document.getElementById('pp-overlay')?.remove()
+  pp = { id: b.id, mode, saving: false }
+
+  const isStay = !!b.checkout_date
+  const nights = isStay ? calcNights(b.preferred_date, b.checkout_date) : 0
+  const row = ppOpenRow(b)
+  const used = ppReschedulesUsed(b)
+  const credit = Number(row ? row.credit_amount : b.advance_amount) || 0
+  const creditTxt = '₹' + credit.toLocaleString('en-IN')
+  const isPostpone = mode === 'postpone'
+  const title = isPostpone ? 'Postpone booking' : (b.booking_status === 'Postponed' ? 'Set new date' : 'Reschedule booking')
+  const curDate = ppDateLabel(b.preferred_date) + (b.time_slot ? ' · ' + ppSlotLabel(b.time_slot) : '')
+
+  const slotField = (!isPostpone && !isStay && b.time_slot) ? `
+        <label class="bcl-field bcl-field--full">
+          <span>Time slot</span>
+          <select id="pp-slot" class="bcl-input">
+            ${CAFE_SLOTS.map(s => `<option value="${escapeHtml(s.key)}"${s.key === b.time_slot ? ' selected' : ''}>${escapeHtml(s.icon + ' ' + s.label + ' · ' + s.time)}</option>`).join('')}
+          </select>
+        </label>` : ''
+
+  const dateFields = isPostpone ? `
+        <label class="bcl-field bcl-field--full">
+          <span>Follow up by</span>
+          <input id="pp-followup" class="bcl-input" type="date" min="${localDateStr(new Date())}">
+        </label>
+        <p class="bcl-hint">Optional. When you next need to ask the customer for a date. Leave empty if there is no plan yet.</p>` : `
+        <label class="bcl-field bcl-field--full">
+          <span>New ${isStay ? 'check-in ' : ''}date</span>
+          <input id="pp-newdate" class="bcl-input" type="date" min="${localDateStr(new Date())}" oninput="ppSyncCheckout()">
+        </label>
+        ${isStay ? `
+        <label class="bcl-field bcl-field--full">
+          <span>New check-out date</span>
+          <input id="pp-newcheckout" class="bcl-input" type="date" oninput="this.dataset.touched='1'">
+        </label>
+        <p class="bcl-hint">Fills in automatically to keep the same ${nights} night${nights !== 1 ? 's' : ''}. Change it to alter the stay.</p>` : ''}
+        ${slotField}`
+
+  const overlay = document.createElement('div')
+  overlay.className = 'bcl-overlay'
+  overlay.id = 'pp-overlay'
+  overlay.innerHTML = `
+    <div class="bcl-modal" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}">
+      <div class="bcl-head">
+        <h3>${escapeHtml(title)} · ${escapeHtml(b.full_name || '')}</h3>
+        <button class="bcl-x" type="button" onclick="ppCloseModal()" aria-label="Close">×</button>
+      </div>
+      <div class="bcl-body">
+        <div class="bcl-meta">
+          #${escapeHtml(String(b.id))} · currently ${escapeHtml(curDate)}${b.venues?.name ? ' · ' + escapeHtml(b.venues.name) : ''}
+        </div>
+        <div class="bcl-warn pp-credit-note">${
+          isPostpone
+            ? `The ${creditTxt} advance stays on this booking as credit. It is <b>not refunded</b> and does not expire.`
+            : `The ${creditTxt} advance carries over to the new date — nothing to re-collect.`
+        }</div>
+        ${!isPostpone && used >= 1 ? `<div class="bcl-warn">This booking has already been rescheduled ${used}×. The free-reschedule limit is still tentative — your call.</div>` : ''}
+        <div class="bcl-warn" id="pp-notice-warn" style="display:none"></div>
+
+        ${dateFields}
+
+        <label class="bcl-field bcl-field--full">
+          <span>Customer asked at</span>
+          <input id="pp-requested" class="bcl-input" type="datetime-local" value="${ppNowLocalInput()}" oninput="ppNoticeCheck()">
+        </label>
+        <p class="bcl-hint">When the customer actually told you — used to judge the 48h notice, not when you are entering it.</p>
+
+        <label class="bcl-field bcl-field--full">
+          <span>Reason / notes</span>
+          <textarea id="pp-reason" class="bcl-input" rows="2" placeholder="${isPostpone ? 'e.g. Customer postponed, no new date given' : 'e.g. Agreed new date over WhatsApp'}"></textarea>
+        </label>
+      </div>
+      <div class="bcl-foot">
+        <button class="bcl-cancel" type="button" onclick="ppCloseModal()">Cancel</button>
+        <button class="bcl-save" id="pp-save-btn" type="button" onclick="ppSave()">${isPostpone ? 'Postpone booking' : 'Reschedule'}</button>
+      </div>
+    </div>`
+  overlay.addEventListener('click', e => { if (e.target === overlay) ppCloseModal() })
+  document.body.appendChild(overlay)
+  ppNoticeCheck()
+}
+window.ppOpen = ppOpen
+
+function ppCloseModal() {
+  document.getElementById('pp-overlay')?.remove()
+  pp = { id: null, mode: null, saving: false }
+}
+window.ppCloseModal = ppCloseModal
+
+// Keeps a stay's nights when the check-in moves, until the admin edits check-out by hand.
+function ppSyncCheckout() {
+  const b = (loadedBookings || []).find(x => String(x.id) === String(pp.id))
+  const nd = document.getElementById('pp-newdate')?.value
+  const co = document.getElementById('pp-newcheckout')
+  if (!b || !b.checkout_date || !co || !nd || co.dataset.touched) return
+  co.value = ppAddDays(nd, calcNights(b.preferred_date, b.checkout_date))
+}
+window.ppSyncCheckout = ppSyncCheckout
+
+// Warning, never a gate: a short-notice move is the admin's call.
+function ppNoticeCheck() {
+  const b = (loadedBookings || []).find(x => String(x.id) === String(pp.id))
+  const el = document.getElementById('pp-notice-warn')
+  if (!b || !el) return
+  const raw = document.getElementById('pp-requested')?.value
+  const asked = raw ? new Date(raw) : new Date()
+  const eventStart = new Date(b.preferred_date + 'T00:00:00')
+  const hours = (eventStart - asked) / 36e5
+  if (hours < 48) {
+    el.style.display = ''
+    el.textContent = hours < 0
+      ? 'The customer asked after the original event date.'
+      : `Under 48h notice (about ${Math.max(0, Math.round(hours))}h before the event date). The advance stays as credit either way.`
+  } else {
+    el.style.display = 'none'
+  }
+}
+window.ppNoticeCheck = ppNoticeCheck
+
+async function ppSave() {
+  if (pp.saving) return
+  const b = (loadedBookings || []).find(x => String(x.id) === String(pp.id))
+  if (!b) return showToast('Booking not found — reload the tab', 'error')
+  const val = elId => (document.getElementById(elId)?.value || '').trim()
+  const reason = val('pp-reason') || null
+  const reqRaw = val('pp-requested')
+  const p_requested_at = reqRaw ? new Date(reqRaw).toISOString() : null
+
+  let call
+  if (pp.mode === 'postpone') {
+    call = () => supabase.rpc('admin_postpone_booking', {
+      p_booking_id: b.id, p_reason: reason, p_follow_up_by: val('pp-followup') || null, p_requested_at,
+    })
+  } else {
+    const nd = val('pp-newdate')
+    if (!nd) return showToast('Pick the new date', 'error')
+    const changes = { preferred_date: nd }
+    if (b.checkout_date) {
+      const co = val('pp-newcheckout')
+      if (!co || co <= nd) return showToast('Check-out must be after the new check-in date', 'error')
+      changes.checkout_date = co
+    }
+    const slot = val('pp-slot')
+    if (slot) changes.time_slot = slot
+    call = () => supabase.rpc('admin_reschedule_booking', {
+      p_booking_id: b.id, p_changes: changes, p_reason: reason, p_requested_at,
+    })
+  }
+
+  pp.saving = true
+  const btn = document.getElementById('pp-save-btn')
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…' }
+  try {
+    const { error } = await call()
+    if (error) throw error
+    showToast(pp.mode === 'postpone' ? 'Booking postponed — advance kept as credit' : 'Booking rescheduled', 'success')
+    ppCloseModal()
+    loadBookings()
+    if (typeof loadQueries === 'function') loadQueries()
+  } catch (err) {
+    console.error(err)
+    pp.saving = false
+    if (btn) { btn.disabled = false; btn.textContent = pp.mode === 'postpone' ? 'Postpone booking' : 'Reschedule' }
+    showToast(err.message || 'Could not save', 'error')
+  }
+}
+window.ppSave = ppSave
+
 function bclOpen(id) {
   if (!appState.session) return showToast('Admin login required', 'error')
   const booking = (loadedBookings || []).find(x => String(x.id) === String(id))
@@ -6680,6 +6950,8 @@ function bclOpen(id) {
 
   const cost        = bclCostsOf(booking)
   const isCancelled = booking.booking_status === 'Cancelled'
+  // A postponed booking can only be cancelled from here; reschedule it to bring it back.
+  const isPostponed = booking.booking_status === 'Postponed'
   const total       = booking.total_amount
   bcl = {
     id: booking.id, saving: false,
@@ -6758,10 +7030,11 @@ function bclOpen(id) {
         <label class="bcl-field bcl-field--full">
           <span>Status</span>
           <select id="bcl-status" class="bcl-input" onchange="bclRecalc()">
-            <option value="Closed"${isCancelled ? '' : ' selected'}${booking.confirmed ? '' : ' disabled'}>Closed — event done, books settled</option>
-            <option value="Cancelled"${isCancelled ? ' selected' : ''}>Cancelled — unconfirm and release the dates</option>
+            <option value="Closed"${isCancelled || isPostponed ? '' : ' selected'}${booking.confirmed && !isPostponed ? '' : ' disabled'}>Closed — event done, books settled</option>
+            <option value="Cancelled"${isCancelled || isPostponed ? ' selected' : ''}>Cancelled — unconfirm and release the dates</option>
           </select>
         </label>
+        ${isPostponed ? '<p class="bcl-hint">This booking is postponed, so it can only be cancelled here (the advance is kept, not refunded). To bring it back, use Set new date instead.</p>' : ''}
         ${booking.confirmed ? '' : '<p class="bcl-hint">This booking isn’t confirmed, so it can only be recorded as Cancelled.</p>'}
 
         <div class="bcl-pay">
