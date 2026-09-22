@@ -2884,6 +2884,26 @@ const CAFE_SLOTS = [
   { key: 'evening',   label: 'Evening',   time: '5 PM – 8 PM',   icon: '🌙' },
 ]
 
+// Actual admin-entered slot time for a booking/query card chip. Falls back
+// to null (caller uses the fixed CAFE_SLOTS window) when no custom time was
+// recorded. Mirrors the "H AM/PM" formatting CAFE_SLOTS.time already uses.
+function slotTimeLabel(record) {
+  const parse = s => {
+    if (!s) return null
+    const [h, m] = String(s).split(':').map(Number)
+    if (Number.isNaN(h)) return null
+    return { h, m: m || 0 }
+  }
+  const fmt = t => {
+    const period = t.h >= 12 ? 'PM' : 'AM'
+    const hh = t.h % 12 || 12
+    const mm = t.m ? `:${String(t.m).padStart(2, '0')}` : ''
+    return `${hh}${mm} ${period}`
+  }
+  const a = parse(record && record.slot_start_time), z = parse(record && record.slot_end_time)
+  return (a && z) ? `${fmt(a)} – ${fmt(z)}` : null
+}
+
 // Fetch booked data — type-aware.
 // maxConcurrentSetups: from venue.max_concurrent_setups (default 1).
 //
@@ -6346,7 +6366,7 @@ function renderQueries(queries) {
       <div class="adm-chips">
         ${venueChip}
         <span class="adm-chip">📅 ${new Date(query.preferred_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-        ${query.time_slot ? (() => { const s = CAFE_SLOTS.find(sl => sl.key === query.time_slot); return `<span class="adm-chip">${s ? s.icon : '⏰'} ${s ? s.label + ' · ' + s.time : escapeHtml(query.time_slot)}</span>` })() : ''}
+        ${query.time_slot ? (() => { const s = CAFE_SLOTS.find(sl => sl.key === query.time_slot); const t = slotTimeLabel(query); return `<span class="adm-chip">${s ? s.icon : '⏰'} ${s ? s.label + ' · ' + (t || s.time) : escapeHtml(query.time_slot)}</span>` })() : ''}
         <span class="adm-chip">👥 ${escapeHtml(query.guest_count)} guest${query.guest_count !== 1 ? 's' : ''}</span>
       </div>
 
@@ -6593,7 +6613,7 @@ function renderBookings(bookings) {
         ${booking.checkout_date
           ? (() => { const n = calcNights(booking.preferred_date, booking.checkout_date); return `<span class="adm-chip">📅 ${new Date(booking.preferred_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} → ${new Date(booking.checkout_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} · ${n} night${n !== 1 ? 's' : ''}</span>` })()
           : `<span class="adm-chip">📅 ${new Date(booking.preferred_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>`}
-        ${booking.time_slot ? (() => { const s = CAFE_SLOTS.find(sl => sl.key === booking.time_slot); return `<span class="adm-chip">${s ? s.icon : '⏰'} ${s ? s.label + ' · ' + s.time : escapeHtml(booking.time_slot)}</span>` })() : ''}
+        ${booking.time_slot ? (() => { const s = CAFE_SLOTS.find(sl => sl.key === booking.time_slot); const t = slotTimeLabel(booking); return `<span class="adm-chip">${s ? s.icon : '⏰'} ${s ? s.label + ' · ' + (t || s.time) : escapeHtml(booking.time_slot)}</span>` })() : ''}
         <span class="adm-chip">👥 ${escapeHtml(booking.guest_count)} guest${booking.guest_count !== 1 ? 's' : ''}</span>
         ${ppReschedChip(booking)}
       </div>
