@@ -325,7 +325,7 @@ const S = {
    admin email, so an unauthenticated or non-admin session gets [] rather than an
    error — which is why load() checks for an empty bookings set explicitly. */
 async function load() {
-  const [bkRes, costRes, addRes, expRes] = await Promise.all([
+  const [bkRes, costRes, addRes, expRes, occRes] = await Promise.all([
     sb.from('bookings')
       .select('id, full_name, mobile_number, preferred_date, checkout_date, time_slot, occasion, ' +
               'total_amount, advance_amount, payment_status, entry_source, external_booking_ref, ' +
@@ -336,11 +336,18 @@ async function load() {
     sb.from('booking_costs').select('booking_id, total_cost, closed_at, close_notes'),
     sb.from('booking_add_ons').select('booking_id, name, price_at_booking'),
     sb.from('expenses').select('spend_date, business, city, category, description, amount'),
+    /* monthly_occupancy_self_managed is a view (security_invoker=true, RLS-gated
+       same as bookings) — nights booked / active days since the venue went live,
+       for active self_managed (TerraCottage) venues only. A missing table on an
+       older DB shouldn't break the whole dashboard load, so its error is not
+       thrown below — just surfaced as an empty occupancy section. */
+    sb.from('monthly_occupancy_self_managed').select('venue_id, venue_name, month, active_days, nights_booked, occupancy_pct'),
   ]);
 
   for (const [label, res] of [['bookings', bkRes], ['costs', costRes], ['add-ons', addRes], ['expenses', expRes]]) {
     if (res.error) throw new Error(`Could not read ${label} — ${res.error.message}`);
   }
+  S.occupancy = (occRes && !occRes.error) ? (occRes.data || []) : [];
   const raw = bkRes.data || [];
   if (!raw.length) throw new Error('Signed in, but no bookings came back. This account does not have read access to the business data.');
   S.dbOk = true; S.sheetOk = true;
@@ -783,6 +790,9 @@ function render() {
     </div>
     <div class="card detail-only"><div class="card-h"><h3>Expense line items</h3><p>Synced nightly from the workbook’s Expenses tab</p></div><div class="card-b" style="padding-top:6px"><div id="t-exp"></div></div></div>
 
+    <div class="sec"><h2>Occupancy</h2><span class="hint">TerraCottage (self-managed) venues · nights booked / nights the venue has been listed · confirmed bookings only</span></div>
+    <div class="card"><div class="card-b" style="padding-top:6px"><div id="t-occ"></div></div></div>
+
     <div class="sec"><h2>${owedActive ? 'Awaiting payment' : 'Bookings'}</h2><span class="hint">${owedActive ? `${owedRows.length} booking${owedRows.length === 1 ? '' : 's'} with a balance · all periods · full amounts, not split` : `${rows.length} in ${period} · click a column to sort`}</span>${owedActive ? `<span class="right"><button type="button" class="btn" onclick="showOwed()">Back to ${esc(period)}</button></span>` : ''}</div>
     <div class="card"><div class="card-b" style="padding-top:6px"><div id="t-all"></div></div></div>
 
@@ -801,6 +811,7 @@ function render() {
   if (reset) reset.addEventListener('click', () => { Object.assign(S.filters, { type: 'all', venue: 'all', channel: 'all', status: 'all', q: '', upcoming: false, owing: false, exposed: false }); render(); });
 
   renderHealth(exposed, mismatches, splitRows, gaps, healthItems);
+  renderOccupancy();
 
   const cols = [
     { key: 'date', label: 'Date', render: r => r.kind === 'stay' && r.endDate ? `<span class="strong">${fmtShort(r.date)}</span> → ${fmtShort(r.endDate)}` : `<span class="strong">${fmtDate(r.date)}</span>`, sort: r => r.date ? r.date.getTime() : 0 },
@@ -846,6 +857,28 @@ function render() {
    🔴 The Cowork build could honestly say "reconciled" because it held two sources
    and compared them. This build has one, so the strip states the source instead.
    Do not restore the word "reconciled" here unless a second source comes back. */
+function renderOccupancy() {
+  const mount = document.getElementById('t-occ');
+  if (!mount) return;
+  const occ = S.occupancy || [];
+  if (!occ.length) { mount.innerHTML = '<div class="empty">No active self-managed (TerraCottage) venues, or the occupancy view is not available.</div>'; return; }
+  const rows = occ.map(o => ({
+    venue: o.venue_name,
+    monthKey: String(o.month).slice(0, 7),
+    activeDays: o.active_days,
+    nights: o.nights_booked,
+    pct: Number(o.occupancy_pct),
+  })).sort((a, b) => b.monthKey.localeCompare(a.monthKey) || a.venue.localeCompare(b.venue));
+  const cols = [
+    { key: 'monthKey', label: 'Month', render: r => esc(monthLabel(r.monthKey)) },
+    { key: 'venue', label: 'Venue', render: r => esc(r.venue) },
+    { key: 'nights', label: 'Nights booked', num: true },
+    { key: 'activeDays', label: 'Active days', num: true },
+    { key: 'pct', label: 'Occupancy', num: true, render: r => `<b>${r.pct.toFixed(1)}%</b>` },
+  ];
+  makeTable(mount, rows, cols, 0, -1);
+}
+
 function renderHealth(exposed, mismatches, splitRows, gaps, n) {
   const host = document.getElementById('health');
   const f = S.filters, open = S.healthOpen || S.detail;
