@@ -45,6 +45,32 @@
 // Both the override fields and the fallback path are exercised identically in
 // buildPicnicEmail and buildStayEmail (a stay can carry includes_food too, e.g.
 // a catered TerraCottage booking — it just never has slot times).
+//
+// Changed 2026-09-02 (v29): FIX — includes_food=false was being ignored by the
+// legacy-multiplier fallback. The v28 else-branch only checked `!record.package_key`,
+// so an admin who explicitly unchecked "Includes food" on a manual booking with no
+// package still got the venue's metadata.food_multiplier/drink_multiplier applied
+// (booking #145, venue 24 House of Amer, food_multiplier 1.5 → email showed "3 food
+// items · 2 beverages" despite includes_food=false in the DB). The fallback now only
+// runs when the admin made NO explicit choice at all (record.includes_food is
+// null/undefined) — an explicit false means "show nothing", same as an explicit true
+// with zero counts.
+//
+// Changed 2026-09-02 (v30): the legacy venue food/drink multiplier fallback is
+// GONE ENTIRELY, per the business rule Aksheev stated 2026-09-02: "venues do not
+// include food or beverages, the booking does - if the booking does not include
+// food and bevs, the venue does not override." The INCLUDED row now renders ONLY
+// from record.includes_food + food_items_count/beverage_items_count. v29 only
+// suppressed the fallback on an explicit includes_food=false, which left the
+// NULL case open - and submit_booking_intent never sets includes_food, so EVERY
+// public-site booking is NULL and would still have inherited the venue default.
+// This also removes an email-vs-site contradiction: app.js getInclusions() bails
+// out on metadata.food_offline, which is true on all six ACTIVE multiplier
+// venues, so the website already showed no inclusions for exactly the venues the
+// email was advertising food for. The helper that read the multipliers and the
+// adult-scaled footnote are deleted with it (both reachable only via the
+// fallback). No RPC reads those metadata keys either (checked pg_proc), so they
+// carry no pricing weight.
 
 import { sendEmail } from "./_shared/resend.ts"
 import { getVenueInfo } from "./_shared/venue.ts"
@@ -116,22 +142,6 @@ function boardText(board: unknown): string {
   return b.message ? `${esc(type)} — "${esc(b.message)}"` : esc(type)
 }
 
-// Cafe food & drink inclusions, scaled to adults only (children are free and
-// order à la carte). Empty string for venues without multipliers. Superseded
-// per-booking by the admin's includes_food override — see buildInclusion below.
-async function getInclusionText(venueId: number | null | undefined, adults: number): Promise<string> {
-  if (!venueId || adults <= 0) return ""
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/venues?id=eq.${venueId}&select=metadata`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } })
-    if (!res.ok) return ""
-    const m = (await res.json())?.[0]?.metadata ?? {}
-    const fm = Number(m.food_multiplier), dm = Number(m.drink_multiplier)
-    if (!fm && !dm) return ""
-    const food = Math.ceil(adults * (fm || 0)), drinks = Math.ceil(adults * (dm || 0))
-    return `${food} food item${food !== 1 ? "s" : ""} · ${drinks} beverage${drinks !== 1 ? "s" : ""}`
-  } catch (_err) { return "" }
-}
-
 function reservationRow(label: string, value: string): string {
   return `
                       <tr>
@@ -187,7 +197,7 @@ interface EmailContent { subject: string; html: string }
 // PICNIC template — slot-based bookings (no checkout_date).
 // Owns its full HTML document end-to-end; edit freely without touching stays.
 // ---------------------------------------------------------------------------
-function buildPicnicEmail(record: Record<string, unknown>, venueLabel: string | null, directionsUrl: string | null, addons: AddOn[], inclusionText: string, inclusionIsAdultScaled: boolean): EmailContent {
+function buildPicnicEmail(record: Record<string, unknown>, venueLabel: string | null, directionsUrl: string | null, addons: AddOn[], inclusionText: string): EmailContent {
   const name      = record.full_name as string
   const firstName = String(record.full_name ?? "").split(" ")[0] || "there"
   const date      = formatDate(record.preferred_date as string)
@@ -322,7 +332,6 @@ function buildPicnicEmail(record: Record<string, unknown>, venueLabel: string | 
                       </tr>` : ""}
                     </tbody>
                   </table>
-                  ${inclusionIsAdultScaled ? `<p style="margin: 14px 0 0 0; font-family: Garamond, 'Times New Roman', serif; font-size: 14px; color: #c4607a; font-style: italic;">Inclusions are based on the number of adults. Children are welcome — order anything extra à la carte.</p>` : ""}
                 </td>
               </tr>
 
@@ -408,7 +417,7 @@ function buildPicnicEmail(record: Record<string, unknown>, venueLabel: string | 
 // STAY template — bookings with a checkout_date (TerraCottage / partner BnBs).
 // Owns its full HTML document end-to-end; edit freely without touching picnics.
 // ---------------------------------------------------------------------------
-function buildStayEmail(record: Record<string, unknown>, venueLabel: string | null, directionsUrl: string | null, addons: AddOn[], inclusionText: string, inclusionIsAdultScaled: boolean): EmailContent {
+function buildStayEmail(record: Record<string, unknown>, venueLabel: string | null, directionsUrl: string | null, addons: AddOn[], inclusionText: string): EmailContent {
   const name      = record.full_name as string
   const firstName = String(record.full_name ?? "").split(" ")[0] || "there"
   const date      = formatDate(record.preferred_date as string)
@@ -538,7 +547,6 @@ function buildStayEmail(record: Record<string, unknown>, venueLabel: string | nu
                       </tr>` : ""}
                     </tbody>
                   </table>
-                  ${inclusionIsAdultScaled ? `<p style="margin: 14px 0 0 0; font-family: Garamond, 'Times New Roman', serif; font-size: 14px; color: #c4607a; font-style: italic;">Inclusions are based on the number of adults. Children are welcome — order anything extra à la carte.</p>` : ""}
                 </td>
               </tr>
 
@@ -641,33 +649,27 @@ Deno.serve(async (req) => {
 
     const { label: venueLabel, directionsUrl } = await getVenueInfo(record.venue_id, record.venue_address)
     const addons = await getAddOns(record.id)
-    const kids = Number(record.children_count || 0)
-    const adults = Number(record.guest_count || 0) - kids
 
-    // Admin-entered food/beverage counts (see migration
-    // 20260815_booking_food_inclusions_and_slot_times) are an explicit fact
-    // about THIS booking and take priority over everything else. Package
-    // inclusions still supersede the legacy venue food/drink multipliers
-    // when neither override applies. Only the multiplier path is
-    // adult-scaled — the admin override is a flat per-booking count — so the
-    // "based on the number of adults" footnote is gated separately.
+    // The BOOKING is the only source of truth for what food/drink is included
+    // (see migration 20260815_booking_food_inclusions_and_slot_times and the
+    // admin Add Booking form's "Includes food" field). Venues never include
+    // food or beverages, so there is deliberately NO venue-level fallback here
+    // — false and null both mean "show no INCLUDED row", and only an explicit
+    // includes_food=true with a non-zero count renders one. See v30; do not
+    // reintroduce a venue-metadata default without changing that rule first.
     let inclusionText = ""
-    let inclusionIsAdultScaled = false
     if (record.includes_food) {
       const foodCt = Number(record.food_items_count || 0)
       const bevCt = Number(record.beverage_items_count || 0)
       if (foodCt || bevCt) {
         inclusionText = `${foodCt} food item${foodCt !== 1 ? "s" : ""} · ${bevCt} beverage${bevCt !== 1 ? "s" : ""}`
       }
-    } else if (!record.package_key) {
-      inclusionText = await getInclusionText(record.venue_id, adults)
-      inclusionIsAdultScaled = Boolean(inclusionText)
     }
 
     const isStay = Boolean(record.checkout_date)
     const { subject, html } = isStay
-      ? buildStayEmail(record, venueLabel, directionsUrl, addons, inclusionText, inclusionIsAdultScaled)
-      : buildPicnicEmail(record, venueLabel, directionsUrl, addons, inclusionText, inclusionIsAdultScaled)
+      ? buildStayEmail(record, venueLabel, directionsUrl, addons, inclusionText)
+      : buildPicnicEmail(record, venueLabel, directionsUrl, addons, inclusionText)
 
     // Standing rule (2026-07-24): CC the team inbox on every guest confirmation.
     // Manual-resend cc values are appended after it, deduped.

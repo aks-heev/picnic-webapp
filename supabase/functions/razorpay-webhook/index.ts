@@ -13,6 +13,10 @@
 // → one email); the second matches zero rows and no-ops. Order does not matter.
 //
 // Secrets: RAZORPAY_WEBHOOK_SECRET (new). SUPABASE_URL + SERVICE_ROLE_KEY injected.
+// META_CAPI_ACCESS_TOKEN (new, not yet set — see sendPurchaseCapi below): a
+// Meta Conversions API access token generated in Events Manager for pixel
+// 1366746648648321. Until this secret exists, sendPurchaseCapi no-ops (logs a
+// warning and returns) — it does NOT block or fail booking confirmation.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 
@@ -28,6 +32,78 @@ async function hmacSha256Hex(secret: string, message: string): Promise<string> {
   return Array.from(new Uint8Array(sig))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("")
+}
+
+// Meta CAPI wants em/ph as plain SHA-256 hex (content hash, not HMAC-keyed —
+// unrelated to hmacSha256Hex above), lowercased/trimmed per the CAPI spec.
+async function sha256Hex(message: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(message))
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+}
+
+const META_PIXEL_ID = "1366746648648321"
+
+// Server-side Purchase — the CAPI half of the browser Purchase pixel fired in
+// app.js (finishBookingFlow / handleEmailPayLink). event_id MUST match the
+// browser's exactly (`purchase_${bookingId}_${paymentId}`) so Meta dedupes
+// the two into one Purchase instead of double-counting revenue. Never throws:
+// a CAPI outage must not block booking confirmation or the webhook's 200.
+async function sendPurchaseCapi(opts: {
+  bookingId: string
+  paymentId: string
+  amountPaise: number
+  email?: string
+  phone?: string
+}): Promise<void> {
+  const accessToken = (Deno.env.get("META_CAPI_ACCESS_TOKEN") ?? "").trim()
+  if (!accessToken) {
+    console.warn("razorpay-webhook: META_CAPI_ACCESS_TOKEN not configured; skipping CAPI Purchase")
+    return
+  }
+
+  try {
+    const userData: Record<string, string[]> = {}
+    if (opts.email) userData.em = [await sha256Hex(opts.email.trim().toLowerCase())]
+    if (opts.phone) {
+      // Meta wants E.164 digits only (no leading '+') before hashing.
+      const digits = opts.phone.replace(/[^0-9]/g, "")
+      if (digits) userData.ph = [await sha256Hex(digits)]
+    }
+
+    const body = {
+      data: [
+        {
+          event_name: "Purchase",
+          event_time: Math.floor(Date.now() / 1000),
+          event_id: `purchase_${opts.bookingId}_${opts.paymentId}`,
+          action_source: "website",
+          user_data: userData,
+          custom_data: {
+            currency: "INR",
+            value: opts.amountPaise / 100,
+          },
+        },
+      ],
+    }
+
+    const res = await fetch(
+      `https://graph.facebook.com/v21.0/${META_PIXEL_ID}/events?access_token=${encodeURIComponent(accessToken)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    )
+    if (!res.ok) {
+      console.error("razorpay-webhook: CAPI Purchase failed", res.status, await res.text())
+    } else {
+      console.log(`razorpay-webhook: CAPI Purchase sent for booking ${opts.bookingId}`)
+    }
+  } catch (err) {
+    console.error("razorpay-webhook: CAPI Purchase error", err)
+  }
 }
 
 function timingSafeEqual(a: string, b: string): boolean {
@@ -134,6 +210,13 @@ Deno.serve(async (req) => {
           razorpay_payment_id: paymentId,
           lead_status: "confirmed",
           lead_status_updated_at: new Date().toISOString(),
+        })
+        await sendPurchaseCapi({
+          bookingId: String(bookingId),
+          paymentId: String(paymentId),
+          amountPaise: Number(entity?.amount) || 0,
+          email: entity?.email || undefined,
+          phone: entity?.contact || undefined,
         })
       }
     } else if (event === "payment.failed") {
