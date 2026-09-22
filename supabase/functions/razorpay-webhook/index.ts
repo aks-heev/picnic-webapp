@@ -68,7 +68,10 @@ async function sendPurchaseCapi(opts: {
     if (opts.email) userData.em = [await sha256Hex(opts.email.trim().toLowerCase())]
     if (opts.phone) {
       // Meta wants E.164 digits only (no leading '+') before hashing.
-      const digits = opts.phone.replace(/[^0-9]/g, "")
+      // Razorpay usually sends "+91XXXXXXXXXX"; a bare 10-digit Indian mobile
+      // gets the 91 country code so the hash matches what Meta has on file.
+      let digits = opts.phone.replace(/[^0-9]/g, "")
+      if (digits.length === 10) digits = "91" + digits
       if (digits) userData.ph = [await sha256Hex(digits)]
     }
 
@@ -94,6 +97,9 @@ async function sendPurchaseCapi(opts: {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        // Razorpay times out slow webhooks and retries/disables them. Cap the
+        // Meta call so a slow Graph API can never delay the webhook's 200.
+        signal: AbortSignal.timeout(3000),
       },
     )
     if (!res.ok) {
