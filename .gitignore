@@ -47,3 +47,8 @@ _to_delete/
 # Python bytecode from scripts/
 __pycache__/
 *.pyc
+
+exports/
+Claude outputs/
+_to_delete_dist_*/
+*.TTF
