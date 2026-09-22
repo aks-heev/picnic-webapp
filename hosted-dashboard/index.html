@@ -134,6 +134,9 @@
   .kpi.on .l { color: var(--terracotta); }
   .kpi.on .l::after { content: "✕"; opacity: .75; font-size: 10px; }
   .kpi.red .v { color: var(--red); } .kpi.olive .v { color: var(--olive); } .kpi.amber .v { color: var(--amber); }
+  .occ-bar { height: 5px; border-radius: 3px; background: var(--bg-2); margin-top: 9px; overflow: hidden; }
+  .occ-bar > i { display: block; height: 100%; border-radius: 3px; }
+  .occ-note { font-size: 12px; color: var(--muted); margin-top: 10px; text-align: right; }
 
   /* ---------- data health strip ---------- */
   .health { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border-radius: var(--r-sm); font-size: 13px; margin-bottom: 14px; border: 1px solid; }
@@ -857,6 +860,14 @@ function render() {
    🔴 The Cowork build could honestly say "reconciled" because it held two sources
    and compared them. This build has one, so the strip states the source instead.
    Do not restore the word "reconciled" here unless a second source comes back. */
+function occBand(pct) { return pct >= 75 ? 'olive' : pct >= 45 ? 'amber' : 'red'; }
+function occChip(curPct, prevPct) {
+  if (prevPct == null) return `<span class="chip flat">first month</span>`;
+  const d = curPct - prevPct;
+  const cls = Math.abs(d) < 0.5 ? 'flat' : (d > 0 ? 'up' : 'down');
+  const arrow = cls === 'flat' ? '—' : (d > 0 ? '▲' : '▼');
+  return `<span class="chip ${cls}" title="vs last month: ${d >= 0 ? '+' : '−'}${Math.abs(d).toFixed(1)}pt">${arrow} ${Math.abs(d).toFixed(1)}pt</span>`;
+}
 function renderOccupancy() {
   const mount = document.getElementById('t-occ');
   if (!mount) return;
@@ -872,18 +883,29 @@ function renderOccupancy() {
   const f = S.filters;
   /* Follow the Period control at the top of the page instead of dumping every
      month into one table — "all months" still needs a table (nothing to scope
-     to), but picking a month should read like the rest of the dashboard's
-     period-scoped cards. */
+     to), but picking a month reads like the rest of the dashboard's period cards:
+     a filled meter for scan-at-a-glance, and a vs-last-month trend, since a bare
+     percentage doesn't say whether 77% is improving or sliding. */
   if (f.month !== 'all') {
     const here = rows.filter(r => r.monthKey === f.month).sort((a, b) => b.pct - a.pct);
     if (!here.length) { mount.innerHTML = `<div class="empty">No self-managed bookings data for ${esc(monthLabel(f.month))}.</div>`; return; }
+    const prevKey = prevMonthKey(f.month);
+    const prevByVenue = new Map(rows.filter(r => r.monthKey === prevKey).map(r => [r.venue, r.pct]));
     const totalNights = here.reduce((s, r) => s + r.nights, 0);
     const totalDays = here.reduce((s, r) => s + r.activeDays, 0);
     const blended = totalDays ? (totalNights / totalDays * 100) : 0;
     mount.innerHTML = '<div class="kpis">' +
-      here.map(r => `<div class="kpi"><div class="l">${esc(r.venue)}</div><div class="v">${r.pct.toFixed(1)}%</div><div class="s">${r.nights} of ${r.activeDays} night${r.activeDays === 1 ? '' : 's'}</div></div>`).join('') +
-      (here.length > 1 ? `<div class="kpi"><div class="l">Blended</div><div class="v">${blended.toFixed(1)}%</div><div class="s">${totalNights} of ${totalDays} nights · ${here.length} venues</div></div>` : '') +
-      '</div>';
+      here.map(r => {
+        const band = occBand(r.pct);
+        return `<div class="kpi ${band}">
+          <div class="l">${esc(r.venue)}</div>
+          <div class="v">${r.pct.toFixed(1)}% ${occChip(r.pct, prevByVenue.has(r.venue) ? prevByVenue.get(r.venue) : null)}</div>
+          <div class="occ-bar"><i style="width:${Math.min(100, r.pct)}%; background:var(--${band})"></i></div>
+          <div class="s">${r.nights} of ${r.activeDays} night${r.activeDays === 1 ? '' : 's'}</div>
+        </div>`;
+      }).join('') +
+      '</div>' +
+      (here.length > 1 ? `<div class="occ-note">Blended across ${here.length} venues: <b>${blended.toFixed(1)}%</b> (${totalNights} of ${totalDays} nights)</div>` : '');
     return;
   }
   const sorted = rows.slice().sort((a, b) => b.monthKey.localeCompare(a.monthKey) || a.venue.localeCompare(b.venue));
@@ -892,7 +914,7 @@ function renderOccupancy() {
     { key: 'venue', label: 'Venue', render: r => esc(r.venue) },
     { key: 'nights', label: 'Nights booked', num: true },
     { key: 'activeDays', label: 'Active days', num: true },
-    { key: 'pct', label: 'Occupancy', num: true, render: r => `<b>${r.pct.toFixed(1)}%</b>` },
+    { key: 'pct', label: 'Occupancy', num: true, render: r => `<b style="color:var(--${occBand(r.pct)})">${r.pct.toFixed(1)}%</b>` },
   ];
   makeTable(mount, sorted, cols, 0, -1);
 }
