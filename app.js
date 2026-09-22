@@ -10759,7 +10759,7 @@ let abk = {
   checkin: '', checkout: '',
   adults: 2, children: 0,
   packageKey: '', addonIds: [], occasion: '', boardType: '', boardMessage: '',
-  externalRef: '', notes: '',
+  externalRef: '', notes: '', bookingSource: '',
   name: '', phone: '', email: '',
   total: 0, advance: 0, discount: 0, totalTouched: false, advanceTouched: false,
   // picnic_stay only: the ratio used to split the negotiated total into picnic vs stay revenue.
@@ -10920,6 +10920,19 @@ function abkPicnicTwin() {
   return v && v.picnic_venue_id ? (abk.venues.find(x => x.id === Number(v.picnic_venue_id)) || null) : null
 }
 
+// Where the booking came from — stored in bookings.booking_source (check-constrained).
+// 'website' is set automatically for site bookings and is not offered here.
+// This is what makes "did the ads bring bookings?" answerable; keep it required.
+const ABK_SOURCES = [
+  ['instagram_ad',      'Instagram ad'],
+  ['instagram_organic', 'Instagram organic'],
+  ['whatsapp',          'WhatsApp'],
+  ['referral',          'Referral'],
+  ['airbnb',            'Airbnb'],
+  ['direct',            'Direct'],
+  ['walk_in',           'Walk-in'],
+]
+
 // Read current DOM inputs back into state (guarded so missing fields don't clobber).
 function abkRead() {
   const g = (id) => document.getElementById(id)
@@ -10939,6 +10952,7 @@ function abkRead() {
   if ((el = g('abk-picnic-amount'))) abk.picnicAmount = el.value
   if ((el = g('abk-stay-amount')))   abk.stayAmount   = el.value
   if ((el = g('abk-notes'))) abk.notes = el.value
+  if ((el = g('abk-source'))) abk.bookingSource = el.value
   if ((el = g('abk-name'))) abk.name = el.value
   if ((el = g('abk-phone'))) abk.phone = el.value
   if ((el = g('abk-email'))) abk.email = el.value
@@ -11177,8 +11191,8 @@ function renderAddBookingForm() {
           ${abk.boardType ? `<input type="text" id="abk-board-message" class="abk-input" style="margin-top:8px" maxlength="100" placeholder="Board message (optional)" value="${abkText(abk.boardMessage)}" oninput="abkRead()" />` : ''}
         </div>
         <div class="abk-field">
-          <label class="abk-label" for="abk-external-ref">Reference <span class="abk-hint">(optional booking ref)</span></label>
-          <input type="text" id="abk-external-ref" class="abk-input" value="${abkText(abk.externalRef)}" placeholder="e.g. Airbnb HMXXXX / WhatsApp" oninput="abkRead()" />
+          <label class="abk-label" for="abk-external-ref">Airbnb reservation code <span class="abk-hint">(Airbnb bookings only)</span></label>
+          <input type="text" id="abk-external-ref" class="abk-input" value="${abkText(abk.externalRef)}" placeholder="e.g. HMXXXXXXXX" oninput="abkRead()" />
         </div>`
     } else if (isPicnic) {
       const pkgs = abkPackagesForVenue(v.id)
@@ -11212,8 +11226,8 @@ function renderAddBookingForm() {
     } else {
       extrasHtml = `
         <div class="abk-field">
-          <label class="abk-label" for="abk-external-ref">Reference <span class="abk-hint">(optional booking ref)</span></label>
-          <input type="text" id="abk-external-ref" class="abk-input" value="${abkText(abk.externalRef)}" placeholder="e.g. Airbnb HMXXXX / WhatsApp" oninput="abkRead()" />
+          <label class="abk-label" for="abk-external-ref">Airbnb reservation code <span class="abk-hint">(Airbnb bookings only)</span></label>
+          <input type="text" id="abk-external-ref" class="abk-input" value="${abkText(abk.externalRef)}" placeholder="e.g. HMXXXXXXXX" oninput="abkRead()" />
         </div>
         ${abkAddonsHtml(v)}`
     }
@@ -11271,6 +11285,15 @@ function renderAddBookingForm() {
           <label class="abk-label" for="abk-email">Email <span class="abk-hint">(optional)</span></label>
           <input type="email" id="abk-email" class="abk-input" value="${abkText(abk.email)}" placeholder="guest@email.com" oninput="abkEmailInput()" />
         </div>
+      </div>
+
+      <div class="abk-field">
+        <label class="abk-label" for="abk-source">Booking source</label>
+        <select id="abk-source" class="abk-input" onchange="abkRead()">
+          <option value="">Where did this booking come from?</option>
+          ${ABK_SOURCES.map(([val, label]) => `<option value="${val}" ${abk.bookingSource === val ? 'selected' : ''}>${label}</option>`).join('')}
+          ${abk.bookingSource === 'website' ? `<option value="website" selected>Website</option>` : ''}
+        </select>
       </div>
 
       <div class="abk-field">
@@ -11367,6 +11390,7 @@ async function abkSave() {
   if (!String(abk.name || '').trim()) return showToast('Guest name is required', 'error')
   if (phone.length !== 10) return showToast('Phone must be a 10-digit mobile number', 'error')
   if (!(Number(abk.adults) >= 1)) return showToast('At least 1 adult is required', 'error')
+  if (!abk.bookingSource) return showToast('Pick the booking source', 'error')
   if (v.type === 'custom' && !String(abk.venueAddress || '').trim()) return showToast('Enter the custom location address', 'error')
 
   let preferredDate, checkoutDate = null, timeSlot = null
@@ -11406,6 +11430,7 @@ async function abkSave() {
     venue_id: v.id,
     venue_address: v.type === 'custom' ? String(abk.venueAddress).trim() : null,
     external_booking_ref: abkHasStay() ? (String(abk.externalRef || '').trim() || null) : null,
+    booking_source: abk.bookingSource || null,
     // Explicit booking type. The DB trigger would derive this, but sending it means the admin's
     // choice always wins and is never re-inferred from the row's shape.
     booking_kind: abk.type,
@@ -11504,7 +11529,7 @@ function abkResetForm() {
   abk = { ...abk, editingId: null, existingPaid: false,
     venueId: null, venueAddress: '', date: '', slot: '', checkin: '', checkout: '',
     adults: 2, children: 0, packageKey: '', addonIds: [], occasion: '', boardType: '', boardMessage: '',
-    externalRef: '', notes: '', name: '', phone: '', email: '', total: 0, advance: 0, discount: 0,
+    externalRef: '', notes: '', bookingSource: '', name: '', phone: '', email: '', total: 0, advance: 0, discount: 0,
     includesFood: false, foodItems: '', bevItems: '', slotStart: '', slotEnd: '',
     picnicAmount: '', stayAmount: '',
     totalTouched: false, advanceTouched: false, sendEmail: true, emailToggleTouched: false,
@@ -11550,6 +11575,7 @@ async function abkStartEdit(id) {
     abk.boardType = (b.board && b.board.type) || ''
     abk.boardMessage = (b.board && b.board.message) || ''
     abk.externalRef = b.external_booking_ref || ''
+    abk.bookingSource = b.booking_source || ''
     abk.notes = b.special_requirements || ''
     abk.name = b.full_name || ''
     abk.phone = b.mobile_number || ''
