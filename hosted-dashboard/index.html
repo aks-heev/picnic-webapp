@@ -868,7 +868,25 @@ function renderOccupancy() {
     activeDays: o.active_days,
     nights: o.nights_booked,
     pct: Number(o.occupancy_pct),
-  })).sort((a, b) => b.monthKey.localeCompare(a.monthKey) || a.venue.localeCompare(b.venue));
+  }));
+  const f = S.filters;
+  /* Follow the Period control at the top of the page instead of dumping every
+     month into one table — "all months" still needs a table (nothing to scope
+     to), but picking a month should read like the rest of the dashboard's
+     period-scoped cards. */
+  if (f.month !== 'all') {
+    const here = rows.filter(r => r.monthKey === f.month).sort((a, b) => b.pct - a.pct);
+    if (!here.length) { mount.innerHTML = `<div class="empty">No self-managed bookings data for ${esc(monthLabel(f.month))}.</div>`; return; }
+    const totalNights = here.reduce((s, r) => s + r.nights, 0);
+    const totalDays = here.reduce((s, r) => s + r.activeDays, 0);
+    const blended = totalDays ? (totalNights / totalDays * 100) : 0;
+    mount.innerHTML = '<div class="kpis">' +
+      here.map(r => `<div class="kpi"><div class="l">${esc(r.venue)}</div><div class="v">${r.pct.toFixed(1)}%</div><div class="s">${r.nights} of ${r.activeDays} night${r.activeDays === 1 ? '' : 's'}</div></div>`).join('') +
+      (here.length > 1 ? `<div class="kpi"><div class="l">Blended</div><div class="v">${blended.toFixed(1)}%</div><div class="s">${totalNights} of ${totalDays} nights · ${here.length} venues</div></div>` : '') +
+      '</div>';
+    return;
+  }
+  const sorted = rows.slice().sort((a, b) => b.monthKey.localeCompare(a.monthKey) || a.venue.localeCompare(b.venue));
   const cols = [
     { key: 'monthKey', label: 'Month', render: r => esc(monthLabel(r.monthKey)) },
     { key: 'venue', label: 'Venue', render: r => esc(r.venue) },
@@ -876,7 +894,7 @@ function renderOccupancy() {
     { key: 'activeDays', label: 'Active days', num: true },
     { key: 'pct', label: 'Occupancy', num: true, render: r => `<b>${r.pct.toFixed(1)}%</b>` },
   ];
-  makeTable(mount, rows, cols, 0, -1);
+  makeTable(mount, sorted, cols, 0, -1);
 }
 
 function renderHealth(exposed, mismatches, splitRows, gaps, n) {
