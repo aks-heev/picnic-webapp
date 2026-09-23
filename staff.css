@@ -484,3 +484,30 @@ html, body {
   padding: 2px 9px; border-radius: 999px;
   background: #fdf6e3; border: 1px solid #eddfb8; color: #8a6d1f;
 }
+
+/* ---------- carry-fresh checklist (picnic) ----------
+   Today's cards: one tickbox per item, whole row is the tap target (>=44px).
+   Upcoming rows: same list, read-only — ticks are today-only on the server. */
+.stf-cl { margin-bottom: 12px; }
+.stf-cl-title {
+  font-size: 13px; font-weight: 600; letter-spacing: .02em;
+  color: var(--boho-text-medium); margin-bottom: 4px;
+}
+.stf-cl ul { list-style: none; margin: 0; padding: 0; }
+.stf-cl-item {
+  display: flex; align-items: center; gap: 12px;
+  min-height: 44px; padding: 4px 2px;
+  font-size: 16px; color: var(--boho-text-dark);
+  border-bottom: 1px solid var(--boho-border);
+  cursor: pointer;
+}
+.stf-cl li:last-child .stf-cl-item { border-bottom: 0; }
+.stf-cl-item input {
+  width: 22px; height: 22px; flex: none; margin: 0;
+  accent-color: var(--boho-accent-sage);
+}
+.stf-cl-item[data-done="1"] span { color: var(--boho-text-light); text-decoration: line-through; }
+.stf-cl-item[data-pending="1"] span { opacity: .7; }
+.stf-cl--ro { margin: 8px 0 0; }
+.stf-cl--ro li { font-size: 13px; color: var(--boho-text-medium); padding: 1px 0; }
+.stf-cl--ro li::before { content: '\2022\00a0'; color: var(--boho-text-light); }

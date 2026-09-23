@@ -95,7 +95,7 @@ const ACTION_LABEL = {
 
 // Errors that will never succeed on retry — drop these from the queue instead
 // of spinning forever. Anything else (network, 5xx) stays queued.
-const TERMINAL_ERRORS = new Set(['unknown_step', 'not_today', 'bad_amount', 'out_of_order', 'invalid_token', 'wrong_kind'])
+const TERMINAL_ERRORS = new Set(['unknown_step', 'not_today', 'bad_amount', 'out_of_order', 'invalid_token', 'wrong_kind', 'unknown_item'])
 
 const ERROR_TEXT = {
   invalid_token: 'This link is no longer valid.',
@@ -103,7 +103,8 @@ const ERROR_TEXT = {
   not_today:     'That booking is not on today’s list any more.',
   bad_amount:    'Amount cannot be negative.',
   out_of_order:  'Do the previous step first.',
-  wrong_kind:    'That step does not apply to this booking.'
+  wrong_kind:    'That step does not apply to this booking.',
+  unknown_item:  'That checklist item changed — reloading.'
 }
 
 /* -------------------------------------------------------------------- state */
@@ -226,7 +227,7 @@ function mergedLog (ev) {
   const rows = (ev.log || []).map(r => ({ ...r, pending: false }))
   const have = new Set(rows.map(r => r.step))
   for (const q of queue) {
-    if (q.booking_id === ev.id && !have.has(q.step)) {
+    if (q.step && q.booking_id === ev.id && !have.has(q.step)) {   // tick jobs carry no step
       rows.push({ step: q.step, at: q.at, by: null, note: q.note, amount: q.amount, pending: true })
       have.add(q.step)
     }
@@ -245,6 +246,51 @@ function applyServerLog (bookingId, log) {
           || (payload.stays || []).find(e => e.id === bookingId)
   if (!ev) return
   ev.log = log
+  save(LS_CACHE, payload)
+}
+
+/* ---------------------------------------------------------------- checklist */
+
+/* Carry-fresh checklist (staff_checklist_for on the server): fixed items +
+   package/booked add-ons + admin extras, one flat list. A tick job is SET-STATE
+   ({ref, checked}), never a toggle, so replaying the queue is always safe — the
+   last queued state for an item wins, on screen and on the server. */
+function mergedChecklist (ev) {
+  const items = (ev.checklist || []).map(i => ({ ...i, pending: false }))
+  for (const q of queue) {
+    if (!q.ref || q.booking_id !== ev.id) continue
+    const it = items.find(i => i.ref === q.ref)
+    if (it) { it.done = q.checked; it.pending = true }
+  }
+  return items
+}
+
+function itemText (i) {
+  if (i.qty_unknown) return `${i.label} · 1 per guest (guest count missing)`
+  return i.qty != null ? `${i.label} × ${i.qty}` : i.label
+}
+
+// Today's cards: tickable. Upcoming: read-only — staff_set_checklist_tick only
+// accepts today's picnics, same day-cap as staff_log_step.
+function checklistHtml (ev, editable) {
+  const items = editable ? mergedChecklist(ev) : (ev.checklist || [])
+  if (!items.length) return ''
+  const rows = items.map(i => editable
+    ? `<li><label class="stf-cl-item" data-done="${i.done ? '1' : '0'}" data-pending="${i.pending ? '1' : '0'}">
+         <input type="checkbox" data-act="tick" data-id="${ev.id}" data-ref="${esc(i.ref)}" ${i.done ? 'checked' : ''}>
+         <span>${esc(itemText(i))}</span></label></li>`
+    : `<li>${esc(itemText(i))}</li>`).join('')
+  return `<div class="stf-cl${editable ? '' : ' stf-cl--ro'}">
+      <div class="stf-cl-title">Checklist</div>
+      <ul>${rows}</ul>
+    </div>`
+}
+
+function applyServerChecklist (bookingId, checklist) {
+  if (!payload || !Array.isArray(checklist)) return
+  const ev = (payload.events || []).find(e => e.id === bookingId)
+  if (!ev) return
+  ev.checklist = checklist
   save(LS_CACHE, payload)
 }
 
@@ -410,6 +456,7 @@ function cardHtml (ev) {
     ${tags.length ? `<div class="stf-meta">${tags.map(t => `<span class="stf-tag">${t}</span>`).join('')}</div>` : ''}
     ${ev.special_requirements ? `<div class="stf-meta"><span class="stf-tag stf-tag--note">Note: ${esc(ev.special_requirements)}</span></div>` : ''}
     ${foodHtml(ev)}
+    ${checklistHtml(ev, true)}
     ${moneyRowHtml(ev, log, {
       due:        balance,
       dueLabel:   'Balance to collect',
@@ -616,6 +663,7 @@ function upcomingHtml (list) {
           }</div>
           ${bits.length ? `<div class="stf-up-bits">${bits.join(' · ')}</div>` : ''}
           ${ev.special_requirements ? `<div class="stf-up-note">Note: ${esc(ev.special_requirements)}</div>` : ''}
+          ${checklistHtml(ev, false)}
         </li>`
     }).join('')
     return `<div class="stf-up-day"><h3>${esc(dayLabel(date))}</h3><ul class="stf-up-list">${rows}</ul></div>`
@@ -647,6 +695,9 @@ function wireCards () {
       if (step === 'payment_received') openPaySheet(id)
       else enqueue(id, step, null, null)
     })
+  })
+  el.main.querySelectorAll('[data-act="tick"]').forEach(box => {
+    box.addEventListener('change', () => enqueueTick(Number(box.dataset.id), box.dataset.ref, box.checked))
   })
 }
 
@@ -696,6 +747,16 @@ function enqueue (bookingId, step, note, amount) {
   flush()
 }
 
+function enqueueTick (bookingId, ref, checked) {
+  // Drop older queued states for this item — except the head job if it is
+  // already in flight; the new job lands after it, so the latest state wins.
+  queue = queue.filter((q, i) => !(q.ref === ref && q.booking_id === bookingId && !(flushing && i === 0)))
+  queue.push({ booking_id: bookingId, ref, checked, at: new Date().toISOString(), tries: 0 })
+  saveQueue()
+  render()
+  flush()
+}
+
 async function flush () {
   if (flushing || !queue.length || !token) return
   flushing = true
@@ -704,13 +765,20 @@ async function flush () {
       const job = queue[0]
       let data
       try {
-        data = await rpc('staff_log_step', {
-          p_token: token,
-          p_booking_id: job.booking_id,
-          p_step: job.step,
-          p_note: job.note,
-          p_amount: job.amount
-        }) || {}
+        data = (job.ref
+          ? await rpc('staff_set_checklist_tick', {
+              p_token: token,
+              p_booking_id: job.booking_id,
+              p_item_ref: job.ref,
+              p_checked: job.checked
+            })
+          : await rpc('staff_log_step', {
+              p_token: token,
+              p_booking_id: job.booking_id,
+              p_step: job.step,
+              p_note: job.note,
+              p_amount: job.amount
+            })) || {}
       } catch (err) {
         // Network / HTTP failure: keep the job, back off, try again later.
         // Business-rule rejections come back as HTTP 200 with {ok:false}.
@@ -726,7 +794,8 @@ async function flush () {
         // queue entry disappears while payload still holds the pre-tap log, the
         // tick vanishes and the button reverts — the staff member sees their tap
         // undo itself. Caught in the Phase 3 browser test.
-        applyServerLog(job.booking_id, data.log)
+        if (job.ref) applyServerChecklist(job.booking_id, data.checklist)
+        else applyServerLog(job.booking_id, data.log)
         queue.shift()
         saveQueue()
         render()

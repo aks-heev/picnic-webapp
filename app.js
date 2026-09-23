@@ -10790,6 +10790,9 @@ let abk = {
   slotMap: null, slotMax: 1, slotVenueId: null,
   saving: false,
   editingId: null, existingPaid: false,
+  // Staff-page checklist extras for this booking ([{label, qty}]). checklistLoaded=false means an
+  // edit couldn't read the existing list — the save then leaves it untouched rather than wiping it.
+  checklistExtras: [], checklistLoaded: true,
 }
 
 // Default clock times per slot, mirroring TIME_SLOTS in the notify-booking-*
@@ -10991,6 +10994,13 @@ function abkRead() {
   // Add-on checkboxes
   if (document.querySelector('.abk-addon-check')) {
     abk.addonIds = Array.from(document.querySelectorAll('.abk-addon-check:checked')).map(c => Number(c.dataset.id))
+  }
+  // Checklist extras rows
+  if (document.querySelector('.abk-cl-row')) {
+    abk.checklistExtras = Array.from(document.querySelectorAll('.abk-cl-row')).map(r => ({
+      label: r.querySelector('.abk-cl-label').value,
+      qty: r.querySelector('.abk-cl-qty').value === '' ? '' : Number(r.querySelector('.abk-cl-qty').value),
+    }))
   }
 }
 
@@ -11242,7 +11252,8 @@ function renderAddBookingForm() {
             <option value="white" ${abk.boardType === 'white' ? 'selected' : ''}>White wooden arch board</option>
           </select>
           ${abk.boardType ? `<input type="text" id="abk-board-message" class="abk-input" style="margin-top:8px" maxlength="100" placeholder="Board message (optional)" value="${abkText(abk.boardMessage)}" oninput="abkRead()" />` : ''}
-        </div>`
+        </div>
+        ${abkChecklistHtml()}`
     } else {
       extrasHtml = `
         <div class="abk-field">
@@ -11384,6 +11395,38 @@ function renderAddBookingForm() {
     </div>`
 }
 
+// Extra items for the staff-page checklist (booking_checklist_extras). Picnic only: the staff
+// page's Picnic tab lists checkout_date-null bookings, so a stay / picnic+stay never shows it.
+function abkChecklistHtml() {
+  const rows = (abk.checklistExtras || []).map((x, i) => `
+    <div class="abk-cl-row">
+      <input type="text" class="abk-input abk-cl-label" maxlength="80" placeholder="e.g. Extra candles" value="${abkText(x.label)}" oninput="abkRead()" />
+      <input type="number" class="abk-input abk-cl-qty" min="1" max="999" placeholder="Qty" value="${abkText(x.qty)}" oninput="abkRead()" />
+      <button type="button" class="abk-cl-remove" aria-label="Remove item" onclick="abkClRemove(${i})">×</button>
+    </div>`).join('')
+  return `
+    <div class="abk-field">
+      <label class="abk-label">Extra checklist items <span class="abk-hint">(optional)</span></label>
+      ${rows}
+      <button type="button" class="abk-cl-add" onclick="abkClAdd()">+ Add item</button>
+      <span class="abk-hint">Added to this booking's checklist on the staff page, after the standard items and add-ons.</span>
+    </div>`
+}
+
+function abkClAdd() {
+  abkRead()
+  abk.checklistExtras = [...(abk.checklistExtras || []), { label: '', qty: '' }]
+  renderAddBookingForm()
+}
+window.abkClAdd = abkClAdd
+
+function abkClRemove(i) {
+  abkRead()
+  abk.checklistExtras = (abk.checklistExtras || []).filter((_, j) => j !== i)
+  renderAddBookingForm()
+}
+window.abkClRemove = abkClRemove
+
 function abkAddonsHtml(v) {
   const list = abkAddonsForVenue(v.id)
   if (!list.length) return ''
@@ -11502,6 +11545,7 @@ async function abkSave() {
         }
       }
       await abkSaveSplit(editingId)
+      await abkSaveChecklist(editingId)
       showToast(`Booking #${editingId} updated`, 'success')
       abkResetForm()
       switchTab('bookings')
@@ -11510,6 +11554,7 @@ async function abkSave() {
       const { data, error } = await supabase.rpc('admin_add_manual_booking', { p_booking, p_add_ons })
       if (error) throw error
       await abkSaveSplit(data)
+      await abkSaveChecklist(data)
       showToast(`Booking #${data} added`, 'success')
       abkResetForm()
       switchTab('bookings')
@@ -11544,6 +11589,25 @@ async function abkSaveSplit(bookingId) {
   }
 }
 
+// Persist staff-checklist extras after the main save — same reason as abkSaveSplit: the admin
+// booking RPCs build their column lists explicitly, and extras live in their own table
+// (booking_checklist_extras, never a bookings column — customers can read every bookings column).
+// Always sends the FULL list, so removing every row on an edit clears the extras.
+async function abkSaveChecklist(bookingId) {
+  if (abk.type !== 'picnic' || !bookingId || !abk.checklistLoaded) return
+  const items = (abk.checklistExtras || [])
+    .map(x => ({ label: String(x.label || '').trim(), qty: x.qty === '' || x.qty == null ? null : Number(x.qty) }))
+    .filter(x => x.label)
+  if (!abk.editingId && !items.length) return
+  try {
+    const { error } = await supabase.rpc('admin_set_booking_checklist_extras', { p_booking_id: bookingId, p_items: items })
+    if (error) throw error
+  } catch (err) {
+    console.error('admin_set_booking_checklist_extras failed:', err)
+    showToast(`Booking #${bookingId} saved, but the extra checklist items didn’t`, 'error')
+  }
+}
+
 // Reset the Add-Booking form back to a clean "new booking" state.
 function abkResetForm() {
   abk = { ...abk, editingId: null, existingPaid: false,
@@ -11551,7 +11615,7 @@ function abkResetForm() {
     adults: 2, children: 0, packageKey: '', addonIds: [], occasion: '', boardType: '', boardMessage: '',
     externalRef: '', notes: '', bookingSource: '', name: '', phone: '', email: '', total: 0, advance: 0, discount: 0,
     includesFood: false, foodItems: '', bevItems: '', slotStart: '', slotEnd: '',
-    picnicAmount: '', stayAmount: '',
+    picnicAmount: '', stayAmount: '', checklistExtras: [], checklistLoaded: true,
     totalTouched: false, advanceTouched: false, sendEmail: true, emailToggleTouched: false,
     slotMap: null, slotVenueId: null, saving: false }
 }
@@ -11612,6 +11676,14 @@ async function abkStartEdit(id) {
     abk.totalTouched = true; abk.advanceTouched = true   // preserve the stored figures
     abk.sendEmail = false; abk.emailToggleTouched = true // opt-in on edit
     abk.slotMap = null; abk.slotVenueId = null; abk.saving = false
+    // Checklist extras. A failed read must not become an empty list that the save then writes
+    // back — checklistLoaded=false makes abkSaveChecklist leave the stored extras alone.
+    const { data: cl, error: clErr } = await supabase
+      .from('booking_checklist_extras').select('label, qty, sort')
+      .eq('booking_id', id).order('sort', { ascending: true })
+    abk.checklistLoaded = !clErr
+    abk.checklistExtras = clErr ? [] : (cl || []).map(x => ({ label: x.label, qty: x.qty == null ? '' : x.qty }))
+    if (clErr) console.error('booking_checklist_extras read failed:', clErr)
     switchTab('add-booking')
     renderAddBookingForm()
     if (abk.type === 'picnic') abkFetchSlots()

@@ -10326,6 +10326,21 @@ textarea.abk-input { resize: vertical; min-height: 60px; }
   font-size: 17px;
   margin-top: 8px;
 }
+/* staff-checklist extras repeater (abkChecklistHtml) */
+.abk-cl-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.abk-cl-row .abk-cl-label { flex: 1 1 auto; min-width: 0; }
+.abk-cl-row .abk-cl-qty { flex: 0 0 80px; }
+.abk-cl-remove {
+  flex: none; width: 40px; height: 40px;
+  border: 1.5px solid var(--boho-border, #e4d3c4); border-radius: 10px;
+  background: #fff; color: #8c3f56; font-size: 20px; line-height: 1; cursor: pointer;
+}
+.abk-cl-add {
+  align-self: flex-start;
+  padding: 8px 14px; min-height: 40px;
+  border: 1.5px dashed var(--boho-border, #e4d3c4); border-radius: 10px;
+  background: transparent; color: var(--boho-text-medium, #6b5c4c); font-weight: 600; cursor: pointer;
+}
 @media (max-width: 480px) {
   .abk-row2 { flex-direction: column; gap: 16px; }
 }
