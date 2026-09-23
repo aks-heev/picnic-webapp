@@ -2,6 +2,13 @@
 
 Written 2026-09-05.
 
+**🔴 SUPERSEDED 2026-09-23 by `docs/HOSTED_DASHBOARD_PLAN.md`.** That plan absorbs this
+one's Phases 2/2b/3 (sync function, backfill, `ads.html`) into a combined build alongside
+this session's separate performance-analytics dashboard. Phase 1 below (the tables) is
+still the current, correct implementation and is reused as-is — nothing in this file's
+§2/§3 has changed. Read the new doc first; come back here only for Phase 1's original
+rationale.
+
 **Status: Phase 1 SHIPPED 2026-09-05.** `public.ad_insights` and `public.ad_sync_runs` are
 live, RLS-verified, empty. Phases 2 / 2b / 3 not started — all blocked on a Meta API token
 (see §4). One deliberate deviation from the spec below: the status column shipped as

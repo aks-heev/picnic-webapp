@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow" />
+<title>The Picnic Stories — Dashboards</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f8f4ee; --card: #ffffff; --ink: #2a2521; --ink-2: #4f463d; --muted: #6b6259;
+    --hair: #e6ddd1; --terracotta: #b8552a; --terracotta-bg: #fbeee5; --olive: #5c6b42;
+    --olive-bg: #e9eedd; --red: #a43520;
+    --serif: Georgia, "Times New Roman", "Iowan Old Style", "Palatino Linotype", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --r: 14px; --r-sm: 9px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--ink); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 22px 22px 64px; }
+
+  /* ---------- sign-in (verbatim from index.html, same auth snippet) ---------- */
+  .signin-wrap { min-height: 76vh; display: flex; align-items: center; justify-content: center; padding: 24px 0; }
+  .signin-card { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r); padding: 34px 30px 26px; width: 100%; max-width: 380px; box-shadow: 0 1px 2px rgba(42,37,33,.04), 0 8px 28px rgba(42,37,33,.06); }
+  .signin-brand { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--terracotta); font-weight: 600; }
+  .signin-card h1 { font-size: 22px; margin: 10px 0 2px; color: var(--ink); letter-spacing: -.01em; }
+  .signin-sub { color: var(--muted); font-size: 13px; margin: 0 0 22px; }
+  .signin-card label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-2); margin: 0 0 5px; }
+  .signin-card input { width: 100%; box-sizing: border-box; padding: 10px 12px; font: inherit; font-size: 14px; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--hair); border-radius: 9px; margin-bottom: 14px; }
+  .signin-card input:focus { outline: 2px solid var(--terracotta); outline-offset: 1px; border-color: transparent; }
+  .signin-card button { width: 100%; padding: 11px 14px; font: inherit; font-size: 14px; font-weight: 600; color: #fff;
+    background: var(--terracotta); border: 0; border-radius: 9px; cursor: pointer; margin-top: 4px; }
+  .signin-card button:disabled { opacity: .6; cursor: default; }
+  .signin-msg { min-height: 18px; margin-top: 12px; font-size: 12.5px; color: var(--red); text-align: center; }
+
+  /* ---------- hub ---------- */
+  .mast { display: flex; align-items: flex-end; gap: 14px; margin-bottom: 26px; flex-wrap: wrap; }
+  .brand h1 { font-family: var(--serif); font-size: 28px; font-weight: 400; margin: 0; letter-spacing: -.01em; }
+  .brand h1 em { font-style: italic; color: var(--terracotta); }
+  .brand .scope { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+  .btn { font: inherit; font-size: 13px; padding: 8px 13px; min-height: 36px; border: 1px solid var(--hair); border-radius: var(--r-sm); background: var(--card); color: var(--ink-2); cursor: pointer; margin-left: auto; }
+  .btn:hover { border-color: var(--terracotta); color: var(--terracotta); }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 640px) { .cards { grid-template-columns: 1fr; } }
+  .dcard { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r); padding: 24px 24px 20px; text-decoration: none; color: inherit; display: block; transition: border-color .12s, box-shadow .12s; }
+  .dcard:hover { border-color: var(--terracotta); box-shadow: 0 8px 24px rgba(42,37,33,.06); }
+  .dcard .icon { font-size: 26px; margin-bottom: 10px; }
+  .dcard h2 { font-family: var(--serif); font-weight: 400; font-size: 20px; margin: 0 0 6px; }
+  .dcard p { color: var(--muted); font-size: 13px; margin: 0; line-height: 1.55; }
+  .dcard .go { margin-top: 14px; font-size: 12.5px; font-weight: 600; color: var(--terracotta); }
+  .state { text-align: center; padding: 60px 20px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="root" class="wrap"><div class="state">Loading…</div></div>
+
+<script>
+/* ============================================================
+   Shared login for every dashboard in this project. Reuses the exact same
+   Supabase project, anon key, and admin-email gate as index.html — this is
+   not a second account system, it's the same one login pointed at a second
+   page. See docs/HOSTED_DASHBOARD_PLAN.md §3: "one login, one token."
+
+   🔴 The anon key is public by design (browser's ticket to the API, not a
+   credential) — every byte of protection is RLS, keyed to
+   auth.email() = 'aksh.eeev@gmail.com' on every table this project reads
+   (verified live 2026-09-23: bookings, venues, expenses, ad_insights,
+   ad_sync_runs all match). Never add an anon SELECT policy to any of them.
+   ============================================================ */
+const SUPABASE_URL = 'https://evmftrogyzoudiccqkya.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2bWZ0cm9neXpvdWRpY2Nxa3lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTM5OTUsImV4cCI6MjA5NTI4OTk5NX0.ka2tLAY7xpe08X8TlNVgft4V__Qv7Ol27rd0daOtI4I';
+const ALLOWED = ['aksh.eeev@gmail.com'];
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+  auth: { persistSession: true, autoRefreshToken: true },
+});
+
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function signInScreen(message) {
+  document.getElementById('root').innerHTML = `
+    <div class="signin-wrap">
+      <div class="signin-card">
+        <div class="signin-brand">The Picnic Stories</div>
+        <h1>Dashboards</h1>
+        <p class="signin-sub">Sign in to continue</p>
+        <form id="signin-form" autocomplete="on">
+          <label for="si-email">Email</label>
+          <input id="si-email" type="email" autocomplete="username" required />
+          <label for="si-pass">Password</label>
+          <input id="si-pass" type="password" autocomplete="current-password" required />
+          <button type="submit" id="si-go">Sign in</button>
+        </form>
+        <div id="si-msg" class="signin-msg">${message ? esc(message) : ''}</div>
+      </div>
+    </div>`;
+  const form = document.getElementById('signin-form');
+  const msg = document.getElementById('si-msg');
+  form.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const btn = document.getElementById('si-go');
+    btn.disabled = true; btn.textContent = 'Signing in…'; msg.textContent = '';
+    const { error } = await sb.auth.signInWithPassword({
+      email: document.getElementById('si-email').value.trim(),
+      password: document.getElementById('si-pass').value,
+    });
+    if (error) {
+      btn.disabled = false; btn.textContent = 'Sign in';
+      msg.textContent = error.message || 'Sign-in failed.';
+      return;
+    }
+    boot();
+  });
+}
+
+async function signOut() { await sb.auth.signOut(); location.reload(); }
+window.signOut = signOut;
+
+function renderHub(email) {
+  document.getElementById('root').innerHTML = `
+    <div class="mast">
+      <div class="brand">
+        <h1>The Picnic <em>Stories</em></h1>
+        <div class="scope">Signed in as ${esc(email)}</div>
+      </div>
+      <button class="btn" onclick="signOut()">Sign out</button>
+    </div>
+    <div class="cards">
+      <a class="dcard" href="/index.html">
+        <div class="icon">📒</div>
+        <h2>Business dashboard</h2>
+        <p>Revenue, bookings, occupancy and expenses for Gurugram &amp; Delhi. The
+           day-to-day finance view.</p>
+        <div class="go">Open →</div>
+      </a>
+      <a class="dcard" href="/ads.html">
+        <div class="icon">📣</div>
+        <h2>Meta Ads dashboard</h2>
+        <p>Spend, delivery health, pixel funnel and ad-set performance for the
+           account's paid campaigns. The ad-spend and performance view.</p>
+        <div class="go">Open →</div>
+      </a>
+    </div>`;
+}
+
+/* Same ALLOWED-list check as index.html — the database decides who can READ
+   (RLS), this only decides who gets shown a dashboard instead of an error. */
+async function boot() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { signInScreen(''); return; }
+  const email = (session.user && session.user.email) || '';
+  if (!ALLOWED.includes(email.trim().toLowerCase())) {
+    await sb.auth.signOut();
+    signInScreen('That account does not have access to these dashboards.');
+    return;
+  }
+  renderHub(email);
+}
+
+sb.auth.onAuthStateChange((event) => {
+  if (event === 'SIGNED_OUT') signInScreen('');
+});
+
+boot();
+</script>
+</body>
+</html>
