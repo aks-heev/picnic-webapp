@@ -1,54 +1,71 @@
 /**
  * meta-live-snapshot
- * Browser-facing proxy for the three Meta reads that `ad_insights` never captures:
- * the 14-day pixel funnel, ad-set frequency/fatigue for active campaigns, and custom
- * audience sizes. Called from `hosted-dashboard/ads.html` by a logged-in partner — never
- * by cron. Same Graph API endpoints the Cowork Meta Ads Dashboard artifact already
- * proved work (see its `loadFunnel` / `loadAdsets` / `loadAudiences`), reimplemented here
- * against the raw Graph API instead of the MCP connector because a Cowork artifact only
- * runs inside Cowork — a Vercel-hosted page has no MCP bridge to call.
+ * Browser-facing proxy for every live Meta read `hosted-dashboard/ads.html` needs —
+ * the page is a port of the Cowork "Meta Ads Dashboard" artifact, which reads all of
+ * this live through the Meta Ads MCP connector. A Vercel page has no MCP bridge, so the
+ * same reads are reimplemented here against the raw Graph API. Sections:
+ *   campaigns — ACTIVE campaigns, last_14d: spend/impressions/clicks/ctr/results/leads/objective
+ *   lifetime  — every campaign ever run, date_preset=maximum, plus status/objective/created_time
+ *   adsets    — ad sets under ACTIVE campaigns, last_14d, with frequency (fatigue)
+ *   funnel    — pixel event totals, trailing 14 days
+ *   audiences — all custom/lookalike audiences, unfiltered (the page applies the artifact's filter)
+ * Query param `section` = one of the above, or `all` (default).
  *
- * 🔴 verify_jwt MUST stay true. This is the credential-minimization point of the whole
- * hosted-dashboard build (docs/HOSTED_DASHBOARD_PLAN.md §3): the Meta token lives ONLY in
- * this function's secrets and `sync-meta-ads`'s, never in a Vercel env var. verify_jwt=true
- * makes Supabase itself reject any caller without a valid session before this code even
- * runs — there is no table here for RLS to protect, so the platform-level JWT check is the
- * only gate. Do not weaken this to verify_jwt=false "to make testing easier."
+ * 🔴 AUTH — verify_jwt=true is NOT enough on its own, and must not be relied on alone.
+ * verify_jwt only proves the bearer is a validly-signed project JWT, and the public anon
+ * key (embedded in every page's source) IS one. Verified live 2026-09-23: v4 returned live
+ * audience data to `Authorization: Bearer <anon key>`. So this function additionally
+ * resolves the caller via /auth/v1/user and requires the admin email — the same single
+ * email every RLS policy on bookings/venues/ad_insights/ad_sync_runs is gated on. Keep
+ * verify_jwt=true as well (it rejects unsigned garbage before any code runs).
  *
- * Caching: each section's response is cached in-memory per Deno isolate for
- * CACHE_TTL_MS. This is a real rate-limit/cost guard, not a nicety — "every partner"
- * loading the page at once should not mean N simultaneous Graph API hits. Isolates are
- * not shared across cold starts, so this is best-effort, not a strict guarantee; that is
- * an acceptable trade for the complexity a Postgres-backed cache would add here.
+ * 🔴 CORS — this is called cross-origin from picnic-dashboard-nu.vercel.app. OPTIONS must
+ * short-circuit before the auth check (browsers never send credentials on a preflight)
+ * and every response must carry CORS headers, or the browser reports an opaque
+ * "Failed to fetch". Found 2026-09-23 on first real browser load.
  *
- * Query param `section` selects the payload: `funnel` | `adsets` | `audiences` | `all`
- * (default `all`). GET or POST both work; nothing is written anywhere by this function.
+ * results/resultIndicator: resolved via each campaign's optimization_goal, read from the
+ * /adsets edge — the campaign edge silently drops that field. See sync-meta-ads/index.ts.
  *
- * Required function secrets: META_ACCESS_TOKEN, META_AD_ACCOUNT_ID (shared with
- * sync-meta-ads — same secrets, do not duplicate into a second name), META_PIXEL_ID
- * (defaults to 1366746648648321, the pixel already live on the site).
+ * Funnel: /{pixel}/stats?aggregation=event returns HOURLY buckets, each carrying its own
+ * nested `data: [{value: <event>, count}]`. The first version read the top level and
+ * always returned `totals: {}` — fixed 2026-09-23.
  *
- * NOT YET DEPLOYED as of writing (2026-09-23) — built-unverified per CLAUDE.md §11.
- * Deploy through the Supabase Dashboard, same constraints as sync-meta-ads.
+ * Caching: each section is cached in-memory per isolate for CACHE_TTL_MS so several
+ * partners loading at once don't multiply Graph API calls. Best-effort, not shared
+ * across cold starts.
+ *
+ * Secrets: META_ACCESS_TOKEN, META_AD_ACCOUNT_ID (shared with sync-meta-ads), META_PIXEL_ID
+ * (defaults to 1366746648648321). SUPABASE_URL / SUPABASE_ANON_KEY are platform-injected.
  */
 
 const META_TOKEN = Deno.env.get("META_ACCESS_TOKEN")
 const AD_ACCOUNT_ID = Deno.env.get("META_AD_ACCOUNT_ID") ?? "565789031303932"
 const PIXEL_ID = Deno.env.get("META_PIXEL_ID") ?? "1366746648648321"
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "https://evmftrogyzoudiccqkya.supabase.co"
 const GRAPH_VERSION = "v21.0"
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`
 
-const CACHE_TTL_MS = 7 * 60 * 1000 // 7 minutes — middle of the plan's 5-10 min guidance
+// Same single admin email every RLS policy on the dashboard tables checks.
+const ALLOWED_EMAILS = ["aksh.eeev@gmail.com"]
+
+const CACHE_TTL_MS = 7 * 60 * 1000
 const FATIGUE_FREQUENCY = 3.5
+
+const CORS_HEADERS: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+}
+
+type Action = { action_type: string; value: string }
 
 type CacheEntry = { data: unknown; expiresAt: number }
 const cache = new Map<string, CacheEntry>()
 
 async function cached<T>(key: string, fn: () => Promise<T>): Promise<{ data: T; cached: boolean }> {
   const hit = cache.get(key)
-  if (hit && hit.expiresAt > Date.now()) {
-    return { data: hit.data as T, cached: true }
-  }
+  if (hit && hit.expiresAt > Date.now()) return { data: hit.data as T, cached: true }
   const data = await fn()
   cache.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS })
   return { data, cached: false }
@@ -65,13 +82,11 @@ async function fetchAllPages<T>(url: string): Promise<T[]> {
     if (Array.isArray(body.data)) out.push(...body.data)
     next = body.paging?.next
     pages++
-    if (pages > 20) throw new Error("fetchAllPages: exceeded 20 pages — aborting")
+    if (pages > 50) throw new Error("fetchAllPages: exceeded 50 pages — aborting")
   }
   return out
 }
 
-// Same mapping as sync-meta-ads, verified 2026-09-23 against the Meta Ads connector's
-// own results field for this account — see that file's comment for the full reconciliation.
 const OPTIMIZATION_GOAL_ACTION_PREFIXES: Record<string, string[]> = {
   CONVERSATIONS: [
     "onsite_conversion.messaging_conversation_started_7d",
@@ -86,12 +101,8 @@ const OPTIMIZATION_GOAL_ACTION_PREFIXES: Record<string, string[]> = {
   PAGE_LIKES: ["like"],
 }
 
-function pickResult(
-  actions: Array<{ action_type: string; value: string }> | undefined,
-  optimizationGoal?: string,
-): { results: number; indicator: string | null } {
+function pickResult(actions: Action[] | undefined, optimizationGoal?: string): { results: number; indicator: string | null } {
   if (!actions || actions.length === 0) return { results: 0, indicator: null }
-
   const preferred = optimizationGoal ? OPTIMIZATION_GOAL_ACTION_PREFIXES[optimizationGoal] : undefined
   if (preferred) {
     for (const wanted of preferred) {
@@ -102,177 +113,219 @@ function pickResult(
       }
     }
   }
-
   let best = actions[0]
   for (const a of actions) if (Number(a.value) > Number(best.value)) best = a
   const n = Math.round(Number(best.value))
   return { results: Number.isFinite(n) ? n : 0, indicator: best.action_type }
 }
 
-/** `optimization_goal` is NOT a valid field on the campaign node/edge — Meta silently
- *  drops it (verified live 2026-09-23), so the original version of this function always
- *  passed `undefined` through to pickResult(), a no-op "fix". The goal lives on ad sets;
- *  pulled from the account's /adsets edge and rolled up per campaign_id (first goal seen
- *  — verified live that this account's active campaigns each have one consistent goal
- *  across their ad sets). See sync-meta-ads/index.ts's fetchCampaignGoals() for the same
- *  fix and fuller explanation. */
-async function fetchCampaignGoals(): Promise<Map<string, string>> {
-  const url =
-    `${GRAPH_BASE}/act_${AD_ACCOUNT_ID}/adsets` +
-    `?fields=id,campaign_id,optimization_goal&limit=200&access_token=${META_TOKEN}`
-  const rows = await fetchAllPages<{ id: string; campaign_id?: string; optimization_goal?: string }>(url)
-  const map = new Map<string, string>()
-  for (const r of rows) {
-    if (r.campaign_id && r.optimization_goal && !map.has(r.campaign_id)) {
-      map.set(r.campaign_id, r.optimization_goal)
-    }
+/** The connector's `lead` field — Meta's aggregate "lead" action (verified present in this
+ *  account's lifetime insights alongside onsite_conversion.lead_grouped, same count). */
+function leadCount(actions: Action[] | undefined): number {
+  const a = (actions || []).find((x) => x.action_type === "lead")
+  const n = a ? Number(a.value) : 0
+  return Number.isFinite(n) ? n : 0
+}
+
+const num = (s: unknown): number => {
+  const n = Number(s)
+  return Number.isFinite(n) ? n : 0
+}
+
+/** campaign_id → optimization_goal, rolled up from ad sets (first goal seen). */
+async function loadGoals(): Promise<Map<string, string>> {
+  const { data } = await cached("goals", async () => {
+    const rows = await fetchAllPages<{ campaign_id?: string; optimization_goal?: string }>(
+      `${GRAPH_BASE}/act_${AD_ACCOUNT_ID}/adsets?fields=id,campaign_id,optimization_goal&limit=200&access_token=${META_TOKEN}`,
+    )
+    const m: Record<string, string> = {}
+    for (const r of rows) if (r.campaign_id && r.optimization_goal && !m[r.campaign_id]) m[r.campaign_id] = r.optimization_goal
+    return m
+  })
+  return new Map(Object.entries(data))
+}
+
+interface CampaignNode { id: string; name: string; status: string; effective_status: string; objective?: string; created_time?: string }
+
+async function loadCampaignNodes(): Promise<CampaignNode[]> {
+  const { data } = await cached("campaign-nodes", () =>
+    fetchAllPages<CampaignNode>(
+      `${GRAPH_BASE}/act_${AD_ACCOUNT_ID}/campaigns?fields=id,name,status,effective_status,objective,created_time&limit=200&access_token=${META_TOKEN}`,
+    ))
+  return data
+}
+
+interface InsightRow {
+  campaign_id: string; spend?: string; impressions?: string; reach?: string; clicks?: string; ctr?: string; actions?: Action[]
+}
+
+/** ACTIVE campaigns, last_14d — the artifact's loadActive(). Campaigns with no delivery in
+ *  the window still appear, with zeros, exactly as the connector returns them. */
+async function loadCampaigns() {
+  const [nodes, goals] = await Promise.all([loadCampaignNodes(), loadGoals()])
+  const active = nodes.filter((c) => c.effective_status === "ACTIVE")
+  if (active.length === 0) return { campaigns: [] }
+  const filtering = encodeURIComponent(JSON.stringify([{ field: "campaign.id", operator: "IN", value: active.map((c) => c.id) }]))
+  const rows = await fetchAllPages<InsightRow>(
+    `${GRAPH_BASE}/act_${AD_ACCOUNT_ID}/insights?level=campaign&date_preset=last_14d&filtering=${filtering}` +
+      `&fields=campaign_id,spend,impressions,reach,clicks,ctr,actions&limit=100&access_token=${META_TOKEN}`,
+  )
+  const byId = new Map(rows.map((r) => [r.campaign_id, r]))
+  return {
+    campaigns: active.map((c) => {
+      const r = byId.get(c.id)
+      const spend = num(r?.spend)
+      const { results, indicator } = pickResult(r?.actions, goals.get(c.id))
+      return {
+        id: c.id, name: c.name, status: c.status, objective: c.objective ?? null,
+        spend, impressions: num(r?.impressions), reach: num(r?.reach), clicks: num(r?.clicks),
+        ctr: r?.ctr != null ? Number(r.ctr) : null,
+        results, resultIndicator: indicator, costPerResult: results > 0 ? spend / results : null,
+        leads: leadCount(r?.actions),
+      }
+    }),
   }
-  return map
 }
 
-async function activeCampaignIds(): Promise<Array<{ id: string; name: string; optimization_goal?: string }>> {
-  const [campaignsUrl, goals] = [
-    `${GRAPH_BASE}/act_${AD_ACCOUNT_ID}/campaigns?fields=id,name,effective_status&limit=200&access_token=${META_TOKEN}`,
-    await fetchCampaignGoals(),
-  ]
-  const rows = await fetchAllPages<{ id: string; name: string; effective_status: string }>(campaignsUrl)
-  return rows.filter((c) => c.effective_status === "ACTIVE").map((c) => ({ id: c.id, name: c.name, optimization_goal: goals.get(c.id) }))
+/** Every campaign ever run, date_preset=maximum — the artifact's loadLifetime(). */
+async function loadLifetime() {
+  const [nodes, goals] = await Promise.all([loadCampaignNodes(), loadGoals()])
+  const rows = await fetchAllPages<InsightRow>(
+    `${GRAPH_BASE}/act_${AD_ACCOUNT_ID}/insights?level=campaign&date_preset=maximum` +
+      `&fields=campaign_id,spend,actions&limit=100&access_token=${META_TOKEN}`,
+  )
+  const byId = new Map(rows.map((r) => [r.campaign_id, r]))
+  return {
+    campaigns: nodes.map((c) => {
+      const r = byId.get(c.id)
+      const spend = num(r?.spend)
+      const { results } = pickResult(r?.actions, goals.get(c.id))
+      return {
+        id: c.id, name: c.name, status: c.status, objective: c.objective ?? null, created: c.created_time ?? null,
+        spend, results, costPerResult: results > 0 ? spend / results : null, leads: leadCount(r?.actions),
+      }
+    }),
+  }
 }
 
-/** 14-day pixel event funnel — matches the campaign KPI window so the two are
- *  comparable. `dataset_stats` is the Graph node for a Pixel's event counts. */
+/** Ad sets under ACTIVE campaigns, last_14d — the artifact's loadAdsets(). */
+async function loadAdsets() {
+  const [nodes, goals] = await Promise.all([loadCampaignNodes(), loadGoals()])
+  const activeIds = nodes.filter((c) => c.effective_status === "ACTIVE").map((c) => c.id)
+  if (activeIds.length === 0) return { campaigns: 0, adsets: [] }
+  const filtering = encodeURIComponent(JSON.stringify([{ field: "campaign.id", operator: "IN", value: activeIds }]))
+  const rows = await fetchAllPages<{
+    adset_id: string; adset_name: string; campaign_id?: string; spend?: string; impressions?: string
+    clicks?: string; ctr?: string; frequency?: string; actions?: Action[]
+  }>(
+    `${GRAPH_BASE}/act_${AD_ACCOUNT_ID}/insights?level=adset&date_preset=last_14d&filtering=${filtering}` +
+      `&fields=adset_id,adset_name,campaign_id,spend,impressions,clicks,ctr,frequency,actions&limit=100&access_token=${META_TOKEN}`,
+  )
+  return {
+    campaigns: activeIds.length,
+    adsets: rows.map((r) => {
+      const { results, indicator } = pickResult(r.actions, r.campaign_id ? goals.get(r.campaign_id) : undefined)
+      const spend = num(r.spend)
+      const frequency = r.frequency != null ? Number(r.frequency) : null
+      return {
+        id: r.adset_id, name: r.adset_name, spend,
+        impressions: num(r.impressions), clicks: num(r.clicks),
+        ctr: r.ctr != null ? Number(r.ctr) : null, frequency,
+        results, resultIndicator: indicator, costPerResult: results > 0 ? spend / results : null,
+        fatigued: frequency != null && frequency > FATIGUE_FREQUENCY,
+      }
+    }),
+  }
+}
+
+/** Pixel event totals, trailing 14 days. Response is hourly buckets with nested data. */
 async function loadFunnel() {
   const nowSec = Math.floor(Date.now() / 1000)
   const startSec = nowSec - 14 * 86400
-  const url = `${GRAPH_BASE}/${PIXEL_ID}/stats?aggregation=event&start_time=${startSec}&end_time=${nowSec}&access_token=${META_TOKEN}`
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`pixel stats ${res.status}: ${await res.text()}`)
-  const body = await res.json()
-  // Graph returns {data: [{event: "Lead", count: N, ...}, ...]} shape for aggregation=event.
+  const buckets = await fetchAllPages<{ data?: Array<{ value?: string; count?: number }> }>(
+    `${GRAPH_BASE}/${PIXEL_ID}/stats?aggregation=event&start_time=${startSec}&end_time=${nowSec}&access_token=${META_TOKEN}`,
+  )
   const totals: Record<string, number> = {}
-  for (const row of body.data ?? []) {
-    const name = row.event ?? row.name
-    if (!name) continue
-    totals[name] = (totals[name] ?? 0) + Number(row.count ?? row.value ?? 0)
-  }
-  return { windowDays: 14, totals }
-}
-
-/** Ad sets under currently-active campaigns, 14-day trailing spend + frequency, for
- *  fatigue detection (frequency > FATIGUE_FREQUENCY = "the same people keep seeing it"). */
-async function loadAdsets() {
-  const campaigns = await activeCampaignIds()
-  if (campaigns.length === 0) return { campaigns: 0, adsets: [] }
-
-  const today = new Date().toISOString().slice(0, 10)
-  const since = new Date(Date.now() - 14 * 86400 * 1000).toISOString().slice(0, 10)
-  const timeRange = encodeURIComponent(JSON.stringify({ since, until: today }))
-  const filtering = encodeURIComponent(JSON.stringify([{ field: "campaign.id", operator: "IN", value: campaigns.map((c) => c.id) }]))
-  const url =
-    `${GRAPH_BASE}/act_${AD_ACCOUNT_ID}/insights` +
-    `?level=adset&time_range=${timeRange}&filtering=${filtering}` +
-    `&fields=adset_id,adset_name,campaign_id,spend,impressions,clicks,ctr,frequency,actions` +
-    `&limit=100&access_token=${META_TOKEN}`
-  const rows = await fetchAllPages<{
-    adset_id: string; adset_name: string; campaign_id?: string; spend?: string; impressions?: string
-    clicks?: string; ctr?: string; frequency?: string
-    actions?: Array<{ action_type: string; value: string }>
-  }>(url)
-
-  const goalByCampaign = new Map(campaigns.map((c) => [c.id, c.optimization_goal]))
-
-  const adsets = rows.map((r) => {
-    const { results, indicator } = pickResult(r.actions, r.campaign_id ? goalByCampaign.get(r.campaign_id) : undefined)
-    const spend = Number(r.spend ?? 0)
-    const frequency = r.frequency != null ? Number(r.frequency) : null
-    return {
-      id: r.adset_id,
-      name: r.adset_name,
-      spend,
-      impressions: r.impressions != null ? Math.round(Number(r.impressions)) : null,
-      clicks: r.clicks != null ? Math.round(Number(r.clicks)) : null,
-      ctr: r.ctr != null ? Number(r.ctr) : null,
-      frequency,
-      results,
-      resultIndicator: indicator,
-      costPerResult: results > 0 ? spend / results : null,
-      fatigued: frequency != null && frequency > FATIGUE_FREQUENCY,
+  for (const b of buckets) {
+    for (const d of b.data ?? []) {
+      if (!d.value) continue
+      totals[d.value] = (totals[d.value] ?? 0) + num(d.count)
     }
-  })
-  return { campaigns: campaigns.length, adsets }
+  }
+  return { windowDays: 14, buckets: buckets.length, totals }
 }
 
-/** Custom + lookalike audiences — sizes only, no PII. Lookalikes churn constantly so
- *  all are shown regardless of delivery_status; other audiences only if ACTIVE. */
+/** All audiences, unfiltered. delivery_status.code 200 = "ready for use" (the connector's ACTIVE). */
 async function loadAudiences() {
-  const url =
-    `${GRAPH_BASE}/act_${AD_ACCOUNT_ID}/customaudiences` +
-    `?fields=name,subtype,approximate_count_lower_bound,approximate_count_upper_bound,delivery_status` +
-    `&limit=25&access_token=${META_TOKEN}`
   const rows = await fetchAllPages<{
     name: string; subtype: string
     approximate_count_lower_bound?: number; approximate_count_upper_bound?: number
     delivery_status?: { code?: number; description?: string }
-  }>(url)
-  const audiences = rows
-    .filter((a) => a.subtype === "LOOKALIKE" || a.delivery_status?.description === "Active")
-    .map((a) => ({
-      name: a.name,
-      subtype: a.subtype,
-      sizeLow: a.approximate_count_lower_bound ?? null,
-      sizeHigh: a.approximate_count_upper_bound ?? null,
-      status: a.delivery_status?.description ?? null,
-    }))
-  return { audiences }
+  }>(
+    `${GRAPH_BASE}/act_${AD_ACCOUNT_ID}/customaudiences` +
+      `?fields=name,subtype,approximate_count_lower_bound,approximate_count_upper_bound,delivery_status&limit=100&access_token=${META_TOKEN}`,
+  )
+  return {
+    audiences: rows.map((a) => ({
+      name: a.name, subtype: a.subtype,
+      sizeLow: a.approximate_count_lower_bound ?? null, sizeHigh: a.approximate_count_upper_bound ?? null,
+      active: a.delivery_status?.code === 200,
+      statusCode: a.delivery_status?.code ?? null, statusText: a.delivery_status?.description ?? null,
+    })),
+  }
+}
+
+/** Resolve the bearer to a real signed-in user and require the admin email. */
+async function callerIsAdmin(req: Request): Promise<boolean> {
+  const auth = req.headers.get("Authorization") ?? ""
+  if (!auth.startsWith("Bearer ")) return false
+  const apikey = Deno.env.get("SUPABASE_ANON_KEY") ?? req.headers.get("apikey") ?? ""
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { Authorization: auth, apikey } })
+  if (!res.ok) return false
+  const user = await res.json().catch(() => null)
+  const email = String(user?.email ?? "").trim().toLowerCase()
+  return email !== "" && ALLOWED_EMAILS.includes(email)
+}
+
+const SECTIONS: Record<string, () => Promise<unknown>> = {
+  campaigns: loadCampaigns,
+  lifetime: loadLifetime,
+  adsets: loadAdsets,
+  funnel: loadFunnel,
+  audiences: loadAudiences,
 }
 
 Deno.serve(async (req) => {
-  if (!META_TOKEN) {
-    return new Response(JSON.stringify({ error: "META_ACCESS_TOKEN secret is not set" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    })
-  }
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS_HEADERS })
 
-  const url = new URL(req.url)
-  const section = url.searchParams.get("section") ?? "all"
+  const jsonHeaders = { "Content-Type": "application/json", ...CORS_HEADERS }
+  const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: jsonHeaders })
+
+  if (!(await callerIsAdmin(req))) return reply({ error: "forbidden — admin sign-in required" }, 403)
+  if (!META_TOKEN) return reply({ error: "META_ACCESS_TOKEN secret is not set" }, 500)
+
+  const section = new URL(req.url).searchParams.get("section") ?? "all"
 
   try {
-    const sections: Record<string, () => Promise<unknown>> = {
-      funnel: loadFunnel,
-      adsets: loadAdsets,
-      audiences: loadAudiences,
-    }
-
     if (section !== "all") {
-      const fn = sections[section]
-      if (!fn) return new Response(JSON.stringify({ error: `unknown section: ${section}` }), { status: 400 })
+      const fn = SECTIONS[section]
+      if (!fn) return reply({ error: `unknown section: ${section}` }, 400)
       const { data, cached: hit } = await cached(section, fn)
-      return new Response(JSON.stringify({ ok: true, section, cached: hit, data }), {
-        headers: { "Content-Type": "application/json" },
-      })
+      return reply({ ok: true, section, cached: hit, data })
     }
 
-    // Promise.allSettled — one slow/broken section must not fail the other two. Matches
-    // the Cowork artifact's own per-section failure isolation.
-    const [funnel, adsets, audiences] = await Promise.allSettled([
-      cached("funnel", loadFunnel),
-      cached("adsets", loadAdsets),
-      cached("audiences", loadAudiences),
-    ])
-
-    const unwrap = (r: PromiseSettledResult<{ data: unknown; cached: boolean }>) =>
-      r.status === "fulfilled" ? { ok: true, cached: r.value.cached, data: r.value.data } : { ok: false, error: String(r.reason) }
-
-    return new Response(
-      JSON.stringify({ ok: true, funnel: unwrap(funnel), adsets: unwrap(adsets), audiences: unwrap(audiences) }),
-      { headers: { "Content-Type": "application/json" } },
-    )
+    // allSettled — one broken section must not fail the others (same isolation as the artifact).
+    const names = Object.keys(SECTIONS)
+    const settled = await Promise.allSettled(names.map((n) => cached(n, SECTIONS[n])))
+    const out: Record<string, unknown> = { ok: true }
+    settled.forEach((r, i) => {
+      out[names[i]] = r.status === "fulfilled"
+        ? { ok: true, cached: r.value.cached, data: r.value.data }
+        : { ok: false, error: String(r.reason) }
+    })
+    return reply(out)
   } catch (err) {
     console.error("meta-live-snapshot error:", err)
-    return new Response(JSON.stringify({ error: String(err) }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    })
+    return reply({ error: String(err) }, 500)
   }
 })

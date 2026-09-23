@@ -31,11 +31,10 @@
  * to 565789031303932 if unset), RESEND_API_KEY (shared), SUPABASE_URL /
  * SUPABASE_SERVICE_ROLE_KEY (injected), TEAM_EMAIL (optional, defaults to team@).
  *
- * NOT YET DEPLOYED as of writing (2026-09-23) — built-unverified per CLAUDE.md §11.
- * Deploy through the Supabase Dashboard (deploy_edge_function cannot be called from
- * Cowork — schema validation rejects verify_jwt/files). Set META_ACCESS_TOKEN and
- * META_AD_ACCOUNT_ID under Dashboard → Edge Functions → Secrets BEFORE enabling the cron
- * job, or every cron fire 500s while cron.job_run_details reports success.
+ * Deployed 2026-09-23 (v5, via deploy_edge_function from Cowork — that works; the older
+ * "Dashboard only" note was stale). results/result_indicator resolve via a per-campaign
+ * optimization_goal pulled from the account's /adsets edge — NOT from the campaign edge,
+ * which silently drops that field. v5 adds the backfill-safe alarm guard below.
  */
 
 import { sendEmail } from "./_shared/resend.ts"
@@ -296,8 +295,15 @@ Deno.serve(async (req) => {
     const spendByCampaignDate = new Map<string, number>()
     for (const r of rows) spendByCampaignDate.set(`${r.campaign_id}|${r.date}`, r.spend_inr)
 
+    // 🔴 Only alarm when THIS run's window actually covers the completed dates being
+    // checked. A historical backfill (e.g. {since:"2026-04-01",until:"2026-04-30"}) has no
+    // rows for yesterday, so every ACTIVE campaign would read as ₹0 and the alarm would
+    // email team@ a false "delivery stopped" for each one. Found before the first
+    // 180-day backfill on 2026-09-23.
+    const windowCoversAlarm = since <= completedDates[completedDates.length - 1] && until >= completedDates[0]
     const silentActive: CampaignMeta[] = []
     for (const c of campaigns.values()) {
+      if (!windowCoversAlarm) break
       if (c.effective_status !== "ACTIVE") continue
       const allZero = completedDates.every((d) => (spendByCampaignDate.get(`${c.id}|${d}`) ?? 0) === 0)
       if (allZero) silentActive.push(c)

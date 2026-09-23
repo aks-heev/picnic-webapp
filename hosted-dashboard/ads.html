@@ -1,555 +1,1025 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="robots" content="noindex, nofollow" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
 <title>The Picnic Stories — Meta Ads Dashboard</title>
+<!--
+  Port of the Cowork artifact "Meta Ads Dashboard" (id meta-ads-dashboard) to a hosted page.
+  Same theme, sections, narratives, gates, lag scan, MER/holdout, chart styling and defaults
+  (Both cities · 30d). Only the data plumbing differs, because a Vercel page has no MCP bridge:
+    artifact: Meta Ads connector + execute_sql
+    here:     meta-live-snapshot (campaigns · lifetime · adsets · funnel · audiences, admin-only)
+              + ad_insights (per-campaign daily spend, backfilled 180 days) + booking_revenue_split
+  Keep this file visually in lockstep with the artifact — change one, change the other.
+-->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
 <style>
   :root {
-    color-scheme: light;
-    --bg: #f8f4ee; --bg-2: #f1ebe2; --card: #ffffff; --ink: #2a2521; --ink-2: #4f463d; --muted: #6b6259;
-    --hair: #e6ddd1; --hair-2: #efe8de;
-    --terracotta: #b8552a; --terracotta-2: #d8794f; --terracotta-bg: #fbeee5;
-    --olive: #5c6b42; --olive-bg: #e9eedd;
-    --amber: #8f6512; --amber-bg: #fbf0d3;
-    --red: #a43520; --red-bg: #fbe7e2;
-    --blue: #385a7a; --blue-bg: #e5eef5;
-    --serif: Georgia, "Times New Roman", "Iowan Old Style", "Palatino Linotype", serif;
+    color-scheme: dark;
+    --bg: #191817;
+    --surface: #211F1E;
+    --surface-2: #262322;
+    --border: #322E2C;
+    --border-soft: #2A2725;
+    --cream: #EFE9E1;
+    --body: #B9B1A8;
+    --muted: #8A827A;
+    --faint: #6A625B;
+    --gold: #D9A441;
+    --gold-soft: rgba(217,164,65,.16);
+    --green: #7CC094;
+    --green-bg: rgba(124,192,148,.13);
+    --amber: #D4A24C;
+    --amber-bg: rgba(212,162,76,.13);
+    --red: #D2776A;
+    --red-bg: rgba(210,119,106,.13);
+    --teal: #6FC2B6;
+    --teal-bg: rgba(111,194,182,.12);
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --r: 14px; --r-sm: 9px;
   }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
-  body { font-family: var(--sans); background: var(--bg); color: var(--ink); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
-  .wrap { max-width: 1180px; margin: 0 auto; padding: 22px 22px 64px; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--body);
+    font: 14px/1.6 var(--sans);
+    -webkit-font-smoothing: antialiased;
+    padding: 34px 0 60px;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 26px; }
 
-  .signin-wrap { min-height: 76vh; display: flex; align-items: center; justify-content: center; padding: 24px 0; }
-  .signin-card { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r); padding: 34px 30px 26px; width: 100%; max-width: 380px; box-shadow: 0 1px 2px rgba(42,37,33,.04), 0 8px 28px rgba(42,37,33,.06); }
-  .signin-brand { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--terracotta); font-weight: 600; }
-  .signin-card h1 { font-size: 22px; margin: 10px 0 2px; color: var(--ink); letter-spacing: -.01em; }
-  .signin-sub { color: var(--muted); font-size: 13px; margin: 0 0 22px; }
-  .signin-card label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-2); margin: 0 0 5px; }
-  .signin-card input { width: 100%; box-sizing: border-box; padding: 10px 12px; font: inherit; font-size: 14px; color: var(--ink);
-    background: var(--bg); border: 1px solid var(--hair); border-radius: 9px; margin-bottom: 14px; }
-  .signin-card input:focus { outline: 2px solid var(--terracotta); outline-offset: 1px; border-color: transparent; }
-  .signin-card button { width: 100%; padding: 11px 14px; font: inherit; font-size: 14px; font-weight: 600; color: #fff;
-    background: var(--terracotta); border: 0; border-radius: 9px; cursor: pointer; margin-top: 4px; }
-  .signin-card button:disabled { opacity: .6; cursor: default; }
+  /* ---------- hosted-only: nav + sign-in (not in the artifact) ---------- */
+  .topnav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px;
+    font: 500 10.5px/1 var(--mono); letter-spacing: 1.1px; text-transform: uppercase; }
+  .topnav a, .topnav button { color: var(--faint); text-decoration: none; background: none; border: 0; cursor: pointer;
+    font: inherit; letter-spacing: inherit; text-transform: inherit; padding: 0; }
+  .topnav a:hover, .topnav button:hover { color: var(--gold); }
+  .topnav .who { color: var(--faint); }
+  .signin-wrap { min-height: 70vh; display: flex; align-items: center; justify-content: center; }
+  .signin-card { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; padding: 30px 28px 24px; width: 100%; max-width: 360px; }
+  .signin-card h1 { font-size: 26px; margin: 4px 0 4px; }
+  .signin-sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+  .signin-card label { display: block; font: 500 10px/1 var(--mono); letter-spacing: 1.2px; text-transform: uppercase; color: var(--faint); margin: 0 0 7px; }
+  .signin-card input { width: 100%; padding: 10px 12px; font: 14px var(--sans); color: var(--cream); background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: 8px; margin-bottom: 14px; }
+  .signin-card input:focus { outline: 1px solid var(--gold); border-color: var(--gold); }
+  .signin-card button { width: 100%; padding: 11px 14px; font: 600 11px/1 var(--mono); letter-spacing: 1.2px; text-transform: uppercase;
+    color: var(--gold); background: var(--gold-soft); border: 1px solid rgba(217,164,65,.35); border-radius: 999px; cursor: pointer; margin-top: 4px; }
+  .signin-card button:disabled { opacity: .5; cursor: default; }
   .signin-msg { min-height: 18px; margin-top: 12px; font-size: 12.5px; color: var(--red); text-align: center; }
 
-  .mast { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px 22px; margin-bottom: 18px; }
-  .brand h1 { font-family: var(--serif); font-size: 28px; font-weight: 400; margin: 0; letter-spacing: -.01em; }
-  .brand h1 em { font-style: italic; color: var(--terracotta); }
-  .brand .scope { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
-  .mast-ctl { margin-left: auto; display: flex; gap: 8px; align-items: center; }
-  .btn { font: inherit; font-size: 13px; padding: 8px 13px; min-height: 36px; border: 1px solid var(--hair); border-radius: var(--r-sm); background: var(--card); color: var(--ink-2); cursor: pointer; }
-  .btn:hover { border-color: var(--terracotta); color: var(--terracotta); }
-  .btn.on { background: var(--ink); border-color: var(--ink); color: #fff; }
-  a.btn { text-decoration: none; display: inline-flex; align-items: center; }
+  /* ---------- masthead ---------- */
+  .mast { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+  .eyebrow {
+    font: 600 10.5px/1 var(--mono); letter-spacing: 1.6px; text-transform: uppercase;
+    color: var(--faint); margin-bottom: 11px;
+  }
+  h1 { font: 600 34px/1.1 var(--serif); color: var(--cream); letter-spacing: -.4px; }
+  .mast-sub { font-size: 13.5px; color: var(--muted); margin-top: 9px; max-width: 400px; }
+  .live {
+    display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0;
+    background: var(--green-bg); color: var(--green); border-radius: 999px; padding: 5px 12px;
+    font: 600 10.5px/1 var(--mono); letter-spacing: 1.3px; text-transform: uppercase;
+  }
+  .live .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
 
-  .band { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
-  .pill { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border-radius: 20px; font-size: 12.5px; font-weight: 600; border: 1px solid; }
-  .pill.ok { background: var(--olive-bg); border-color: #d6dfc0; color: var(--olive); }
-  .pill.warn { background: var(--amber-bg); border-color: #efd9a3; color: var(--amber); }
-  .pill.bad { background: var(--red-bg); border-color: #efc9c0; color: var(--red); }
-  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  /* ---------- attention ---------- */
+  .attention { margin-top: 26px; display: flex; flex-direction: column; gap: 8px; }
+  .att-item {
+    display: flex; gap: 11px; align-items: flex-start;
+    background: var(--surface); border: 1px solid var(--border); border-left: 2px solid var(--faint);
+    border-radius: 9px; padding: 11px 14px; font-size: 13px; color: var(--body);
+  }
+  .att-item .att-tag {
+    font: 600 9.5px/1.7 var(--mono); letter-spacing: 1.1px; text-transform: uppercase;
+    flex-shrink: 0; color: var(--faint);
+  }
+  .att-item b { color: var(--cream); font-weight: 600; }
+  .att-item.bad { border-left-color: var(--red); } .att-item.bad .att-tag { color: var(--red); }
+  .att-item.warn { border-left-color: var(--amber); } .att-item.warn .att-tag { color: var(--amber); }
+  .att-item.info { border-left-color: var(--teal); } .att-item.info .att-tag { color: var(--teal); }
+  .att-item.ok { border-left-color: var(--green); } .att-item.ok .att-tag { color: var(--green); }
 
-  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 16px; }
-  .kpi { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r-sm); padding: 12px 14px; }
-  .kpi .l { font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
-  .kpi .v { font-size: 21px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
-  .kpi .s { font-size: 12px; color: var(--muted); margin-top: 2px; }
-  .kpi.red .v { color: var(--red); } .kpi.olive .v { color: var(--olive); } .kpi.amber .v { color: var(--amber); }
+  /* ---------- cards ---------- */
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 26px; }
+  @media (max-width: 620px) { .cards { grid-template-columns: 1fr; } }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; padding: 17px 19px 18px; }
+  .card .label {
+    font: 500 10px/1 var(--mono); letter-spacing: 1.4px; text-transform: uppercase; color: var(--faint);
+  }
+  .card .value {
+    font: 500 31px/1.15 var(--serif); color: var(--cream); margin-top: 11px;
+    font-variant-numeric: tabular-nums; letter-spacing: -.5px;
+  }
+  .card .delta { font-size: 12.5px; color: var(--muted); margin-top: 7px; }
 
-  .sec { display: flex; align-items: baseline; gap: 10px; margin: 26px 0 12px; flex-wrap: wrap; }
-  .sec h2 { font-family: var(--serif); font-weight: 400; font-size: 21px; margin: 0; }
-  .sec .hint { font-size: 12.5px; color: var(--muted); }
-  .sec .ctl { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
-  .toggle { display: inline-flex; border: 1px solid var(--hair); border-radius: var(--r-sm); overflow: hidden; }
-  .toggle button { font: inherit; font-size: 12.5px; padding: 6px 11px; border: 0; background: var(--card); color: var(--ink-2); cursor: pointer; border-right: 1px solid var(--hair); }
-  .toggle button:last-child { border-right: 0; }
-  .toggle button.on { background: var(--ink); color: #fff; }
+  /* ---------- blocks ---------- */
+  .block {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 11px;
+    padding: 20px 22px 22px; margin-top: 20px;
+  }
+  .block-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+  .block h2 { font: 600 19px/1.3 var(--serif); color: var(--cream); letter-spacing: -.2px; }
+  .narrative { font-size: 13.5px; color: var(--muted); margin-top: 7px; line-height: 1.6; }
+  .narrative b { color: var(--body); font-weight: 600; }
+  .block-body { margin-top: 18px; }
+  .chart-box { height: 250px; position: relative; }
 
-  .card { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r); margin-bottom: 14px; }
-  .card-h { padding: 14px 18px 0; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-  .card-h h3 { font-size: 14px; margin: 0; font-weight: 600; }
-  .card-h p { font-size: 12.5px; color: var(--muted); margin: 0; }
-  .card-b { padding: 12px 18px 16px; }
-  .chart-box { position: relative; height: 280px; }
-  .narrative { font-size: 13px; color: var(--ink-2); margin: 0 0 10px; }
-  .narrative b { color: var(--ink); }
+  /* ---------- tables ---------- */
+  .table-scroll { overflow-x: auto; margin: 0 -6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.8px; }
+  th {
+    text-align: left; font: 500 9.5px/1 var(--mono); letter-spacing: 1.1px; text-transform: uppercase;
+    color: var(--faint); padding: 0 10px 10px; border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: var(--gold); }
+  th .arrow { font-size: 7px; margin-left: 4px; opacity: .3; }
+  th.sort-active { color: var(--gold); } th.sort-active .arrow { opacity: 1; }
+  td { padding: 11px 10px; border-bottom: 1px solid var(--border-soft); color: var(--body); font-variant-numeric: tabular-nums; }
+  td.name { color: var(--cream); }
+  td.num, th.num { text-align: right; }
+  tbody tr:hover td { background: var(--surface-2); }
+  tbody tr:last-child td { border-bottom: none; }
+  .sub { font: 400 11.5px/1 var(--mono); color: var(--faint); letter-spacing: .3px; }
 
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
-  td { padding: 8px 10px; border-bottom: 1px solid var(--hair-2); }
-  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  tr.fatigued { background: var(--amber-bg); }
+  /* ---------- pills ---------- */
+  .pill {
+    display: inline-block; padding: 3px 9px; border-radius: 999px;
+    font: 600 9.5px/1.3 var(--mono); letter-spacing: .9px; text-transform: uppercase; white-space: nowrap;
+  }
+  .pill.active, .pill.ok { background: var(--green-bg); color: var(--green); }
+  .pill.inactive, .pill.wait { background: rgba(255,255,255,.05); color: var(--muted); }
+  .pill.hold { background: var(--amber-bg); color: var(--amber); }
+  .pill.bad { background: var(--red-bg); color: var(--red); }
+  .pill.era-new { background: var(--teal-bg); color: var(--teal); }
+  .pill.era-mid { background: var(--amber-bg); color: var(--amber); }
+  .pill.era-old { background: rgba(255,255,255,.05); color: var(--faint); }
+  .fatigue { color: var(--red); }
 
-  .funnel-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
-  .f-bar { flex: 1; height: 26px; border-radius: 5px; background: var(--terracotta-bg); position: relative; }
-  .f-bar i { display: block; height: 100%; border-radius: 5px; background: var(--terracotta); }
-  .f-label { width: 150px; font-size: 12.5px; color: var(--ink-2); flex-shrink: 0; }
-  .f-count { width: 60px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; flex-shrink: 0; }
-  .f-rate { width: 90px; text-align: right; font-size: 11.5px; color: var(--muted); flex-shrink: 0; }
-  .f-rate.bad { color: var(--red); font-weight: 600; }
+  /* ---------- funnel ---------- */
+  .funnel-row { display: flex; align-items: center; gap: 11px; margin: 11px 0 3px; }
+  .funnel-row .f-label { width: 106px; flex-shrink: 0; font-size: 12.5px; color: var(--body); }
+  .funnel-row .f-bar-track { flex: 1; background: rgba(255,255,255,.045); border-radius: 5px; height: 22px; overflow: hidden; }
+  .funnel-row .f-bar { background: linear-gradient(90deg, rgba(217,164,65,.85), rgba(217,164,65,.4)); height: 100%; border-radius: 5px; min-width: 3px; }
+  .funnel-row.leak .f-bar { background: linear-gradient(90deg, rgba(210,119,106,.9), rgba(210,119,106,.45)); }
+  .funnel-row .f-count { width: 52px; text-align: right; flex-shrink: 0; font: 500 15px/1 var(--serif); color: var(--cream); font-variant-numeric: tabular-nums; }
+  .f-rate { font: 400 10.5px/1 var(--mono); color: var(--faint); margin: 0 0 9px 117px; letter-spacing: .3px; }
+  .f-rate.bad { color: var(--red); }
+  .callout {
+    border-radius: 9px; padding: 12px 14px; font-size: 12.8px; margin-top: 15px; line-height: 1.55;
+    background: var(--red-bg); border: 1px solid rgba(210,119,106,.25); color: #E8AFA6;
+  }
+  .callout.info { background: rgba(255,255,255,.035); border-color: var(--border); color: var(--muted); }
+  .callout b { color: var(--cream); font-weight: 600; }
 
-  .loading, .empty, .err { padding: 22px 12px; text-align: center; color: var(--muted); font-size: 13px; }
-  .err { color: var(--red); }
-  .state { text-align: center; padding: 60px 20px; color: var(--muted); }
+  /* ---------- history ---------- */
+  .subhead { font: 600 15px/1.3 var(--serif); color: var(--cream); margin-bottom: 5px; }
+  .subnote { font-size: 12.5px; color: var(--muted); margin-bottom: 14px; line-height: 1.6; }
+  .hist-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 620px) { .hist-grid { grid-template-columns: 1fr; } }
+  .hist { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 15px 17px; }
+  .hist .h-city { font: 500 10px/1 var(--mono); letter-spacing: 1.4px; text-transform: uppercase; color: var(--faint); }
+  .hist .h-roas { font: 500 28px/1.1 var(--serif); color: var(--gold); font-variant-numeric: tabular-nums; margin-top: 9px; letter-spacing: -.4px; }
+  .hist .h-meta { font-size: 12px; color: var(--muted); line-height: 1.65; margin-top: 6px; }
 
-  footer { margin-top: 30px; font-size: 12px; color: var(--muted); line-height: 1.7; }
+  /* ---------- range switcher ---------- */
+  .range { display: inline-flex; gap: 2px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px; }
+  .range button {
+    font: 600 9.5px/1 var(--mono); letter-spacing: .9px; text-transform: uppercase; color: var(--muted);
+    background: none; border: 0; border-radius: 999px; padding: 6px 11px; cursor: pointer; transition: all .12s;
+  }
+  .range button:hover { color: var(--cream); }
+  .range button.on { background: var(--gold-soft); color: var(--gold); }
+
+  /* ---------- ads on/off comparison ---------- */
+  .cmp { margin-top: 4px; }
+  .cmp-row { display: flex; align-items: center; gap: 12px; margin: 10px 0; }
+  .cmp-lab { width: 118px; flex-shrink: 0; font: 500 10px/1.4 var(--mono); letter-spacing: 1px; text-transform: uppercase; color: var(--faint); }
+  .cmp-track { flex: 1; background: rgba(255,255,255,.045); border-radius: 5px; height: 26px; overflow: hidden; }
+  .cmp-bar { height: 100%; border-radius: 5px; min-width: 3px; background: linear-gradient(90deg, rgba(217,164,65,.8), rgba(217,164,65,.4)); }
+  .cmp-row.off .cmp-bar { background: linear-gradient(90deg, rgba(111,194,182,.8), rgba(111,194,182,.4)); }
+  .cmp-val { width: 108px; flex-shrink: 0; font: 500 15px/1 var(--serif); color: var(--cream); font-variant-numeric: tabular-nums; }
+  .cmp-val span { font: 400 11px/1 var(--sans); color: var(--muted); display: block; margin-top: 4px; }
+
+  /* ---------- blended efficiency ---------- */
+  .mer-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  @media (max-width: 620px) { .mer-cards { grid-template-columns: 1fr 1fr; } }
+  .mer-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 13px 14px; }
+  .mer-card .label { font: 500 9.5px/1 var(--mono); letter-spacing: 1.2px; text-transform: uppercase; color: var(--faint); }
+  .mer-card .value { font: 500 24px/1.15 var(--serif); color: var(--cream); margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .mer-card .foot { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+  .mer-card.flag .value { color: var(--red); }
+
+  .err { color: var(--red); font-size: 13px; padding: 6px 0; }
+  .loading { color: var(--faint); font-size: 13px; padding: 6px 0; }
+  footer {
+    margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border);
+    font-size: 11.8px; color: var(--faint); line-height: 1.75;
+  }
 </style>
 </head>
 <body>
-<div id="root" class="wrap"><div class="state">Loading…</div></div>
+<div class="wrap" id="root"><div class="loading">Loading…</div></div>
+
+<template id="dashboard-tpl">
+  <div class="topnav">
+    <a href="/hub.html">← Dashboards</a>
+    <span><span class="who" id="who"></span> · <button type="button" id="signout">Sign out</button></span>
+  </div>
+
+  <div class="mast">
+    <div>
+      <div class="eyebrow">Meta Ads · The Picnic Stories</div>
+      <h1>Ad Pulse</h1>
+      <div class="mast-sub">Picnic &amp; proposal styling across Delhi NCR — account 565789031303932 · INR</div>
+    </div>
+    <div class="live"><span class="dot"></span><span id="live-label">Live</span></div>
+  </div>
+
+  <div class="attention" id="attention">
+    <div class="att-item"><span class="att-tag">···</span><span>Running checks…</span></div>
+  </div>
+
+  <div class="cards" id="overview"><div class="loading">Fetching account data…</div></div>
+
+  <div class="block">
+    <div class="block-head"><h2>Active campaigns</h2><span class="pill wait" id="active-count">—</span></div>
+    <div class="narrative" id="active-narrative">Reading campaign performance…</div>
+    <div class="block-body"><div class="table-scroll" id="active-campaigns"><div class="loading">Fetching…</div></div></div>
+  </div>
+
+  <div class="block">
+    <div class="block-head">
+      <h2>Spend vs bookings</h2>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
+      <div class="range" id="city">
+        <button data-city="both" class="on">Both cities</button><button data-city="gurugram">Gurugram</button><button data-city="jaipur">Jaipur</button>
+      </div>
+      <div class="range" id="range">
+        <button data-days="30" class="on">30d</button><button data-days="60">60d</button><button data-days="90">90d</button><button data-days="all">All</button>
+      </div>
+    </div>
+    <div class="sub" id="trend-window" style="margin-top:10px;">…</div>
+    <div class="narrative" id="trend-narrative">Aligning daily ad spend against the dates bookings were made…</div>
+    <div class="block-body">
+      <div class="chart-box" style="height:270px;"><canvas id="trend"></canvas></div>
+      <div class="err" id="trend-err" style="display:none"></div>
+      <div id="lag-readout"></div>
+    </div>
+  </div>
+
+  <div class="block">
+    <div class="block-head"><h2>Blended efficiency</h2><span class="sub" id="mer-window">90 days</span></div>
+    <div class="narrative" id="mer-narrative">Matching ad spend against confirmed bookings…</div>
+    <div class="block-body">
+      <div class="mer-cards" id="mer-cards"></div>
+      <div class="cmp" id="mer-compare" style="margin-top:20px;"></div>
+      <div id="mer-holdout"></div>
+    </div>
+  </div>
+
+  <div class="block">
+    <div class="block-head"><h2>Pixel funnel</h2><span class="sub">14 days</span></div>
+    <div class="narrative" id="funnel-narrative">Reading pixel events…</div>
+    <div class="block-body" id="funnel"><div class="loading">Fetching…</div></div>
+  </div>
+
+  <div class="block">
+    <div class="block-head"><h2>Ad sets</h2><span class="sub">fatigue above 3.5</span></div>
+    <div class="narrative" id="adsets-narrative">Reading ad set delivery…</div>
+    <div class="block-body"><div class="table-scroll" id="adsets"><div class="loading">Fetching…</div></div></div>
+  </div>
+
+  <div class="block">
+    <div class="block-head"><h2>Audiences</h2><span class="sub">privacy floor at 1,000</span></div>
+    <div class="narrative">Custom, website and lookalike audiences available to target. Sizes reading &lt;1,000 are Meta's privacy floor, not the real count.</div>
+    <div class="block-body"><div class="table-scroll" id="audiences"><div class="loading">Fetching…</div></div></div>
+  </div>
+
+  <div class="block">
+    <div class="block-head"><h2>Lifetime ad performance</h2><span class="sub">all time · live</span></div>
+    <div class="narrative" id="lifetime-narrative">Reading every campaign ever run on this account…</div>
+    <div class="block-body"><div class="table-scroll" id="leaderboard"><div class="loading">Fetching…</div></div></div>
+  </div>
+
+  <div class="block">
+    <div class="subhead">Revenue baseline</div>
+    <div class="subnote">
+      Meta sees ad-attributed conversations and Leads, never closed bookings — revenue is earned off-platform over WhatsApp,
+      so no true ROAS exists in the API. This block is the only real revenue signal available, it is typed in by hand, and the
+      date ranges below are its last update rather than a live refresh.
+    </div>
+    <div class="hist-grid">
+      <div class="hist">
+        <div class="h-city">Gurugram</div>
+        <div class="h-roas">12.6×</div>
+        <div class="h-meta">108 bookings · ₹15.2L revenue<br>₹14,052 avg booking · Sep 2025 – Jun 2026</div>
+      </div>
+      <div class="hist">
+        <div class="h-city">Jaipur</div>
+        <div class="h-roas">7.3×</div>
+        <div class="h-meta">73 bookings · ₹7.7L revenue<br>₹10,597 avg booking · two seasons, 2024–25</div>
+      </div>
+      <div class="hist">
+        <div class="h-city">Combined</div>
+        <div class="h-roas">~10.1×</div>
+        <div class="h-meta">181 bookings · ₹22.9L revenue<br>₹12,657 avg booking · all available data</div>
+      </div>
+      <div class="hist">
+        <div class="h-city">Best segments</div>
+        <div class="h-roas" style="font-size:19px;">Women 25–34</div>
+        <div class="h-meta">74% of conversations<br>Birthday 51 · Proposal 30 · Anniversary 25</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Live sections read from Meta through the meta-live-snapshot function (cached ~7 minutes) · daily spend from ad_insights, synced
+    every morning by sync-meta-ads · pixel 1366746648648321 ·
+    Scale/kill verdicts stay hidden until a campaign has 20+ Lead events, because a handful of leads is too noisy to act on ·
+    Thresholds: scale at cost/conversation ≤ ₹25 or cost/Lead ≤ ₹150 · kill above ₹300/Lead · hold the WhatsApp objective until 50+ Leads ·
+    Meta-attributed Leads and raw pixel Lead events are different measurements and may legitimately disagree; the funnel block reconciles them. ·
+    City filter on the spend/bookings chart buckets every campaign ever run by name (anything matching "Jaipur" → Jaipur, everything else → Gurugram)
+    and every booking by its venue's city column; Delhi's one lifetime booking (0 in the last 90 days) is folded into the Gurugram bucket since the
+    only NCR campaign targets both.
+  </footer>
+</template>
 
 <script>
-/* ============================================================
-   Same shared login as hub.html / index.html — one Supabase project, one
-   anon key, one admin email gate. See docs/HOSTED_DASHBOARD_PLAN.md §3.
-   ============================================================ */
-const SUPABASE_URL = 'https://evmftrogyzoudiccqkya.supabase.co';
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2bWZ0cm9neXpvdWRpY2Nxa3lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTM5OTUsImV4cCI6MjA5NTI4OTk5NX0.ka2tLAY7xpe08X8TlNVgft4V__Qv7Ol27rd0daOtI4I';
-const ALLOWED = ['aksh.eeev@gmail.com'];
-const AD_ACCOUNT_ID = '565789031303932';
+/* ============ CONFIG ============ */
+const SUPABASE_URL  = "https://evmftrogyzoudiccqkya.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2bWZ0cm9neXpvdWRpY2Nxa3lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTM5OTUsImV4cCI6MjA5NTI4OTk5NX0.ka2tLAY7xpe08X8TlNVgft4V__Qv7Ol27rd0daOtI4I";
+const ALLOWED = ["aksh.eeev@gmail.com"];
+const LEAD_CONFIDENCE_MIN = 20; // don't render a hard gate verdict below this many leads
+const FATIGUE_FREQUENCY   = 3.5;
+const TARGET_COST_PER_CONV = 25;
+const FETCH_DAYS      = 180; // pull once, slice client-side so the range buttons are instant
+const DEFAULT_VIEW    = 30;
+const DEFAULT_CITY    = "both";
+const DARK_WEEK_SPEND = 100; // a week under this much spend counts as "ads off"
+const cityOfCampaignName = n => /jaipur/i.test(String(n || "")) ? "jaipur" : "gurugram";
+/* ================================ */
 
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
-  auth: { persistSession: true, autoRefreshToken: true },
-});
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { persistSession: true, autoRefreshToken: true } });
 
-/* ---------- primitives (same as index.html) ---------- */
-function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function inr(n) { const v = Math.round(Number(n) || 0); return '₹' + v.toLocaleString('en-IN'); }
-function inrShort(n) {
-  const v = Math.round(Number(n) || 0);
-  if (Math.abs(v) >= 100000) return '₹' + (v / 100000).toFixed(1).replace(/\.0$/, '') + 'L';
-  if (Math.abs(v) >= 1000) return '₹' + (v / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
-  return '₹' + v;
+const fmtINR = n => "₹" + Number(n).toLocaleString("en-IN", {maximumFractionDigits: n < 100 ? 2 : 0});
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const plural = (n, w) => n + " " + w + (n === 1 ? "" : "s");
+const numOr0 = s => { const n = Number(s); return isFinite(n) ? n : 0; };
+const numOrNaN = s => (s == null ? NaN : Number(s));
+const fmtCtr = v => (v == null || !isFinite(Number(v))) ? "—" : Number(v).toFixed(2) + "%";
+const prettyObjective = o => String(o || "—").replace(/^OUTCOME_/, "").replace(/_/g, " ").toLowerCase();
+// Graph returns created_time as "2026-06-28T17:22:57+0530" — add the colon so every browser parses it
+const parseMetaDate = s => { if (!s) return null; const d = new Date(String(s).replace(/([+-]\d{2})(\d{2})$/, "$1:$2")); return isNaN(d.getTime()) ? null : d; };
+
+function fail(id, e) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = '<div class="err">Couldn\'t load: ' + esc((e && e.message) || e) + '</div>';
 }
-function fmtDate(iso) {
-  const d = new Date(iso + 'T00:00:00');
-  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  return `${String(d.getDate()).padStart(2, '0')} ${MON[d.getMonth()]}`;
-}
-function isoDaysAgo(n) { const d = new Date(Date.now() - n * 86400000); return d.toISOString().slice(0, 10); }
-function daysBetween(a, b) { return Math.round((new Date(b) - new Date(a)) / 86400000); }
+function narrate(id, html) { const el = document.getElementById(id); if (el) el.innerHTML = html; }
 
-/* ---------- auth gate (same pattern as index.html / hub.html) ---------- */
-function signInScreen(message) {
-  document.getElementById('root').innerHTML = `
-    <div class="signin-wrap">
-      <div class="signin-card">
-        <div class="signin-brand">The Picnic Stories</div>
-        <h1>Meta Ads dashboard</h1>
-        <p class="signin-sub">Sign in to continue</p>
-        <form id="signin-form" autocomplete="on">
-          <label for="si-email">Email</label>
-          <input id="si-email" type="email" autocomplete="username" required />
-          <label for="si-pass">Password</label>
-          <input id="si-pass" type="password" autocomplete="current-password" required />
-          <button type="submit" id="si-go">Sign in</button>
-        </form>
-        <div id="si-msg" class="signin-msg">${message ? esc(message) : ''}</div>
-      </div>
-    </div>`;
-  const form = document.getElementById('signin-form');
-  const msg = document.getElementById('si-msg');
-  form.addEventListener('submit', async ev => {
-    ev.preventDefault();
-    const btn = document.getElementById('si-go');
-    btn.disabled = true; btn.textContent = 'Signing in…'; msg.textContent = '';
-    const { error } = await sb.auth.signInWithPassword({
-      email: document.getElementById('si-email').value.trim(),
-      password: document.getElementById('si-pass').value,
-    });
-    if (error) { btn.disabled = false; btn.textContent = 'Sign in'; msg.textContent = error.message || 'Sign-in failed.'; return; }
-    boot();
-  });
-}
-async function signOut() { await sb.auth.signOut(); location.reload(); }
-window.signOut = signOut;
-
-/* ============================================================
-   State + data loading. Every SQL read goes through booking_revenue_split /
-   ad_insights / ad_sync_runs directly (Postgres via supabase-js .from()) —
-   no client-side joins across thousands of rows, matching the standing rule
-   in docs/HOSTED_DASHBOARD_PLAN.md §8. The three live-only reads (pixel
-   funnel, ad-set fatigue, audiences) go through meta-live-snapshot, the
-   JWT-gated proxy — never a direct Graph API call from the browser, and
-   never a second copy of META_ACCESS_TOKEN in this page or in Vercel.
-   ============================================================ */
-const S = { session: null, city: 'both', rangeDays: 90, adInsights: [], syncRuns: [], bookings: [], live: null };
-
-const CITY_LABEL = { both: 'Both cities', gurugram: 'Gurugram', jaipur: 'Jaipur' };
-
-async function loadCore() {
-  const [insightsRes, syncRes, bookingsRes] = await Promise.all([
-    sb.from('ad_insights').select('account_id,campaign_id,campaign_name,date,spend_inr,results,result_indicator,effective_status_at_sync').gte('date', isoDaysAgo(180)).order('date', { ascending: true }),
-    sb.from('ad_sync_runs').select('run_at,window_start,window_end,rows_upserted,ok,error').order('run_at', { ascending: false }).limit(1),
-    sb.from('booking_revenue_split').select('id,booked_on,city,picnic_revenue,confirmed,excluded_reason,booking_kind').gte('booked_on', isoDaysAgo(180)),
-  ]);
-  if (insightsRes.error) throw new Error('ad_insights: ' + insightsRes.error.message);
-  if (syncRes.error) throw new Error('ad_sync_runs: ' + syncRes.error.message);
-  if (bookingsRes.error) throw new Error('booking_revenue_split: ' + bookingsRes.error.message);
-
-  S.adInsights = insightsRes.data || [];
-  S.syncRuns = syncRes.data || [];
-  S.bookings = (bookingsRes.data || []).filter(b => !b.excluded_reason && b.confirmed && ['picnic', 'picnic_stay'].includes(b.booking_kind));
+// Postgres date_trunc('week') is Monday-based; match it so the two series line up.
+function weekKey(isoStr) {
+  const x = new Date(String(isoStr).slice(0, 10) + "T00:00:00Z");
+  x.setUTCDate(x.getUTCDate() - ((x.getUTCDay() + 6) % 7));
+  return x.toISOString().slice(0, 10);
 }
 
+/* ---- Needs Attention: collected by each section, rendered once at the end ---- */
+const attention = [];
+const RANK = { bad: 0, warn: 1, info: 2 };
+const addAttention = (level, tag, text) => attention.push({ level, tag, text });
+
+function renderAttention() {
+  const el = document.getElementById("attention");
+  if (!attention.length) {
+    el.innerHTML = '<div class="att-item ok"><span class="att-tag">Clear</span><span>Nothing flagged — every check passed on this refresh.</span></div>';
+    return;
+  }
+  el.innerHTML = attention.slice().sort((a, b) => RANK[a.level] - RANK[b.level])
+    .map(a => '<div class="att-item ' + a.level + '"><span class="att-tag">' + esc(a.tag) + '</span><span>' + a.text + '</span></div>')
+    .join("");
+}
+
+function gateVerdict(leads, cpLead) {
+  if (isNaN(leads) || leads < LEAD_CONFIDENCE_MIN) return { cls: "wait", label: "Gathering n=" + (isNaN(leads) ? 0 : leads) };
+  if (isNaN(cpLead)) return { cls: "wait", label: "No lead cost" };
+  if (cpLead <= 150) return { cls: "ok", label: "Passing" };
+  if (cpLead > 300) return { cls: "bad", label: "Kill gate" };
+  return { cls: "hold", label: "Monitor" };
+}
+
+/* ---- Live Meta reads: one call to meta-live-snapshot (admin-only, JWT of the signed-in user) ---- */
 async function loadLive() {
-  const token = S.session.access_token;
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/meta-live-snapshot?section=all`, {
-    headers: { Authorization: `Bearer ${token}`, apikey: SUPABASE_ANON },
+  const { data: { session } } = await sb.auth.getSession();
+  const res = await fetch(SUPABASE_URL + "/functions/v1/meta-live-snapshot?section=all", {
+    headers: { Authorization: "Bearer " + session.access_token, apikey: SUPABASE_ANON }
   });
-  if (!res.ok) throw new Error(`meta-live-snapshot ${res.status}: ${await res.text()}`);
-  S.live = await res.json();
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error("meta-live-snapshot " + res.status + ((body && body.error) ? ": " + body.error : ""));
+  return body;
+}
+const section = (live, name) => {
+  const s = live && live[name];
+  if (!s) throw new Error(name + " missing from response");
+  if (!s.ok) throw new Error(s.error || name + " failed");
+  return s.data;
+};
+
+/* ---- Account overview + active campaigns ---- */
+function renderOverview(activeRows, allRows) {
+  const totalSpend = activeRows.reduce((s,r) => s + numOr0(r.spend), 0);
+  const totalConvs = activeRows.reduce((s,r) => s + numOr0(r.results), 0);
+  const totalLeads = activeRows.reduce((s,r) => s + numOr0(r.leads), 0);
+  const blendedCp = totalConvs > 0 ? totalSpend / totalConvs : NaN;
+  const paused = allRows ? allRows.filter(r => r.status !== "ACTIVE").length : null;
+  const lifeSpend = allRows ? allRows.reduce((s,r) => s + numOr0(r.spend), 0) : NaN;
+
+  if (!isNaN(blendedCp) && blendedCp > TARGET_COST_PER_CONV)
+    addAttention("warn", "Cost", "Blended cost per conversation is <b>" + fmtINR(blendedCp) + "</b>, above the " + fmtINR(TARGET_COST_PER_CONV) + " target.");
+
+  document.getElementById("live-label").textContent = activeRows.length ? "Live" : "Dark";
+  document.getElementById("overview").innerHTML = [
+    ["Spend · 14 days", fmtINR(totalSpend), activeRows.length + " active " + (activeRows.length === 1 ? "campaign" : "campaigns")],
+    ["Cost / conversation", isNaN(blendedCp) ? "—" : fmtINR(blendedCp),
+      isNaN(blendedCp) ? "no conversations yet" : (blendedCp <= TARGET_COST_PER_CONV ? "under the ₹25 target" : "above the ₹25 target")],
+    ["Conversations", totalConvs.toLocaleString("en-IN"), "WhatsApp messages started · " + plural(totalLeads, "Lead")],
+    ["Lifetime spend", isNaN(lifeSpend) ? "—" : fmtINR(lifeSpend), paused == null ? "—" : "across " + allRows.length + " campaigns ever run"]
+  ].map(([l,v,d]) => '<div class="card"><div class="label">'+esc(l)+'</div><div class="value">'+esc(v)+'</div><div class="delta">'+esc(d)+'</div></div>').join("");
 }
 
-/* ============================================================
-   Rendering. Every block is independent — a failure in one (most likely
-   meta-live-snapshot, since it's the one piece not yet deployed as of this
-   build) must not blank the rest of the page. Matches the Cowork artifact's
-   own Promise.allSettled-per-section pattern.
-   ============================================================ */
-function render() {
-  const root = document.getElementById('root');
-  root.innerHTML = `
-    <div class="mast">
-      <div class="brand">
-        <h1>Meta <em>Ads</em></h1>
-        <div class="scope">Account ${AD_ACCOUNT_ID} · signed in as ${esc(S.session.user.email)}</div>
-      </div>
-      <div class="mast-ctl">
-        <a class="btn" href="/hub.html">← Dashboards</a>
-        <button class="btn" onclick="signOut()">Sign out</button>
-      </div>
-    </div>
-    <div id="band" class="band"></div>
-    <div id="kpis" class="kpis"></div>
-
-    <div class="sec">
-      <h2>Spend vs bookings</h2>
-      <span class="hint" id="spend-window"></span>
-      <div class="ctl">
-        <div class="toggle" id="city-toggle">
-          <button data-city="both">Both cities</button><button data-city="gurugram">Gurugram</button><button data-city="jaipur">Jaipur</button>
-        </div>
-        <div class="toggle" id="range-toggle">
-          <button data-days="30">30d</button><button data-days="60">60d</button><button data-days="90">90d</button><button data-days="180">180d</button>
-        </div>
-      </div>
-    </div>
-    <div class="card"><div class="card-b">
-      <p class="narrative" id="spend-narrative"></p>
-      <div class="chart-box"><canvas id="c-spend"></canvas></div>
-    </div></div>
-
-    <div class="sec"><h2>Ads-on / ads-off</h2><span class="hint">Daily average picnic revenue, spend days vs zero-spend days, same 180-day window — a behavioural read, not attribution (see docs/META_ADS_DASHBOARD_PLAN.md §1: click-to-message ads have no campaign ID on the resulting booking)</span></div>
-    <div class="card"><div class="card-b" id="holdout">Computing…</div></div>
-
-    <div class="sec"><h2>Pixel funnel</h2><span class="hint">14 days · live</span></div>
-    <div class="card"><div class="card-b" id="funnel">Loading…</div></div>
-
-    <div class="sec"><h2>Ad sets</h2><span class="hint">Active campaigns · 14 days · live · fatigue line at frequency 3.5</span></div>
-    <div class="card"><div class="card-b" id="adsets">Loading…</div></div>
-
-    <div class="sec"><h2>Lifetime leaderboard</h2><span class="hint">Every campaign in ad_insights (full backfill target: since 2026-06-01)</span></div>
-    <div class="card"><div class="card-b" id="leaderboard">Loading…</div></div>
-
-    <div class="sec"><h2>Audiences</h2><span class="hint">Live</span></div>
-    <div class="card"><div class="card-b" id="audiences">Loading…</div></div>
-
-    <footer>
-      Historical spend/results read from <code>public.ad_insights</code>, synced daily by
-      the <code>sync-meta-ads</code> edge function. Pixel funnel, ad-set frequency and
-      audiences are read live via <code>meta-live-snapshot</code>, cached ~7 minutes.
-      City split on the spend/bookings chart: every booking's venue city, Jaipur vs
-      everything else (Delhi's one lifetime booking folds into Gurugram — the only NCR
-      campaign targets both). "Ads-on/ads-off" is a behavioural signal, not
-      attribution — this business runs click-to-message ads with no campaign ID reaching
-      the resulting booking, so "which campaign converted" is not computable from this
-      data (see docs/META_ADS_DASHBOARD_PLAN.md §1).
-    </footer>`;
-
-  renderBand();
-  renderKpis();
-  wireCityToggle();
-  wireRangeToggle();
-  renderSpendChart();
-  renderHoldout();
-  renderLive();
-}
-
-/* ---- Delivery-status band: per campaign with data in the last 30 days, days since
-   last non-zero spend. Campaigns whose most recent status snapshot is ACTIVE are the
-   ones worth flagging red; anything already PAUSED going quiet is not news. ---- */
-function renderBand() {
-  const byCampaign = new Map();
-  for (const r of S.adInsights) {
-    if (!byCampaign.has(r.campaign_id)) byCampaign.set(r.campaign_id, { name: r.campaign_name, status: r.effective_status_at_sync, lastSpendDate: null });
-    const c = byCampaign.get(r.campaign_id);
-    c.status = r.effective_status_at_sync; // ad_insights rows are date-ordered ascending, so the last write wins = latest status snapshot
-    if (Number(r.spend_inr) > 0 && (!c.lastSpendDate || r.date > c.lastSpendDate)) c.lastSpendDate = r.date;
+function renderActiveCampaigns(rows) {
+  document.getElementById("active-count").textContent = rows.length + " running";
+  if (!rows.length) {
+    document.getElementById("active-campaigns").innerHTML = '<div class="loading">Nothing is running right now.</div>';
+    narrate("active-narrative", "No campaign is delivering — the account is dark. Every number above is historical.");
+    addAttention("info", "Idle", "No campaigns are currently active in this account.");
+    return;
   }
+  let lowSample = 0;
+  const trs = rows.map(c => {
+    const spend = numOr0(c.spend), convs = numOrNaN(c.results), cpConv = numOrNaN(c.costPerResult);
+    const leads = numOr0(c.leads);
+    const cpLead = leads > 0 ? spend / leads : NaN;
+    const gate = gateVerdict(leads, cpLead);
+    if (gate.cls === "wait") lowSample++;
+    if (gate.cls === "bad") addAttention("bad", "Kill gate", "<b>" + esc(c.name) + "</b> is above ₹300 per Lead (" + fmtINR(cpLead) + ").");
+    else if (gate.cls === "wait") addAttention("info", "Low n", "<b>" + esc(c.name) + "</b> has " + plural(leads, "Lead") +
+      " in 14 days — too few to fire a scale or kill verdict.");
+    return "<tr><td class='name'>" + esc(c.name) + "<div class='sub'>" + esc(prettyObjective(c.objective)) + "</div></td>" +
+      "<td class='num'>" + fmtINR(spend) + "</td><td class='num'>" + (isNaN(convs) ? "—" : convs) +
+      "</td><td class='num'>" + (isNaN(cpConv) ? "—" : fmtINR(cpConv)) + "</td><td class='num'>" + leads +
+      "</td><td class='num'>" + (isNaN(cpLead) ? "—" : fmtINR(cpLead)) + "</td><td class='num'>" + fmtCtr(c.ctr) +
+      "</td><td class='num'><span class='pill " + gate.cls + "'>" + esc(gate.label) + "</span></td></tr>";
+  }).join("");
 
-  const today = isoDaysAgo(0);
-  const pills = [];
-  for (const c of byCampaign.values()) {
-    if (c.status !== 'ACTIVE') continue;
-    const daysSince = c.lastSpendDate ? daysBetween(c.lastSpendDate, today) : null;
-    const cls = daysSince === null || daysSince > 1 ? 'bad' : daysSince === 1 ? 'warn' : 'ok';
-    const label = daysSince === null ? `${esc(c.name)} — no spend recorded` : daysSince === 0 ? `${esc(c.name)} — spending today` : `${esc(c.name)} — ${daysSince}d since last spend`;
-    pills.push(`<span class="pill ${cls}"><span class="dot"></span>${label}</span>`);
+  const best = rows.slice().sort((a,b) => (numOrNaN(a.costPerResult) || Infinity) - (numOrNaN(b.costPerResult) || Infinity))[0];
+  const bestCp = numOrNaN(best.costPerResult);
+  narrate("active-narrative",
+    plural(rows.length, "campaign") + " delivering. " +
+    (isNaN(bestCp) ? "" : "Best cost per conversation is <b>" + fmtINR(bestCp) + "</b> on " + esc(best.name) + ". ") +
+    (lowSample ? lowSample + " of them " + (lowSample === 1 ? "has" : "have") + " too few Leads for the gates to say anything yet." : "All gates have enough Lead volume to be trusted."));
+
+  document.getElementById("active-campaigns").innerHTML =
+    '<table><thead><tr><th>Campaign</th><th class="num">Spend</th><th class="num">Convs</th><th class="num">₹/conv</th>' +
+    '<th class="num">Leads</th><th class="num">₹/lead</th><th class="num">CTR</th><th class="num">Gate</th></tr></thead><tbody>' + trs + '</tbody></table>';
+}
+
+/* ---- Shared daily series: ad_insights spend + booking_revenue_split bookings on one contiguous day axis.
+   Bookings are dated by booked_on (IST day the booking was made) — the only date that can respond to an ad. ---- */
+const isoDay = d => new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().slice(0, 10);
+
+async function fetchDailySeries() {
+  const since = isoDay(new Date(Date.now() - FETCH_DAYS * 86400000));
+  const until = isoDay(new Date());
+
+  const [spendRes, bookingRes] = await Promise.all([
+    // ad_insights = one row per (campaign, day), synced daily and backfilled 180 days (2026-09-23)
+    sb.from("ad_insights").select("campaign_id,campaign_name,date,spend_inr").gte("date", since).lte("date", until),
+    // booking_revenue_split is the single canonical definition of picnic revenue (city column added 2026-09-23).
+    // A picnic_stay with no split recorded returns NULL revenue + split_unknown, never a guess.
+    sb.from("booking_revenue_split").select("booked_on,city,picnic_revenue,split_unknown,confirmed,excluded_reason,booking_kind").gte("booked_on", since)
+  ]);
+  if (spendRes.error) throw new Error("ad_insights: " + spendRes.error.message);
+  if (bookingRes.error) throw new Error("booking_revenue_split: " + bookingRes.error.message);
+
+  const perCity = { gurugram: {}, jaipur: {} };
+  const touch = (city, k) => (perCity[city][k] = perCity[city][k] || { spend: 0, bookings: 0, revenue: 0, unknown: 0 });
+
+  (spendRes.data || []).forEach(r => {
+    const k = String(r.date || "").slice(0, 10); if (!k) return;
+    touch(cityOfCampaignName(r.campaign_name), k).spend += numOr0(r.spend_inr);
+  });
+  (bookingRes.data || []).forEach(r => {
+    if (r.excluded_reason || !r.confirmed || !["picnic", "picnic_stay"].includes(r.booking_kind)) return;
+    const k = String(r.booked_on || "").slice(0, 10); if (!k) return;
+    const c = touch(r.city === "jaipur" ? "jaipur" : "gurugram", k);
+    c.bookings += 1;
+    c.revenue  += numOr0(r.picnic_revenue);
+    c.unknown  += r.split_unknown ? 1 : 0;
+  });
+
+  const build = city => {
+    const dates = [], spend = [], bookings = [], revenue = [], unknown = [];
+    for (let t = Date.parse(since + "T00:00:00Z"); t <= Date.parse(until + "T00:00:00Z"); t += 86400000) {
+      const k = new Date(t).toISOString().slice(0, 10);
+      const c = perCity[city][k] || { spend: 0, bookings: 0, revenue: 0, unknown: 0 };
+      dates.push(k); spend.push(c.spend); bookings.push(c.bookings);
+      revenue.push(c.revenue); unknown.push(c.unknown);
+    }
+    return { dates, spend, bookings, revenue, unknown, since, until };
+  };
+
+  const gurugram = build("gurugram"), jaipur = build("jaipur");
+  const both = {
+    dates: gurugram.dates,
+    spend:    gurugram.spend.map((v, i) => v + jaipur.spend[i]),
+    bookings: gurugram.bookings.map((v, i) => v + jaipur.bookings[i]),
+    revenue:  gurugram.revenue.map((v, i) => v + jaipur.revenue[i]),
+    unknown:  gurugram.unknown.map((v, i) => v + jaipur.unknown[i]),
+    since, until
+  };
+  return { both, gurugram, jaipur };
+}
+
+function pearson(xs, ys) {
+  const n = Math.min(xs.length, ys.length);
+  if (n < 5) return NaN;
+  let mx = 0, my = 0;
+  for (let i = 0; i < n; i++) { mx += xs[i]; my += ys[i]; }
+  mx /= n; my /= n;
+  let sxy = 0, sxx = 0, syy = 0;
+  for (let i = 0; i < n; i++) { const dx = xs[i] - mx, dy = ys[i] - my; sxy += dx*dy; sxx += dx*dx; syy += dy*dy; }
+  return (sxx > 0 && syy > 0) ? sxy / Math.sqrt(sxx * syy) : NaN;
+}
+
+/* ---- Range + city switching: one fetch (three city series), sliced client-side ---- */
+let dailyByCity = null, trendChart = null;
+let selectedDays = DEFAULT_VIEW, selectedCity = DEFAULT_CITY;
+const CITY_LABEL = { both: "Both cities", gurugram: "Gurugram", jaipur: "Jaipur" };
+
+function sliceDaily(all, days) {
+  let start = 0;
+  if (days === "all") {
+    while (start < all.dates.length && all.spend[start] === 0 && all.bookings[start] === 0) start++;
+  } else {
+    start = Math.max(0, all.dates.length - Number(days));
   }
-  if (pills.length === 0) pills.push(`<span class="pill warn"><span class="dot"></span>No active campaigns found in ad_insights</span>`);
-
-  const run = S.syncRuns[0];
-  const syncCls = !run ? 'bad' : !run.ok ? 'bad' : daysBetween(run.run_at.slice(0, 10), today) * 24 > 36 ? 'bad' : 'ok';
-  const syncLabel = !run ? 'Never synced' : !run.ok ? `Last sync failed: ${esc(run.error || 'unknown error')}` : `Synced ${new Date(run.run_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
-  pills.push(`<span class="pill ${syncCls}"><span class="dot"></span>${syncLabel}</span>`);
-
-  // Runway card intentionally omitted — Phase 2's balance/spend_cap curl check has not
-  // been run (no token available this session). Per docs/HOSTED_DASHBOARD_PLAN.md §6:
-  // "drop the runway card rather than faking a number." Add it back once that curl
-  // succeeds; until then this row of pills is the whole delivery-status band.
-
-  document.getElementById('band').innerHTML = pills.join('');
+  return {
+    dates: all.dates.slice(start), spend: all.spend.slice(start),
+    bookings: all.bookings.slice(start), revenue: all.revenue.slice(start),
+    unknown: (all.unknown || []).slice(start),
+    since: all.dates[start] || all.since, until: all.until
+  };
 }
 
-function renderKpis() {
-  const today = isoDaysAgo(0);
-  const last30 = S.adInsights.filter(r => daysBetween(r.date, today) <= 30);
-  const spend30 = last30.reduce((s, r) => s + Number(r.spend_inr), 0);
-  const results30 = last30.reduce((s, r) => s + Number(r.results || 0), 0);
-  const cpResult = results30 > 0 ? spend30 / results30 : null;
-
-  const bookings30 = S.bookings.filter(b => daysBetween(b.booked_on, today) <= 30);
-  const revenue30 = bookings30.reduce((s, b) => s + Number(b.picnic_revenue || 0), 0);
-  const mer = spend30 > 0 ? revenue30 / spend30 : null;
-
-  const kpis = [
-    { l: '30d spend', v: inr(spend30) },
-    { l: '30d results', v: results30, s: cpResult != null ? `${inr(cpResult)} / result` : '—' },
-    { l: '30d picnic bookings', v: bookings30.length, s: `n=${bookings30.length}, directional` },
-    { l: '30d picnic revenue', v: inrShort(revenue30) },
-    { l: 'MER (30d)', v: mer != null ? mer.toFixed(2) + '×' : '—', s: 'revenue ÷ spend, not attribution' },
-  ];
-  document.getElementById('kpis').innerHTML = kpis.map(k => `
-    <div class="kpi"><div class="l">${esc(k.l)}</div><div class="v">${k.v}</div>${k.s ? `<div class="s">${esc(k.s)}</div>` : ''}</div>`).join('');
+// Attention items raised by the range-dependent blocks are cleared and re-raised on every
+// toggle, so the list always describes the view on screen (the artifact only ever
+// rendered its first view, so it never needed this).
+let viewAttentionStart = 0;
+function applyView() {
+  if (!dailyByCity) return;
+  attention.length = viewAttentionStart;
+  const all = dailyByCity[selectedCity] || dailyByCity.both;
+  const view = sliceDaily(all, selectedDays);
+  renderTrend(view, selectedCity);
+  renderBlended(view, selectedCity);
+  if (bootDone) renderAttention();
 }
 
-function wireCityToggle() {
-  const el = document.getElementById('city-toggle');
-  [...el.querySelectorAll('button')].forEach(b => {
-    b.classList.toggle('on', b.dataset.city === S.city);
-    b.onclick = () => { S.city = b.dataset.city; renderSpendChart(); wireCityToggle(); };
+function wireToggle(groupId, apply) {
+  document.querySelectorAll("#" + groupId + " button").forEach(b => {
+    b.addEventListener("click", () => {
+      document.querySelectorAll("#" + groupId + " button").forEach(x => x.classList.remove("on"));
+      b.classList.add("on");
+      apply(b);
+      applyView();
+    });
   });
 }
-function wireRangeToggle() {
-  const el = document.getElementById('range-toggle');
-  [...el.querySelectorAll('button')].forEach(b => {
-    b.classList.toggle('on', Number(b.dataset.days) === S.rangeDays);
-    b.onclick = () => { S.rangeDays = Number(b.dataset.days); renderSpendChart(); wireRangeToggle(); };
-  });
-}
 
-function cityOfCampaignName(name) { return /jaipur/i.test(String(name || '')) ? 'jaipur' : 'gurugram'; }
+/* ---- Spend vs bookings, with a lag scan ---- */
+function renderTrend(daily, city) {
+  const dates = daily.dates, spend = daily.spend, bookings = daily.bookings;
+  const cityTag = city && city !== "both" ? CITY_LABEL[city] + " only · " : "";
+  document.getElementById("trend-window").textContent =
+    cityTag + daily.since + " → " + daily.until + " · " + dates.length + " days";
 
-function renderSpendChart() {
-  const today = isoDaysAgo(0);
-  const since = isoDaysAgo(S.rangeDays - 1);
-  const dates = [];
-  for (let i = S.rangeDays - 1; i >= 0; i--) dates.push(isoDaysAgo(i));
-
-  const spendByDate = new Map(dates.map(d => [d, 0]));
-  for (const r of S.adInsights) {
-    if (r.date < since || r.date > today) continue;
-    if (S.city !== 'both' && cityOfCampaignName(r.campaign_name) !== S.city) continue;
-    spendByDate.set(r.date, (spendByDate.get(r.date) || 0) + Number(r.spend_inr));
-  }
-  const bookingsByDate = new Map(dates.map(d => [d, 0]));
-  for (const b of S.bookings) {
-    if (b.booked_on < since || b.booked_on > today) continue;
-    if (S.city !== 'both' && b.city !== S.city) continue;
-    bookingsByDate.set(b.booked_on, (bookingsByDate.get(b.booked_on) || 0) + 1);
+  let best = { lag: 0, r: -Infinity };
+  for (let L = 0; L <= 21; L++) {
+    const r = pearson(spend.slice(0, spend.length - L), bookings.slice(L));
+    if (!isNaN(r) && r > best.r) best = { lag: L, r: r };
   }
 
-  const spendSeries = dates.map(d => spendByDate.get(d));
-  const bookingSeries = dates.map(d => bookingsByDate.get(d));
-  const totalSpend = spendSeries.reduce((a, b) => a + b, 0);
-  const totalBookings = bookingSeries.reduce((a, b) => a + b, 0);
-  const zeroSpendDays = spendSeries.filter(v => v === 0).length;
+  const totalBookings = bookings.reduce((a, b) => a + b, 0);
+  const darkDays = spend.filter(v => v < 1).length;
+  const onDark = dates.reduce((s, _, i) => s + (spend[i] < 1 ? bookings[i] : 0), 0);
+  const darkShare = totalBookings ? onDark / totalBookings : 0;
 
-  document.getElementById('spend-window').textContent = `${fmtDate(since)} → ${fmtDate(today)} · ${CITY_LABEL[S.city]}`;
-  document.getElementById('spend-narrative').innerHTML =
-    `<b>${inr(totalSpend)}</b> spent, <b>${totalBookings}</b> confirmed picnic booking${totalBookings === 1 ? '' : 's'} over ${S.rangeDays} days` +
-    (zeroSpendDays ? ` — <b>${zeroSpendDays}</b> day${zeroSpendDays === 1 ? '' : 's'} with ₹0 spend.` : '.');
+  narrate("trend-narrative",
+    "Daily ad spend against the day each <b>picnic</b> booking was made — not the event date, and stays excluded since no ads run on stay. " +
+    "<b>" + plural(totalBookings, "picnic booking") + "</b> across " + dates.length + " days, of which <b>" + onDark +
+    "</b> arrived on days with zero ad spend (" + darkDays + " such days in the window).");
 
-  const ctx = document.getElementById('c-spend').getContext('2d');
-  if (S.spendChart) S.spendChart.destroy();
-  S.spendChart = new Chart(ctx, {
+  const rTxt = isFinite(best.r) ? best.r.toFixed(2) : "—";
+  const strength = !isFinite(best.r) ? "no measurable relationship"
+    : Math.abs(best.r) < 0.2 ? "no relationship worth acting on"
+    : Math.abs(best.r) < 0.4 ? "a weak relationship"
+    : Math.abs(best.r) < 0.6 ? "a moderate relationship" : "a strong relationship";
+  const strong = isFinite(best.r) && best.r >= 0.4;
+
+  document.getElementById("lag-readout").innerHTML =
+    '<div class="callout' + (strong ? " info" : "") + '"><b>Lag scan.</b> Testing spend against bookings 0–21 days later, ' +
+    'the best fit is a <b>' + best.lag + '-day lag</b> at <b>r = ' + rTxt + '</b> — ' + strength + '. ' +
+    (darkShare > 0.4
+      ? '<b>' + Math.round(darkShare * 100) + '% of bookings arrived on zero-spend days</b>, so daily spend is not what is driving bookings in this data. ' +
+        'Either demand is largely organic, repeat or seasonal, or the true lag is longer than three weeks.'
+      : 'Daily booking counts run 0–3, so a single day moves r noticeably — directional only, never proof.') +
+    '</div>';
+  if (darkShare > 0.4) addAttention("warn", "Causation",
+    "<b>" + Math.round(darkShare * 100) + "% of bookings</b> arrived on days with zero ad spend — spend and bookings are not moving together.");
+
+  const canvas = document.getElementById("trend");
+  const ctx = canvas.getContext("2d");
+  const grad = ctx.createLinearGradient(0, 0, 0, 270);
+  grad.addColorStop(0, "rgba(217,164,65,.34)");
+  grad.addColorStop(1, "rgba(217,164,65,0)");
+
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(canvas, {
     data: {
-      labels: dates.map(fmtDate),
+      labels: dates.map(k => new Date(k + "T00:00:00Z").toLocaleDateString("en-IN", { month: "short", day: "numeric" })),
       datasets: [
-        { type: 'bar', label: 'Spend (₹)', data: spendSeries, backgroundColor: '#b8552a', borderRadius: 3, yAxisID: 'y' },
-        { type: 'line', label: 'Bookings', data: bookingSeries, borderColor: '#5c6b42', backgroundColor: '#5c6b42', tension: .3, pointRadius: 2.5, yAxisID: 'y1' },
-      ],
+        { type: "line", label: "Ad spend (₹)", data: spend, borderColor: "#D9A441", backgroundColor: grad,
+          borderWidth: 2, fill: true, tension: .28, pointRadius: 0, pointHoverRadius: 4, yAxisID: "y", order: 2 },
+        { type: "line", label: "Picnic bookings", data: bookings, borderColor: "#6FC2B6", backgroundColor: "#6FC2B6",
+          borderWidth: 2, fill: false, tension: .3, pointRadius: dates.length > 100 ? 0 : 2,
+          pointHoverRadius: 5, yAxisID: "y1", order: 1 }
+      ]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      scales: {
-        x: { ticks: { maxTicksLimit: 12, font: { size: 11 } }, grid: { display: false } },
-        y: { position: 'left', beginAtZero: true, ticks: { callback: v => inrShort(v), font: { size: 11 } } },
-        y1: { position: 'right', beginAtZero: true, grid: { display: false }, ticks: { stepSize: 1, font: { size: 11 } } },
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { position: "bottom", labels: { boxWidth: 8, boxHeight: 8, usePointStyle: true, pointStyle: "circle",
+          font: { size: 10.5, family: "ui-monospace, Menlo, monospace" }, color: "#8A827A", padding: 16 } },
+        tooltip: { backgroundColor: "#2A2725", borderColor: "#3A3634", borderWidth: 1, padding: 10, cornerRadius: 8,
+          titleColor: "#EFE9E1", bodyColor: "#B9B1A8", titleFont: { size: 11.5 }, bodyFont: { size: 11.5 }, displayColors: false }
       },
-      plugins: { legend: { position: 'bottom', labels: { boxWidth: 11, font: { size: 11.5 } } } },
-    },
+      scales: {
+        y:  { position: "left", border: { display: false }, grid: { color: "rgba(255,255,255,.045)" },
+              ticks: { font: { size: 10, family: "ui-monospace, Menlo, monospace" }, color: "#6A625B", maxTicksLimit: 4, callback: v => "₹" + v } },
+        y1: { position: "right", border: { display: false }, grid: { drawOnChartArea: false }, beginAtZero: true,
+              ticks: { font: { size: 10, family: "ui-monospace, Menlo, monospace" }, color: "#6A625B", precision: 0, maxTicksLimit: 4 } },
+        x:  { border: { display: false }, grid: { display: false },
+              ticks: { font: { size: 9.5, family: "ui-monospace, Menlo, monospace" }, color: "#6A625B", maxRotation: 0, autoSkipPadding: 22 } }
+      }
+    }
   });
 }
 
-/* ---- Ads-on / ads-off: behavioural split of daily picnic revenue by whether that
-   day had any spend, over the full 180-day loaded window. Not attribution — see the
-   narrative text and footer disclaimer. ---- */
-function renderHoldout() {
-  const spendByDate = new Map();
-  for (const r of S.adInsights) spendByDate.set(r.date, (spendByDate.get(r.date) || 0) + Number(r.spend_inr));
-  const revenueByDate = new Map();
-  for (const b of S.bookings) revenueByDate.set(b.booked_on, (revenueByDate.get(b.booked_on) || 0) + Number(b.picnic_revenue || 0));
-
-  const allDates = [...spendByDate.keys()];
-  if (allDates.length === 0) {
-    document.getElementById('holdout').innerHTML = '<div class="empty">No synced spend data yet — sync-meta-ads has not run.</div>';
+/* ---- Ad sets across active campaigns, with frequency/fatigue ---- */
+function renderAdsets(data) {
+  const rows = data.adsets || [];
+  if (!data.campaigns) {
+    document.getElementById("adsets").innerHTML = '<div class="loading">No active campaigns.</div>';
+    narrate("adsets-narrative", "Nothing delivering, so no ad sets to read.");
     return;
   }
-  const onDays = allDates.filter(d => spendByDate.get(d) > 0);
-  const offDays = allDates.filter(d => spendByDate.get(d) === 0);
-  const avgRev = ds => ds.length ? ds.reduce((s, d) => s + (revenueByDate.get(d) || 0), 0) / ds.length : null;
-  const onAvg = avgRev(onDays), offAvg = avgRev(offDays);
-
-  document.getElementById('holdout').innerHTML = `
-    <div class="kpis" style="margin-bottom:0">
-      <div class="kpi"><div class="l">Ads-on days</div><div class="v">${onDays.length}</div><div class="s">avg ${onAvg != null ? inrShort(onAvg) : '—'}/day picnic revenue</div></div>
-      <div class="kpi"><div class="l">Ads-off days</div><div class="v">${offDays.length}</div><div class="s">avg ${offAvg != null ? inrShort(offAvg) : '—'}/day picnic revenue</div></div>
-    </div>`;
+  let fatiguedCount = 0, maxFreq = 0;
+  const trs = rows.map(r => {
+    const cp = numOrNaN(r.costPerResult);
+    const freq = numOrNaN(r.frequency);
+    if (!isNaN(freq)) maxFreq = Math.max(maxFreq, freq);
+    const fatigued = !isNaN(freq) && freq > FATIGUE_FREQUENCY;
+    if (fatigued) {
+      fatiguedCount++;
+      addAttention("warn", "Fatigue", "Ad set <b>" + esc(r.name) + "</b> is at frequency " + freq.toFixed(2) +
+        " — the same people keep seeing it; refresh the creative before CTR drops.");
+    }
+    const warn = !isNaN(cp) && cp > TARGET_COST_PER_CONV ? ' style="color:var(--red)"' : "";
+    return "<tr><td class='name'>" + esc(r.name) + "</td><td class='num'>" + fmtINR(numOr0(r.spend)) +
+      "</td><td class='num'>" + (r.results == null ? "—" : r.results) +
+      "</td><td class='num'" + warn + ">" + (isNaN(cp) ? "—" : fmtINR(cp)) + "</td><td class='num'>" + fmtCtr(r.ctr) +
+      "</td><td class='num" + (fatigued ? " fatigue" : "") + "'>" + (isNaN(freq) ? "—" : freq.toFixed(2)) + "</td></tr>";
+  }).join("");
+  narrate("adsets-narrative", plural(rows.length, "ad set") + " delivering. " +
+    (fatiguedCount ? "<b>" + plural(fatiguedCount, "ad set") + "</b> past the 3.5 fatigue line — creative needs refreshing."
+                   : "Highest frequency is <b>" + maxFreq.toFixed(2) + "</b>, comfortably under the 3.5 fatigue line."));
+  document.getElementById("adsets").innerHTML =
+    '<table><thead><tr><th>Ad set</th><th class="num">Spend</th><th class="num">Convs</th><th class="num">₹/conv</th>' +
+    '<th class="num">CTR</th><th class="num">Freq</th></tr></thead><tbody>' + trs + '</tbody></table>';
 }
 
-/* ---- Live sections via meta-live-snapshot — loaded + rendered separately from the
-   historical sections so a failure here never blanks the rest of the page. ---- */
-async function renderLive() {
-  try {
-    await loadLive();
-  } catch (err) {
-    const msg = `<div class="err">Live Meta data unavailable: ${esc(err.message || String(err))}<br><span style="color:var(--muted);font-weight:400;font-size:12px">meta-live-snapshot may not be deployed yet, or META_ACCESS_TOKEN is not set — this is a known open item as of the 2026-09-23 build.</span></div>`;
-    document.getElementById('funnel').innerHTML = msg;
-    document.getElementById('adsets').innerHTML = msg;
-    document.getElementById('audiences').innerHTML = msg;
-    renderLeaderboard(); // doesn't depend on live data
-    return;
+/* ---- Blended efficiency: MER + the accidental ads-off holdout ---- */
+function renderBlended(daily, city) {
+  const cityTag = city && city !== "both" ? CITY_LABEL[city] + " only · " : "";
+  document.getElementById("mer-window").textContent = cityTag + daily.since + " → " + daily.until;
+
+  const weeks = {};
+  const touch = k => (weeks[k] = weeks[k] || { spend: 0, bookings: 0, revenue: 0, unknown: 0 });
+  daily.dates.forEach((k, i) => {
+    const w = touch(weekKey(k));
+    w.spend += daily.spend[i];
+    w.bookings += daily.bookings[i];
+    w.revenue += daily.revenue[i];
+    w.unknown += (daily.unknown && daily.unknown[i]) || 0;
+  });
+
+  const keys = Object.keys(weeks).sort();
+  if (!keys.length) { document.getElementById("mer-cards").innerHTML = '<div class="loading">No overlapping data.</div>'; return; }
+
+  const totSpend = keys.reduce((s,k) => s + weeks[k].spend, 0);
+  const totBookings = keys.reduce((s,k) => s + weeks[k].bookings, 0);
+  const totRevenue = keys.reduce((s,k) => s + weeks[k].revenue, 0);
+  const mer = totSpend > 0 ? totRevenue / totSpend : NaN;
+  const costPerBooking = totBookings > 0 ? totSpend / totBookings : NaN;
+
+  const onW  = keys.filter(k => weeks[k].spend >= DARK_WEEK_SPEND);
+  const offW = keys.filter(k => weeks[k].spend <  DARK_WEEK_SPEND);
+  const rate = ks => ks.length ? ks.reduce((s,k) => s + weeks[k].bookings, 0) / ks.length : NaN;
+  const onRate = rate(onW), offRate = rate(offW);
+  const offRevenue = offW.reduce((s,k) => s + weeks[k].revenue, 0);
+
+  document.getElementById("mer-cards").innerHTML = [
+    ["MER", isNaN(mer) ? "—" : mer.toFixed(1) + "×", "₹" + (isNaN(mer) ? "—" : mer.toFixed(0)) + " booked per ₹1 spent"],
+    ["Cost / picnic", isNaN(costPerBooking) ? "—" : fmtINR(costPerBooking), "ad spend ÷ picnic bookings"],
+    ["Ad spend", fmtINR(totSpend), keys.length + " weeks"],
+    ["Picnic bookings", totBookings + " · " + fmtINR(totRevenue), "stays excluded — no ads run on stay"]
+  ].map(([l,v,f]) => '<div class="mer-card"><div class="label">' + esc(l) +
+      '</div><div class="value">' + esc(v) + '</div><div class="foot">' + esc(f) + '</div></div>').join("");
+
+  const totUnknown = keys.reduce((s,k) => s + weeks[k].unknown, 0);
+  if (totUnknown) addAttention("warn", "Split", "<b>" + plural(totUnknown, "picnic+stay booking") +
+    "</b> ha" + (totUnknown === 1 ? "s" : "ve") + " no picnic/stay split recorded, so their picnic revenue is unknown and MER is understated.");
+  narrate("mer-narrative",
+    "<b>Picnic revenue only</b>, read from the <span class='sub'>booking_revenue_split</span> view — stay revenue is excluded " +
+    "throughout, since no ads run on stay. For a combined picnic+stay booking the view counts only its picnic share. " +
+    "Picnics close over WhatsApp and carry no ad attribution, so per-channel ROAS cannot exist here. The workaround is to ignore " +
+    "attribution and divide <b>all</b> picnic revenue by <b>all</b> ad spend — that ratio is MER. Every <b>₹1</b> spent sits " +
+    "alongside <b>" + (isNaN(mer) ? "—" : "₹" + mer.toFixed(0)) + "</b> of picnic bookings. The catch: it still credits ads for " +
+    "picnics that came from Instagram, referrals and repeat customers, so it is a ceiling on how good ads could look — never " +
+    "proof they caused anything. The comparison below is the real test." +
+    (totUnknown ? " <b>" + plural(totUnknown, "picnic+stay booking") + "</b> in this range " +
+      (totUnknown === 1 ? "has" : "have") + " no picnic/stay split recorded yet, so " +
+      (totUnknown === 1 ? "it is" : "they are") + " counted as bookings but contribute no revenue — MER is understated by that much." : ""));
+
+  let cmp = "", holdout = "";
+  if (offW.length >= 2 && onW.length >= 2) {
+    const mx = Math.max(onRate, offRate, 0.1);
+    const row = (cls, label, val, sub) =>
+      '<div class="cmp-row ' + cls + '"><div class="cmp-lab">' + label + '</div>' +
+      '<div class="cmp-track"><div class="cmp-bar" style="width:' + Math.max(val / mx * 100, 2) + '%"></div></div>' +
+      '<div class="cmp-val">' + val.toFixed(1) + '<span>' + sub + '</span></div></div>';
+    cmp = '<div class="cmp-lab" style="width:auto;margin-bottom:2px;">Picnic bookings per week</div>' +
+      row("on", "Ads running", onRate, plural(onW.length, "week")) +
+      row("off", "Ads off", offRate, plural(offW.length, "week"));
+
+    const better = offRate >= onRate;
+    holdout = '<div class="callout' + (better ? "" : " info") + '">' +
+      (better
+        ? '<b>Bookings did not fall when ads stopped.</b> ' + fmtINR(offRevenue) + ' (' +
+          Math.round(offRevenue / (totRevenue || 1) * 100) + '% of revenue) came in during weeks with no spend. ' +
+          'That is why the ' + (isNaN(mer) ? "" : mer.toFixed(1) + "× ") + 'MER above cannot be read as ads causing revenue — ' +
+          'either demand is largely organic, repeat or seasonal, or the ad→booking lag runs longer than these weeks. Do not scale on MER alone.'
+        : '<b>Bookings ran higher while spending</b> — the direction you would expect if ads contribute. ' +
+          'Still directional at this sample size, not proof.') +
+      '</div>';
+    if (better) addAttention("warn", "MER", "Bookings averaged <b>" + offRate.toFixed(1) +
+      "/week with ads off</b> vs " + onRate.toFixed(1) + "/week with ads on — spend and revenue are not moving together.");
+  } else {
+    cmp = '<div class="subnote">Not enough weeks both with and without spend in this range to compare. Widen the range above.</div>';
   }
-  renderFunnel();
-  renderAdsets();
-  renderAudiences();
-  renderLeaderboard();
+  document.getElementById("mer-compare").innerHTML = cmp;
+  document.getElementById("mer-holdout").innerHTML = holdout;
 }
 
-function renderFunnel() {
-  const f = S.live && S.live.funnel;
-  const el = document.getElementById('funnel');
-  if (!f || !f.ok) { el.innerHTML = `<div class="err">${esc((f && f.error) || 'unavailable')}</div>`; return; }
-  const totals = f.data.totals || {};
-  const order = ['PageView', 'ViewContent', 'InitiateCheckout', 'Lead'];
-  const present = order.filter(k => totals[k] != null);
-  if (present.length === 0) { el.innerHTML = '<div class="empty">No pixel events in the last 14 days.</div>'; return; }
-  const max = Math.max(...present.map(k => totals[k]));
-  let html = present.map((k, i) => {
-    const c = totals[k];
-    const pct = max > 0 ? (c / max * 100) : 0;
-    const rate = i > 0 && totals[order[i - 1]] > 0 ? (c / totals[order[i - 1]] * 100) : null;
-    const isLeak = rate !== null && rate < 10;
-    return `<div class="funnel-row">
-      <div class="f-label">${esc(k)}</div>
-      <div class="f-bar"><i style="width:${pct}%"></i></div>
-      <div class="f-count">${c}</div>
-      <div class="f-rate${isLeak ? ' bad' : ''}">${rate !== null ? rate.toFixed(1) + '%' : ''}</div>
-    </div>`;
-  }).join('');
-  el.innerHTML = html + (f.cached ? '<div class="s" style="margin-top:8px;color:var(--muted);font-size:11.5px">Cached response (~7 min)</div>' : '');
+/* ---- Pixel funnel, 14-day window + attribution reconciliation ---- */
+function renderFunnel(data, attributedLeads) {
+  const totals = data.totals || {};
+  const order = ["PageView","ViewContent","InitiateCheckout","Contact","Lead"];
+  const max = Math.max.apply(null, order.map(e => totals[e] || 0).concat([1]));
+  let html = "";
+  order.forEach((ev, i) => {
+    const c = totals[ev] || 0;
+    const prev = i > 0 ? (totals[order[i-1]] || 0) : 0;
+    const rate = i > 0 && prev > 0 ? (c / prev * 100) : null;
+    const isLeak = ev === "Lead" && rate !== null && rate < 10;
+    html += '<div class="funnel-row' + (isLeak ? " leak" : "") + '"><div class="f-label">' + ev + '</div>' +
+      '<div class="f-bar-track"><div class="f-bar" style="width:' + Math.max(c/max*100, 1.2) + '%"></div></div>' +
+      '<div class="f-count">' + c + '</div></div>';
+    if (rate !== null) html += '<div class="f-rate' + (isLeak ? " bad" : "") + '">' + rate.toFixed(1) + '% of ' + order[i-1] + '</div>';
+  });
+  const ic = totals.InitiateCheckout || 0, pixelLeads = totals.Lead || 0;
+  const icRate = ic > 0 ? (pixelLeads / ic * 100) : null;
+  narrate("funnel-narrative", ic > 0
+    ? "<b>" + ic + "</b> people clicked to enquire and <b>" + pixelLeads + "</b> completed the form — " +
+      (icRate < 10 ? "a <b>" + icRate.toFixed(1) + "%</b> completion rate, which is where the money is leaking."
+                   : "a " + icRate.toFixed(1) + "% completion rate.")
+    : "No enquiry clicks recorded in this window.");
+
+  if (ic > 0 && pixelLeads / ic < 0.1) {
+    html += '<div class="callout"><b>The form is the bottleneck.</b> ' + ic + ' enquiry clicks produced only ' +
+      plural(pixelLeads, "Lead") + ' in 14 days. Verify the Lead event fires on form success, then cut form friction. ' +
+      'Fix this before sending more paid traffic to /packages.</div>';
+    addAttention("bad", "Funnel", "Only <b>" + pixelLeads + "</b> Lead" + (pixelLeads === 1 ? "" : "s") +
+      " from <b>" + ic + "</b> enquiry clicks in 14 days — the form is leaking or the event isn't firing.");
+  }
+
+  const diff = Math.abs(attributedLeads - pixelLeads);
+  const base = Math.max(attributedLeads, pixelLeads, 1);
+  const diverges = diff / base > 0.3 && base >= 3;
+  html += '<div class="callout' + (diverges ? "" : " info") + '"><b>Attribution check.</b> Meta-attributed Leads <b>' +
+    attributedLeads + '</b> · raw pixel Lead events <b>' + pixelLeads + '</b>, same 14-day window. ' +
+    (diverges ? 'They disagree by more than 30% — check the Lead event mapping before trusting either number.'
+              : 'Close enough to treat the attribution as sound.') + '</div>';
+  if (diverges) addAttention("warn", "Tracking", "Attributed Leads (<b>" + attributedLeads + "</b>) and pixel Lead events (<b>" +
+    pixelLeads + "</b>) disagree by more than 30% over the same 14 days.");
+
+  document.getElementById("funnel").innerHTML = html || '<div class="err">No pixel events in window</div>';
 }
 
-function renderAdsets() {
-  const a = S.live && S.live.adsets;
-  const el = document.getElementById('adsets');
-  if (!a || !a.ok) { el.innerHTML = `<div class="err">${esc((a && a.error) || 'unavailable')}</div>`; return; }
-  const rows = a.data.adsets || [];
-  if (rows.length === 0) { el.innerHTML = '<div class="empty">No ad sets under active campaigns.</div>'; return; }
-  const trs = rows.map(r => `
-    <tr class="${r.fatigued ? 'fatigued' : ''}">
-      <td>${esc(r.name)}</td>
-      <td class="num">${inr(r.spend)}</td>
-      <td class="num">${r.results}</td>
-      <td class="num">${r.costPerResult != null ? inr(r.costPerResult) : '—'}</td>
-      <td class="num">${r.ctr != null ? r.ctr.toFixed(2) + '%' : '—'}</td>
-      <td class="num">${r.frequency != null ? r.frequency.toFixed(2) : '—'}</td>
-    </tr>`).join('');
-  const fatiguedCount = rows.filter(r => r.fatigued).length;
-  el.innerHTML =
-    (fatiguedCount ? `<p class="narrative"><b>${fatiguedCount}</b> ad set${fatiguedCount === 1 ? '' : 's'} past the 3.5 fatigue line — creative needs refreshing.</p>` : '') +
-    `<table><thead><tr><th>Ad set</th><th class="num">Spend</th><th class="num">Results</th><th class="num">₹/result</th><th class="num">CTR</th><th class="num">Freq</th></tr></thead><tbody>${trs}</tbody></table>`;
+/* ---- Audiences: active ones, plus non-lookalikes whatever their status (lookalikes churn constantly) ---- */
+function renderAudiences(data) {
+  const rows = (data.audiences || []).filter(a => a.active || a.subtype !== "LOOKALIKE");
+  const trs = rows.map(a => {
+    const lo = Number(a.sizeLow), hi = Number(a.sizeHigh);
+    const size = !(lo > 20) ? "&lt;1,000" : lo.toLocaleString("en-IN") + (hi > lo ? "+" : "");
+    const st = a.active ? '<span class="pill active">Active</span>'
+      : '<span class="pill inactive" title="' + esc(a.statusText) + '">' + esc(a.statusCode != null ? "Code " + a.statusCode : "Inactive") + '</span>';
+    return "<tr><td class='name'>" + esc(a.name) + "</td><td class='sub'>" + esc(a.subtype) + "</td><td>" + st +
+      "</td><td class='num'>" + size + "</td></tr>";
+  }).join("");
+  document.getElementById("audiences").innerHTML =
+    '<table><thead><tr><th>Audience</th><th>Type</th><th>Status</th><th class="num">Approx. size</th></tr></thead><tbody>' + trs + '</tbody></table>';
 }
 
-function renderAudiences() {
-  const a = S.live && S.live.audiences;
-  const el = document.getElementById('audiences');
-  if (!a || !a.ok) { el.innerHTML = `<div class="err">${esc((a && a.error) || 'unavailable')}</div>`; return; }
-  const rows = a.data.audiences || [];
-  if (rows.length === 0) { el.innerHTML = '<div class="empty">No active audiences.</div>'; return; }
-  const trs = rows.map(a => `
-    <tr><td>${esc(a.name)}</td><td>${esc(a.subtype)}</td><td class="num">${a.sizeLow != null ? a.sizeLow.toLocaleString('en-IN') : '—'}${a.sizeHigh != null ? '–' + a.sizeHigh.toLocaleString('en-IN') : ''}</td><td>${esc(a.status || '—')}</td></tr>`).join('');
-  el.innerHTML = `<table><thead><tr><th>Audience</th><th>Type</th><th class="num">Size</th><th>Status</th></tr></thead><tbody>${trs}</tbody></table>`;
+/* ---- Lifetime leaderboard (every campaign ever run) ---- */
+let leaderboardData = [];
+let leaderboardSort = { key: "spend", dir: -1 };
+
+function setLifetime(rows) {
+  leaderboardData = rows.map(r => ({
+    name: r.name || "(unnamed)", status: r.status || "—", objective: prettyObjective(r.objective),
+    created: parseMetaDate(r.created), spend: numOr0(r.spend),
+    results: numOr0(r.results), cpResult: numOrNaN(r.costPerResult), leads: numOr0(r.leads)
+  }));
+}
+
+function eraPill(created) {
+  if (!created) return '<span class="pill inactive">—</span>';
+  const y = created.getFullYear();
+  return '<span class="pill ' + (y >= 2026 ? "era-new" : y === 2025 ? "era-mid" : "era-old") + '">' + y + '</span>';
 }
 
 function renderLeaderboard() {
-  const byCampaign = new Map();
-  for (const r of S.adInsights) {
-    if (!byCampaign.has(r.campaign_id)) byCampaign.set(r.campaign_id, { name: r.campaign_name, spend: 0, results: 0, status: null });
-    const c = byCampaign.get(r.campaign_id);
-    c.spend += Number(r.spend_inr);
-    c.results += Number(r.results || 0);
-    c.status = r.effective_status_at_sync;
-  }
-  const rows = [...byCampaign.values()].sort((a, b) => b.spend - a.spend);
-  const el = document.getElementById('leaderboard');
-  if (rows.length === 0) { el.innerHTML = '<div class="empty">No data in ad_insights yet — sync-meta-ads has not run.</div>'; return; }
-  const trs = rows.map(c => `
-    <tr><td>${esc(c.name)}</td><td>${esc(c.status || '—')}</td><td class="num">${inr(c.spend)}</td><td class="num">${c.results}</td><td class="num">${c.results > 0 ? inr(c.spend / c.results) : '—'}</td></tr>`).join('');
-  el.innerHTML = `<table><thead><tr><th>Campaign</th><th>Status</th><th class="num">Spend</th><th class="num">Results</th><th class="num">₹/result</th></tr></thead><tbody>${trs}</tbody></table>`;
+  const cols = [
+    { key: "name", label: "Campaign", text: true }, { key: "status", label: "Status", text: true },
+    { key: "created", label: "Created" }, { key: "spend", label: "Spend", num: true },
+    { key: "results", label: "Results", num: true }, { key: "cpResult", label: "₹/result", num: true },
+    { key: "leads", label: "Leads", num: true }
+  ];
+  const sorted = leaderboardData.slice().sort((a, b) => {
+    const k = leaderboardSort.key;
+    let av = a[k], bv = b[k];
+    if (k === "created") { av = av ? av.getTime() : -Infinity; bv = bv ? bv.getTime() : -Infinity; }
+    if (typeof av === "string") {
+      av = av.toLowerCase(); bv = String(bv).toLowerCase();
+      return av < bv ? -leaderboardSort.dir : av > bv ? leaderboardSort.dir : 0;
+    }
+    if (isNaN(av)) av = -Infinity;
+    if (isNaN(bv)) bv = -Infinity;
+    return (av - bv) * leaderboardSort.dir;
+  });
+  const thead = "<tr>" + cols.map(c => {
+    const active = c.key === leaderboardSort.key;
+    return '<th class="sortable' + (c.num ? " num" : "") + (active ? " sort-active" : "") + '" data-key="' + c.key + '">' +
+      esc(c.label) + '<span class="arrow">' + (active && leaderboardSort.dir === 1 ? "▲" : "▼") + '</span></th>';
+  }).join("") + "</tr>";
+  const trs = sorted.map(r => {
+    const st = r.status === "ACTIVE" ? '<span class="pill active">Active</span>' : '<span class="pill inactive">Paused</span>';
+    return "<tr><td class='name'>" + esc(r.name) + "<div class='sub'>" + esc(r.objective) + "</div></td><td>" + st +
+      "</td><td>" + eraPill(r.created) + "</td><td class='num'>" + fmtINR(r.spend) + "</td><td class='num'>" +
+      r.results.toLocaleString("en-IN") + "</td><td class='num'>" + (isNaN(r.cpResult) ? "—" : fmtINR(r.cpResult)) +
+      "</td><td class='num'>" + r.leads + "</td></tr>";
+  }).join("");
+  document.getElementById("leaderboard").innerHTML = '<table id="lb-table"><thead>' + thead + '</thead><tbody>' + trs + '</tbody></table>';
+  document.querySelectorAll("#lb-table th.sortable").forEach(th => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.key, col = cols.find(c => c.key === key);
+      if (leaderboardSort.key === key) leaderboardSort.dir *= -1;
+      else leaderboardSort = { key, dir: col && col.text ? 1 : -1 };
+      renderLeaderboard();
+    });
+  });
+
+  const withVolume = leaderboardData.filter(r => r.results >= 50 && !isNaN(r.cpResult) && r.cpResult > 0);
+  const best = withVolume.slice().sort((a, b) => a.cpResult - b.cpResult)[0];
+  const biggest = leaderboardData.slice().sort((a, b) => b.spend - a.spend)[0];
+  narrate("lifetime-narrative",
+    leaderboardData.length + " campaigns ever run on this account. " +
+    (biggest ? "The heaviest spender was <b>" + esc(biggest.name) + "</b> at " + fmtINR(biggest.spend) + ". " : "") +
+    (best ? "The most efficient with real volume was <b>" + esc(best.name) + "</b> at " + fmtINR(best.cpResult) + " per result." : ""));
 }
 
-/* ---------- boot ---------- */
+/* ---- dashboard boot (after sign-in) — same section order and failure isolation as the artifact ---- */
+let bootDone = false;
+async function runDashboard(session) {
+  const root = document.getElementById("root");
+  root.innerHTML = "";
+  root.appendChild(document.getElementById("dashboard-tpl").content.cloneNode(true));
+  document.getElementById("who").textContent = session.user.email;
+  document.getElementById("signout").addEventListener("click", async () => { await sb.auth.signOut(); location.reload(); });
+
+  const [liveR, dailyR] = await Promise.allSettled([loadLive(), fetchDailySeries()]);
+  const live = liveR.status === "fulfilled" ? liveR.value : null;
+  const liveErr = liveR.status === "rejected" ? liveR.reason : null;
+  const get = name => { if (liveErr) throw liveErr; return section(live, name); };
+
+  let activeRows = [], allRows = null;
+  try {
+    activeRows = get("campaigns").campaigns || [];
+    try { allRows = get("lifetime").campaigns || []; } catch (e) { allRows = null; }
+    renderOverview(activeRows, allRows);
+    renderActiveCampaigns(activeRows);
+  } catch (e) {
+    fail("overview", e); fail("active-campaigns", e);
+    addAttention("bad", "Error", "Campaign data failed to load: " + esc(e.message || e));
+  }
+  try { setLifetime(get("lifetime").campaigns || []); renderLeaderboard(); }
+  catch (e) { fail("leaderboard", e); addAttention("warn", "Error", "Lifetime history failed to load."); }
+
+  const totalAttributedLeads = activeRows.reduce((s, r) => s + numOr0(r.leads), 0);
+  try { renderAdsets(get("adsets")); } catch (e) { fail("adsets", e); }
+  try { renderFunnel(get("funnel"), totalAttributedLeads); } catch (e) { fail("funnel", e); }
+  try { renderAudiences(get("audiences")); } catch (e) { fail("audiences", e); }
+
+  viewAttentionStart = attention.length;
+  if (dailyR.status === "fulfilled") {
+    dailyByCity = dailyR.value;
+    wireToggle("range", b => { selectedDays = b.dataset.days; });
+    wireToggle("city", b => { selectedCity = b.dataset.city; });
+    applyView();
+  } else {
+    fail("mer-cards", dailyR.reason);
+    const el = document.getElementById("trend-err");
+    el.style.display = "block";
+    el.textContent = "Spend vs bookings failed: " + ((dailyR.reason && dailyR.reason.message) || dailyR.reason);
+    narrate("trend-narrative", "Could not load the spend/bookings comparison.");
+  }
+
+  bootDone = true;
+  renderAttention();
+}
+
+/* ---- auth gate (same single-admin model as hub.html / index.html) ---- */
+function signInScreen(message) {
+  document.getElementById("root").innerHTML = `
+    <div class="signin-wrap"><div class="signin-card">
+      <div class="eyebrow">Meta Ads · The Picnic Stories</div>
+      <h1>Ad Pulse</h1>
+      <div class="signin-sub">Sign in to continue</div>
+      <form id="signin-form" autocomplete="on">
+        <label for="si-email">Email</label>
+        <input id="si-email" type="email" autocomplete="username" required>
+        <label for="si-pass">Password</label>
+        <input id="si-pass" type="password" autocomplete="current-password" required>
+        <button type="submit" id="si-go">Sign in</button>
+      </form>
+      <div id="si-msg" class="signin-msg">${message ? esc(message) : ""}</div>
+    </div></div>`;
+  document.getElementById("signin-form").addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const btn = document.getElementById("si-go"), msg = document.getElementById("si-msg");
+    btn.disabled = true; btn.textContent = "Signing in…"; msg.textContent = "";
+    const { error } = await sb.auth.signInWithPassword({
+      email: document.getElementById("si-email").value.trim(),
+      password: document.getElementById("si-pass").value,
+    });
+    if (error) { btn.disabled = false; btn.textContent = "Sign in"; msg.textContent = error.message || "Sign-in failed."; return; }
+    boot();
+  });
+}
+
 async function boot() {
   const { data: { session } } = await sb.auth.getSession();
-  if (!session) { signInScreen(''); return; }
-  const email = (session.user && session.user.email) || '';
-  if (!ALLOWED.includes(email.trim().toLowerCase())) {
+  if (!session) { signInScreen(""); return; }
+  const email = ((session.user && session.user.email) || "").trim().toLowerCase();
+  if (!ALLOWED.includes(email)) {
     await sb.auth.signOut();
-    signInScreen('That account does not have access to this dashboard.');
+    signInScreen("That account does not have access to this dashboard.");
     return;
   }
-  S.session = session;
-  document.getElementById('root').innerHTML = '<div class="state">Loading…</div>';
-  try {
-    await loadCore();
-    render();
-  } catch (err) {
-    document.getElementById('root').innerHTML = `<div class="state err"><strong>Couldn't load.</strong><div>${esc(err.message || String(err))}</div></div>`;
-  }
+  runDashboard(session);
 }
 
-sb.auth.onAuthStateChange((event) => { if (event === 'SIGNED_OUT') signInScreen(''); });
+sb.auth.onAuthStateChange(event => { if (event === "SIGNED_OUT") signInScreen(""); });
 boot();
 </script>
 </body>
