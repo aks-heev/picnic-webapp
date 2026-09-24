@@ -5524,6 +5524,124 @@ window.addVfTier         = addVfTier
 window.removeVfTier      = removeVfTier
 window.toggleBlockedDate = toggleBlockedDate
 
+// One booking card for the customer My Bookings page. Every value is either a
+// stored snapshot column on the booking row or a get_my_bookings() field —
+// nothing is re-priced client-side (CLAUDE.md §7): balance is total − advance
+// as stored, and is only shown when a total was actually recorded.
+function mbkCardHtml(b) {
+  const venue = b.venues || {}
+  const inr = n => '₹' + Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 })
+  const fmtDate = (iso, opts) => new Date(iso + 'T00:00:00').toLocaleDateString('en-IN', opts)
+  const fmtTime = t => {                       // '17:30:00' -> '5:30 PM'
+    const [h, m] = String(t).split(':').map(Number)
+    return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`
+  }
+  const safeUrl = u => (/^https?:\/\//i.test(u || '') ? u : '')
+
+  // ── Status ────────────────────────────────────────────────────────────
+  const isCancelled = b.booking_status === 'Cancelled'
+  const isPostponed = b.booking_status === 'Postponed'
+  const isDone      = b.booking_status === 'Completed' || b.booking_status === 'Closed'
+  let statusCls = 'mbk-status--pending', statusTxt = '⏳ Pending confirmation'
+  if (isCancelled)       { statusCls = 'mbk-status--cancelled'; statusTxt = 'Cancelled' }
+  else if (isPostponed)  { statusCls = 'mbk-status--pending';   statusTxt = '↻ Postponed' }
+  else if (isDone)       { statusCls = 'mbk-status--done';      statusTxt = '✓ Completed' }
+  else if (b.confirmed)  { statusCls = 'mbk-status--confirmed'; statusTxt = '✓ Confirmed' }
+
+  // ── When ──────────────────────────────────────────────────────────────
+  const isStay = !!b.checkout_date
+  const dateStr = b.preferred_date
+    ? fmtDate(b.preferred_date, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })
+    : '—'
+  let whenStr = dateStr
+  let nightsStr = ''
+  if (isStay) {
+    whenStr = `${fmtDate(b.preferred_date, { weekday: 'short', day: 'numeric', month: 'short' })} → ${fmtDate(b.checkout_date, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}`
+    const nights = Math.round((new Date(b.checkout_date) - new Date(b.preferred_date)) / 86400000)
+    if (nights > 0) nightsStr = `${nights} night${nights !== 1 ? 's' : ''}`
+  }
+  let timeStr = ''
+  if (b.slot_start_time && b.slot_end_time) {
+    timeStr = `${fmtTime(b.slot_start_time)} – ${fmtTime(b.slot_end_time)}`
+  } else if (b.time_slot) {
+    timeStr = b.time_slot.charAt(0).toUpperCase() + b.time_slot.slice(1)
+  }
+
+  // ── Who ───────────────────────────────────────────────────────────────
+  const adults = Number(b.guest_count) || 0
+  const kids   = Number(b.children_count) || 0
+  const guestStr = `${adults} guest${adults !== 1 ? 's' : ''}` + (kids > 0 ? ` + ${kids} child${kids !== 1 ? 'ren' : ''}` : '')
+
+  // ── Money ─────────────────────────────────────────────────────────────
+  const total   = b.total_amount != null ? Number(b.total_amount) : null
+  const advance = Number(b.advance_amount) || 0
+  const showMoney = !isCancelled && total != null && total > 0
+  let moneyHtml = ''
+  if (showMoney) {
+    const rowsHtml = []
+    rowsHtml.push(`<div class="mbk-pay-row"><span>${b.confirmed ? 'Total' : 'Estimated total'}</span><span>${inr(total)}</span></div>`)
+    if (b.confirmed && advance > 0) {
+      rowsHtml.push(`<div class="mbk-pay-row mbk-pay-row--paid"><span>${advance >= total ? 'Paid in full' : 'Advance paid'}</span><span>− ${inr(advance)}</span></div>`)
+      if (advance < total && !isDone) {
+        rowsHtml.push(`<div class="mbk-pay-row mbk-pay-row--due"><span>Balance due</span><span>${inr(total - advance)}</span></div>`)
+      }
+    }
+    moneyHtml = `<div class="mbk-pay">${rowsHtml.join('')}</div>`
+  } else if (!isCancelled && b.confirmed && advance > 0) {
+    // Legacy rows have no total — keep the original single-line behaviour.
+    moneyHtml = `<div class="mbk-pay"><div class="mbk-pay-row mbk-pay-row--paid"><span>Advance paid</span><span>${inr(advance)}</span></div></div>`
+  }
+
+  // ── Details grid ──────────────────────────────────────────────────────
+  const addOns = Array.isArray(b.add_ons) ? b.add_ons : []
+  const boardMsg = b.board && typeof b.board.message === 'string' ? b.board.message.trim() : ''
+  const detail = (label, valueHtml) => valueHtml
+    ? `<div class="mbk-detail"><span class="mbk-detail-label">${label}</span><span class="mbk-detail-value">${valueHtml}</span></div>`
+    : ''
+  const detailsHtml = [
+    detail(isStay ? 'Stay' : 'Date', escapeHtml(whenStr) + (nightsStr ? ` <span class="mbk-muted">· ${nightsStr}</span>` : '')),
+    isStay ? '' : detail('Time', escapeHtml(timeStr)),
+    detail('Guests', escapeHtml(guestStr)),
+    detail('Package', escapeHtml(b.package_name || '')),
+    detail('Occasion', escapeHtml(b.occasion || '')),
+    detail('Add-ons', addOns.length
+      ? addOns.map(a => escapeHtml(a.name || '')).filter(Boolean).join(', ')
+      : ''),
+    detail('Board message', boardMsg ? `“${escapeHtml(boardMsg)}”` : ''),
+    detail('Address', escapeHtml(b.venue_address || ''))
+  ].join('')
+
+  // ── Actions ───────────────────────────────────────────────────────────
+  const team   = venue.team_id ? (appState.teams || []).find(t => t.id === venue.team_id) : null
+  const waNum  = (team?.whatsapp || WHATSAPP_FALLBACK_NUMBER).replace(/\D/g, '')
+  const waText = `Hi! I have a question about my booking #${b.id} at ${venue.name || 'the venue'} on ${dateStr}.`
+  const mapsHref = safeUrl(venue.maps_url)
+  const actionsHtml = `
+    <div class="mbk-actions">
+      ${mapsHref && !isCancelled ? `<a class="mbk-action" href="${escapeHtml(mapsHref)}" target="_blank" rel="noopener noreferrer">📍 Directions</a>` : ''}
+      <a class="mbk-action" href="https://wa.me/${waNum}?text=${encodeURIComponent(waText)}" target="_blank" rel="noopener noreferrer">💬 Message us</a>
+    </div>`
+
+  const placeStr = [venue.area, venue.city].filter(Boolean).join(', ')
+  return `
+    <div class="mbk-card${isCancelled ? ' mbk-card--cancelled' : ''}">
+      <div class="mbk-card-top">
+        <div>
+          <p class="mbk-card-venue">${escapeHtml(venue.name || 'Venue')}</p>
+          <p class="mbk-card-meta">${escapeHtml(placeStr)}</p>
+        </div>
+        <span class="mbk-status ${statusCls}">${statusTxt}</span>
+      </div>
+      <p class="mbk-card-ref">Booking #${escapeHtml(String(b.id))}</p>
+      <div class="mbk-details">${detailsHtml}</div>
+      ${b.special_requirements ? `<p class="mbk-card-note">"${escapeHtml(b.special_requirements)}"</p>` : ''}
+      ${moneyHtml}
+      ${!b.confirmed && !isCancelled ? `<p class="mbk-pending-note">Awaiting confirmation from our team. Message us if you'd like an update.</p>` : ''}
+      ${actionsHtml}
+    </div>
+  `
+}
+
 async function renderMyBookings() {
   const el = document.getElementById('my-bookings-content')
   if (!el) return
@@ -5555,37 +5673,24 @@ async function renderMyBookings() {
       return
     }
 
-    const cards = data.map(b => {
-      const venue     = b.venues
-      const statusCls = b.confirmed ? 'mbk-status--confirmed' : 'mbk-status--pending'
-      const statusTxt = b.confirmed ? '✓ Confirmed' : '⏳ Pending confirmation'
-      const dateStr   = b.preferred_date
-        ? new Date(b.preferred_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
-        : '—'
-      const checkoutStr = b.checkout_date
-        ? ' → ' + new Date(b.checkout_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })
-        : ''
-      const slot = b.time_slot ? ` · ${b.time_slot.charAt(0).toUpperCase() + b.time_slot.slice(1)}` : ''
-      return `
-        <div class="mbk-card">
-          <div class="mbk-card-top">
-            <div>
-              <p class="mbk-card-venue">${escapeHtml(venue?.name || 'Venue')}</p>
-              <p class="mbk-card-meta">${escapeHtml(venue?.area || '')}</p>
-            </div>
-            <span class="mbk-status ${statusCls}">${statusTxt}</span>
-          </div>
-          <div class="mbk-card-details">
-            <span>📅 ${dateStr}${checkoutStr}${slot}</span>
-            <span>👥 ${b.guest_count} guest${b.guest_count !== 1 ? 's' : ''}</span>
-            ${b.confirmed && b.advance_amount > 0 ? `<span>💰 ₹${Number(b.advance_amount).toLocaleString('en-IN')} ${
-              b.total_amount != null && Number(b.advance_amount) >= Number(b.total_amount) ? 'paid in full' : 'advance paid'
-            }</span>` : ''}
-          </div>
-          ${b.special_requirements ? `<p class="mbk-card-note">"${escapeHtml(b.special_requirements)}"</p>` : ''}
-        </div>
-      `
-    }).join('')
+    // An unconfirmed enquiry that duplicates a confirmed booking (same venue +
+    // date) is the customer's earlier lead for the same event — showing both
+    // reads as two bookings. Hide the enquiry; the confirmed row wins.
+    const confirmedKeys = new Set(
+      data.filter(b => b.confirmed).map(b => `${b.venue_id}|${b.preferred_date}`)
+    )
+    const rows = data.filter(b => b.confirmed || !confirmedKeys.has(`${b.venue_id}|${b.preferred_date}`))
+
+    // Upcoming = event (or stay checkout) is today or later, in IST.
+    const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+    const isUpcoming = b => (b.checkout_date || b.preferred_date || '') >= todayIST
+    const upcoming = rows.filter(isUpcoming)
+      .sort((a, b) => (a.preferred_date || '').localeCompare(b.preferred_date || ''))
+    const past = rows.filter(b => !isUpcoming(b))   // newest-first, as the RPC returns
+
+    const sectionHtml = (title, list) => list.length
+      ? `<h3 class="mbk-section-title">${title}</h3><div class="mbk-cards">${list.map(mbkCardHtml).join('')}</div>`
+      : ''
 
     el.innerHTML = `
       <div class="mbk-page">
@@ -5595,9 +5700,10 @@ async function renderMyBookings() {
         </button>
         <div class="mbk-list-header">
           <h2 class="mbk-heading">Your bookings</h2>
-          <p class="mbk-sub">${data.length} booking${data.length !== 1 ? 's' : ''} found</p>
+          <p class="mbk-sub">${rows.length} booking${rows.length !== 1 ? 's' : ''} found</p>
         </div>
-        <div class="mbk-cards">${cards}</div>
+        ${sectionHtml('Upcoming', upcoming)}
+        ${sectionHtml('Past', past)}
         <div class="mbk-signout">
           <button class="btn btn--ghost mbk-signout-btn" onclick="customerSignOut()">Sign out</button>
         </div>

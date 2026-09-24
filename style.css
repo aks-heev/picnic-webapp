@@ -6631,6 +6631,102 @@ body.menu-viewer-open {
   border-top: 1px solid rgba(196, 96, 122, 0.1);
   padding-top: 10px;
 }
+/* Enriched booking card */
+.mbk-section-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--boho-text-muted, #8a7272);
+  margin: 22px 0 10px;
+}
+.mbk-section-title:first-of-type { margin-top: 4px; }
+.mbk-status--cancelled {
+  background: rgba(138, 114, 114, 0.14);
+  color: #7a6666;
+}
+.mbk-status--done {
+  background: rgba(138, 114, 114, 0.1);
+  color: #7a6666;
+}
+.mbk-card--cancelled { opacity: 0.75; }
+.mbk-card-ref {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--boho-text-muted, #8a7272);
+  margin: -6px 0 12px;
+}
+.mbk-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mbk-detail {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  font-size: 0.84rem;
+  color: var(--boho-text-dark, #3a2e2e);
+}
+.mbk-detail-label {
+  flex: 0 0 auto;
+  color: var(--boho-text-muted, #8a7272);
+  font-size: 0.78rem;
+}
+.mbk-detail-value {
+  text-align: right;
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.mbk-muted { color: var(--boho-text-muted, #8a7272); font-weight: 400; }
+.mbk-pay {
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: rgba(196, 96, 122, 0.05);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mbk-pay-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.84rem;
+  color: var(--boho-text-dark, #3a2e2e);
+}
+.mbk-pay-row--paid { color: #2d8a57; }
+.mbk-pay-row--due {
+  font-weight: 700;
+  border-top: 1px dashed rgba(196, 96, 122, 0.25);
+  padding-top: 6px;
+}
+.mbk-pending-note {
+  margin-top: 12px;
+  font-size: 0.78rem;
+  color: var(--boho-text-muted, #8a7272);
+  line-height: 1.5;
+}
+.mbk-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+.mbk-action {
+  flex: 1;
+  text-align: center;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--boho-accent-pink, #c4607a);
+  border: 1.5px solid rgba(196, 96, 122, 0.3);
+  border-radius: 20px;
+  padding: 7px 10px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.mbk-action:hover { background: rgba(196, 96, 122, 0.08); }
+
 .mbk-signout {
   margin-top: 28px;
   text-align: center;
