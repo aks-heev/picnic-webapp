@@ -6674,6 +6674,7 @@ function renderBookings(bookings) {
 
     const timeAgo = formatTimeAgo(new Date(booking.created_at))
     const advanceFormatted = Number(booking.advance_amount || 0).toLocaleString('en-IN')
+    const totalFormatted = Number(booking.total_amount || 0).toLocaleString('en-IN')
 
     // Close state. A booking_costs row existing IS the "has been closed" signal;
     // there is no closed_at column on bookings by design (see the phase 1 migration).
@@ -6692,6 +6693,7 @@ function renderBookings(bookings) {
           <span class="adm-status-dot adm-status-dot--${statusMod}"></span>
           <span class="adm-id" title="Booking ID">#${escapeHtml(booking.id)}</span>
           <span class="adm-name">${escapeHtml(booking.full_name)}</span>
+          <span class="adm-price-badge adm-price-badge--total" title="Total booking value">₹${totalFormatted}</span>
         </div>
         <div class="adm-card-header-meta">
           <span class="adm-badge adm-badge--${statusMod}">${statusLabel}</span>
