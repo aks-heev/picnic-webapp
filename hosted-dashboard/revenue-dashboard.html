@@ -144,6 +144,8 @@
   .occ-bar { height: 6px; border-radius: 3px; background: var(--bg-2); overflow: hidden; }
   .occ-bar > i { display: block; height: 100%; border-radius: 3px; transition: width .25s ease; }
   .occ-row .s { font-size: 12.5px; color: var(--muted); margin-top: 9px; }
+  .occ-row .occ-adr { margin-top: 3px; }
+  .occ-row .occ-adr b { color: var(--ink, inherit); font-weight: 600; font-variant-numeric: tabular-nums; }
   .occ-note { font-size: 12px; color: var(--muted); margin: 14px 2px 4px; text-align: right; }
   .occ-empty { padding: 30px 4px; }
 
@@ -910,6 +912,24 @@ function renderOccupancy() {
     const totalNights = here.reduce((s, r) => s + r.nights, 0);
     const totalDays = here.reduce((s, r) => s + r.activeDays, 0);
     const blended = totalDays ? (totalNights / totalDays * 100) : 0;
+    /* Avg nightly rate = stay revenue / nights, per venue, for the selected month.
+       Always by EVENT date (same per-night proration as the occupancy nights),
+       regardless of the Booked-on/Event basis toggle, so the rate matches the
+       nights shown above it. Stays straddling a month boundary contribute only
+       the nights (and the matching share of total) that fall in this month.
+       Stay totals are what was recorded on the booking, so Airbnb-originated
+       stays that record only our cut pull the average down. */
+    const adr = new Map(); let adrRev = 0, adrNights = 0;
+    S.records.forEach(r => {
+      if (r.kind !== 'stay') return;
+      const hit = spans(r, 'event').find(x => x.k === f.month);
+      if (!hit || !(hit.nights > 0)) return;
+      const a = adr.get(r.venue) || { rev: 0, nights: 0 };
+      a.rev += r.total * hit.share; a.nights += hit.nights;
+      adr.set(r.venue, a);
+      adrRev += r.total * hit.share; adrNights += hit.nights;
+    });
+    const adrText = v => { const a = adr.get(v); return a && a.nights ? `${inr(a.rev / a.nights)} / night` : '—'; };
     mount.innerHTML = here.map(r => {
       const band = occBand(r.pct);
       return `<div class="occ-row">
@@ -920,9 +940,10 @@ function renderOccupancy() {
         <div class="pct"><b style="color:var(--${band})">${r.pct.toFixed(1)}%</b></div>
         <div class="occ-bar" style="margin-top:10px"><i style="width:${Math.min(100, r.pct)}%; background:var(--${band})"></i></div>
         <div class="s">${r.nights} of ${r.activeDays} night${r.activeDays === 1 ? '' : 's'} listed</div>
+        <div class="s occ-adr">Avg nightly rate <b>${adrText(r.venue)}</b></div>
       </div>`;
     }).join('') +
-      (here.length > 1 ? `<div class="occ-note">Blended across ${here.length} venues: <b>${blended.toFixed(1)}%</b> (${totalNights} of ${totalDays} nights)</div>` : '');
+      (here.length > 1 ? `<div class="occ-note">Blended across ${here.length} venues: <b>${blended.toFixed(1)}%</b> (${totalNights} of ${totalDays} nights)${adrNights ? ` · Avg nightly rate <b>${inr(adrRev / adrNights)}</b>` : ''}</div>` : '');
     return;
   }
   const sorted = rows.slice().sort((a, b) => b.monthKey.localeCompare(a.monthKey) || a.venue.localeCompare(b.venue));
