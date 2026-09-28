@@ -5773,7 +5773,10 @@ function applyAuthState(session) {
     // back. Without clearing the hash, that kept yanking the admin back to
     // Add Booking no matter which tab they'd since switched to. Consume the
     // hash once so only the initial deep-link load honors it.
-    if (typeof location !== 'undefined' && location.hash === '#add-booking') {
+    // The hosted dashboard's calendar links here as #add-booking?venue=…&date=… —
+    // abkStashPrefill() keeps those values for loadAddBookingForm() to apply.
+    if (typeof location !== 'undefined' && (location.hash === '#add-booking' || location.hash.startsWith('#add-booking?'))) {
+      abkStashPrefill(location.hash)
       switchTab('add-booking')
       history.replaceState(null, '', location.pathname + location.search)
     }
@@ -10916,7 +10919,7 @@ async function loadAddBookingForm() {
   if (!appState.session) return
   const container = document.getElementById('add-booking-container')
   if (!container) return
-  if (abk.loaded) { renderAddBookingForm(); return }
+  if (abk.loaded) { abkApplyPrefill(); renderAddBookingForm(); abkPrefillFetchSlots(); return }
   container.innerHTML = '<p class="admin-loading">Loading…</p>'
   try {
     const [venueRes, addonRes, vaRes, pkgRes, vpRes] = await Promise.all([
@@ -10939,7 +10942,9 @@ async function loadAddBookingForm() {
     abk.packages = pkgRes.data || []
     abk.venuePackages = vpRes.data || []
     abk.loaded = true
+    abkApplyPrefill()
     renderAddBookingForm()
+    abkPrefillFetchSlots()
   } catch (err) {
     console.error('Failed to load Add Booking form:', err)
     container.innerHTML = '<p class="venues-error">Unable to load the booking form.</p>'
@@ -10947,6 +10952,62 @@ async function loadAddBookingForm() {
 }
 
 function abkVenue() { return abk.venues.find(v => v.id === Number(abk.venueId)) || null }
+
+// ---- Prefill from the hosted dashboard's calendar (added 2026-09-28) ----
+// The calendar's "Add booking" button opens admin#add-booking?type=…&venue=…&date=…
+// (picnic) or …&checkin=…&checkout=… (stay). This ONLY sets the form's starting
+// values: pricing, the slot/night conflict check, the picnic/stay split and the
+// emails all stay in the normal save path, unchanged. Nothing is ever saved here.
+// Every value is validated and dropped if it doesn't fit, so a bad or stale link
+// degrades to the blank form rather than a wrong booking:
+//   - venue must be an active venue offered for that type (ids resolve live)
+//   - dates must be YYYY-MM-DD and not before today in IST (sttIstToday)
+//   - check-out must be after check-in; slot must be a known ABK_SLOT_TIMES key
+// Skipped entirely while editing an existing booking so it can never overwrite one.
+let abkPendingPrefill = null
+let abkPrefillNeedsSlots = false
+function abkStashPrefill(hash) {
+  const q = String(hash || '').split('?')[1]
+  if (!q) { abkPendingPrefill = null; return }
+  const p = new URLSearchParams(q)
+  abkPendingPrefill = {
+    type: p.get('type') || '', venue: p.get('venue') || '',
+    date: p.get('date') || '', checkin: p.get('checkin') || '', checkout: p.get('checkout') || '',
+    slot: p.get('slot') || '',
+  }
+}
+function abkApplyPrefill() {
+  const pf = abkPendingPrefill
+  abkPendingPrefill = null
+  abkPrefillNeedsSlots = false
+  if (!pf || abk.editingId) return
+  const today = sttIstToday()
+  const okDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && s >= today
+  if (['picnic', 'stay', 'picnic_stay'].includes(pf.type) && pf.type !== abk.type) {
+    abk.type = pf.type
+    abk.venueId = null; abk.slot = ''; abk.packageKey = ''; abk.addonIds = []
+    abk.slotMap = null; abk.slotVenueId = null
+    abk.totalTouched = false
+  }
+  const vid = Number(pf.venue)
+  if (vid && abkVenuesForType().some(v => v.id === vid)) {
+    abk.venueId = vid; abk.slot = ''; abk.packageKey = ''; abk.addonIds = []; abk.totalTouched = false
+  }
+  if (abk.type === 'picnic' && okDate(pf.date)) abk.date = pf.date
+  if (abkHasStay() && okDate(pf.checkin)) {
+    abk.checkin = pf.checkin
+    abk.checkout = (okDate(pf.checkout) && pf.checkout > pf.checkin) ? pf.checkout : ''
+  }
+  if (abkHasPicnic() && Object.prototype.hasOwnProperty.call(ABK_SLOT_TIMES, pf.slot)) abk.slot = pf.slot
+  abkPrefillNeedsSlots = abk.type === 'picnic' && !!abk.venueId
+  showToast('Pre-filled from the calendar. Check the details before saving.', 'success')
+}
+// Same slot-availability fetch a manual venue pick triggers (abkVenueChanged).
+function abkPrefillFetchSlots() {
+  if (!abkPrefillNeedsSlots) return
+  abkPrefillNeedsSlots = false
+  abkFetchSlots()
+}
 
 function abkVenuesForType() {
   // picnic_stay = a stay AND a picnic setup at the same property. It is offered only where the

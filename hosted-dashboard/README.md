@@ -14,6 +14,29 @@ Supabase only (`evmftrogyzoudiccqkya`), via `supabase-js` from the browser:
 | `booking_costs` | per-booking cost, and therefore profit |
 | `booking_add_ons` | add-on lines in the detail view |
 | `expenses` | the operating-expense panel |
+| `monthly_occupancy_self_managed` | the occupancy section (`revenue-dashboard.html`) |
+| `venues` | calendar only: setup capacity (`max_concurrent_setups`) and combo parent/child links |
+| `venue_availability` (`source` = `ical`, `admin`) | calendar only: Airbnb nights with no booking row, and admin blocks |
+
+`venues` and `venue_availability` are readable by any signed-in user (the public
+site's availability calendar reads them) and hold no customer data. If either
+read fails, the calendar still shows bookings and says what is missing.
+
+## Calendar (revenue-dashboard.html, added 2026-09-28)
+
+Opened from the **List | Calendar** toggle on the Next up card. Two tabs:
+**Picnics** (month grid, guest name then venue and slot) and **Airbnb & stays**
+(one row per TerraCottage unit across 28 nights, plus a derived whole-home row
+that is sellable only when every unit is free). Clicking a day, a stay or an
+open gap opens a dialog with the booking details.
+
+It is **read-only**. The dialog's *Add booking* is a link that opens the admin
+panel's Add Booking form in a new tab, pre-filled through
+`/admin#add-booking?type=…&venue=…&date=…` or `…&checkin=…&checkout=…`
+(`abkApplyPrefill` in `app.js` validates every value). Pricing, the conflict
+check, the picnic/stay split and the emails stay in that one form — do not add
+a second booking form here. Coming back to the dashboard tab re-reads the data,
+so the new booking appears without pressing Refresh.
 
 The Cowork version of this dashboard read the Google Sheet as its book of record
 and used the database only to cross-check it. A browser cannot read a Drive
