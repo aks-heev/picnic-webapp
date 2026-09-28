@@ -11002,6 +11002,25 @@ function abkApplyPrefill() {
   abkPrefillNeedsSlots = abk.type === 'picnic' && !!abk.venueId
   showToast('Pre-filled from the calendar. Check the details before saving.', 'success')
 }
+// ---- Embed mode (added 2026-09-28) ----
+// admin?embed=1 is this Add Booking form shown inside the hosted calendar's dialog
+// (picnic-dashboard /calendar). admin.html hides the site chrome for it (html.admin-embed);
+// in here it only changes what happens after a NEW booking saves: stay on a clean form
+// and tell the parent window which booking was added. Saving itself is unchanged.
+// Posted ONLY to the listed dashboard origins — the browser drops a postMessage whose
+// targetOrigin doesn't match the parent — and the payload is ids and dates, no guest data.
+// 🔴 A new dashboard domain must be added here AND to the frame-ancestors header for
+// /admin in vercel.json, or the calendar's dialog shows a refused frame.
+const ADMIN_EMBED_PARENTS = ['https://picnic-dashboard-nu.vercel.app']
+const ADMIN_EMBED = typeof window !== 'undefined' && window.parent !== window &&
+  new URLSearchParams(location.search).get('embed') === '1'
+function abkNotifyEmbedParent(id, date, checkout, kind) {
+  if (!ADMIN_EMBED) return
+  ADMIN_EMBED_PARENTS.forEach(origin => {
+    try { window.parent.postMessage({ type: 'tps:booking-saved', id, date, checkout: checkout || null, kind }, origin) } catch (e) { /* wrong parent: dropped */ }
+  })
+}
+
 // Same slot-availability fetch a manual venue pick triggers (abkVenueChanged).
 function abkPrefillFetchSlots() {
   if (!abkPrefillNeedsSlots) return
@@ -11725,7 +11744,11 @@ async function abkSave() {
       await abkSaveSplit(data)
       await abkSaveChecklist(data)
       showToast(`Booking #${data} added`, 'success')
+      // Embedded in the hosted calendar: tell it which booking was added (it closes the
+      // dialog and opens the booking) and stay on a clean form instead of jumping tabs.
+      const savedKind = abk.type
       abkResetForm()
+      if (ADMIN_EMBED) { abkNotifyEmbedParent(data, preferredDate, checkoutDate, savedKind); renderAddBookingForm(); return }
       switchTab('bookings')
     }
   } catch (err) {

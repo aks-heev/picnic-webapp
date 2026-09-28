@@ -22,21 +22,45 @@ Supabase only (`evmftrogyzoudiccqkya`), via `supabase-js` from the browser:
 site's availability calendar reads them) and hold no customer data. If either
 read fails, the calendar still shows bookings and says what is missing.
 
-## Calendar (revenue-dashboard.html, added 2026-09-28)
+## Pages
 
-Opened from the **List | Calendar** toggle on the Next up card. Two tabs:
-**Picnics** (month grid, guest name then venue and slot) and **Airbnb & stays**
-(one row per TerraCottage unit across 28 nights, plus a derived whole-home row
-that is sellable only when every unit is free). Clicking a day, a stay or an
-open gap opens a dialog with the booking details.
+| Route | File | What |
+|---|---|---|
+| `/` | `index.html` | hub: one sign-in, a card per dashboard |
+| `/revenue-dashboard` | `revenue-dashboard.html` | revenue, P&L, occupancy, bookings table |
+| `/meta-dashboard` | `meta-dashboard.html` | Meta ads |
+| `/calendar` | `calendar.html` | bookings calendar (below) |
 
-It is **read-only**. The dialog's *Add booking* is a link that opens the admin
-panel's Add Booking form in a new tab, pre-filled through
-`/admin#add-booking?type=…&venue=…&date=…` or `…&checkin=…&checkout=…`
-(`abkApplyPrefill` in `app.js` validates every value). Pricing, the conflict
-check, the picnic/stay split and the emails stay in that one form — do not add
-a second booking form here. Coming back to the dashboard tab re-reads the data,
-so the new booking appears without pressing Refresh.
+## Calendar (`calendar.html`, 2026-09-28)
+
+Two tabs: **Picnics** (month grid, guest name then venue and slot, "Full" when a
+multi-setup venue reaches `max_concurrent_setups`) and **Airbnb & stays** (one
+row per TerraCottage unit across 28 nights, plus a derived whole-home row that
+is sellable only when every unit is free, and a list of open nights). Clicking a
+day, a stay or a gap opens a dialog with the booking details. The revenue
+dashboard's Next up card links here; the calendar code lives only in this file.
+
+**Adding a booking.** The page itself never writes to the database. *Add
+booking* opens the admin panel's own form inside a dialog —
+`https://www.picnicstories.com/admin?embed=1#add-booking?type=…&venue=…&date=…`
+(or `…&checkin=…&checkout=…`). `abkApplyPrefill` in `app.js` validates every
+pre-filled value; `embed=1` hides the admin chrome (`admin.html`) and, after a
+new booking saves, `app.js` posts `{type: 'tps:booking-saved', id, date,
+checkout, kind}` to this page, which closes the dialog, reloads and opens the
+new booking. Pricing, the conflict check, add-ons, the board message, the staff
+checklist, the picnic/stay split and the emails all stay in that one form.
+
+- 🔴 Do not add a second booking form to this project. The database function
+  (`admin_add_manual_booking`) protects conflicts and money, but the admin form
+  also carries add-on prices, the white-arch board message, checklist extras
+  and the split — a copy would drift and save incomplete bookings.
+- 🔴 The admin page may be framed only by origins in the `frame-ancestors`
+  header for `/admin` in the repo-root `vercel.json`. A new dashboard domain
+  must be added there AND to `ADMIN_EMBED_PARENTS` in `app.js`, or the dialog
+  shows a refused frame (and the save message is never delivered).
+- The embedded form has its own login: browsers keep an embedded site's
+  storage separate, so the first use on each device asks for the admin
+  password inside the dialog. "Open in new tab" in the dialog is the fallback.
 
 The Cowork version of this dashboard read the Google Sheet as its book of record
 and used the database only to cross-check it. A browser cannot read a Drive

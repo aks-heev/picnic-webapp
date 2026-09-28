@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow" />
+<title>The Picnic Stories — Bookings Calendar</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f8f4ee;
+    --bg-2: #f1ebe2;
+    --card: #ffffff;
+    --ink: #2a2521;
+    --ink-2: #4f463d;
+    --muted: #6b6259;
+    --hair: #e6ddd1;
+    --hair-2: #efe8de;
+    --terracotta: #b8552a;
+    --terracotta-2: #d8794f;
+    --terracotta-bg: #fbeee5;
+    --olive: #5c6b42;
+    --olive-bg: #e9eedd;
+    --amber: #8f6512;
+    --amber-bg: #fbf0d3;
+    --red: #a43520;
+    --red-bg: #fbe7e2;
+    --blue: #385a7a;
+    --blue-bg: #e5eef5;
+    --serif: Georgia, "Times New Roman", "Iowan Old Style", "Palatino Linotype", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --r: 14px;
+    --r-sm: 9px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--ink); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 22px 22px 64px; }
+  button:focus-visible, a:focus-visible { outline: 2px solid var(--terracotta); outline-offset: 1px; }
+
+  /* ---------- masthead (same look as the other dashboards) ---------- */
+  .mast { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px 22px; margin-bottom: 18px; }
+  .brand h1 { font-family: var(--serif); font-size: 28px; font-weight: 400; margin: 0; letter-spacing: -.01em; color: var(--ink); }
+  .brand h1 em { font-style: italic; color: var(--terracotta); }
+  .brand .scope { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+  .brand .back { font-size: 12.5px; color: var(--terracotta); text-decoration: none; font-weight: 600; }
+  .brand .back:hover { text-decoration: underline; }
+  .mast-ctl { margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .btn { font: inherit; font-size: 13px; padding: 8px 13px; min-height: 36px; border: 1px solid var(--hair); border-radius: var(--r-sm); background: var(--card); color: var(--ink-2); cursor: pointer; }
+  .btn:hover { border-color: var(--terracotta); color: var(--terracotta); }
+  .stamp { width: 100%; font-size: 12px; color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; }
+  .stamp span { display: inline-flex; align-items: center; gap: 6px; }
+  .stamp a { color: var(--terracotta); text-decoration: none; }
+  .stamp a:hover { text-decoration: underline; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; background: var(--olive); }
+  .empty { padding: 22px 12px; text-align: center; color: var(--muted); font-size: 13px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+  .b-plain { background: var(--bg-2); color: var(--muted); }
+  .b-live { background: var(--olive-bg); color: var(--olive); }
+  .b-airbnb { background: var(--blue-bg); color: var(--blue); }
+  .occ-bar { height: 6px; border-radius: 3px; background: var(--bg-2); overflow: hidden; }
+  .occ-bar > i { display: block; height: 100%; border-radius: 3px; }
+  .state { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r); padding: 32px; text-align: center; color: var(--muted); }
+  .state.err { text-align: left; border-color: #efc9c0; background: var(--red-bg); color: var(--ink-2); }
+  .state.err strong { color: var(--red); display: block; margin-bottom: 5px; font-size: 14px; }
+
+  /* ---- sign-in (same as the other dashboards) ---- */
+  .signin-wrap { min-height: 76vh; display: flex; align-items: center; justify-content: center; padding: 24px 0; }
+  .signin-card { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r); padding: 34px 30px 26px; width: 100%; max-width: 380px; box-shadow: 0 1px 2px rgba(42,37,33,.04), 0 8px 28px rgba(42,37,33,.06); }
+  .signin-brand { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--terracotta); font-weight: 600; }
+  .signin-card h1 { font-size: 22px; margin: 10px 0 2px; color: var(--ink); letter-spacing: -.01em; }
+  .signin-sub { color: var(--muted); font-size: 13px; margin: 0 0 22px; }
+  .signin-card label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-2); margin: 0 0 5px; }
+  .signin-card input { width: 100%; box-sizing: border-box; padding: 10px 12px; font: inherit; font-size: 14px; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--hair); border-radius: 9px; margin-bottom: 14px; }
+  .signin-card input:focus { outline: 2px solid var(--terracotta); outline-offset: 1px; border-color: transparent; }
+  .signin-card button { width: 100%; padding: 11px 14px; font: inherit; font-size: 14px; font-weight: 600; color: #fff;
+    background: var(--terracotta); border: 0; border-radius: 9px; cursor: pointer; margin-top: 4px; }
+  .signin-card button:disabled { opacity: .6; cursor: default; }
+  .signin-msg { min-height: 18px; margin-top: 12px; font-size: 12.5px; color: var(--red); text-align: center; }
+
+  /* ---------- calendar (added 2026-09-28) ---------- */
+  .cal { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r); margin-bottom: 16px; overflow: hidden; }
+  .cal-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--hair-2); }
+  .cal-h-l, .cal-h-r { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .cal-h h2 { font-family: var(--serif); font-weight: 400; font-size: 21px; margin: 0; }
+  .cal-tabs { display: flex; gap: 4px; }
+  .cal-tab { font: inherit; font-size: 13px; font-weight: 600; border: 1px solid var(--hair); border-radius: 20px; padding: 5px 13px; min-height: 34px; background: var(--card); color: var(--ink-2); cursor: pointer; }
+  .cal-tab[aria-selected="true"] { background: var(--terracotta); border-color: var(--terracotta); color: #fff; }
+  .cal-tab small { font-size: 12px; font-weight: 500; opacity: .8; }
+  .cal-nav { width: 36px; padding: 0; font-size: 16px; }
+  .cal-period { font-family: var(--serif); font-size: 16px; min-width: 150px; text-align: center; }
+  .cal-b { padding: 12px 16px 14px; }
+  .cal-warn { margin: 10px 16px 0; font-size: 12.5px; color: var(--amber); background: var(--amber-bg); border-radius: var(--r-sm); padding: 8px 12px; }
+  .cal-dows, .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+  .cal-dows { margin-bottom: 5px; }
+  .cal-dows div { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; color: var(--muted); padding-left: 4px; }
+  .cal-day { font: inherit; text-align: left; min-height: 112px; padding: 6px 6px 7px; border: 1px solid var(--hair-2); border-radius: var(--r-sm); background: var(--card); color: var(--ink); cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .cal-day:hover { border-color: var(--terracotta-2); }
+  .cal-day.out { background: var(--bg); }
+  .cal-day.out .cal-n { color: #8a8077; }
+  .cal-day.sel { border: 2px solid var(--terracotta); padding: 5px 5px 6px; }
+  .cal-dh { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 20px; }
+  .cal-dh-l { display: flex; align-items: center; gap: 4px; min-width: 0; }
+  .cal-n { font-size: 13px; font-weight: 500; }
+  .cal-day.today .cal-n { background: var(--ink); color: #fff; border-radius: 10px; padding: 0 7px; font-weight: 700; }
+  .cal-flag { font-size: 10.5px; font-weight: 700; border-radius: 4px; padding: 0 5px; white-space: nowrap; }
+  .cal-flag.full { background: var(--amber-bg); color: #6f4d0b; }
+  .cal-flag.over { background: var(--red-bg); color: var(--red); }
+  .cal-units { display: flex; gap: 3px; flex-shrink: 0; }
+  .cal-unit { font-size: 9.5px; font-weight: 700; color: var(--blue); background: var(--blue-bg); border-radius: 4px; padding: 0 4px; }
+  .cal-chip { background: var(--terracotta-bg); color: #6e2f12; border-radius: 6px; padding: 3px 6px; font-size: 11.5px; line-height: 1.3; min-width: 0; }
+  .cal-chip b { display: flex; align-items: center; gap: 5px; font-weight: 700; }
+  .cal-chip b span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+  .cal-chip i { display: block; font-style: normal; color: #8a3a17; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cal-chip.blk { background: var(--bg-2); color: var(--ink-2); }
+  .cal-chip.blk i { color: var(--muted); }
+  .cal-due { width: 6px; height: 6px; border-radius: 50%; background: var(--amber); flex-shrink: 0; }
+  .cal-more { font-size: 11.5px; color: var(--muted); padding-left: 3px; }
+  .cal-count { display: none; }
+  .cal-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .cal-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+  .cal-sw { width: 16px; height: 10px; border-radius: 3px; display: inline-block; }
+  .cal-legend .cal-hint { margin-left: auto; }
+  /* stays timeline */
+  .cal-stays { display: grid; grid-template-columns: minmax(0, 1fr) 240px; }
+  .cal-tl-wrap { overflow-x: auto; padding: 12px 16px 14px; }
+  .cal-tl { --w: 26px; min-width: max-content; }
+  .cal-tl-row { display: flex; align-items: stretch; border-top: 1px solid var(--hair-2); }
+  .cal-tl-row.hd { border-top: 0; }
+  .cal-tl-lbl { width: 132px; flex-shrink: 0; padding: 9px 10px 9px 0; position: sticky; left: 0; background: var(--card); z-index: 2; }
+  .cal-tl-lbl b { display: block; font-size: 13.5px; font-weight: 600; }
+  .cal-tl-lbl span { font-size: 11.5px; color: var(--muted); }
+  .cal-tl-cols { display: flex; }
+  .cal-tl-col { width: var(--w); flex-shrink: 0; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); padding: 2px 0; line-height: 1.15; }
+  .cal-tl-col small { display: block; font-size: 9.5px; }
+  .cal-tl-col.wk { color: var(--ink-2); font-weight: 600; }
+  .cal-tl-col.mo { box-shadow: inset 1px 0 0 var(--terracotta); color: var(--terracotta); font-weight: 700; }
+  .cal-tl-col.now { background: var(--terracotta); color: #fff; border-radius: 6px; font-weight: 700; }
+  .cal-track { position: relative; height: 48px; flex-shrink: 0; }
+  .cal-track.combo { background: repeating-linear-gradient(135deg, var(--hair-2) 0 6px, var(--bg) 6px 12px); }
+  .cal-shade { position: absolute; top: 0; bottom: 0; width: var(--w); background: rgba(241,235,226,.7); }
+  .cal-shade.now { background: rgba(184,85,42,.08); }
+  .cal-bar { position: absolute; top: 9px; height: 30px; border-radius: 7px; border: 0; font: inherit; font-size: 11.5px; font-weight: 600; line-height: 30px; padding: 0 7px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; z-index: 1; }
+  .cal-bar.cl { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+  .cal-bar.cr { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .cal-bar.air { background: var(--terracotta); color: #fff; }
+  .cal-bar.dir { background: var(--olive); color: #fff; }
+  .cal-bar.ical { background: repeating-linear-gradient(135deg, #f3d9cb 0 5px, var(--terracotta-bg) 5px 10px); color: #6e2f12; box-shadow: inset 0 0 0 1px var(--terracotta); }
+  .cal-bar.blk { background: repeating-linear-gradient(135deg, var(--hair) 0 5px, var(--bg-2) 5px 10px); color: var(--ink-2); box-shadow: inset 0 0 0 1px #cfc4b5; }
+  .cal-bar.sell { background: var(--olive-bg); color: #3f4a2d; border: 1.5px dashed var(--olive); line-height: 27px; }
+  .cal-bar:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .cal-side { border-left: 1px solid var(--hair-2); background: #fdfbf8; padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
+  .cal-side h4 { margin: 0 0 6px; font-size: 11px; letter-spacing: .07em; text-transform: uppercase; font-weight: 600; color: var(--muted); }
+  .cal-occ { margin-bottom: 8px; }
+  .cal-occ div:first-child { display: flex; justify-content: space-between; font-size: 13px; }
+  .cal-occ div:first-child span:last-child { font-variant-numeric: tabular-nums; }
+  .cal-gap { display: flex; width: 100%; justify-content: space-between; gap: 8px; font: inherit; font-size: 12.5px; text-align: left; color: var(--ink); background: transparent; border: 0; border-top: 1px solid var(--hair-2); padding: 8px 0; min-height: 36px; cursor: pointer; }
+  .cal-gap:hover b { color: var(--terracotta); }
+  .cal-gap span:last-child { color: var(--olive); font-weight: 600; white-space: nowrap; }
+  /* dialog */
+  .cal-ov { position: fixed; inset: 0; background: rgba(42,37,33,.42); z-index: 50; display: flex; align-items: flex-start; justify-content: center; padding: 8vh 16px 16px; overflow-y: auto; }
+  .cal-dlg { width: 100%; max-width: 600px; background: var(--card); border-radius: 16px; box-shadow: 0 24px 60px rgba(42,37,33,.28); overflow: hidden; }
+  .cal-dlg:focus { outline: none; }
+  .cal-dlg-h { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 18px 20px 12px; border-bottom: 1px solid var(--hair-2); }
+  .cal-dlg-k { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; font-weight: 600; color: var(--muted); }
+  .cal-dlg-h h2 { font-family: var(--serif); font-weight: 400; font-size: 25px; line-height: 1.2; margin: 2px 0 0; }
+  .cal-dlg-s { font-size: 13px; color: var(--muted); }
+  .cal-x { width: 40px; height: 40px; flex-shrink: 0; border: 1px solid var(--hair); border-radius: 10px; background: var(--card); color: var(--ink-2); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+  .cal-dlg-b { padding: 14px 20px; display: flex; flex-direction: column; gap: 10px; max-height: 60vh; overflow-y: auto; }
+  .cal-bk { border: 1px solid var(--hair); border-radius: 12px; padding: 11px 13px; display: flex; flex-direction: column; gap: 5px; }
+  .cal-bk-t { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .cal-bk-t b { font-weight: 600; font-size: 15.5px; }
+  .cal-bk-t span { display: inline-flex; gap: 8px; align-items: baseline; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .cal-bk-l { font-size: 13px; color: var(--ink-2); }
+  .cal-bk-m { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding-top: 8px; border-top: 1px solid var(--hair-2); font-size: 12px; color: var(--muted); }
+  .cal-bk-m b { display: block; font-size: 14px; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .cal-bk-m b.due { color: var(--amber); } .cal-bk-m b.ok { color: var(--olive); }
+  .cal-note { font-size: 12.5px; border-radius: 10px; padding: 10px 12px; }
+  .cal-note.amber { color: #6f4d0b; background: var(--amber-bg); }
+  .cal-note.red { color: var(--red); background: var(--red-bg); }
+  .cal-note.plain { color: var(--ink-2); border: 1px dashed var(--hair); }
+  .cal-also { font-size: 13px; color: var(--ink-2); }
+  .cal-also b { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; font-weight: 600; color: var(--muted); margin-right: 8px; }
+  .cal-dlg-f { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 20px; background: #fdfbf8; border-top: 1px solid var(--hair-2); }
+  .cal-dlg-f p { margin: 0; font-size: 12px; color: var(--muted); max-width: 320px; }
+  .cal-dlg-f div { display: flex; gap: 8px; margin-left: auto; }
+  .cal-dlg-f .btn { min-height: 44px; padding: 0 16px; }
+  .cal-add { display: inline-flex; align-items: center; gap: 6px; padding: 0 18px; min-height: 44px; border-radius: 10px; background: var(--terracotta); color: #fff; font-size: 13.5px; font-weight: 600; text-decoration: none; }
+  .cal-add:hover { background: #a94c25; }
+  .cal-add.off { background: var(--hair-2); color: var(--muted); pointer-events: none; }
+  @media (max-width: 860px) {
+    .cal-stays { grid-template-columns: 1fr; }
+    .cal-side { border-left: 0; border-top: 1px solid var(--hair-2); }
+  }
+  @media (max-width: 700px) {
+    .cal-h { padding: 10px 12px; } .cal-b { padding: 10px 8px 12px; }
+    .cal-period { min-width: 0; flex: 1; }
+    .cal-dows, .cal-grid { gap: 3px; }
+    .cal-day { min-height: 56px; padding: 4px; align-items: center; }
+    .cal-day.sel { padding: 3px; }
+    .cal-dh { justify-content: center; }
+    .cal-units, .cal-day .cal-flag, .cal-chip, .cal-more { display: none; }
+    .cal-count { display: inline-block; font-size: 11px; font-weight: 700; color: #6e2f12; background: var(--terracotta-bg); border-radius: 9px; padding: 0 6px; }
+    .cal-count.full { background: var(--amber-bg); color: #6f4d0b; }
+    .cal-legend .cal-hint { margin-left: 0; }
+    .cal-tl-lbl { width: 76px; }
+    .cal-ov { padding: 0; align-items: flex-end; }
+    .cal-dlg { border-radius: 16px 16px 0 0; max-width: none; }
+    .cal-dlg-b { max-height: 62vh; }
+  }
+
+  /* newly added booking, after the embedded form reports a save */
+  .cal-chip.new { box-shadow: inset 0 0 0 2px var(--olive); }
+  .cal-bk.new { border-color: var(--olive); box-shadow: 0 0 0 2px var(--olive-bg); }
+  .cal-bk-t .badge { margin-right: 2px; }
+
+  /* ---------- Add Booking dialog: the admin form, embedded ---------- */
+  #addbk { z-index: 60; }
+  #addbk[hidden] { display: none; }
+  .addbk-dlg { width: 100%; max-width: 760px; height: min(88vh, 980px); background: var(--card); border-radius: 16px; box-shadow: 0 24px 60px rgba(42,37,33,.28); display: flex; flex-direction: column; overflow: hidden; }
+  .addbk-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px 12px 20px; border-bottom: 1px solid var(--hair-2); }
+  .addbk-h h2 { font-family: var(--serif); font-weight: 400; font-size: 21px; margin: 0; }
+  .addbk-h div { display: flex; align-items: center; gap: 10px; }
+  .addbk-h a { font-size: 12.5px; color: var(--terracotta); text-decoration: none; font-weight: 600; }
+  .addbk-h a:hover { text-decoration: underline; }
+  .addbk-body { position: relative; flex: 1; background: var(--bg); }
+  .addbk-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .addbk-load[hidden] { display: none; }
+  .addbk-load { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 13px; }
+  .addbk-f { padding: 9px 20px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--hair-2); background: #fdfbf8; }
+  @media (max-width: 700px) {
+    #addbk { padding: 0; align-items: stretch; }
+    .addbk-dlg { max-width: none; height: 100%; border-radius: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="root"><div class="state">Loading…</div></div>
+</div>
+
+<div id="addbk" class="cal-ov" hidden>
+  <div class="addbk-dlg" role="dialog" aria-modal="true" aria-labelledby="addbk-t" tabindex="-1">
+    <div class="addbk-h">
+      <h2 id="addbk-t">Add booking</h2>
+      <div>
+        <a id="addbk-tab" href="#" target="_blank" rel="noopener">Open in new tab ↗</a>
+        <button type="button" class="cal-x" id="addbk-x" aria-label="Close without saving"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+    </div>
+    <div class="addbk-body">
+      <div class="addbk-load" id="addbk-load">Loading the booking form…</div>
+      <iframe id="addbk-f" title="Add booking form" referrerpolicy="no-referrer"></iframe>
+    </div>
+    <div class="addbk-f">This is the admin panel’s own form. The first time on a device it asks you to log in, separately from this dashboard.</div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   BOOKINGS CALENDAR — /calendar on the picnic-dashboard project.
+
+   SECURITY: identical to the other dashboards here. The anon key is public by
+   design; every byte of protection is RLS keyed to
+   auth.email() = 'aksh.eeev@gmail.com'. This page READS bookings (admin-only
+   RLS), venues and venue_availability (readable by any signed-in user, no
+   customer data). It writes nothing: bookings are created by the admin
+   panel's form, embedded below, under the admin's own session there.
+   🔴 Never add an anon SELECT policy to bookings to make this page "easier".
+   ============================================================ */
+const SUPABASE_URL  = 'https://evmftrogyzoudiccqkya.supabase.co';
+const SUPABASE_ANON  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2bWZ0cm9neXpvdWRpY2Nxa3lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTM5OTUsImV4cCI6MjA5NTI4OTk5NX0.ka2tLAY7xpe08X8TlNVgft4V__Qv7Ol27rd0daOtI4I';
+const CITIES = ['Gurugram', 'Delhi'];          // same book as the business dashboard
+const TEAM_PHONES = ['7742363777', '7425055501'];  // standing exclusions (CLAUDE.md §8)
+const ALLOWED = ['aksh.eeev@gmail.com'];
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+  auth: { persistSession: true, autoRefreshToken: true },
+});
+
+const MONTHS = { Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5, Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11 };
+const MON_LBL = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const TODAY = (() => { const d = new Date(); d.setHours(0,0,0,0); return d; })();
+
+/* ---------- primitives (same as revenue-dashboard.html) ---------- */
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function money(v) {
+  if (v == null) return 0;
+  const s = String(v).replace(/₹/g, '').replace(/,/g, '').trim();
+  if (s === '' || s === '-' || s === '—') return 0;
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+function inr(n) { const v = Math.round(Number(n) || 0); return '₹' + v.toLocaleString('en-IN'); }
+function parseDate(s) {
+  if (!s) return null;
+  const t = String(s).trim();
+  let m = t.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
+  if (m && MONTHS[m[2]] !== undefined) return new Date(Number(m[3]), MONTHS[m[2]], Number(m[1]));
+  m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return null;
+}
+function fmtShort(d) { return d ? `${String(d.getDate()).padStart(2,'0')} ${MON_LBL[d.getMonth()]}` : '—'; }
+function monthKey(d) { return d ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` : ''; }
+function isoDate(d) { return d ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` : ''; }
+/* "Today" is the business's day (Asia/Kolkata), not the browser's. */
+function istTodayIso() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
+function isoToDate(s) { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, m - 1, d); }
+function addDaysIso(s, n) { const d = isoToDate(s); d.setDate(d.getDate() + n); return isoDate(d); }
+function nightsBetween(a, b) { return Math.round((isoToDate(b) - isoToDate(a)) / 86400000); }
+
+const S = { records: [], venues: [], avail: [], dbOk: false, email: '', cal: null, loadedAt: 0, calDataErr: '' };
+
+/* ---------- load ---------- */
+async function load() {
+  const availFrom = addDaysIso(istTodayIso(), -60), availTo = addDaysIso(istTodayIso(), 400);
+  const [bkRes, venRes, avRes] = await Promise.all([
+    sb.from('bookings')
+      .select('id, full_name, mobile_number, preferred_date, checkout_date, time_slot, occasion, ' +
+              'total_amount, advance_amount, payment_status, entry_source, external_booking_ref, ' +
+              'created_at, venue_id, guest_count, package_name, booking_kind, venues!inner(name, city, type)')
+      .eq('confirmed', true)
+      .in('venues.city', CITIES)
+      .order('preferred_date', { ascending: false }),
+    sb.from('venues').select('id, name, type, city, is_active, parent_venue_id, max_concurrent_setups')
+      .in('city', CITIES),
+    sb.from('venue_availability').select('venue_id, date, source, time_slot')
+      .in('source', ['ical', 'admin']).gte('date', availFrom).lte('date', availTo),
+  ]);
+  if (bkRes.error) throw new Error(`Could not read bookings — ${bkRes.error.message}`);
+  const raw = bkRes.data || [];
+  if (!raw.length) throw new Error('Signed in, but no bookings came back. This account does not have read access to the business data.');
+  S.venues = (venRes && !venRes.error) ? (venRes.data || []) : [];
+  S.avail = (avRes && !avRes.error) ? (avRes.data || []) : [];
+  S.calDataErr = (venRes && venRes.error) || (avRes && avRes.error) ? 'Airbnb blocks and venue capacity could not be read; bookings are still shown.' : '';
+  S.dbOk = true;
+  S.loadedAt = Date.now();
+
+  const kept = raw.filter(r =>
+    !TEAM_PHONES.includes(String(r.mobile_number || '').trim()) &&
+    !/^test/i.test(String(r.full_name || '').trim()));
+  /* Record shape copied from revenue-dashboard.html's load() so channel,
+     balance and paid read exactly as they do there. Costs and add-ons are not
+     read on this page, hence the empty maps. */
+  const costBy = new Map(), addBy = new Map();
+  const recs = kept.map(r => {
+    const isStay = !!r.checkout_date;
+    const start = parseDate(r.preferred_date);
+    const end = isStay ? parseDate(r.checkout_date) : null;
+    const nights = (isStay && start && end) ? Math.max(0, Math.round((end - start) / 86400000)) : 0;
+    const total = money(r.total_amount);
+    const advance = money(r.advance_amount);
+    const cost = money((costBy.get(String(r.id)) || {}).total_cost);
+
+    /* Channel. external_booking_ref is free text and mixes two different things:
+       real Airbnb confirmation codes (HM + 8 alphanumerics, sometimes with an
+       AIRBNB- prefix) and hand-typed provenance notes — "WhatsApp", "Direct",
+       "direct-extension", and the bare word "Airbnb".
+       🔴 The code test alone is not enough: bookings #142 and #143 are genuine
+       platform stays whose ref is literally "Airbnb", and a code-only check
+       filed both under Direct. Both forms have to be accepted. */
+    const ref = String(r.external_booking_ref || '').trim();
+    const bare = ref.replace(/^AIRBNB-/i, '');
+    const viaAirbnb = isStay && (/^HM[A-Z0-9]{8}$/i.test(bare) || /^airbnb$/i.test(ref));
+    const channel = isStay
+      ? (viaAirbnb ? 'Airbnb' : 'Direct')
+      : (String(r.entry_source || '') === 'admin' ? 'Direct' : 'Website');
+
+    return {
+      kind: isStay ? 'stay' : 'picnic',
+      bookingId: '#' + r.id,
+      venue: (r.venues && r.venues.name) || '—',
+      city: (r.venues && r.venues.city) || '',
+      name: r.full_name || '',
+      phone: r.mobile_number || '',
+      date: start, endDate: end, nights,
+      /* created_at is UTC; the business runs on IST, and a booking made at
+         02:00 IST belongs to that day, not the previous one. */
+      bookedOn: r.created_at ? new Date(new Date(r.created_at).getTime() + 5.5 * 3600000) : null,
+      occasion: r.occasion || '',
+      channel,
+      total, advance,
+      balance: Math.max(0, total - advance),
+      netProfit: total - cost,
+      cost,
+      addOns: addBy.get(String(r.id)) || [],
+      /* 🔴 payment_status is NOT the truth flag. CLAUDE.md §6: admin-entered and
+         offline-collected bookings stay 'pending' forever by design, so keying
+         "paid" off it would report every manual booking as owing. The money
+         columns are the truth — advance_amount is raised to total_amount when a
+         booking is settled. This reproduces the workbook's ₹38,600 outstanding
+         exactly (Amy 15,200 + Simran 14,900 + Nitij 8,500), verified 2026-09-03. */
+      payment: advance >= total && total > 0 ? 'Paid' : 'Advance Paid',
+      status: (start && start < TODAY) ? 'Completed' : 'Confirmed',
+      bkid: String(r.id),
+      /* Calendar fields. bookingKind is bookings.booking_kind (picnic | stay |
+         picnic_stay); the calendar prefers it over the checkout_date shape,
+         which cannot tell a picnic AT a stay property from a stay. kind above
+         is left alone — every revenue figure on this page keys on it. */
+      venueId: r.venue_id, venueType: (r.venues && r.venues.type) || '',
+      guests: r.guest_count, pkg: r.package_name || '', slot: r.time_slot || '',
+      bookingKind: r.booking_kind || '',
+    };
+  });
+  // Fold venue spelling variants onto the most common form.
+  const variants = new Map();
+  recs.forEach(r => {
+    const k = String(r.venue || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!k) return;
+    if (!variants.has(k)) variants.set(k, new Map());
+    const c = variants.get(k); c.set(r.venue, (c.get(r.venue) || 0) + 1);
+  });
+  const canonical = new Map();
+  variants.forEach((counts, k) => { let best = null, n = -1; counts.forEach((cnt, name) => { if (cnt > n) { n = cnt; best = name; } }); canonical.set(k, best); });
+  recs.forEach(r => { const k = String(r.venue || '').toLowerCase().replace(/\s+/g, ' ').trim(); if (canonical.has(k)) r.venue = canonical.get(k); });
+
+  // Payment Status is authoritative: Paid => fully collected, zero balance.
+  recs.forEach(r => {
+    r.paid = (r.payment || '').trim().toLowerCase() === 'paid';
+    r.collected = r.paid ? r.total : r.advance;
+    r.balance = r.paid ? 0 : Math.max(0, r.total - r.advance);
+    r.share = 1; r.shareNights = r.nights;
+  });
+
+  S.records = recs;
+}
+
+/* ---------- page ---------- */
+function render() {
+  document.getElementById('root').innerHTML = `
+    <div class="mast">
+      <div class="brand">
+        <a class="back" href="/">← Dashboards</a>
+        <h1>The Picnic <em>Stories</em></h1>
+        <div class="scope">Bookings calendar · Gurugram &amp; Delhi</div>
+      </div>
+      <div class="mast-ctl">
+        <button type="button" class="btn" onclick="refresh()" title="Re-read the booking system">Refresh</button>
+      </div>
+      <div class="stamp">
+        <span><i class="dot"></i> Live system connected · ${S.records.length} confirmed</span>
+        <span>Updated ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+        <span>${esc(S.email || '')} · <a href="#" onclick="signOut();return false;">Sign out</a></span>
+      </div>
+    </div>
+    <div id="cal"></div>`;
+  renderCalendar();
+}
+
+/* ============================================================
+   CALENDAR (this page's whole job; moved here from revenue-dashboard.html
+   on 2026-09-28 so the calendar lives in exactly one file).
+
+   This page never writes to the database itself. "Add booking" opens the
+   admin panel's own Add Booking form INSIDE a dialog here (an iframe of
+   picnicstories.com/admin?embed=1), pre-filled through
+   #add-booking?type=…&venue=…&date=… (abkApplyPrefill in app.js). When that
+   form saves, it posts {type:'tps:booking-saved'} back to this window and
+   the calendar reloads and opens the new booking.
+   🔴 Do not add a second booking form here, and do not call
+   admin_add_manual_booking from this page. The admin form carries things the
+   database function does not: add-on prices, the white-arch board message
+   (cutout printing), staff checklist extras, the picnic/stay split, food
+   counts and slot times. A copy of it would drift, and bookings made here
+   would be quietly incomplete.
+
+   Two views, because the two businesses have different shapes:
+   - Picnics: month grid; a picnic is one slot on one day at one of many venues.
+   - Stays:   one row per unit, bars across nights; a stay is a range of nights.
+   Airbnb nights that have NO booking row come from venue_availability
+   (source='ical'), with the same two corrections staff_occupancy_upcoming()
+   makes: nights already explained by a stay row at that venue (or its combo
+   parent) are dropped, and combo venues are skipped because they inherit
+   their children. What survives is an Airbnb reservation nobody entered.
+   ============================================================ */
+/* 🔴 The admin page only allows itself to be framed by this origin list — see
+   the frame-ancestors header for /admin in the picnic-webapp vercel.json. A new
+   dashboard domain has to be added THERE and in ADMIN_EMBED_PARENTS in app.js,
+   or the dialog shows a refused frame. */
+const ADMIN_ORIGIN = 'https://www.picnicstories.com';
+const ADMIN_ADD_URL = ADMIN_ORIGIN + '/admin?embed=1#add-booking';
+const SLOT_ORDER = { morning: 0, afternoon: 1, evening: 2 };
+const SLOT_LBL = { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening' };
+const SLOT_SHORT = { morning: 'Morn', afternoon: 'Aft', evening: 'Eve' };
+const DOW_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const DOW_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const CAL_NIGHTS = 28, CAL_PREF_KEY = 'tps.calendar';
+
+/* Open/closed and the chosen tab are a per-viewer convenience, so browser
+   storage is fine — and optional: a private window just starts closed. */
+function calState() {
+  if (!S.cal) {
+    let p = {};
+    try { p = JSON.parse(localStorage.getItem(CAL_PREF_KEY) || '{}') || {}; } catch (e) { p = {}; }
+    const t = istTodayIso();
+    S.cal = { open: true, view: p.view === 'stays' ? 'stays' : 'picnic', month: t.slice(0, 7), stayStart: addDaysIso(t, -3), dlg: null, opener: null, focusDlg: false };
+  }
+  return S.cal;
+}
+function calSavePrefs() { try { localStorage.setItem(CAL_PREF_KEY, JSON.stringify({ view: S.cal.view })); } catch (e) {} }
+function calShortVenue(name) { return String(name || '').replace(/^TerraCottage\s+/i, ''); }
+function calSlot(s, short) { return (short ? SLOT_SHORT : SLOT_LBL)[s] || (s ? s : 'No slot'); }
+function calHasPicnic(r) { return r.bookingKind ? (r.bookingKind === 'picnic' || r.bookingKind === 'picnic_stay') : r.kind === 'picnic'; }
+function calHasStay(r) { return (r.bookingKind ? (r.bookingKind === 'stay' || r.bookingKind === 'picnic_stay') : r.kind === 'stay') && r.date && r.endDate; }
+function calAddHref(p) {
+  const q = new URLSearchParams();
+  Object.keys(p).forEach(k => { if (p[k] != null && p[k] !== '') q.set(k, String(p[k])); });
+  return ADMIN_ADD_URL + '?' + q.toString();
+}
+
+/* One pass over the loaded data into lookups both views and the dialog share. */
+function calIndex() {
+  const venues = (S.venues || []).filter(v => v.is_active !== false);
+  const vById = new Map((S.venues || []).map(v => [v.id, v]));
+  const picByDay = new Map(), stayByVenue = new Map(), nightMap = new Map();
+  S.records.forEach(r => {
+    if (calHasPicnic(r) && r.date) {
+      const k = isoDate(r.date);
+      if (!picByDay.has(k)) picByDay.set(k, []);
+      picByDay.get(k).push(r);
+    }
+    if (calHasStay(r)) {
+      if (!stayByVenue.has(r.venueId)) stayByVenue.set(r.venueId, []);
+      stayByVenue.get(r.venueId).push(r);
+      if (!nightMap.has(r.venueId)) nightMap.set(r.venueId, new Map());
+      const a = isoDate(r.date), n = nightsBetween(a, isoDate(r.endDate));
+      for (let i = 0; i < n; i++) nightMap.get(r.venueId).set(addDaysIso(a, i), r);
+    }
+  });
+  picByDay.forEach(list => list.sort((a, b) => ((SLOT_ORDER[a.slot] ?? 9) - (SLOT_ORDER[b.slot] ?? 9)) || a.venue.localeCompare(b.venue)));
+  const children = new Map();
+  venues.forEach(v => { if (v.parent_venue_id) { if (!children.has(v.parent_venue_id)) children.set(v.parent_venue_id, []); children.get(v.parent_venue_id).push(v.id); } });
+  const bookedOn = (vid, k) => {
+    const m = nightMap.get(vid);
+    if (m && m.has(k)) return m.get(k);
+    const v = vById.get(vid);
+    if (v && v.parent_venue_id) { const pm = nightMap.get(v.parent_venue_id); if (pm && pm.has(k)) return pm.get(k); }
+    return null;
+  };
+  const icalOnly = new Map(), adminDay = new Map(), adminSlot = new Map();
+  const addTo = (map, key, val) => { if (!map.has(key)) map.set(key, new Set()); map.get(key).add(val); };
+  (S.avail || []).forEach(a => {
+    const v = vById.get(a.venue_id);
+    if (!v) return;
+    if (a.source === 'ical') {
+      if (v.type === 'combo') return;          // inherits its children — counting it doubles every stay
+      if (bookedOn(v.id, a.date)) return;      // already explained by a booking row
+      addTo(icalOnly, v.id, a.date);
+    } else if (a.source === 'admin') {
+      if (a.time_slot) { if (!adminSlot.has(a.date)) adminSlot.set(a.date, []); adminSlot.get(a.date).push({ vid: v.id, slot: a.time_slot }); }
+      else addTo(adminDay, v.id, a.date);
+    }
+  });
+  const unitNight = (vid, k) => {
+    const r = bookedOn(vid, k);
+    if (r) return { t: 'booked', r };
+    if (icalOnly.has(vid) && icalOnly.get(vid).has(k)) return { t: 'ical' };
+    if (adminDay.has(vid) && adminDay.get(vid).has(k)) return { t: 'blocked' };
+    return null;
+  };
+  const comboFree = (cid, k) => !unitNight(cid, k) && (children.get(cid) || []).every(ch => !unitNight(ch, k));
+  const units = venues.filter(v => v.type === 'self_managed').sort((a, b) => a.id - b.id);
+  const combos = venues.filter(v => v.type === 'combo' && (children.get(v.id) || []).length).sort((a, b) => a.id - b.id);
+  return { venues, vById, picByDay, stayByVenue, children, bookedOn, icalOnly, adminDay, adminSlot, unitNight, comboFree, units, combos };
+}
+
+/* Venue+slot groups on one day, measured against venues.max_concurrent_setups.
+   Full = at capacity (fine, but take nothing more); over = more setups than
+   the venue can hold, which the booking RPCs should have refused. */
+function calCapacity(ix, list) {
+  const g = new Map();
+  list.forEach(r => { const key = r.venueId + '|' + (r.slot || ''); if (!g.has(key)) g.set(key, { r, n: 0 }); g.get(key).n++; });
+  const out = [];
+  g.forEach(({ r, n }) => {
+    const v = ix.vById.get(r.venueId);
+    const max = v ? (Number(v.max_concurrent_setups) || 1) : null;
+    if (max == null || !r.slot) return;
+    if (n > max) out.push({ lvl: 'over', venue: r.venue, slot: r.slot, n, max });
+    // Single-setup venues are 'full' with every booking, so only multi-setup
+    // venues reaching their cap are worth flagging.
+    else if (n === max && max > 1) out.push({ lvl: 'full', venue: r.venue, slot: r.slot, n, max });
+  });
+  return out;
+}
+
+function calPicnicHtml(ix) {
+  const c = S.cal, today = istTodayIso();
+  const [y, m] = c.month.split('-').map(Number);
+  const lead = (new Date(y, m - 1, 1).getDay() + 6) % 7;          // Monday-first grid
+  const weeks = Math.ceil((lead + new Date(y, m, 0).getDate()) / 7);
+  const first = isoDate(new Date(y, m - 1, 1 - lead));
+  const selKey = c.dlg && c.dlg.t === 'day' ? c.dlg.k : '';
+  let cells = '';
+  for (let i = 0; i < weeks * 7; i++) {
+    const k = addDaysIso(first, i), d = isoToDate(k);
+    const list = ix.picByDay.get(k) || [];
+    const cap = calCapacity(ix, list);
+    const over = cap.find(x => x.lvl === 'over'), full = cap.find(x => x.lvl === 'full');
+    const flag = over ? `<span class="cal-flag over" title="${esc(over.venue)} ${esc(calSlot(over.slot))}: ${over.n} setups, capacity ${over.max}">Over cap</span>`
+      : full ? `<span class="cal-flag full" title="${esc(full.venue)} ${esc(calSlot(full.slot))}: ${full.n} of ${full.max} setups">Full</span>` : '';
+    const units = ix.units.filter(u => ix.unitNight(u.id, k))
+      .map(u => `<span class="cal-unit" title="${esc(u.name)} occupied">${esc(calShortVenue(u.name).charAt(0))}</span>`).join('');
+    const blocks = (ix.adminSlot.get(k) || []).map(b => ({ blk: true, venue: (ix.vById.get(b.vid) || {}).name || '', slot: b.slot }))
+      .concat(ix.venues.filter(v => v.type === 'cafe' && ix.adminDay.has(v.id) && ix.adminDay.get(v.id).has(k)).map(v => ({ blk: true, venue: v.name, slot: '' })));
+    const items = list.map(r => `<div class="cal-chip${r.bkid === S.cal.fresh ? ' new' : ''}"><b><span>${esc(r.name || '—')}</span>${r.balance > 0 ? '<i class="cal-due" title="Balance due"></i>' : ''}</b><i>${esc(r.venue)} · ${esc(calSlot(r.slot, true))}${r.bookingKind === 'picnic_stay' ? ' · +stay' : ''}</i></div>`)
+      .concat(blocks.map(b => `<div class="cal-chip blk"><b><span>Blocked</span></b><i>${esc(b.venue)}${b.slot ? ' · ' + esc(calSlot(b.slot, true)) : ' · all day'}</i></div>`));
+    const shown = items.slice(0, 3).join('') + (items.length > 3 ? `<div class="cal-more">+${items.length - 3} more</div>` : '');
+    const aria = `${d.getDate()} ${MON_LBL[d.getMonth()]}: ${list.length ? list.map(r => r.name).join(', ') : 'no picnics'}${full || over ? ', a slot is full' : ''}. Open day`;
+    cells += `<button type="button" class="cal-day${monthKey(d) !== c.month ? ' out' : ''}${k === today ? ' today' : ''}${k === selKey ? ' sel' : ''}" data-day="${k}" aria-haspopup="dialog" aria-label="${esc(aria)}">
+      <div class="cal-dh"><span class="cal-dh-l"><span class="cal-n">${d.getDate() === 1 ? '1 ' + MON_LBL[d.getMonth()] : d.getDate()}</span>${flag}</span><span class="cal-units">${units}</span></div>
+      ${shown}${list.length ? `<span class="cal-count${full || over ? ' full' : ''}">${list.length}</span>` : ''}
+    </button>`;
+  }
+  const unitLegend = ix.units.map(u => `<span class="cal-unit">${esc(calShortVenue(u.name).charAt(0))}</span>`).join('');
+  return `<div class="cal-b">
+    <div class="cal-dows">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(x => `<div>${x}</div>`).join('')}</div>
+    <div class="cal-grid">${cells}</div>
+    <div class="cal-legend">
+      <span><span class="cal-sw" style="background:var(--terracotta-bg)"></span>Picnic: guest, then venue · slot</span>
+      <span><span class="cal-flag full">Full</span>Slot at the venue’s setup capacity</span>
+      <span><i class="cal-due"></i>Balance due</span>
+      ${unitLegend ? `<span>${unitLegend}${esc(ix.units.map(u => calShortVenue(u.name)).join(' / '))} occupied that night</span>` : ''}
+      <span class="cal-hint">Click a day for details or to add a booking</span>
+    </div>
+  </div>`;
+}
+
+/* A run of nights [a, b) on the timeline. Geometry puts check-in and check-out
+   at the middle of their day columns, so back-to-back stays meet in one cell
+   and a turnover day reads as a turnover day. */
+function calBarGeom(s0, a, b) {
+  // Positions are in columns; --w (the column width, CSS) turns them into px.
+  const ci = nightsBetween(s0, a), co = nightsBetween(s0, b);
+  const clipL = ci < 0, clipR = co >= CAL_NIGHTS;
+  const l = clipL ? 0 : ci + 0.5, r = clipR ? CAL_NIGHTS : co + 0.5;
+  return { style: `left:calc(var(--w) * ${l} + ${clipL ? 0 : 1}px); width:calc(var(--w) * ${r - l} - ${(clipL ? 0 : 1) + (clipR ? 0 : 1)}px)`, cls: (clipL ? ' cl' : '') + (clipR ? ' cr' : ''), cells: r - l };
+}
+/* Consecutive nights in a Set, collapsed into [a, b) runs overlapping the window. */
+function calRuns(set, s0, end, test) {
+  const out = []; let k = s0;
+  if (test ? test(k) : set.has(k)) { while (test ? test(addDaysIso(k, -1)) : set.has(addDaysIso(k, -1))) { k = addDaysIso(k, -1); if (nightsBetween(k, s0) > 120) break; } }
+  let runStart = null;
+  for (let cur = k; cur < end || runStart; cur = addDaysIso(cur, 1)) {
+    const on = test ? test(cur) : set.has(cur);
+    if (on && !runStart) runStart = cur;
+    if (!on && runStart) { out.push([runStart, cur]); runStart = null; if (cur >= end) break; }
+    if (nightsBetween(s0, cur) > CAL_NIGHTS + 120) { if (runStart) out.push([runStart, cur]); break; }
+  }
+  return out;
+}
+
+function calStaysHtml(ix) {
+  const c = S.cal, s0 = c.stayStart, end = addDaysIso(s0, CAL_NIGHTS), today = istTodayIso();
+  const days = Array.from({ length: CAL_NIGHTS }, (_, i) => addDaysIso(s0, i));
+  const shade = days.map((k, i) => { const dw = isoToDate(k).getDay(); return k === today ? `<i class="cal-shade now" style="left:calc(var(--w) * ${i})"></i>` : (dw === 0 || dw === 6) ? `<i class="cal-shade" style="left:calc(var(--w) * ${i})"></i>` : ''; }).join('');
+  const head = days.map(k => { const d = isoToDate(k), dw = d.getDay(); return `<div class="cal-tl-col${k === today ? ' now' : d.getDate() === 1 ? ' mo' : (dw === 0 || dw === 6) ? ' wk' : ''}"><small>${DOW_SHORT[dw].charAt(0)}</small>${d.getDate() === 1 ? MON_LBL[d.getMonth()] : d.getDate()}</div>`; }).join('');
+  const bar = (a, b, cls, label, data, title) => {
+    const g = calBarGeom(s0, a, b);
+    return `<button type="button" class="cal-bar ${cls}${g.cls}" style="${g.style}" ${data} aria-haspopup="dialog" title="${esc(title)}" aria-label="${esc(title)}">${g.cells >= 2 ? esc(label) : ''}</button>`;
+  };
+  const inWin = r => isoDate(r.date) < end && isoDate(r.endDate) > s0;
+  const stayBar = (r, prefix) => {
+    const a = isoDate(r.date), b = isoDate(r.endDate), n = nightsBetween(a, b);
+    const air = r.channel === 'Airbnb';
+    return bar(a, b, air ? 'air' : 'dir', `${prefix || ''}${r.name} · ${n}n`, `data-stay="${esc(r.bkid)}"`, `${r.name}, ${air ? 'Airbnb' : 'Direct'} · ${fmtIsoShort(a)} → ${fmtIsoShort(b)} · ${n} night${n === 1 ? '' : 's'}`);
+  };
+  const rows = [], stats = [], gaps = [];
+  const freeRuns = (vid, test) => {
+    const from = s0 > today ? s0 : today;
+    if (from >= end) return;
+    calRuns(null, from, end, k => k >= from && test(k)).forEach(([a, b]) => {
+      const open = b >= end;
+      gaps.push({ vid, a, b: open ? end : b, open, n: nightsBetween(a, open ? end : b) });
+    });
+  };
+  ix.units.forEach(u => {
+    const own = (ix.stayByVenue.get(u.id) || []).filter(inWin).map(r => stayBar(r));
+    const par = u.parent_venue_id ? (ix.stayByVenue.get(u.parent_venue_id) || []).filter(inWin).map(r => stayBar(r, calShortVenue((ix.vById.get(u.parent_venue_id) || {}).name) + ': ')) : [];
+    const ical = calRuns(ix.icalOnly.get(u.id) || new Set(), s0, end).map(([a, b]) => bar(a, b, 'ical', 'Airbnb block', `data-ical="${u.id}|${a}|${b}"`, `Blocked on Airbnb, no booking entered · ${fmtIsoShort(a)} → ${fmtIsoShort(b)}`));
+    const blk = calRuns(ix.adminDay.get(u.id) || new Set(), s0, end).map(([a, b]) => bar(a, b, 'blk', 'Blocked', `data-blk="${u.id}|${a}|${b}"`, `Blocked in admin · ${fmtIsoShort(a)} → ${fmtIsoShort(b)}`));
+    rows.push(`<div class="cal-tl-row"><div class="cal-tl-lbl"><b>${esc(calShortVenue(u.name))}</b><span>${esc(u.name === calShortVenue(u.name) ? 'unit' : 'TerraCottage')}</span></div><div class="cal-track" style="width:calc(var(--w) * ${CAL_NIGHTS})">${shade}${own.join('')}${par.join('')}${ical.join('')}${blk.join('')}</div></div>`);
+    const booked = days.filter(k => { const s = ix.unitNight(u.id, k); return s && s.t !== 'blocked'; }).length;
+    stats.push({ name: calShortVenue(u.name), booked });
+    freeRuns(u.id, k => !ix.unitNight(u.id, k));
+  });
+  ix.combos.forEach(cv => {
+    const own = (ix.stayByVenue.get(cv.id) || []).filter(inWin).map(r => stayBar(r));
+    const sellFrom = s0 > today ? s0 : today;   // past nights are not sellable
+    const sell = calRuns(null, sellFrom, end, k => k >= sellFrom && ix.comboFree(cv.id, k)).map(([a, b]) => {
+      const open = b >= end, bb = open ? end : b, n = nightsBetween(a, bb);
+      return bar(a, bb, 'sell', `Sellable · ${n}${open ? '+' : ''}n`, `data-gap="${cv.id}|${a}|${bb}|${open ? 1 : 0}"`, `${cv.name} sellable (all units free) · ${fmtIsoShort(a)} → ${open ? 'beyond ' + fmtIsoShort(bb) : fmtIsoShort(bb)}`);
+    });
+    rows.push(`<div class="cal-tl-row"><div class="cal-tl-lbl"><b>${esc(calShortVenue(cv.name))}</b><span>whole home · derived</span></div><div class="cal-track combo" style="width:calc(var(--w) * ${CAL_NIGHTS})">${own.join('')}${sell.join('')}</div></div>`);
+    freeRuns(cv.id, k => ix.comboFree(cv.id, k));
+  });
+  /* partner_bnb and any other venue that actually has a stay in view gets a row
+     too, so nothing booked is invisible just because it isn't a TerraCottage unit. */
+  const shownIds = new Set(ix.units.map(u => u.id).concat(ix.combos.map(v => v.id)));
+  ix.stayByVenue.forEach((list, vid) => {
+    if (shownIds.has(vid)) return;
+    const inView = list.filter(inWin);
+    if (!inView.length) return;
+    const v = ix.vById.get(vid) || { name: inView[0].venue };
+    rows.push(`<div class="cal-tl-row"><div class="cal-tl-lbl"><b>${esc(v.name)}</b><span>${esc(v.type || 'stay')}</span></div><div class="cal-track" style="width:calc(var(--w) * ${CAL_NIGHTS})">${shade}${inView.map(r => stayBar(r)).join('')}</div></div>`);
+  });
+  gaps.sort((a, b) => a.a.localeCompare(b.a) || a.vid - b.vid);
+  const gapHtml = gaps.slice(0, 10).map(g => `<button type="button" class="cal-gap" data-gap="${g.vid}|${g.a}|${g.b}|${g.open ? 1 : 0}" aria-haspopup="dialog"><span><b>${esc(calShortVenue((ix.vById.get(g.vid) || {}).name))}</b> · ${fmtIsoShort(g.a)}${g.open ? ' →' : ' – ' + fmtIsoShort(g.b)}</span><span>${g.n}${g.open ? '+' : ''} night${g.n === 1 && !g.open ? '' : 's'}</span></button>`).join('');
+  const statHtml = stats.map(s => { const pct = Math.round(s.booked / CAL_NIGHTS * 100); return `<div class="cal-occ"><div><span><b>${esc(s.name)}</b></span><span>${s.booked} / ${CAL_NIGHTS} · ${pct}%</span></div><div class="occ-bar" style="margin-top:4px"><i style="width:${pct}%;background:var(--terracotta)"></i></div></div>`; }).join('');
+  return `<div class="cal-stays">
+    <div class="cal-tl-wrap"><div class="cal-tl">
+      <div class="cal-tl-row hd"><div class="cal-tl-lbl"></div><div class="cal-tl-cols">${head}</div></div>
+      ${rows.join('') || '<div class="empty">No stay venues found.</div>'}
+      <div class="cal-legend">
+        <span><span class="cal-sw" style="background:var(--terracotta)"></span>Airbnb</span>
+        <span><span class="cal-sw" style="background:var(--olive)"></span>Direct</span>
+        <span><span class="cal-sw" style="background:repeating-linear-gradient(135deg,#f3d9cb 0 4px,#fbeee5 4px 8px);box-shadow:inset 0 0 0 1px var(--terracotta)"></span>Blocked on Airbnb, no booking entered</span>
+        <span><span class="cal-sw" style="background:var(--olive-bg);border:1.5px dashed var(--olive)"></span>Whole home sellable</span>
+      </div>
+    </div></div>
+    <aside class="cal-side">
+      <div><h4>Nights taken · these ${CAL_NIGHTS}</h4>${statHtml || '<div class="empty">—</div>'}</div>
+      <div><h4>Open nights · click to book</h4>${gapHtml || '<div class="cal-dlg-s">Nothing open from today in this window.</div>'}</div>
+    </aside>
+  </div>`;
+}
+function fmtIsoShort(k) { return fmtShort(isoToDate(k)); }
+
+function calMoneyHtml(r) {
+  const air = r.channel === 'Airbnb';
+  const due = r.balance > 0;
+  return `<div class="cal-bk-m">
+    <div>Total<b>${inr(r.total)}</b></div>
+    <div>${r.paid ? 'Paid' : 'Advance'}<b>${inr(r.collected)}</b></div>
+    <div>${air ? 'Awaiting payout' : 'Balance'}<b class="${due ? 'due' : 'ok'}">${due ? inr(r.balance) : 'Settled'}</b></div>
+  </div>`;
+}
+function calBookingCard(r, forStay) {
+  const chan = r.channel === 'Airbnb' ? '<span class="badge b-airbnb">Airbnb</span>' : r.channel === 'Website' ? '<span class="badge b-live">Website</span>' : '<span class="badge b-plain">Direct</span>';
+  let line;
+  if (forStay) {
+    const a = isoDate(r.date), b = isoDate(r.endDate), n = nightsBetween(a, b);
+    line = [r.venue, `${fmtIsoShort(a)} → ${fmtIsoShort(b)}`, `${n} night${n === 1 ? '' : 's'}`, r.guests ? `${r.guests} guest${r.guests === 1 ? '' : 's'}` : ''];
+  } else {
+    line = [r.venue, calSlot(r.slot), r.pkg, r.guests ? `${r.guests} guest${r.guests === 1 ? '' : 's'}` : '', r.occasion, r.bookingKind === 'picnic_stay' ? 'with a stay' : ''];
+  }
+  return `<div class="cal-bk${r.bkid === S.cal.fresh ? ' new' : ''}">
+    <div class="cal-bk-t"><b>${esc(r.name || '—')}</b><span>${r.bkid === S.cal.fresh ? '<span class="badge b-live">Just added</span>' : ''}${chan}${esc(r.bookingId)}</span></div>
+    <div class="cal-bk-l">${esc(line.filter(Boolean).join(' · '))}</div>
+    ${calMoneyHtml(r)}
+  </div>`;
+}
+
+/* Dialog content, resolved from S.cal.dlg on every render so a refresh (e.g.
+   coming back from the admin tab) shows the booking that was just added. */
+function calDialogHtml(ix) {
+  const d = S.cal.dlg;
+  if (!d) return '';
+  const today = istTodayIso();
+  let kicker = '', title = '', sub = '', body = '', add = null, hint = '';
+  if (d.t === 'day') {
+    const dt = isoToDate(d.k), list = ix.picByDay.get(d.k) || [];
+    const past = d.k < today;
+    const due = list.reduce((s, r) => s + (r.balance > 0 ? r.balance : 0), 0);
+    kicker = past ? 'Past day' : d.k === today ? 'Today' : 'Picnics';
+    title = `${DOW_LONG[dt.getDay()]}, ${dt.getDate()} ${MON_LBL[dt.getMonth()]}`;
+    sub = list.length ? `${list.length} picnic setup${list.length === 1 ? '' : 's'}${due ? ' · ' + inr(due) + ' still to collect' : ''}` : 'No picnics booked';
+    body = list.map(r => calBookingCard(r, false)).join('') || '<div class="cal-note plain">Nothing booked on this day yet.</div>';
+    calCapacity(ix, list).forEach(x => {
+      body += x.lvl === 'over'
+        ? `<div class="cal-note red">${esc(x.venue)} ${esc(calSlot(x.slot).toLowerCase())}: ${x.n} setups against a capacity of ${x.max}. Check this booking before the day.</div>`
+        : `<div class="cal-note amber">${esc(x.venue)} ${esc(calSlot(x.slot).toLowerCase())} is full (${x.n} of ${x.max} setups).</div>`;
+    });
+    const blocks = (ix.adminSlot.get(d.k) || []).map(b => `${(ix.vById.get(b.vid) || {}).name || 'Venue'} ${calSlot(b.slot).toLowerCase()}`);
+    if (blocks.length) body += `<div class="cal-also"><b>Blocked</b>${esc(blocks.join(' · '))}</div>`;
+    const stays = ix.units.map(u => { const s = ix.unitNight(u.id, d.k); if (!s) return ''; return `${calShortVenue(u.name)}: ${s.t === 'booked' ? s.r.name + (s.r.channel === 'Airbnb' ? ' (Airbnb)' : '') : s.t === 'ical' ? 'Airbnb block' : 'blocked'}`; }).filter(Boolean);
+    if (stays.length) body += `<div class="cal-also"><b>Stays that night</b>${esc(stays.join(' · '))}</div>`;
+    if (!past) { add = { type: 'picnic', date: d.k }; hint = `Opens the Add Booking form with ${dt.getDate()} ${MON_LBL[dt.getMonth()]} filled in. Pick the venue and slot there; the slot check runs on save.`; }
+    else hint = 'Past date. Back-fill from the admin panel directly; the sheet sync can duplicate rows dated in its lookback window.';
+  } else if (d.t === 'stay') {
+    const r = S.records.find(x => x.bkid === d.id);
+    if (!r) { S.cal.dlg = null; return ''; }
+    const a = isoDate(r.date), b = isoDate(r.endDate);
+    kicker = r.venue; title = r.name || '—';
+    sub = `${fmtIsoShort(a)} → ${fmtIsoShort(b)}${a <= today && b > today ? ' · in house now' : b <= today ? ' · checked out' : ''}`;
+    body = calBookingCard(r, true);
+    if (r.bookingKind === 'picnic_stay') body += '<div class="cal-also"><b>Also</b>includes a picnic setup</div>';
+    if (b >= today) { add = { type: 'stay', venue: r.venueId, checkin: b }; hint = `Opens the Add Booking form for ${r.venue} with check-in ${fmtIsoShort(b)}, this guest’s check-out.`; }
+  } else if (d.t === 'gap' || d.t === 'ical' || d.t === 'blk') {
+    const v = ix.vById.get(d.vid) || { name: 'Venue' };
+    const n = nightsBetween(d.a, d.b);
+    const from = d.a < today ? today : d.a;
+    const range = `${fmtIsoShort(d.a)} → ${d.open ? 'beyond ' + fmtIsoShort(d.b) : fmtIsoShort(d.b)} · ${n}${d.open ? '+' : ''} night${n === 1 && !d.open ? '' : 's'}`;
+    if (d.t === 'gap') {
+      kicker = 'Open nights'; title = `${v.name} is free`; sub = range;
+      body = v.type === 'combo'
+        ? `<div class="cal-note plain">Every unit is free on these nights, so the whole home can be sold. A ${esc(v.name)} booking blocks all of its units.</div>`
+        : '<div class="cal-note plain">No booking or block on these nights.</div>';
+    } else if (d.t === 'ical') {
+      kicker = 'Blocked on Airbnb'; title = `${v.name}: no booking entered`; sub = range;
+      body = '<div class="cal-note amber">Airbnb shows these nights as taken, but there is no booking row for them. If it is a real reservation, enter it (source: Airbnb) so revenue and occupancy count it. If it is a block you set on Airbnb, nothing to do.</div>';
+    } else {
+      kicker = 'Blocked'; title = `${v.name} is blocked`; sub = range;
+      body = '<div class="cal-note plain">Blocked in the admin panel’s Availability tab. Unblock it there before adding a booking.</div>';
+    }
+    if (d.t !== 'blk' && from < d.b) {
+      add = { type: 'stay', venue: v.id, checkin: from, checkout: d.open ? '' : d.b };
+      hint = `Opens the Add Booking form with ${v.name}, check-in ${fmtIsoShort(from)}${d.open ? '' : ', check-out ' + fmtIsoShort(d.b)}.`;
+    }
+  }
+  return `<div class="cal-ov" data-cal-ov>
+    <div class="cal-dlg" role="dialog" aria-modal="true" aria-labelledby="cal-dlg-t" tabindex="-1">
+      <div class="cal-dlg-h">
+        <div><div class="cal-dlg-k">${esc(kicker)}</div><h2 id="cal-dlg-t">${esc(title)}</h2><div class="cal-dlg-s">${esc(sub)}</div></div>
+        <button type="button" class="cal-x" data-cal-close aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div class="cal-dlg-b">${body}</div>
+      <div class="cal-dlg-f">
+        <p>${esc(hint)}</p>
+        <div>
+          <button type="button" class="btn" data-cal-close>Close</button>
+          ${add ? `<a class="cal-add" href="${esc(calAddHref(add))}" target="_blank" rel="noopener" data-cal-add aria-haspopup="dialog"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add booking</a>` : '<span class="cal-add off" aria-disabled="true">Add booking</span>'}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderCalendar() {
+  const mount = document.getElementById('cal');
+  if (!mount) return;
+  const c = calState();
+  const ix = calIndex();
+  const nPic = S.records.filter(r => calHasPicnic(r) && r.date && isoDate(r.date) >= istTodayIso()).length;
+  const nStay = S.records.filter(r => calHasStay(r) && isoDate(r.endDate) > istTodayIso()).length;
+  const isPic = c.view === 'picnic';
+  const [y, m] = c.month.split('-').map(Number);
+  const period = isPic ? `${MON_LBL[m - 1]} ${y}` : `${fmtIsoShort(c.stayStart)} – ${fmtIsoShort(addDaysIso(c.stayStart, CAL_NIGHTS - 1))}`;
+  mount.innerHTML = `<section class="cal" aria-label="Bookings calendar">
+    <div class="cal-h">
+      <div class="cal-h-l">
+        <h2>Calendar</h2>
+        <div class="cal-tabs" role="tablist" aria-label="Booking type">
+          <button type="button" class="cal-tab" role="tab" aria-selected="${isPic}" data-cal-view="picnic">Picnics <small>· ${nPic} ahead</small></button>
+          <button type="button" class="cal-tab" role="tab" aria-selected="${!isPic}" data-cal-view="stays">Airbnb &amp; stays <small>· ${nStay} ahead</small></button>
+        </div>
+      </div>
+      <div class="cal-h-r">
+        <button type="button" class="btn cal-nav" data-cal-step="-1" aria-label="${isPic ? 'Previous month' : 'Previous four weeks'}">‹</button>
+        <div class="cal-period" aria-live="polite">${esc(period)}</div>
+        <button type="button" class="btn cal-nav" data-cal-step="1" aria-label="${isPic ? 'Next month' : 'Next four weeks'}">›</button>
+        <button type="button" class="btn" data-cal-today>Today</button>
+      </div>
+    </div>
+    ${S.calDataErr ? `<div class="cal-warn">${esc(S.calDataErr)}</div>` : ''}
+    ${isPic ? calPicnicHtml(ix) : calStaysHtml(ix)}
+    ${calDialogHtml(ix)}
+  </section>`;
+  if (!mount._calBound) { mount.addEventListener('click', calClick); mount.addEventListener('keydown', calKeydown); mount._calBound = true; }
+  if (c.dlg && c.focusDlg) {
+    c.focusDlg = false;
+    const x = mount.querySelector('.cal-dlg [data-cal-close]');
+    if (x) x.focus();
+  }
+}
+
+function calOpenDlg(dlg, opener) {
+  S.cal.dlg = dlg; S.cal.opener = opener; S.cal.focusDlg = true;
+  renderCalendar();
+}
+function calCloseDlg() {
+  const op = S.cal.opener;
+  S.cal.dlg = null; S.cal.opener = null;
+  renderCalendar();
+  if (op) { const el = document.querySelector(op); if (el) el.focus(); }
+}
+function calClick(e) {
+  const t = e.target;
+  let el0;
+  const c = S.cal;
+  if ((el0 = t.closest('[data-cal-add]'))) {   // open the admin form here; the href stays as a no-JS / middle-click fallback
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) { S.calPendingRefresh = true; return; }
+    e.preventDefault(); addOpen(el0.getAttribute('href')); return;
+  }
+  if (t.closest('[data-cal-close]') || t.hasAttribute('data-cal-ov')) { calCloseDlg(); return; }
+  if (t.closest('.cal-dlg')) return;
+  let el;
+  if ((el = t.closest('[data-cal-view]'))) { c.view = el.dataset.calView; c.dlg = null; calSavePrefs(); renderCalendar(); return; }
+  if ((el = t.closest('[data-cal-step]'))) {
+    const step = Number(el.dataset.calStep);
+    if (c.view === 'picnic') { const [y, m] = c.month.split('-').map(Number); c.month = monthKey(new Date(y, m - 1 + step, 1)); }
+    else c.stayStart = addDaysIso(c.stayStart, step * 28);
+    renderCalendar(); return;
+  }
+  if (t.closest('[data-cal-today]')) { const td = istTodayIso(); c.month = td.slice(0, 7); c.stayStart = addDaysIso(td, -3); renderCalendar(); return; }
+  if ((el = t.closest('[data-day]'))) { calOpenDlg({ t: 'day', k: el.dataset.day }, `[data-day="${el.dataset.day}"]`); return; }
+  if ((el = t.closest('[data-stay]'))) { calOpenDlg({ t: 'stay', id: el.dataset.stay }, `[data-stay="${el.dataset.stay}"]`); return; }
+  for (const kind of ['gap', 'ical', 'blk']) {
+    if ((el = t.closest(`[data-${kind}]`))) {
+      const [vid, a, b, open] = el.dataset[kind].split('|');
+      calOpenDlg({ t: kind, vid: Number(vid), a, b, open: open === '1' }, `[data-${kind}="${el.dataset[kind]}"]`);
+      return;
+    }
+  }
+}
+function calKeydown(e) {
+  if (!S.cal || !S.cal.dlg) return;
+  if (e.key === 'Escape') { e.preventDefault(); calCloseDlg(); return; }
+  if (e.key === 'Tab') {   // keep focus inside the open dialog
+    const f = Array.from(document.querySelectorAll('.cal-dlg button, .cal-dlg a[href]'));
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+}
+/* Coming back to this tab (e.g. after a middle-click "Add booking" in a new
+   tab) re-reads the data. Also refreshes a page left open for over 10 minutes.
+   Skipped while the Add Booking dialog is open, so a half-filled form is never
+   thrown away by a reload. */
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !S.dbOk || addIsOpen()) return;
+  if (S.calPendingRefresh || Date.now() - (S.loadedAt || 0) > 10 * 60 * 1000) { S.calPendingRefresh = false; window.refresh(); }
+});
+
+
+/* ---------- Add Booking dialog (the admin form in an iframe) ----------
+   The iframe is loaded fresh on every open, so each booking starts from a
+   clean form with the calendar's pre-fill. Closing it discards anything
+   unsaved; saving happens only inside the admin form. */
+function addIsOpen() { const o = document.getElementById('addbk'); return !!(o && !o.hidden); }
+function addOpen(href) {
+  const o = document.getElementById('addbk'), f = document.getElementById('addbk-f');
+  document.getElementById('addbk-tab').href = String(href).replace('?embed=1', '');
+  document.getElementById('addbk-load').hidden = false;
+  f.src = href;
+  o.hidden = false;
+  document.body.style.overflow = 'hidden';
+  document.getElementById('addbk-x').focus();
+}
+function addClose() {
+  const o = document.getElementById('addbk'), f = document.getElementById('addbk-f');
+  o.hidden = true;
+  f.src = 'about:blank';
+  document.body.style.overflow = '';
+  const back = document.querySelector('.cal-dlg [data-cal-add]') || document.querySelector('.cal-dlg [data-cal-close]');
+  if (back) back.focus();
+}
+document.getElementById('addbk-x').addEventListener('click', addClose);
+document.getElementById('addbk-f').addEventListener('load', e => { if (e.target.getAttribute('src') !== 'about:blank') document.getElementById('addbk-load').hidden = true; });
+document.getElementById('addbk').addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); addClose(); } });
+document.getElementById('addbk').addEventListener('click', e => { if (e.target.id === 'addbk') addClose(); });
+/* The admin form reports a successful save with postMessage. Only a message
+   from the admin origin, of the one expected shape, is acted on — anything
+   else is ignored. The message carries ids and dates, never guest details. */
+window.addEventListener('message', e => {
+  if (e.origin !== ADMIN_ORIGIN) return;
+  const d = e.data;
+  if (!d || d.type !== 'tps:booking-saved' || !d.id) return;
+  addClose();
+  const c = calState();
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(d.date || '')) ? d.date : istTodayIso();
+  c.fresh = String(d.id);
+  if (d.checkout) {   // a stay (or picnic + stay): open it on the stays timeline
+    c.view = 'stays'; c.stayStart = addDaysIso(date, -3);
+    c.dlg = { t: 'stay', id: String(d.id) };
+  } else {
+    c.view = 'picnic'; c.month = date.slice(0, 7);
+    c.dlg = { t: 'day', k: date };
+  }
+  c.opener = null; c.focusDlg = true;
+  window.refresh();
+});
+
+/* ---------- auth gate (same as the other dashboards) ---------- */
+function signInScreen(message) {
+  document.getElementById('root').innerHTML = `
+    <div class="signin-wrap">
+      <div class="signin-card">
+        <div class="signin-brand">The Picnic Stories</div>
+        <h1>Bookings calendar</h1>
+        <p class="signin-sub">Gurugram &amp; Delhi</p>
+        <form id="signin-form" autocomplete="on">
+          <label for="si-email">Email</label>
+          <input id="si-email" type="email" autocomplete="username" required />
+          <label for="si-pass">Password</label>
+          <input id="si-pass" type="password" autocomplete="current-password" required />
+          <button type="submit" id="si-go">Sign in</button>
+        </form>
+        <div id="si-msg" class="signin-msg">${message ? esc(message) : ''}</div>
+      </div>
+    </div>`;
+  const form = document.getElementById('signin-form');
+  const msg = document.getElementById('si-msg');
+  form.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const btn = document.getElementById('si-go');
+    btn.disabled = true; btn.textContent = 'Signing in…'; msg.textContent = '';
+    const { error } = await sb.auth.signInWithPassword({
+      email: document.getElementById('si-email').value.trim(),
+      password: document.getElementById('si-pass').value,
+    });
+    if (error) {
+      btn.disabled = false; btn.textContent = 'Sign in';
+      msg.textContent = error.message || 'Sign-in failed.';
+      return;
+    }
+    boot();
+  });
+}
+async function signOut() { await sb.auth.signOut(); location.reload(); }
+window.signOut = signOut;
+
+/* Re-read the data without losing the view, the open dialog or the scroll. */
+window.refresh = async function () {
+  const keepY = window.scrollY;
+  try {
+    await load();
+    render();
+    window.scrollTo(0, keepY);
+  } catch (err) {
+    document.getElementById('root').innerHTML = `<div class="state err"><strong>Couldn’t refresh.</strong><div>${esc(err.message || String(err))}</div></div>`;
+  }
+};
+
+async function boot() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { signInScreen(''); return; }
+  S.email = (session.user && session.user.email) || '';
+  if (!ALLOWED.includes(S.email.trim().toLowerCase())) {
+    await sb.auth.signOut();
+    signInScreen('That account does not have access to this dashboard.');
+    return;
+  }
+  document.getElementById('root').innerHTML = '<div class="state">Loading…</div>';
+  try {
+    await load();
+    render();
+  } catch (err) {
+    const m = err && err.message ? err.message : String(err);
+    if (/does not have read access/i.test(m)) {
+      await sb.auth.signOut();
+      signInScreen('That account cannot see the business data. Sign in with the owner account.');
+      return;
+    }
+    document.getElementById('root').innerHTML = `<div class="state err"><strong>Couldn’t load the calendar.</strong><div>${esc(m)}</div><div style="margin-top:9px; font-size:12px;">Reload the page to retry, or <a href="#" onclick="signOut();return false;">sign out</a>.</div></div>`;
+  }
+}
+boot();
+</script>
+</body>
+</html>

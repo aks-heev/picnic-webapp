@@ -11,6 +11,23 @@
                font-src https://fonts.gstatic.com;
                img-src 'self' data: https:;">
     <title>Admin · The Picnic Stories</title>
+    <!-- Embedded Add Booking: the hosted calendar (picnic-dashboard /calendar) shows this page
+         in a dialog as admin?embed=1#add-booking?… — hide the site chrome so only the form shows.
+         Framing is limited to that dashboard by the frame-ancestors header in vercel.json;
+         what happens after a save is ADMIN_EMBED in app.js. -->
+    <script>
+      if (window.parent !== window && new URLSearchParams(location.search).get('embed') === '1') {
+        document.documentElement.classList.add('admin-embed')
+      }
+    </script>
+    <style>
+      html.admin-embed .navbar,
+      html.admin-embed .database-status,
+      html.admin-embed .dashboard-header,
+      html.admin-embed .dashboard-tabs,
+      html.admin-embed #add-booking-tab .tab-header { display: none !important; }
+      html.admin-embed .page.active:not(#home-page) { padding-top: 16px; }
+    </style>
     <!-- Admin is private: keep it out of search engines and AI crawlers. -->
     <meta name="robots" content="noindex, nofollow">
     <meta name="theme-color" content="#7a6a55">
