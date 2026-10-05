@@ -11409,7 +11409,7 @@ function renderAddBookingForm() {
           ${abk.boardType ? `<input type="text" id="abk-board-message" class="abk-input" style="margin-top:8px" maxlength="100" placeholder="Board message (optional)" value="${abkText(abk.boardMessage)}" oninput="abkRead()" />` : ''}
         </div>
         <div class="abk-field">
-          <label class="abk-label" for="abk-external-ref">Airbnb reservation code <span class="abk-hint">(Airbnb bookings only)</span></label>
+          <label class="abk-label" for="abk-external-ref">Airbnb reservation code <span class="abk-hint">(required when source is Airbnb — HM + 8 characters, from the Airbnb confirmation email)</span></label>
           <input type="text" id="abk-external-ref" class="abk-input" value="${abkText(abk.externalRef)}" placeholder="e.g. HMXXXXXXXX" oninput="abkRead()" />
         </div>`
     } else if (isPicnic) {
@@ -11445,7 +11445,7 @@ function renderAddBookingForm() {
     } else {
       extrasHtml = `
         <div class="abk-field">
-          <label class="abk-label" for="abk-external-ref">Airbnb reservation code <span class="abk-hint">(Airbnb bookings only)</span></label>
+          <label class="abk-label" for="abk-external-ref">Airbnb reservation code <span class="abk-hint">(required when source is Airbnb — HM + 8 characters, from the Airbnb confirmation email)</span></label>
           <input type="text" id="abk-external-ref" class="abk-input" value="${abkText(abk.externalRef)}" placeholder="e.g. HMXXXXXXXX" oninput="abkRead()" />
         </div>
         ${abkAddonsHtml(v)}`
@@ -11642,6 +11642,18 @@ async function abkSave() {
   if (phone.length !== 10) return showToast('Phone must be a 10-digit mobile number', 'error')
   if (!(Number(abk.adults) >= 1)) return showToast('At least 1 adult is required', 'error')
   if (!abk.bookingSource) return showToast('Pick the booking source', 'error')
+  // Airbnb reservation code. The monthly earnings reconcile and the Morning-brief Airbnb check
+  // match on this exact code, so free text here ("Airbnb", a phone number) silently breaks them —
+  // 23 rows typed "Airbnb" between 2026-08-29 and 2026-09-30. Only an HM code is accepted.
+  // A legacy value on an existing booking (e.g. "WhatsApp", "direct-extension") is left alone if
+  // unchanged, so editing an old row isn't blocked; clearing or replacing it is always allowed.
+  const extRefRaw = String(abk.externalRef || '').trim()
+  const extRefUnchanged = !!abk.editingId && extRefRaw === String(abk.externalRefOriginal || '').trim()
+  const extRef = extRefUnchanged ? extRefRaw : extRefRaw.toUpperCase().replace(/\s+/g, '')
+  if (abkHasStay() && !extRefUnchanged) {
+    if (extRef && !/^HM[A-Z0-9]{8}$/.test(extRef)) return showToast('Airbnb code must look like HMXXXXXXXX (HM + 8 letters/digits). Leave it blank if this isn\'t an Airbnb booking.', 'error')
+    if (abk.bookingSource === 'airbnb' && !extRef) return showToast('Enter the Airbnb reservation code (HM…). It\'s in the Airbnb confirmation email.', 'error')
+  }
   if (v.type === 'custom' && !String(abk.venueAddress || '').trim()) return showToast('Enter the custom location address', 'error')
 
   let preferredDate, checkoutDate = null, timeSlot = null
@@ -11680,7 +11692,7 @@ async function abkSave() {
     board: (abkHasPicnic() && abk.boardType) ? { type: abk.boardType, message: String(abk.boardMessage || '').trim() } : null,
     venue_id: v.id,
     venue_address: v.type === 'custom' ? String(abk.venueAddress).trim() : null,
-    external_booking_ref: abkHasStay() ? (String(abk.externalRef || '').trim() || null) : null,
+    external_booking_ref: abkHasStay() ? (extRef || null) : null,
     booking_source: abk.bookingSource || null,
     // Explicit booking type. The DB trigger would derive this, but sending it means the admin's
     // choice always wins and is never re-inferred from the row's shape.
@@ -11805,7 +11817,7 @@ function abkResetForm() {
   abk = { ...abk, editingId: null, existingPaid: false,
     venueId: null, venueAddress: '', date: '', slot: '', checkin: '', checkout: '',
     adults: 2, children: 0, packageKey: '', addonIds: [], occasion: '', boardType: '', boardMessage: '',
-    externalRef: '', notes: '', bookingSource: '', name: '', phone: '', email: '', total: 0, advance: 0, discount: 0,
+    externalRef: '', externalRefOriginal: '', notes: '', bookingSource: '', name: '', phone: '', email: '', total: 0, advance: 0, discount: 0,
     includesFood: false, foodItems: '', bevItems: '', slotStart: '', slotEnd: '',
     picnicAmount: '', stayAmount: '', checklistExtras: [], checklistLoaded: true,
     totalTouched: false, advanceTouched: false, sendEmail: true, emailToggleTouched: false,
@@ -11851,6 +11863,7 @@ async function abkStartEdit(id) {
     abk.boardType = (b.board && b.board.type) || ''
     abk.boardMessage = (b.board && b.board.message) || ''
     abk.externalRef = b.external_booking_ref || ''
+    abk.externalRefOriginal = abk.externalRef
     abk.bookingSource = b.booking_source || ''
     abk.notes = b.special_requirements || ''
     abk.name = b.full_name || ''
