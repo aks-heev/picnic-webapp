@@ -71,6 +71,22 @@
 // adult-scaled footnote are deleted with it (both reachable only via the
 // fallback). No RPC reads those metadata keys either (checked pg_proc), so they
 // carry no pricing weight.
+//
+// Changed 2026-10-05 (v41): SECURITY — the request body is no longer trusted.
+// This function is verify_jwt=false (the DB trigger sends no auth header), so
+// before v41 ANYONE could POST a made-up {record} and have a branded "You're
+// confirmed" email sent from team@picnicstories.com to ANY address, with any
+// cc, and an unescaped guest name injected into the HTML. Now:
+//   • the payload's record.id is only a POINTER — the booking is re-read from
+//     the DB with the service key and the email is rendered from that row only;
+//   • the payload's email_address must equal the stored one (the trigger and
+//     admin_resend_confirmation both send the full row, so they always match;
+//     a forger who doesn't know a guest's email can't replay a real booking);
+//   • a payload cc is honoured only for @picnicstories.com addresses;
+//   • the guest's first name is HTML-escaped in the hero line.
+// Rendering for legitimate calls is unchanged (the DB row and row_to_json(NEW)
+// carry the same values). Do NOT add a CRON_SECRET/Authorization check here —
+// the triggers send no Authorization header, so it would stop every email.
 
 import { sendEmail } from "./_shared/resend.ts"
 import { getVenueInfo } from "./_shared/venue.ts"
@@ -223,7 +239,7 @@ function buildPicnicEmail(record: Record<string, unknown>, venueLabel: string | 
   const packageRowHtml  = packageName ? reservationRow("PACKAGE", esc(packageName)) : ""
   const boardRowHtml    = boardText(record.board) ? reservationRow("BOARD", boardText(record.board)) : ""
   const inclusionRowHtml = inclusionText ? reservationRow("INCLUDED", inclusionText) : ""
-  const heroSub = `${name.split(" ")[0]}, your luxury picnic is officially on the calendar. We are curating the magic — you just bring the memories.`
+  const heroSub = `${esc(String(name ?? "").split(" ")[0])}, your luxury picnic is officially on the calendar. We are curating the magic — you just bring the memories.`
 
   const subject = `You're confirmed, ${firstName} — picnic on ${formatDate(record.preferred_date as string)}`
 
@@ -438,7 +454,7 @@ function buildStayEmail(record: Record<string, unknown>, venueLabel: string | nu
   const packageRowHtml  = packageName ? reservationRow("PACKAGE", esc(packageName)) : ""
   const boardRowHtml    = boardText(record.board) ? reservationRow("BOARD", boardText(record.board)) : ""
   const inclusionRowHtml = inclusionText ? reservationRow("INCLUDED", inclusionText) : ""
-  const heroSub = `${name.split(" ")[0]}, your stay is officially on the calendar. Settle in, relax, and let us take care of the rest.`
+  const heroSub = `${esc(String(name ?? "").split(" ")[0])}, your stay is officially on the calendar. Settle in, relax, and let us take care of the rest.`
 
   const subject = `You're confirmed, ${firstName} — stay from ${formatDate(record.preferred_date as string)} to ${formatDate(record.checkout_date as string)}`
 
@@ -628,9 +644,47 @@ function buildStayEmail(record: Record<string, unknown>, venueLabel: string | nu
   return { subject, html }
 }
 
+// v41: the payload is a pointer, never the content. Re-read the booking with
+// the service key so a forged body cannot choose the recipient or the text.
+async function loadBooking(id: number): Promise<Record<string, unknown> | null> {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/bookings?id=eq.${id}&select=*`, {
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+  })
+  if (!res.ok) throw new Error(`booking lookup failed: HTTP ${res.status}`)
+  const rows = await res.json()
+  return Array.isArray(rows) && rows[0] ? rows[0] : null
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  })
+}
+
 Deno.serve(async (req) => {
   try {
-    const { record, old_record, cc } = await req.json()
+    const body = await req.json().catch(() => null)
+    const payload = body?.record
+    const old_record = body?.old_record
+    const cc = body?.cc
+
+    const id = Number(payload?.id)
+    if (!Number.isInteger(id) || id <= 0) {
+      return jsonResponse({ ok: false, error: "bad_request" }, 400)
+    }
+
+    const record = await loadBooking(id)
+    if (!record) {
+      console.warn(`notify-booking-confirmed: rejected — booking ${id} does not exist`)
+      return jsonResponse({ ok: false, error: "unknown_booking" }, 404)
+    }
+    // Legitimate callers (both triggers, admin_resend_confirmation) send the
+    // full row, so the email always matches. A forger must already know it.
+    if ((payload.email_address ?? null) !== (record.email_address ?? null)) {
+      console.warn(`notify-booking-confirmed: rejected — payload email does not match booking ${id}`)
+      return jsonResponse({ ok: false, error: "payload_mismatch" }, 403)
+    }
 
     if (!record.confirmed || old_record?.confirmed === true) {
       return new Response(JSON.stringify({ ok: true, skipped: true }), {
@@ -647,8 +701,8 @@ Deno.serve(async (req) => {
       })
     }
 
-    const { label: venueLabel, directionsUrl } = await getVenueInfo(record.venue_id, record.venue_address)
-    const addons = await getAddOns(record.id)
+    const { label: venueLabel, directionsUrl } = await getVenueInfo(record.venue_id as number | null, record.venue_address as string | null)
+    const addons = await getAddOns(record.id as number)
 
     // The BOOKING is the only source of truth for what food/drink is included
     // (see migration 20260815_booking_food_inclusions_and_slot_times and the
@@ -672,14 +726,15 @@ Deno.serve(async (req) => {
       : buildPicnicEmail(record, venueLabel, directionsUrl, addons, inclusionText)
 
     // Standing rule (2026-07-24): CC the team inbox on every guest confirmation.
-    // Manual-resend cc values are appended after it, deduped.
+    // Manual-resend cc values are appended after it, deduped — v41: and only
+    // when they are @picnicstories.com addresses, so a forged body can't add any.
     const TEAM_CC = "team@picnicstories.com"
     const extraCc = (cc ? (Array.isArray(cc) ? cc : [cc]) : [])
-      .filter((e: unknown): e is string => typeof e === "string" && e !== TEAM_CC)
+      .filter((e: unknown): e is string => typeof e === "string" && e !== TEAM_CC && /@picnicstories\.com$/i.test(e))
     const ccList = [TEAM_CC, ...extraCc]
 
     await sendEmail({
-      to: record.email_address,
+      to: record.email_address as string,
       subject,
       html,
       cc: ccList,

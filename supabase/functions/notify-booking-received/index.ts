@@ -21,6 +21,22 @@
 // and submit_booking_intent never sets these fields — so in practice the guest
 // ack renders neither row. It is wired anyway for the rare admin-entered
 // unconfirmed row, and so the two templates cannot drift apart later.
+//
+// Changed 2026-10-05 (v43): SECURITY — the request body is no longer trusted.
+// This function is verify_jwt=false (the DB trigger sends no auth header), so
+// before v43 ANYONE could POST a made-up {record} and have the branded guest
+// acknowledgement sent from team@picnicstories.com to ANY address, plus an
+// admin alert to team@ with an unescaped name / special-requests field. Now:
+//   • the payload's record.id is only a POINTER — the booking is re-read from
+//     the DB with the service key and both emails render from that row only;
+//   • the payload's email_address must equal the stored one (the INSERT
+//     trigger sends the full row, so it always matches; a forger who doesn't
+//     know a guest's email can't replay a real booking);
+//   • the guest's first name, and the name + special requests in the admin
+//     alert, are HTML-escaped.
+// Rendering for legitimate calls is unchanged. Do NOT add a CRON_SECRET /
+// Authorization check — the trigger sends no Authorization header, so it
+// would silently stop every booking email.
 
 import { sendEmail } from "./_shared/resend.ts"
 import { getVenueInfo } from "./_shared/venue.ts"
@@ -28,6 +44,8 @@ import { getAddOns, type AddOn } from "./_shared/addons.ts"
 import { getBundledAddonIds } from "./_shared/packages.ts"
 
 const APP_URL = Deno.env.get("APP_URL") ?? "https://picnicstories.com"
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
+const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 
 const LOGO_URL =
   "https://cdn-reach.hostinger.com/settings/0a27628d960484a8a3d2b3e50518a32b/307542/logo_1780982818.png"
@@ -283,7 +301,7 @@ function buildGuestHtml(
   variant: "query" | "lock" = "query",
 ): string {
   const isLock      = variant === "lock"
-  const firstName   = String(record.full_name ?? "").split(" ")[0] || "there"
+  const firstName   = esc(String(record.full_name ?? "").split(" ")[0] || "there")
   const date        = formatDate(record.preferred_date as string)
   const location    = venueLabel ?? (record.venue_address as string | null) ?? "To be confirmed"
   const kidsCount   = Number(record.children_count || 0)
@@ -485,9 +503,44 @@ function buildGuestHtml(
 </html>`
 }
 
+// v43: the payload is a pointer, never the content. Re-read the booking with
+// the service key so a forged body cannot choose the recipient or the text.
+// deno-lint-ignore no-explicit-any
+async function loadBooking(id: number): Promise<any | null> {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/bookings?id=eq.${id}&select=*`, {
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+  })
+  if (!res.ok) throw new Error(`booking lookup failed: HTTP ${res.status}`)
+  const rows = await res.json()
+  return Array.isArray(rows) && rows[0] ? rows[0] : null
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  })
+}
+
 Deno.serve(async (req) => {
   try {
-    const { record } = await req.json()
+    const body = await req.json().catch(() => null)
+    const payload = body?.record
+    const id = Number(payload?.id)
+    if (!Number.isInteger(id) || id <= 0) {
+      return jsonResponse({ ok: false, error: "bad_request" }, 400)
+    }
+    const record = await loadBooking(id)
+    if (!record) {
+      console.warn(`notify-booking-received: rejected — booking ${id} does not exist`)
+      return jsonResponse({ ok: false, error: "unknown_booking" }, 404)
+    }
+    // The INSERT trigger sends the full row, so the email always matches.
+    // A forger must already know the guest's email to get past this.
+    if ((payload.email_address ?? null) !== (record.email_address ?? null)) {
+      console.warn(`notify-booking-received: rejected — payload email does not match booking ${id}`)
+      return jsonResponse({ ok: false, error: "payload_mismatch" }, 403)
+    }
     // Three states at INSERT:
     //   confirmed              → paid booking (admin notice only; guest gets the confirmation email elsewhere)
     //   lock_unpaid            → guest chose to lock the date but hasn't paid yet — chase payment
@@ -573,7 +626,7 @@ Deno.serve(async (req) => {
             </td></tr>
           </table>` : ""}
           <table style="border-collapse: collapse; width: 100%;">
-            <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Name</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${record.full_name}</td></tr>
+            <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Name</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${esc(record.full_name)}</td></tr>
             ${record.email_address ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Email</strong></td><td style="padding: 8px; border: 1px solid #ddd;"><a href="mailto:${esc(record.email_address)}" style="color:#2d6a4f;">${esc(record.email_address)}</a></td></tr>` : `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Email</strong></td><td style="padding: 8px; border: 1px solid #ddd; color:#888;">— not provided</td></tr>`}
             <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Phone</strong></td><td style="padding: 8px; border: 1px solid #ddd;"><a href="tel:${esc(record.mobile_number)}" style="color:#2d6a4f; font-weight:bold;">${esc(record.mobile_number)}</a></td></tr>
             <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Date</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${record.preferred_date}${record.checkout_date ? ` → ${record.checkout_date}` : ""}</td></tr>
@@ -585,7 +638,7 @@ Deno.serve(async (req) => {
             ${record.external_booking_ref ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Reference</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${esc(record.external_booking_ref)}</td></tr>` : ""}
             ${record.occasion ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Occasion</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${esc(record.occasion)}</td></tr>` : ""}
             ${boardText(record.board) ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Board</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${boardText(record.board)}</td></tr>` : ""}
-            ${record.special_requirements ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Special req.</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${record.special_requirements}</td></tr>` : ""}
+            ${record.special_requirements ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Special req.</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${esc(record.special_requirements)}</td></tr>` : ""}
           </table>
           ${adminCostBlock(record, addons, bundledIds, record.checkout_date ? "Stay + Picnic setup" : "Picnic setup")}
           <p style="margin-top: 24px;">
