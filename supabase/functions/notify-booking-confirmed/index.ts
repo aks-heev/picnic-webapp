@@ -87,6 +87,11 @@
 // Rendering for legitimate calls is unchanged (the DB row and row_to_json(NEW)
 // carry the same values). Do NOT add a CRON_SECRET/Authorization check here —
 // the triggers send no Authorization header, so it would stop every email.
+//
+// Changed 2026-10-05 (v42): separate hero images per template, per Aksheev.
+// The sunburst (DSC03089.JPG) stays on the STAY email; the PICNIC email now
+// uses images/picnic-hero.jpg (couple at a rooftop setup, 1200x799 JPG —
+// JPG not WebP on purpose: Outlook desktop doesn't render WebP).
 
 import { sendEmail } from "./_shared/resend.ts"
 import { getVenueInfo } from "./_shared/venue.ts"
@@ -98,8 +103,10 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 
 const LOGO_URL =
   "https://cdn-reach.hostinger.com/settings/0a27628d960484a8a3d2b3e50518a32b/307542/logo_1780982818.png"
-const HERO_IMG =
+const STAY_HERO_IMG =
   "https://evmftrogyzoudiccqkya.supabase.co/storage/v1/object/public/images/DSC03089.JPG"
+const PICNIC_HERO_IMG =
+  "https://evmftrogyzoudiccqkya.supabase.co/storage/v1/object/public/images/picnic-hero.jpg"
 
 const TIME_SLOTS: Record<string, string> = {
   morning:   "9 AM – 12 PM",
@@ -301,7 +308,7 @@ function buildPicnicEmail(record: Record<string, unknown>, venueLabel: string | 
               <!-- HERO IMAGE -->
               <tr>
                 <td align="center" style="padding: 20px;">
-                  <img alt="The Picnic Stories" src="${HERO_IMG}"
+                  <img alt="The Picnic Stories" src="${PICNIC_HERO_IMG}"
                     style="width: 100%; max-width: 100%; height: auto; display: block; border-radius: 20px;"/>
                 </td>
               </tr>
@@ -516,7 +523,7 @@ function buildStayEmail(record: Record<string, unknown>, venueLabel: string | nu
               <!-- HERO IMAGE -->
               <tr>
                 <td align="center" style="padding: 20px;">
-                  <img alt="The Picnic Stories" src="${HERO_IMG}"
+                  <img alt="The Picnic Stories" src="${STAY_HERO_IMG}"
                     style="width: 100%; max-width: 100%; height: auto; display: block; border-radius: 20px;"/>
                 </td>
               </tr>

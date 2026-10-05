@@ -37,6 +37,13 @@
 // Rendering for legitimate calls is unchanged. Do NOT add a CRON_SECRET /
 // Authorization check — the trigger sends no Authorization header, so it
 // would silently stop every booking email.
+//
+// Changed 2026-10-05 (v44): guest-ack hero swapped from a generic stock picnic
+// image hosted on the old Hostinger account to images/picnic-hero.jpg in our
+// own Supabase Storage (same photo as the picnic confirmation email, v42).
+//
+// Changed 2026-10-05 (v45): logo moved off the old Hostinger CDN to
+// https://www.picnicstories.com/logo-mark.png (pixel-identical image).
 
 import { sendEmail } from "./_shared/resend.ts"
 import { getVenueInfo } from "./_shared/venue.ts"
@@ -47,10 +54,12 @@ const APP_URL = Deno.env.get("APP_URL") ?? "https://picnicstories.com"
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 
-const LOGO_URL =
-  "https://cdn-reach.hostinger.com/settings/0a27628d960484a8a3d2b3e50518a32b/307542/logo_1780982818.png"
+// Logo served from our own site (public/logo-mark.png, git-tracked) instead of
+// the old Hostinger CDN. Do NOT rename/delete public/logo-mark.png without
+// updating this URL — every guest email would show a broken logo.
+const LOGO_URL = "https://www.picnicstories.com/logo-mark.png"
 const HERO_IMG =
-  "https://images.hostinger.com/94826b0b-025f-4661-94d7-3e767b98d39d.png"
+  "https://evmftrogyzoudiccqkya.supabase.co/storage/v1/object/public/images/picnic-hero.jpg"
 
 // Default slot windows. Kept byte-identical to the same constant in
 // notify-booking-confirmed — if one changes, change both.
