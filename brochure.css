@@ -36,7 +36,7 @@ h1, h2, h3, h4 { font-family: var(--pk-serif); font-weight: 600; margin: 0; line
   backdrop-filter: blur(6px);
   border-bottom: 1px solid var(--pk-line);
 }
-.pk-brand { display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--pk-teal); font: 600 17px/1 var(--pk-serif); white-space: nowrap; }
+.pk-brand { display: flex; align-items: center; gap: 8px; text-decoration: none; color: #2d1f14; font: 500 20px/1 var(--pk-serif); letter-spacing: -0.01em; white-space: nowrap; } /* = main site .nav-brand h2 */
 .pk-brand img { width: 32px; height: 32px; }
 .pk-jump { display: flex; gap: 14px; overflow-x: auto; scrollbar-width: none; }
 .pk-jump::-webkit-scrollbar { display: none; }
@@ -99,6 +99,10 @@ main { max-width: 760px; margin: 0 auto; padding: 0 16px; }
   border-radius: 999px; font: 600 14px/1.2 var(--pk-sans);
 }
 .pk-btn:hover { background: #0e564b; }
+.pk-btn--site { flex: 0 0 100%; min-height: 48px; font-size: 15px; }
+.pk-btn--wa { background: transparent; color: var(--pk-teal); border: 1.5px solid var(--pk-teal); }
+.pk-btn--wa:hover { background: rgba(18, 106, 93, 0.08); }
+.pk-cta-label { margin-top: 4px !important; }
 .pk-btn:focus-visible { outline: 3px solid var(--pk-teal-bright); outline-offset: 2px; }
 
 /* Add-ons menu */
@@ -148,6 +152,8 @@ main { max-width: 760px; margin: 0 auto; padding: 0 16px; }
 .pk-cta--final { justify-content: center; }
 .pk-final .pk-btn { background: #fff; color: var(--pk-teal); }
 .pk-final .pk-btn:hover { background: var(--pk-paper); }
+.pk-final .pk-btn--wa { background: transparent; color: #fff; border-color: #fff; }
+.pk-final .pk-btn--wa:hover { background: rgba(255, 255, 255, 0.12); }
 .pk-final .pk-contact { font: 400 13.5px/1.7 var(--pk-sans); margin-top: 18px; }
 .pk-final a:not(.pk-btn) { color: #fff; }
 

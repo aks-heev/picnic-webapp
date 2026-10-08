@@ -2518,10 +2518,26 @@ async function showPackagesPage(push = true, opts = {}) {
   if (!el) return
   el.innerHTML = '<div class="pkgp-loading">Loading packages…</div>'
   if (!packagesLoaded) await loadPackages()
+  // Validate a deep-linked ?tier= only now, against the DB-loaded tiers — the
+  // hardcoded fallback lacks DB-only packages (the_prelude), which the router's
+  // early check used to silently drop (2026-10-08).
+  if (pkgPageState.tierKey && !PACKAGE_TIERS[pkgPageState.tierKey]) pkgPageState.tierKey = null
   if (!(appState.venues || []).length) await loadVenues()
   const venues = pkgEnabledVenues()
   await loadCatalogsForVenues(venues.map(v => v.id))
   renderPackagesPage()
+  // ?step=venue (brochure "Book on website" links): land on the venue picker,
+  // same as tapping a package's Choose button. Opt-in so existing ?tier= links
+  // (homepage, ads) keep landing at the top.
+  if (opts.scrollToVenues && pkgPageState.tierKey) {
+    const target = document.getElementById('pkgp-venues')
+    if (target) {
+      // Offset by the sticky navbar so the "Where should <package> happen?"
+      // heading stays visible above the venue cards.
+      const navH = document.querySelector('.navbar')?.offsetHeight || 0
+      window.scrollTo(0, target.getBoundingClientRect().top + window.scrollY - navH - 12)
+    }
+  }
   track('packages_page_viewed', {
     occasion: pkgPageState.occasion || null,
     tier: pkgPageState.tierKey || null,
@@ -12220,8 +12236,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const qsTier = urlParams.get('tier')
     const qsOcc  = urlParams.get('occasion')
     showPackagesPage(false, {
-      tierKey:  qsTier && PACKAGE_TIERS[qsTier] ? qsTier : null,
+      tierKey:  qsTier || null, // validated after the DB load, inside showPackagesPage
       occasion: OCCASIONS.includes(qsOcc) ? qsOcc : '',
+      scrollToVenues: urlParams.get('step') === 'venue',
     })
   } else if (venueId) {
     // Legacy ?venue=ID deep links → resolve, then swap the URL to the slug form

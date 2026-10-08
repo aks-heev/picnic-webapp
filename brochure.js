@@ -33,17 +33,33 @@ function waLink(city, pkgName) {
   return `https://wa.me/${WA[city]}?text=${encodeURIComponent(text)}`
 }
 
+// Website booking link. With a package: /packages?tier=<key>&step=venue opens
+// the site's packages-first flow with that package chosen, scrolled to the
+// venue picker (app.js showPackagesPage). Without one: the packages page.
+function siteLink(pkgKey) {
+  const p = new URLSearchParams()
+  if (pkgKey) { p.set('tier', pkgKey); p.set('step', 'venue') }
+  p.set('utm_source', 'brochure')
+  p.set('utm_medium', 'link')
+  return `/packages?${p}`
+}
+
 function renderCtas() {
   document.querySelectorAll('[data-cta]').forEach(slot => {
     const card = slot.closest('[data-pkg]')
+    const key = card?.dataset.pkg || null
     const name = card?.querySelector('h3')?.textContent.trim() || ''
-    slot.innerHTML = `<p class="pk-cta-label">Book on WhatsApp</p>` + Object.keys(WA).map(city =>
-      `<a class="pk-btn" href="${waLink(city, name)}" target="_blank" rel="noopener noreferrer" data-city="${city}">${city}</a>`
-    ).join('')
+    slot.innerHTML =
+      `<a class="pk-btn pk-btn--site" href="${siteLink(key)}" data-site>${name ? `Book ${esc(name)} online` : 'Book online'}</a>` +
+      `<p class="pk-cta-label">Or book on WhatsApp</p>` +
+      Object.keys(WA).map(city =>
+        `<a class="pk-btn pk-btn--wa" href="${waLink(city, name)}" target="_blank" rel="noopener noreferrer" data-city="${city}">${city}</a>`
+      ).join('')
     slot.addEventListener('click', (e) => {
-      const a = e.target.closest('a[data-city]')
+      const a = e.target.closest('a')
       if (!a) return
-      track('brochure_whatsapp_click', { package_key: card?.dataset.pkg || null, city: a.dataset.city })
+      if (a.hasAttribute('data-site')) track('brochure_book_online_click', { package_key: key })
+      else if (a.dataset.city) track('brochure_whatsapp_click', { package_key: key, city: a.dataset.city })
     })
   })
 }
