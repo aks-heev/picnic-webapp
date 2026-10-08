@@ -20,6 +20,7 @@ export default defineConfig({
         terms: resolve(here, 'terms.html'),
         cancellation: resolve(here, 'cancellation.html'),
         disclaimer: resolve(here, 'disclaimer.html'),
+        brochure: resolve(here, 'brochure.html'),
       },
     },
   },

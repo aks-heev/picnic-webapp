@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Unlisted guest-facing brochure page (/brochure) (replaces sending the packages PDF).
+       noindex: reachable only by the link we send; not in nav or sitemap. /packages is the separate, indexed SEO page built by scripts/prerender-venues.mjs. -->
+  <meta name="robots" content="noindex, nofollow">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self';
+             script-src 'self' 'unsafe-inline' https://app.posthog.com https://us.i.posthog.com https://us-assets.i.posthog.com;
+             connect-src 'self' https://*.supabase.co https://app.posthog.com https://us.i.posthog.com https://us-assets.i.posthog.com;
+             style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+             font-src https://fonts.gstatic.com;
+             img-src 'self' data: https:;">
+  <title>Our Packages | The Picnic Stories</title>
+  <meta name="description" content="Curated picnic experiences in Delhi NCR, Gurugram and Jaipur — packages, add-ons, venues and themes.">
+  <!-- Link preview card (WhatsApp / Instagram) -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Our Picnic Packages — The Picnic Stories">
+  <meta property="og:description" content="Fully set-up picnics for birthdays, anniversaries, proposals and more. Packages from ₹5,900.">
+  <meta property="og:image" content="https://www.picnicstories.com/brochure/hero.webp">
+  <meta property="og:url" content="https://www.picnicstories.com/brochure">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,500;0,600;1,400;1,500&family=Be+Vietnam+Pro:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./brochure.css">
+</head>
+<body>
+
+  <header class="pk-top">
+    <a href="/" class="pk-brand">
+      <img src="/logo-mark.png" alt="" width="36" height="36">
+      <span>The Picnic Stories</span>
+    </a>
+    <nav class="pk-jump" aria-label="Sections">
+      <a href="#packages">Packages</a>
+      <a href="#addons">Add-ons</a>
+      <a href="#venues">Venues</a>
+      <a href="#themes">Themes</a>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Cover -->
+    <section class="pk-cover">
+      <p class="pk-place">Delhi NCR · Gurugram · Jaipur</p>
+      <p class="pk-eyebrow">Curated picnic</p>
+      <h1>Experiences</h1>
+      <p class="pk-occasions">Birthdays · Anniversaries · Proposals · Bachelorette &amp; more</p>
+      <img class="pk-hero" src="/brochure/hero.webp" width="720" height="509" alt="A macramé tent picnic setup lit with candles and fairy lights at dusk">
+      <p class="pk-lede">We design fully set-up outdoor picnics — tents, florals, music, and every little detail — so all you have to do is show up and celebrate.</p>
+      <p class="pk-note-pill">Food &amp; beverages not included unless listed</p>
+    </section>
+
+    <!-- Packages: copy + photos are static here; "from" prices are filled live
+         from venue_packages by packages.js (fallbacks below = values at build). -->
+    <section id="packages" class="pk-section">
+      <p class="pk-eyebrow">Our packages</p>
+      <h2>Pick your tier</h2>
+
+      <article class="pk-card" data-pkg="the_prelude">
+        <div class="pk-card-head">
+          <div>
+            <p class="pk-tier">Starter</p>
+            <h3>The Prelude</h3>
+            <p class="pk-where">at Beige Cafe · up to 4 guests</p>
+          </div>
+          <p class="pk-price">from <strong data-price>₹5,900</strong></p>
+        </div>
+        <p class="pk-tagline">An intimate little world.</p>
+        <ul class="pk-incl">
+          <li>Cozy macramé tent setup</li><li>Ambient fairy lighting</li><li>Curated lamps &amp; floor seating</li><li>Dedicated host support</li>
+        </ul>
+        <div class="pk-gallery pk-gallery--prelude">
+          <img src="/brochure/prelude-1.webp" width="900" height="1125" loading="lazy" alt="A couple toasting inside a lit macramé tent">
+          <img src="/brochure/prelude-2.webp" width="458" height="572" loading="lazy" alt="Prelude setup under a macramé tent in daylight">
+          <img src="/brochure/prelude-3.webp" width="460" height="575" loading="lazy" alt="Candles, roses and a low table set for two">
+        </div>
+        <div class="pk-cta" data-cta></div>
+      </article>
+
+      <article class="pk-card" data-pkg="setting">
+        <div class="pk-card-head">
+          <div>
+            <p class="pk-tier">Essentials</p>
+            <h3>The Setting</h3>
+          </div>
+          <p class="pk-price">from <strong data-price>₹8,900</strong></p>
+        </div>
+        <p class="pk-tagline">The signature setup, beautifully done.</p>
+        <ul class="pk-incl">
+          <li>Fresh fruits</li><li>Flower decor</li><li>Candles &amp; lamps</li><li>Crockery &amp; cutlery</li><li>Bluetooth speaker</li><li>Macramé tent</li><li>Message board</li><li>Dedicated host support</li>
+        </ul>
+        <img class="pk-collage" src="/brochure/setting.webp" width="1200" height="960" loading="lazy" alt="The Setting: long table with candles, florals and a macramé tent">
+        <div class="pk-cta" data-cta></div>
+      </article>
+
+      <article class="pk-card pk-card--popular" data-pkg="moment">
+        <div class="pk-card-head">
+          <div>
+            <p class="pk-badge">★ Most popular</p>
+            <h3>The Moment</h3>
+          </div>
+          <p class="pk-price">from <strong data-price>₹12,900</strong></p>
+        </div>
+        <p class="pk-tagline">Bouquet, cake and printed memories.</p>
+        <p class="pk-plus"><span>Everything in The Setting, plus</span></p>
+        <ul class="pk-incl">
+          <li>Cake</li><li>Bouquet</li><li>Photo printouts (10 pics)</li>
+        </ul>
+        <img class="pk-collage" src="/brochure/moment.webp" width="1200" height="960" loading="lazy" alt="The Moment: couples with a bouquet, cake and printed photos">
+        <div class="pk-cta" data-cta></div>
+      </article>
+
+      <article class="pk-card" data-pkg="story">
+        <div class="pk-card-head">
+          <div>
+            <p class="pk-tier">Premium</p>
+            <h3>The Story</h3>
+          </div>
+          <p class="pk-price">from <strong data-price>₹24,900</strong></p>
+        </div>
+        <p class="pk-tagline">The full production — photographer and more.</p>
+        <p class="pk-plus"><span>Everything in The Moment, plus</span></p>
+        <ul class="pk-incl">
+          <li>Photographer</li><li>Skyshots (fireworks)</li><li>Cold pyros</li>
+        </ul>
+        <img class="pk-collage" src="/brochure/story.webp" width="1200" height="960" loading="lazy" alt="The Story: fireworks and cold pyros over a picnic setup">
+        <div class="pk-cta" data-cta></div>
+      </article>
+
+      <p class="pk-small">Prices shown are starting prices at Beige Cafe; they vary by venue. Styled, delivered &amp; wrapped up by our team — you just show up.</p>
+    </section>
+
+    <!-- Add-ons: rows rendered live from add_ons (is_active) by brochure.js;
+         the static list is the fallback if the fetch fails. -->
+    <section id="addons" class="pk-section">
+      <p class="pk-eyebrow">The Picnic Stories</p>
+      <h2>Add-ons menu</h2>
+      <p class="pk-sub">Any add-on can be layered onto any tier. Some add-ons vary by venue — Skyshots and Movie Screening on request.</p>
+      <ul class="pk-menu" data-addons>
+        <li><span>Bonfire (charcoal pit)</span><b>₹500</b></li>
+        <li><span>Photo Printouts (10 pics)</span><b>₹500</b></li>
+        <li><span>Extra Flowers</span><b>₹1,100</b></li>
+        <li><span>Extra Candles</span><b>₹1,100</b></li>
+        <li><span>Extra Hour</span><b>₹1,100</b></li>
+        <li><span>Cake</span><b>₹1,100</b></li>
+        <li><span>Bouquet</span><b>₹1,500</b></li>
+        <li><span>Cold Pyros</span><b>₹3,000</b></li>
+        <li><span>Skyshots (fireworks)</span><b>₹4,000</b></li>
+        <li><span>Barbeque</span><b>₹4,000</b></li>
+        <li><span>Sip &amp; Paint</span><b>₹4,000</b></li>
+        <li><span>Movie Screening</span><b>₹4,500</b></li>
+        <li><span>Live Music</span><b>₹6,000</b></li>
+        <li><span>Photographer</span><b>₹6,000</b></li>
+      </ul>
+    </section>
+
+    <section id="venues" class="pk-section">
+      <p class="pk-eyebrow">Locations &amp; venues</p>
+      <h2>Gurugram &amp; Delhi NCR</h2>
+      <p class="pk-sub">Handpicked spots — every setup styled by our team</p>
+      <div class="pk-venues">
+        <div class="pk-venue"><p class="pk-vtype">Outdoor · Cafe</p><h4>Beige Cafe</h4><p class="pk-vmeta">Leopard Trail, Gurugram · Included in package price</p><p>A Mediterranean-inspired getaway against the rustic backdrop of the Aravalli hills.</p></div>
+        <div class="pk-venue"><p class="pk-vtype">Outdoor · Nature</p><h4>Countryside Offgrid</h4><p class="pk-vmeta">Leopard Trail, Gurugram · Additional venue charges apply · Subject to availability</p><p>Nature-immersed picnics nestled in the scenic foothills of the Aravalis.</p></div>
+        <div class="pk-venue"><p class="pk-vtype">Outdoor · Cafe</p><h4>The Sunroom</h4><p class="pk-vmeta">Palam Farms, Delhi · Additional venue charges apply · Subject to availability</p><p>A glasshouse-style cafe inside Palam Farms — lush greenery, softly lit cabanas, palm-lined pathways.</p></div>
+        <div class="pk-venue"><p class="pk-vtype">Indoor · All-weather · Setup with stay</p><h4>TerraCottage Ochre</h4><p class="pk-vmeta">DLF Phase 2, Gurugram · Additional venue charges apply · Subject to availability</p><p>A cozy studio apartment in warm terracotta tones — your picnic, indoors.</p></div>
+        <div class="pk-venue"><p class="pk-vtype">Indoor · All-weather · Setup with stay</p><h4>TerraCottage Umber</h4><p class="pk-vmeta">DLF Phase 2, Gurugram · Additional venue charges apply · Subject to availability</p><p>A cozy 2BHK picnic-plus-stay experience in the heart of the city.</p></div>
+        <div class="pk-venue"><p class="pk-vtype">Indoor · All-weather · Setup with stay</p><h4>TerraCottage Sienna</h4><p class="pk-vmeta">DLF Phase 2, Gurugram · Additional venue charges apply · Subject to availability</p><p>Ochre and Umber combined — a full floor with terrace, for bigger celebrations.</p></div>
+      </div>
+
+      <h2 class="pk-h2-gap">Jaipur</h2>
+      <p class="pk-sub">Heritage settings in the Pink City</p>
+      <div class="pk-venues">
+        <div class="pk-venue"><p class="pk-vtype">Outdoor · Restaurant</p><h4>Castle Valley</h4><p class="pk-vmeta">Besides Amer Fort, Jaipur · Included in package price</p><p>Directly opposite the majestic Amer Fort — a perfect blend of historic charm and culinary delight.</p></div>
+        <div class="pk-venue"><p class="pk-vtype">Heritage · Stay available</p><h4>House of Amer</h4><p class="pk-vmeta">Amer, Jaipur · Included in package price · Subject to availability</p><p>An exquisite heritage venue in the historic heart of Amer, near the iconic Jagat Shiromani Temple.</p></div>
+        <div class="pk-venue"><p class="pk-vtype">Heritage hotel · Stay available</p><h4>Om Niwas Suite Hotel</h4><p class="pk-vmeta">Bani Park, Jaipur · Additional venue charges apply · Subject to availability</p><p>A hidden heritage oasis in the serene, tree-lined lanes of Bani Park.</p></div>
+        <div class="pk-venue"><p class="pk-vtype">Heritage · Garden</p><h4>Once Upon A Time at The Bagh</h4><p class="pk-vmeta">Vidyadhar Ji Ka Bagh, Jaipur · Additional venue charges apply · Subject to availability</p><p>A majestic heritage venue inside Jaipur's historic 18th-century Vidyadhar Ji Ka Bagh.</p></div>
+      </div>
+
+      <h2 class="pk-h2-gap">Time slots</h2>
+      <div class="pk-slots">
+        <div><b>Morning</b><span>9:00 AM – 11:00 AM</span></div>
+        <div><b>Sunset</b><span>5:30 PM – 8:00 PM</span></div>
+        <div><b>Custom</b><span>On request</span></div>
+      </div>
+      <p class="pk-sub">Have your own spot in mind? A backyard, rooftop, or a place that means something — we'll bring the picnic to you.</p>
+    </section>
+
+    <section id="themes" class="pk-section">
+      <p class="pk-eyebrow">Choose your theme</p>
+      <h2>Real setups, real moments</h2>
+      <p class="pk-sub">Every theme, styled with your occasion in mind</p>
+      <div class="pk-theme">
+        <h3 class="pk-theme-name pk-theme--pink"><i>blush</i> PINK</h3>
+        <div class="pk-theme-row">
+          <img src="/brochure/theme-pink-1.webp" width="389" height="236" loading="lazy" alt="Blush pink theme: roses on a pink runner">
+          <img src="/brochure/theme-pink-2.webp" width="363" height="236" loading="lazy" alt="Blush pink theme: full setup under a macramé tent">
+          <img src="/brochure/theme-pink-3.webp" width="173" height="232" loading="lazy" alt="Blush pink theme: place setting with roses">
+        </div>
+      </div>
+      <div class="pk-theme">
+        <h3 class="pk-theme-name pk-theme--beige"><i>ivory</i> BEIGE</h3>
+        <div class="pk-theme-row">
+          <img src="/brochure/theme-beige-1.webp" width="390" height="236" loading="lazy" alt="Ivory beige theme: white florals and candles">
+          <img src="/brochure/theme-beige-2.webp" width="363" height="236" loading="lazy" alt="Ivory beige theme: arch board setup">
+          <img src="/brochure/theme-beige-3.webp" width="173" height="235" loading="lazy" alt="Ivory beige theme: tent with wooden figurines">
+        </div>
+      </div>
+      <div class="pk-theme">
+        <h3 class="pk-theme-name pk-theme--green"><i>sage</i> GREEN</h3>
+        <div class="pk-theme-row">
+          <img src="/brochure/theme-green-1.webp" width="390" height="236" loading="lazy" alt="Sage green theme: table with candles and greenery">
+          <img src="/brochure/theme-green-2.webp" width="364" height="236" loading="lazy" alt="Sage green theme: low table setup on grass">
+          <img src="/brochure/theme-green-3.webp" width="181" height="236" loading="lazy" alt="Sage green theme: tent and cushions">
+        </div>
+      </div>
+    </section>
+
+    <section class="pk-section">
+      <p class="pk-eyebrow">Our work</p>
+      <h2>Get inspired</h2>
+      <p class="pk-sub">Tap any link to watch real setups by occasion</p>
+      <dl class="pk-reels">
+        <dt>Proposals</dt><dd><a href="https://www.instagram.com/reel/DaIYMCPz-Dp/">Watch 1</a><a href="https://www.instagram.com/reel/DT-HDSjE-bf/">Watch 2</a><a href="https://www.instagram.com/reel/DEmK5dYT0J2/">Watch 3</a><a href="https://www.instagram.com/p/DNf_-B8zuIe/">Watch 4</a></dd>
+        <dt>Birthdays</dt><dd><a href="https://www.instagram.com/reel/DBL3mLpuaXG/">Watch 1</a><a href="https://www.instagram.com/reel/DBTIe5HpAQ3/">Watch 2</a><a href="https://www.instagram.com/p/DBN2Vr7JUYe/">Watch 3</a></dd>
+        <dt>Kids birthday</dt><dd><a href="https://www.instagram.com/reel/DA8cy5xBeps/">Watch 1</a></dd>
+        <dt>Bachelorette</dt><dd><a href="https://www.instagram.com/p/DClrYqUBOAv/">Watch 1</a></dd>
+        <dt>Anniversary</dt><dd><a href="https://www.instagram.com/reel/DQQyQd_Ez1L/">Watch 1</a></dd>
+        <dt>Date</dt><dd><a href="https://www.instagram.com/reel/C4qBHCDhrkn/">Watch 1</a></dd>
+        <dt>Countryside Offgrid</dt><dd><a href="https://www.instagram.com/reel/DBWeTyUPcBD/">Watch 1</a></dd>
+        <dt>Themes</dt><dd><a href="https://www.instagram.com/p/DcV-ieKiR0V/">Beige white</a><a href="https://www.instagram.com/reel/DRCoL2vkxBm/">Green white</a></dd>
+        <dt>At your venue</dt><dd><a href="https://www.instagram.com/reel/DBJT1ZUh5yz/">Watch 1</a><a href="https://www.instagram.com/reel/DdbmuB0p3lr/">Watch 2</a><a href="https://www.instagram.com/reel/C658jk3LRxj/">Watch 3</a></dd>
+      </dl>
+    </section>
+
+    <section class="pk-final">
+      <h2>Loved what you saw?</h2>
+      <p>Book your picnic today and let us handle every detail — setup, styling, and teardown.</p>
+      <div class="pk-cta pk-cta--final" data-cta></div>
+      <p class="pk-contact">
+        <a href="https://www.instagram.com/the.picnic.stories/">@the.picnic.stories</a> ·
+        <a href="https://picnicstories.com/?utm_source=brochure&amp;utm_medium=link">picnicstories.com</a><br>
+        <span class="nw">+91 97737-03982 (Gurugram)</span> · <span class="nw">+91 92669-64666 (Jaipur)</span><br>
+        Open every day · Morning &amp; sunset slots available
+      </p>
+    </section>
+  </main>
+
+  <footer class="pk-foot">F&amp;B not included unless stated · Prices subject to confirmation</footer>
+
+  <script type="module" src="./brochure.js"></script>
+</body>
+</html>
