@@ -203,6 +203,12 @@
   .pnl td { padding: 8px 6px; font-size: 13.5px; }
   .pnl td:first-child { color: var(--ink-2); }
   .pnl tr.total td { border-top: 2px solid var(--hair); font-family: var(--serif); font-size: 18px; padding-top: 10px; }
+  .pnl.mix th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; padding: 4px 6px 6px; border-bottom: 1px solid var(--hair); }
+  .pnl.mix th.num, .pnl.mix td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pnl.mix td { border-bottom: 1px solid var(--hair); }
+  .mixbar { display: inline-block; width: 46px; height: 6px; margin-right: 8px; border-radius: 3px; background: var(--hair); vertical-align: middle; overflow: hidden; }
+  .mixbar i { display: block; height: 100%; background: var(--terracotta); border-radius: 3px; }
+  .mixn { font-size: 11px; color: var(--muted); }
   .note { font-size: 12.5px; color: var(--muted); margin: 10px 0 0; line-height: 1.55; }
 
   .foot { font-size: 12px; color: var(--muted); line-height: 1.65; margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--hair); }
@@ -347,7 +353,7 @@ async function load() {
     sb.from('bookings')
       .select('id, full_name, mobile_number, preferred_date, checkout_date, time_slot, occasion, ' +
               'total_amount, advance_amount, payment_status, entry_source, external_booking_ref, ' +
-              'created_at, venues!inner(name, city, type)')
+              'created_at, package_name, booking_source, venues!inner(name, city, type)')
       .eq('confirmed', true)
       .in('venues.city', CITIES)
       .order('preferred_date', { ascending: false }),
@@ -431,6 +437,9 @@ async function load() {
          02:00 IST belongs to that day, not the previous one. */
       bookedOn: r.created_at ? new Date(new Date(r.created_at).getTime() + 5.5 * 3600000) : null,
       occasion: r.occasion || '',
+      pkg: r.package_name || '',
+      source: r.booking_source || '',
+      costed: costBy.has(String(r.id)),
       channel,
       total, advance,
       balance: Math.max(0, total - advance),
@@ -706,6 +715,34 @@ function render() {
   const opt = (v, l, cur) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${esc(l)}</option>`;
   const pnlLine = n => (n < 0 ? '− ' : '+ ') + inr(Math.abs(n));
 
+  /* Packages, sources and lead time — picnics only (stays have no package).
+     Margin uses only bookings whose costs have been closed: an uncosted booking
+     has cost 0 here, which would read as 100% margin. */
+  const pics = rows.filter(r => r.kind === 'picnic');
+  const SRC_LBL = { instagram_ad: 'Instagram ad', instagram_organic: 'Instagram organic', website: 'Website', direct: 'Direct', whatsapp: 'WhatsApp', referral: 'Referral' };
+  const groupPics = keyFn => {
+    const m = new Map();
+    pics.forEach(r => { const k = keyFn(r); if (!m.has(k)) m.set(k, []); m.get(k).push(r); });
+    return [...m.entries()].map(([k, l]) => {
+      const rev = l.reduce((s, r) => s + r.total, 0);
+      const c = l.filter(r => r.costed);
+      const cRev = c.reduce((s, r) => s + r.total, 0), cProf = c.reduce((s, r) => s + r.netProfit, 0);
+      return { k, n: l.length, rev, avg: rev / l.length, margin: cRev ? Math.round(cProf / cRev * 100) : null, costed: c.length };
+    }).sort((a, b) => b.rev - a.rev);
+  };
+  const byPkg = groupPics(r => r.pkg || 'No package recorded');
+  const bySrc = groupPics(r => SRC_LBL[r.source] || r.source || 'Not recorded');
+  const picRevAll = pics.reduce((s, r) => s + r.total, 0);
+  const avgPicnic = pics.length ? picRevAll / pics.length : null;
+  const leadDays = pics.filter(r => r.date && r.bookedOn && r.date.getFullYear() >= 2000).map(r => {
+    const ev = Date.UTC(r.date.getFullYear(), r.date.getMonth(), r.date.getDate());
+    const bk = Date.UTC(r.bookedOn.getUTCFullYear(), r.bookedOn.getUTCMonth(), r.bookedOn.getUTCDate());
+    return Math.round((ev - bk) / 86400000);
+  }).filter(d => d >= 0).sort((a, b) => a - b);
+  const medLead = leadDays.length ? (leadDays.length % 2 ? leadDays[(leadDays.length - 1) / 2] : (leadDays[leadDays.length / 2 - 1] + leadDays[leadDays.length / 2]) / 2) : null;
+  const mixTable = (list, head) => list.length ? `<table class="pnl mix"><thead><tr><th>${head}</th><th class="num">Bookings</th><th class="num">Revenue</th><th class="num">Average</th><th class="num" title="Booking profit ÷ revenue, over bookings whose costs are closed">Margin</th></tr></thead><tbody>${list.map(g => `
+      <tr><td>${esc(g.k)}</td><td class="num">${g.n}</td><td class="num"><span class="mixbar"><i style="width:${picRevAll ? (g.rev / picRevAll * 100).toFixed(1) : 0}%"></i></span>${inrShort(g.rev)}</td><td class="num">${inrShort(g.avg)}</td><td class="num">${g.margin == null ? '—' : g.margin + '%'}${g.costed < g.n ? ` <span class="mixn">${g.costed}/${g.n}</span>` : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No picnics in range.</div>';
+
   const nextRows = upcoming.slice(0, 5).map(r => `
     <div class="nrow ${r.exposed && D ? 'flag' : ''}">
       <div class="d">${fmtShort(r.date)}<small>${daysFromToday(r.date) === 0 ? 'today' : 'in ' + daysFromToday(r.date) + 'd'}</small></div>
@@ -790,6 +827,16 @@ function render() {
       ${clickKpi('type', 'stay', f.type === 'stay', '', 'Stays', nStay, Math.round(nights) + ' night' + (Math.round(nights) === 1 ? '' : 's') + ' · ' + inrShort(stayRev))}
       ${clickKpi('owing', undefined, f.owing, owed > 0 ? 'amber' : '', 'Awaiting balance', owedRows.filter(r => rowIds.has(r.bkid)).length, 'in this period')}
       ${D ? clickKpi('exposed', undefined, f.exposed, exposed.length ? 'red' : 'olive', 'Unprotected dates', exposed.length, exposed.length ? 'not blocking the calendar' : 'all future dates covered') : ''}
+      ${kpi('', 'Avg picnic booking', avgPicnic == null ? '—' : inrShort(avgPicnic), pics.length + ' picnic' + (pics.length === 1 ? '' : 's') + ' in this period')}
+      ${kpi('', 'Median lead time', medLead == null ? '—' : medLead + ' day' + (medLead === 1 ? '' : 's'), 'booking made → picnic date')}
+    </div>
+
+    <div class="sec"><h2>Packages &amp; sources</h2><span class="hint">${period} · picnics only · bar is share of picnic revenue</span></div>
+    <div class="grid2">
+      <div class="card"><div class="card-h"><h3>By package</h3><p>“No package recorded” is older bookings and custom quotes</p></div>
+        <div class="card-b">${mixTable(byPkg, 'Package')}</div></div>
+      <div class="card"><div class="card-h"><h3>By source</h3><p>How the booking reached us, as entered · recorded consistently from Sep 2026</p></div>
+        <div class="card-b">${mixTable(bySrc, 'Source')}</div></div>
     </div>
 
     <div class="sec"><h2>Profit &amp; loss</h2><span class="hint">${period} · expenses are month-scoped by their own date</span></div>
