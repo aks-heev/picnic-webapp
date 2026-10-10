@@ -3,21 +3,70 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "redirects": [
-    { "source": "/hub", "destination": "/", "permanent": false },
-    { "source": "/hub.html", "destination": "/", "permanent": false },
-    { "source": "/ads", "destination": "/meta-dashboard", "permanent": false },
-    { "source": "/ads.html", "destination": "/meta-dashboard", "permanent": false }
+    {
+      "source": "/hub",
+      "destination": "/",
+      "permanent": false
+    },
+    {
+      "source": "/hub.html",
+      "destination": "/",
+      "permanent": false
+    },
+    {
+      "source": "/ads",
+      "destination": "/meta-dashboard",
+      "permanent": false
+    },
+    {
+      "source": "/ads.html",
+      "destination": "/meta-dashboard",
+      "permanent": false
+    }
   ],
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy", "value": "no-referrer" },
-        { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
-        { "key": "Permissions-Policy", "value": "geolocation=(), camera=(), microphone=()" }
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "geolocation=(), camera=(), microphone=()"
+        }
       ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/bookings",
+      "destination": "/views.html"
+    },
+    {
+      "source": "/sales",
+      "destination": "/views.html"
+    },
+    {
+      "source": "/stays",
+      "destination": "/views.html"
+    },
+    {
+      "source": "/money",
+      "destination": "/views.html"
     }
   ]
 }
