@@ -278,6 +278,90 @@ function getPicnicPrice(venue, adults) {
 // base_price is the single nightly source (CLAUDE.md §7).
 const STAY_NIGHTLY_TYPES = ['self_managed', 'combo']
 
+// ── Stay-only mode (2026-10-10) ─────────────────────────────────────────────
+// A self_managed/combo stay sold ROOM-ONLY, with the celebration setup sold as
+// add-ons of category 'setup' (venue_add_ons decides which venue offers which).
+// Gated per venue by metadata.stay_only === true, so launch is a data change
+// (setup add-ons + stay-only base_price + flag), never a deploy. With the flag
+// off, every surface below renders exactly as before.
+// Once the flag is on, base_price IS the stay-only nightly rate.
+// Optional metadata: direct_perks (string[]), unit_code (string, WhatsApp ref).
+function stayOnlyActive(venue) {
+  return STAY_NIGHTLY_TYPES.includes(venue?.type) && venue?.metadata?.stay_only === true
+}
+
+// Reference the guest's WhatsApp message carries, e.g. TERRACOTTAGE-OCHRE-WEB.
+function stayUnitRef(venue) {
+  const base = venue?.metadata?.unit_code || venue?.slug || String(venue?.id || '')
+  return `${String(base).toUpperCase()}-WEB`
+}
+
+// First-touch utm_source for the session, so stay-only leads record their
+// channel in bookings.external_booking_ref (web-ig, web-google, web-direct).
+const STAY_UTM_KEY = 'ps_utm_source'
+;(function captureUtmSource() {
+  try {
+    const src = new URLSearchParams(window.location.search).get('utm_source')
+    if (src && !sessionStorage.getItem(STAY_UTM_KEY)) {
+      const clean = src.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 30)
+      if (clean) sessionStorage.setItem(STAY_UTM_KEY, clean)
+    }
+  } catch (err) { /* storage blocked: falls back to web-direct */ }
+})()
+function stayChannelRef() {
+  let src = null
+  try { src = sessionStorage.getItem(STAY_UTM_KEY) } catch (err) { /* ignore */ }
+  return `web-${src || 'direct'}`
+}
+
+// "Choose your stay" section for the venue page: Stay vs Celebration Stay.
+// Everything shown is data: base_price, metadata.direct_perks, setup add-ons.
+// No setup add-ons linked yet => only the Stay card renders.
+function stayChoiceSectionHtml(venue, addOns = []) {
+  const nightly = Number(venue.base_price) || 0
+  const fmt     = n => '₹' + Number(n).toLocaleString('en-IN')
+  const setups  = addOns
+    .filter(a => a.category === 'setup')
+    .sort((a, b) => Number(a.price) - Number(b.price))
+  const perks   = Array.isArray(venue.metadata?.direct_perks)
+    ? venue.metadata.direct_perks.filter(p => typeof p === 'string' && p.trim())
+    : []
+  const tick = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>'
+  const priceLine = nightly
+    ? `${fmt(nightly)}<span class="vd-stay-option-unit"> / night</span>`
+    : 'Price on request'
+
+  const stayCard = `
+      <div class="vd-stay-option">
+        <h3 class="vd-stay-option-title">Stay</h3>
+        <p class="vd-stay-option-price">${priceLine}</p>
+        <p class="vd-stay-option-sub">The stay only, without a decor setup.</p>
+        ${perks.length ? `
+        <ul class="vd-stay-option-list">
+          ${perks.map(p => `<li>${tick}<span>${escapeHtml(p)}</span></li>`).join('')}
+        </ul>
+        <p class="vd-stay-option-foot">Included when you book here directly.</p>` : ''}
+      </div>`
+
+  const celebCard = setups.length ? `
+      <div class="vd-stay-option vd-stay-option--celebration">
+        <h3 class="vd-stay-option-title">Celebration Stay</h3>
+        <p class="vd-stay-option-price">${priceLine}${nightly ? `<span class="vd-stay-option-unit"> + setup from ${fmt(setups[0].price)}</span>` : ''}</p>
+        <p class="vd-stay-option-sub">The stay plus a decor setup in the room. You choose the setup when you book.</p>
+        <ul class="vd-stay-option-list">
+          ${setups.map(a => `<li>${tick}<span><strong>${escapeHtml(a.name)}</strong> · ${fmt(a.price)}${a.description ? `<small>${escapeHtml(a.description)}</small>` : ''}</span></li>`).join('')}
+        </ul>
+      </div>` : ''
+
+  return `
+            <div class="vd-section vd-stay-choice">
+              <h2 class="vd-section-title">Choose your stay</h2>
+              <div class="vd-stay-options${celebCard ? '' : ' vd-stay-options--single'}">${stayCard}${celebCard}</div>
+              <p class="vd-stay-option-foot">Pick your dates to send a booking request. We confirm availability with you on WhatsApp.</p>
+            </div>
+            <hr class="vd-divider">`
+}
+
 // Included food & drink counts for a booking, scaled to adults only.
 // food   = ceil(adults × food_multiplier)
 // drinks = ceil(adults × drink_multiplier)
@@ -1145,7 +1229,7 @@ function renderVenueDetail(venue, addOns = []) {
 
             <!-- What's included — in the packages flow this moves into The
                  Setting package card instead (see showPackageStep). -->
-            ${packageFlowActive(venue) ? '' : (() => {
+            ${packageFlowActive(venue) ? '' : stayOnlyActive(venue) ? stayChoiceSectionHtml(venue, addOns) : (() => {
               const meta = venue.metadata || {}
               const svgWrap = paths => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`
               const checkSvg   = svgWrap('<polyline points="20 6 9 17 4 12"/>')
@@ -1315,7 +1399,7 @@ function renderVenueDetail(venue, addOns = []) {
               ${venue.base_price ? `
               <div class="vd-price-row">
                 <span class="vd-price-amount" id="sidebar-price-amount">${escapeHtml(formatPrice(venue.base_price))}</span>
-                <span class="vd-price-label" id="sidebar-price-label">${venue.type === 'partner_bnb' ? 'starting price · picnic setup only' : 'starting price'}</span>
+                <span class="vd-price-label" id="sidebar-price-label">${venue.type === 'partner_bnb' ? 'starting price · picnic setup only' : stayOnlyActive(venue) ? 'per night · stay only' : 'starting price'}</span>
               </div>` : `
               <div class="vd-price-row">
                 <span class="vd-price-amount" id="sidebar-price-amount">Custom</span>
@@ -3542,12 +3626,12 @@ function updateGuestPrice(venue) {
     const nights    = calcNights(appState.checkinDate, appState.checkoutDate)
     const stayTotal = nights * picnicPrice
     priceEl.textContent = formatPrice(stayTotal) || 'Custom'
-    if (labelEl) labelEl.textContent = `${nights} night${nights !== 1 ? 's' : ''} · ${guestLine}`
+    if (labelEl) labelEl.textContent = `${nights} night${nights !== 1 ? 's' : ''}${stayOnlyActive(venue) ? ' · stay only' : ''} · ${guestLine}`
     return
   }
 
   priceEl.textContent = formatPrice(picnicPrice) || 'Custom'
-  if (labelEl) labelEl.textContent = guestLine
+  if (labelEl) labelEl.textContent = stayOnlyActive(venue) ? `per night · stay only · ${guestLine}` : guestLine
 }
 
 // Increment/decrement adult or child count and refresh price
@@ -3934,7 +4018,7 @@ async function showBookingForm(venue) {
       <div class="vd-bf-addon-cats">
         ${addonsByCategory.map(({ cat, label, items }) => `
         <div class="vd-bf-cat" data-cat="${cat}">
-          <button type="button" class="vd-bf-cat-header" onclick="toggleAddonCat(this)" aria-expanded="false">
+          <button type="button" class="vd-bf-cat-header" onclick="toggleAddonCat(this)" aria-expanded="${cat === 'setup' ? 'true' : 'false'}">
             <span class="vd-bf-cat-label">${label}</span>
             <span class="vd-bf-cat-meta">
               <span class="vd-bf-cat-count hidden">${items.length}</span>
@@ -3942,7 +4026,7 @@ async function showBookingForm(venue) {
               <span class="vd-bf-cat-chevron">›</span>
             </span>
           </button>
-          <div class="vd-bf-cat-body" hidden>
+          <div class="vd-bf-cat-body"${cat === 'setup' ? '' : ' hidden'}>
             ${items.map(a => `
             <label class="vd-bf-addon-row">
               <div class="vd-bf-addon-info">
@@ -3956,7 +4040,7 @@ async function showBookingForm(venue) {
                        data-addon-name="${escapeHtml(a.name)}"
                        data-addon-price="${a.price}"
                        data-addon-confirm="${a.requires_confirmation || false}"
-                       onchange="updateBookingSummaryPrice(); updateAddonCatBadge(this.closest('.vd-bf-cat'))">
+                       onchange="${cat === 'setup' ? 'onlyOneSetup(this); ' : ''}updateBookingSummaryPrice(); updateAddonCatBadge(this.closest('.vd-bf-cat'))">
               </div>
             </label>`).join('')}
           </div>
@@ -4140,6 +4224,14 @@ window.changePackage = function() {
   if (!venue) return
   showVenueBodyStep()
   showPackageStep(venue)
+}
+
+// Celebration setups are single-choice: ticking one clears the others.
+window.onlyOneSetup = function(cb) {
+  if (!cb?.checked) return
+  cb.closest('.vd-bf-cat')?.querySelectorAll('.bv-addon-check').forEach(o => {
+    if (o !== cb) o.checked = false
+  })
 }
 
 // Recompute price total when add-ons are toggled in the booking view
@@ -4468,6 +4560,8 @@ function handleInlineBookingSubmit(event) {
     const nights        = calcNights(appState.checkinDate, appState.checkoutDate)
     lead.advance_amount = Math.round((nights * picnicPrice + addonSum) * 0.3)
   }
+  // Stay-only leads record their channel (web-ig / web-google / web-direct).
+  if (stayOnlyActive(venue)) lead.external_booking_ref = stayChannelRef()
   // partner_bnb: picnic setup only, never multiplied by nights.
   if (venue.type === 'partner_bnb') {
     if (appState.checkinDate)  lead.preferred_date = appState.checkinDate
@@ -4601,7 +4695,12 @@ function intentWaHref(lead) {
     advance_amount: lead.advance_amount,
     total_amount:   lead.advance_amount > 0 ? Math.round(lead.advance_amount / 0.3) : null,
   }
-  return `https://wa.me/${num}?text=${encodeURIComponent(buildWhatsAppMessage(booking, venue?.name || '', false))}`
+  if (stayOnlyActive(venue)) {
+    const setupIds = new Set((appState.currentVenueAddOns || []).filter(a => a.category === 'setup').map(a => a.id))
+    booking.checkout_date = lead.checkout_date || null
+    booking.setup_names   = (appState.pendingAddOns || []).filter(a => setupIds.has(a.addon_id)).map(a => a.name)
+  }
+  return `https://wa.me/${num}?text=${encodeURIComponent(buildWhatsAppMessage(booking, venue?.name || '', false, venue))}`
 }
 
 // Intent-screen WhatsApp CTA click. The anchor opens wa.me natively (default
@@ -5165,7 +5264,8 @@ function recordLeadStatus(bookingId, status) {
 // Pre-filled WhatsApp message for the success-page CTA. Only includes lines
 // we actually have data for — the RPC-returned booking row carries the full
 // bookings columns, but the local fallback row has just id/date/guests.
-function buildWhatsAppMessage(booking, venueName, confirmed) {
+function buildWhatsAppMessage(booking, venueName, confirmed, venue = null) {
+  if (stayOnlyActive(venue)) return buildStayWhatsAppMessage(booking, venue)
   let dateStr = 'TBC'
   if (booking?.preferred_date) {
     const d = new Date(booking.preferred_date + 'T00:00:00')
@@ -5187,6 +5287,32 @@ function buildWhatsAppMessage(booking, venueName, confirmed) {
   if (booking?.advance_amount > 0) lines.push(`💳 Advance: ₹${Number(booking.advance_amount).toLocaleString('en-IN')}${confirmed ? ' (paid)' : ''}`)
   if (booking?.id) lines.push('', `Booking ref: #PS-${booking.id}`)
   lines.push('', confirmed ? 'Looking forward to it!' : 'Please help me lock this in!')
+  return lines.join('\n')
+}
+
+// Stay-only variant: check-in/out instead of a slot, the chosen setup (if
+// any), and the unit ref so the enquiry can be traced back to this page.
+function buildStayWhatsAppMessage(booking, venue) {
+  const fmtDate = d => d
+    ? new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+    : 'TBC'
+  const nights = (booking?.preferred_date && booking?.checkout_date)
+    ? calcNights(booking.preferred_date, booking.checkout_date) : 0
+  const setups = Array.isArray(booking?.setup_names) ? booking.setup_names.filter(Boolean) : []
+  const lines = [
+    setups.length ? 'Hi! I\'d like to book a Celebration Stay.' : 'Hi! I\'d like to book a stay.',
+    '',
+    `📍 Stay: ${venue?.name || ''}`,
+    `📅 Check-in: ${fmtDate(booking?.preferred_date)}`,
+    `📅 Check-out: ${fmtDate(booking?.checkout_date)}${nights ? ` (${nights} night${nights !== 1 ? 's' : ''})` : ''}`,
+  ]
+  if (booking?.guest_count) lines.push(`👥 Guests: ${booking.guest_count}`)
+  if (setups.length) lines.push(`✨ Setup: ${setups.join(', ')}`)
+  if (booking?.total_amount) lines.push(`💰 Estimated total: ₹${Number(booking.total_amount).toLocaleString('en-IN')}`)
+  lines.push('')
+  if (booking?.id) lines.push(`Booking ref: #PS-${booking.id}`)
+  lines.push(`Ref: ${stayUnitRef(venue)}`)
+  lines.push('', 'Please confirm availability.')
   return lines.join('\n')
 }
 
@@ -5213,7 +5339,8 @@ function renderSuccessPage({ booking, venueName, venueTeamId, confirmed = false 
 
   // WhatsApp CTA — route to the venue team's number when known
   const waNumber = (team?.whatsapp || WHATSAPP_FALLBACK_NUMBER).replace(/\D/g, '')
-  const waHref   = `https://wa.me/${waNumber}?text=${encodeURIComponent(buildWhatsAppMessage(booking, venueName, confirmed))}`
+  const waVenue  = appState.currentVenue?.name === venueName ? appState.currentVenue : null
+  const waHref   = `https://wa.me/${waNumber}?text=${encodeURIComponent(buildWhatsAppMessage(booking, venueName, confirmed, waVenue))}`
 
   // Format date nicely: "Saturday, 14 June 2026"
   let dateFormatted = ''
@@ -8317,8 +8444,13 @@ function setBookingsStatusFilter(status, btn) {
 // ADD-ONS MANAGER
 // ================================================================
 
-const ADDON_CATEGORIES = ['photography', 'decor', 'food', 'entertainment', 'extension']
+// 'setup' = a celebration decor setup sold on a stay-only venue (see stayOnlyActive).
+// Single-choice in the booking form (onlyOneSetup). The venue page's
+// "Elevate your experience" list has its own category list and leaves it out;
+// stay-only venues show setups in "Choose your stay" instead.
+const ADDON_CATEGORIES = ['setup', 'photography', 'decor', 'food', 'entertainment', 'extension']
 const ADDON_CATEGORY_LABELS = {
+  setup:         '✨ Celebration setup',
   photography:   '📷 Photography',
   decor:         '🌸 Decor',
   food:          '🍰 Food',

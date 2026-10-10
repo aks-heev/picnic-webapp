@@ -10750,3 +10750,76 @@ textarea.bcl-input { resize: vertical; }
 .pp-strip-items em { font-style: normal; color: #9a7a3a; font-size: 12px; }
 .pp-overdue { color: #b3402a; }
 .pp-strip-note { margin-top: 6px; font-size: 12.5px; color: #6b5a4f; font-style: italic; }
+
+/* ── Stay-only mode: "Choose your stay" (2026-10-10) ──────────────────────
+   Rendered by stayChoiceSectionHtml() in app.js, only when a stay venue has
+   metadata.stay_only = true. Two cards side by side; stacked on mobile. */
+.vd-stay-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.vd-stay-options--single { grid-template-columns: 1fr; max-width: 420px; }
+@media (max-width: 640px) {
+  .vd-stay-options { grid-template-columns: 1fr; }
+}
+.vd-stay-option {
+  background: #fff;
+  border: 1px solid rgba(196, 96, 122, 0.18);
+  border-radius: 14px;
+  padding: 18px 18px 16px;
+  min-width: 0;
+}
+.vd-stay-option--celebration {
+  border-color: rgba(196, 96, 122, 0.45);
+  background: #fffaf8;
+}
+.vd-stay-option-title {
+  font-family: var(--font-serif);
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--boho-text-dark);
+  margin: 0 0 6px;
+}
+.vd-stay-option-price {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--boho-text-dark);
+  margin: 0 0 6px;
+}
+.vd-stay-option-unit {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--boho-text-medium);
+}
+.vd-stay-option-sub {
+  font-size: 0.9rem;
+  color: var(--boho-text-medium);
+  margin: 0 0 10px;
+}
+.vd-stay-option-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.vd-stay-option-list li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 0.9rem;
+  color: var(--boho-text-dark);
+}
+.vd-stay-option-list li svg { flex: 0 0 auto; margin-top: 3px; color: var(--boho-accent-pink); }
+.vd-stay-option-list small {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--boho-text-medium);
+  margin-top: 2px;
+}
+.vd-stay-option-foot {
+  font-size: 0.8rem;
+  color: var(--boho-text-medium);
+  margin: 10px 0 0;
+}
