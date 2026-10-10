@@ -54,19 +54,19 @@
   "rewrites": [
     {
       "source": "/bookings",
-      "destination": "/views.html"
+      "destination": "/views"
     },
     {
       "source": "/sales",
-      "destination": "/views.html"
+      "destination": "/views"
     },
     {
       "source": "/stays",
-      "destination": "/views.html"
+      "destination": "/views"
     },
     {
       "source": "/money",
-      "destination": "/views.html"
+      "destination": "/views"
     }
   ]
 }
