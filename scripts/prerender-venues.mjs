@@ -148,7 +148,13 @@ function buildPage(template, v) {
   const slug = v.slug || slugify(v.name)
   const url = `${SITE}/venues/${slug}`
   const img = v.images?.[0]?.url || HERO_FALLBACK
-  const title = `${v.name} — Luxury Picnic in ${v.city} | The Picnic Stories`
+  // Stays (self_managed / partner_bnb / combo) are not picnic venues — titling them
+  // "Luxury Picnic" mis-describes the page in Google results. Names that already
+  // end in "— Stay" (e.g. "Om Niwas Suite Hotel — Stay") don't get it twice.
+  const isStay = ['self_managed', 'partner_bnb', 'combo'].includes(v.type)
+  const title = isStay
+    ? `${v.name.replace(/\s+[—-]\s+Stay$/i, '')} — Stay in ${v.city} | The Picnic Stories`
+    : `${v.name} — Luxury Picnic in ${v.city} | The Picnic Stories`
   const desc = clamp(v.description) ||
     `Book ${v.name}, a curated luxury picnic experience in ${v.city} by The Picnic Stories.`
   const priceText = Number(v.base_price) > 0
