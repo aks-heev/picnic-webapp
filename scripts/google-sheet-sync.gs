@@ -175,6 +175,17 @@ function syncBookings() {
 
     if (targetRow) {
       // FULL-ROW UPDATE in place (row number unchanged by writes).
+      // 🔴 EXCEPT the channel label. `Source`/`Channel` are hardcoded below to
+      // 'Website'/'Airbnb' because this sync originally only ever carried website
+      // bookings. It now also carries admin-entered ones, and on 2026-09-03 it
+      // relabelled four genuinely Direct bookings — Danyela and Aman became
+      // "Website", the two TerraCottage stays became "Airbnb". The DB cannot tell
+      // us the truth either: entry_source='admin' covers both a Direct walk-in AND
+      // an Airbnb reservation typed in by hand. So on UPDATE we leave whatever is
+      // in the cell alone — a human classification always beats a guess. New rows
+      // still get the default, which is right for the website flow that creates them.
+      delete values['Source'];
+      delete values['Channel'];
       writeRow(target, targetRow, values);
       if (!isStay) applyPicnicAddons(target, targetRow, ad.ids);
       updated++;
@@ -251,7 +262,7 @@ function pushExpenses(H) {
   const ix = name => head.findIndex(c => c.toLowerCase().indexOf(name.toLowerCase()) === 0);
   const cDate = ix('Date'), cBiz = ix('Business'), cCity = ix('City'),
         cCat = ix('Category'), cDesc = ix('Description'), cAmt = ix('Amount'),
-        cPaid = ix('Paid By'), cNotes = ix('Notes');
+        cPaid = ix('Paid By'), cNotes = ix('Notes'), cProp = ix('Property');
 
   const payload = [];
   const seen = {};
@@ -279,6 +290,9 @@ function pushExpenses(H) {
       category: cat || null, description: desc || null, amount: amount,
       paid_by: cPaid !== -1 ? (String(row[cPaid] || '').trim() || null) : null,
       notes:  cNotes !== -1 ? (String(row[cNotes] || '').trim() || null) : null,
+      // Property = what the bill covers (Umber | Ochre | Boho | 4th Floor | All TerraCottage).
+      // Deliberately NOT part of sheet_row_key: re-tagging a row updates it in place.
+      property: cProp !== -1 ? (String(row[cProp] || '').trim() || null) : null,
       sheet_row_key: key, synced_at: runStamp
     });
   }
@@ -378,6 +392,15 @@ function buildRowValues(b, v, isStay, ad, cost) {
       // number-formatting controls how many decimals are DISPLAYED; the stored
       // value stays exact so the derived total lands on total_amount.
       'Nightly Rate (₹)': (total != null && nights > 0) ? (total / nights) : '',
+      // 🔴 The sheet computes a stay's Gross as Nightly Rate x Nights + Additional
+      // Charges. The nightly rate written above is total_amount / nights, and
+      // total_amount ALREADY contains any additional charge — so leaving a value in
+      // this column counts it twice. It did: TCUMB-001 (Harshit Agarwal) read Gross
+      // 13,000 against a true 12,500 and invented a Rs 500 balance due, the moment
+      // backfilling booking #152 gave the sync a row to write. Same failure as the
+      // legacy Adhiraj column: a sheet-only field that a sheet formula sums and the
+      // sync also feeds. Anything extra belongs in total_amount, not here.
+      'Additional Charges (₹)': '',
       'Advance / Prepaid (₹)': b.advance_amount || '',
       'Booked On': bookedOnDate(b.created_at),
       'Booking Status': bookingStatus(b),
