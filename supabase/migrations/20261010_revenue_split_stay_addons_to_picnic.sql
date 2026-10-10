@@ -1,4 +1,4 @@
--- Stay-only + Celebration Stay (2026-10-10). NOT YET APPLIED: awaiting Aksheev's approval.
+-- Stay-only + Celebration Stay (2026-10-10). APPLIED live 2026-10-10 via apply_migration.
 -- TerraCottage stays will be sold stay-only, with the celebration setup sold as add-ons
 -- on the stay venue (booking_kind stays 'stay'). Before this change, a 'stay' booking put its
 -- ENTIRE total into stay_revenue, so setup add-ons would have been counted as stay revenue.
