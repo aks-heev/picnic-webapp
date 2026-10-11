@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { track, identifyUser } from './analytics.js'
 import { injectSpeedInsights } from '@vercel/speed-insights'
+import { SHARED_SETUP_LABELS } from './setup-labels.js'
 
 // --- perf helpers (2026-07-04): gate auto-advancing carousels so they don't
 // burn the main thread / battery when nobody is looking. Function declarations
@@ -1243,7 +1244,7 @@ function renderVenueDetail(venue, addOns = []) {
                 { label: 'Wax Candles',        icon: svgWrap('<line x1="12" y1="2" x2="12" y2="6"/><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>') },
                 { label: 'Electric Candles',   icon: svgWrap('<line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/>') },
                 { label: 'Macrame Tent',       icon: svgWrap('<path d="M2 20 L12 3 L22 20"/><line x1="2" y1="20" x2="22" y2="20"/><path d="M9.5 20 L12 14 L14.5 20"/>') },
-                { label: 'Macrame Umbrella',   icon: svgWrap('<path d="M23 12a11.05 11.05 0 0 0-22 0zm-5 7a3 3 0 0 1-6 0v-7"/>') },
+                { label: 'Picnic Umbrella',    icon: svgWrap('<path d="M23 12a11.05 11.05 0 0 0-22 0zm-5 7a3 3 0 0 1-6 0v-7"/>') },
                 { label: 'Portable Speaker',   icon: svgWrap('<rect x="4" y="2" width="16" height="20" rx="2"/><circle cx="12" cy="14" r="4"/><line x1="12" y1="6" x2="12.01" y2="6"/>') },
                 { label: 'Board with Message', icon: svgWrap('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>') },
                 { label: 'Cutlery & Essentials', icon: svgWrap('<line x1="8" y1="6" x2="8" y2="12"/><path d="M6.5 12 8 15.5 9.5 12"/><path d="M16 6v4a2 2 0 0 1-2 2h-.5l1 7.5"/><line x1="16" y1="6" x2="16" y2="12"/>') },
@@ -2301,12 +2302,8 @@ window.removePkgAdmImage = removePkgAdmImage
 // The setup every venue gets — also shown venue-independently on the
 // /packages page's Setting card. Venue-specific extras (metadata.includes)
 // are appended by venueSetupLabels() once a venue is in play.
-const SHARED_SETUP_LABELS = [
-  'Fresh Fruits', 'Fresh Flowers', 'Wax Candles', 'Electric Candles',
-  'Macrame Tent', 'Macrame Umbrella', 'Portable Speaker',
-  'Board with Message', 'Cutlery & Essentials',
-  'Setup & cleanup', 'Dedicated host support',
-]
+// SHARED_SETUP_LABELS itself lives in ./setup-labels.js (imported at the top)
+// so /brochure renders the same list.
 function venueSetupLabels(venue) {
   const meta = venue?.metadata || {}
   return [...SHARED_SETUP_LABELS, ...(meta.includes || [])]
