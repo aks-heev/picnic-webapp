@@ -3,13 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- Unlisted guest-facing brochure page (/brochure) (replaces sending the packages PDF).
-       noindex: reachable only by the link we send; not in nav or sitemap. /packages is the separate, indexed SEO page built by scripts/prerender-venues.mjs. -->
-  <meta name="robots" content="noindex, nofollow">
+  <!-- Public packages page (/brochure) — the web version of the packages PDF and,
+       per docs/PLAN_merge_packages_into_brochure_2026-10-11.md, the one public place
+       packages are described. Indexed and in the sitemap since Phase 1 (2026-10-11). -->
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="https://www.picnicstories.com/brochure">
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
-             script-src 'self' 'unsafe-inline' https://app.posthog.com https://us.i.posthog.com https://us-assets.i.posthog.com;
-             connect-src 'self' https://*.supabase.co https://app.posthog.com https://us.i.posthog.com https://us-assets.i.posthog.com;
+             script-src 'self' 'unsafe-inline' https://app.posthog.com https://us.i.posthog.com https://us-assets.i.posthog.com https://connect.facebook.net;
+             connect-src 'self' https://*.supabase.co https://app.posthog.com https://us.i.posthog.com https://us-assets.i.posthog.com https://connect.facebook.net https://www.facebook.com;
              style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
              font-src https://fonts.gstatic.com;
              img-src 'self' data: https:;">
@@ -27,8 +29,32 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,500;0,600;1,400;1,500&family=Be+Vietnam+Pro:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./brochure.css">
+
+  <!-- Meta Pixel — same pixel and deferred-load pattern as index.html. The fbq
+       stub queues PageView + brochure.js's ViewContent synchronously; only the
+       fbevents.js download waits for first interaction or idle (4s cap). -->
+  <script>
+  !function(f,b){if(f.fbq)return;var n=f.fbq=function(){n.callMethod?
+  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];
+  var done=false;
+  function load(){if(done)return;done=true;
+    var t=b.createElement('script');t.async=!0;
+    t.src='https://connect.facebook.net/en_US/fbevents.js';
+    var s=b.getElementsByTagName('script')[0];s.parentNode.insertBefore(t,s);}
+  ['pointerdown','keydown','touchstart','scroll'].forEach(function(e){
+    f.addEventListener(e,load,{once:true,passive:true});});
+  if('requestIdleCallback' in f){f.requestIdleCallback(load,{timeout:4000});}
+  else{setTimeout(load,3500);}
+  }(window,document);
+  fbq('init', '1366746648648321');
+  fbq('track', 'PageView');
+  </script>
+  <!-- End Meta Pixel Code -->
 </head>
 <body>
+  <noscript><img height="1" width="1" style="display:none" alt=""
+  src="https://www.facebook.com/tr?id=1366746648648321&ev=PageView&noscript=1"></noscript>
 
   <header class="pk-top">
     <a href="/" class="pk-brand">

@@ -1215,6 +1215,9 @@ async function main() {
     urls.push(packagesPage.url)
     console.log(`[prerender] packages page: /packages`)
   }
+  // /brochure is a Vite page (brochure.html), not prerendered here — listed so
+  // Google finds it (indexable since 2026-10-11, merge plan Phase 1).
+  urls.push(`${SITE}/brochure`)
 
   // Homepage itself (GSC fix 2026-07-15): inject real venue-card links into
   // #venues-grid so Googlebot's raw-HTML crawl of "/" — its highest-authority,

@@ -96,6 +96,7 @@ async function fillLivePrices() {
       if (!(p > 0)) continue
       if (!minById.has(r.package_id) || p < minById.get(r.package_id)) minById.set(r.package_id, p)
     }
+    const shown = []
     document.querySelectorAll('[data-pkg]').forEach(card => {
       const id = idByKey.get(card.dataset.pkg)
       // Package switched off in admin → don't advertise it here either. Only
@@ -103,7 +104,21 @@ async function fillLivePrices() {
       if (id === undefined) { if (idByKey.size) card.hidden = true; return }
       const min = minById.get(id)
       if (min) card.querySelector('[data-price]').textContent = inr(min)
+      shown.push({ key: card.dataset.pkg, min })
     })
+    // Meta Pixel ViewContent — same shape as showPackagesPage in app.js, so
+    // Events Manager numbers stay comparable across the two pages.
+    if (typeof window.fbq === 'function' && shown.length) {
+      const prices = shown.map(s => s.min).filter(p => p > 0)
+      const params = {
+        content_ids:  shown.map(s => s.key),
+        content_name: 'Picnic Packages',
+        content_type: 'product_group',
+        currency:     'INR',
+      }
+      if (prices.length) params.value = Math.min(...prices)
+      window.fbq('track', 'ViewContent', params)
+    }
   }
 
   if (!addRes.error && (addRes.data || []).length) {
