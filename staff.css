@@ -511,3 +511,92 @@ html, body {
 .stf-cl--ro { margin: 8px 0 0; }
 .stf-cl--ro li { font-size: 13px; color: var(--boho-text-medium); padding: 1px 0; }
 .stf-cl--ro li::before { content: '\2022\00a0'; color: var(--boho-text-light); }
+
+/* ===========================================================================
+   Guest review — collected in person on today's picnic card.
+   Tap Guest review → full-screen guest form → Done hands the list back.
+   =========================================================================== */
+
+.stf-review-btn { margin-top: 10px; }
+.stf-review-done {
+  margin-top: 10px;
+  min-height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 600;
+  color: var(--boho-accent-sage);
+}
+
+
+/* Guest mode sits above everything, including the sticky header (z 20) and
+   sheets (z 50). */
+.stf-guest {
+  position: fixed; inset: 0; z-index: 70;
+  background: var(--boho-cream);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+body[data-guest="1"] { overflow: hidden; }
+
+.stf-guest-inner {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: max(24px, env(safe-area-inset-top, 0px)) 20px calc(24px + env(safe-area-inset-bottom, 0px));
+  min-height: 100%;
+  display: flex; flex-direction: column;
+}
+.stf-guest-logo { border-radius: 50%; align-self: center; margin-bottom: 8px; }
+.stf-guest-title {
+  font-family: var(--font-serif);
+  font-size: 30px; font-weight: 600;
+  text-align: center;
+  margin: 0 0 4px;
+}
+.stf-guest-sub { text-align: center; color: var(--boho-text-medium); margin: 0 0 18px; font-size: 16px; }
+.stf-guest-form { display: flex; flex-direction: column; }
+.stf-guest-form .stf-label { margin-top: 16px; }
+.stf-label-note { color: var(--boho-text-light); font-size: 13px; }
+
+.stf-stars { display: flex; justify-content: center; gap: 6px; margin: 4px 0 8px; }
+.stf-star {
+  width: var(--tap); height: var(--tap);
+  border: none; background: transparent;
+  font-size: 44px; line-height: 1;
+  color: var(--boho-border);
+  cursor: pointer; padding: 0;
+}
+.stf-star[data-on="1"] { color: #d4a017; }
+
+.stf-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--boho-text-dark);
+  background: var(--boho-white);
+  border: 1px solid var(--boho-border);
+  border-radius: var(--radius-sm);
+  resize: vertical;
+}
+
+.stf-notice {
+  margin: 16px 0 18px;
+  font-size: 14px;
+  color: var(--boho-text-medium);
+}
+
+.stf-guest-err { color: var(--boho-accent-rose); font-size: 14px; margin: 10px 0 0; text-align: center; }
+
+.stf-guest-thanks { flex: 1; display: flex; flex-direction: column; justify-content: center; padding-bottom: 60px; }
+.stf-guest-thanks .stf-btn { margin-top: 12px; }
+
+/* Quiet on purpose: cancelling is the staff member's move, not the guest's. */
+.stf-guest-staff {
+  align-self: center;
+  margin-top: 28px;
+  min-height: 44px; padding: 0 18px;
+  border: none; background: transparent;
+  color: var(--boho-text-light);
+  font-family: var(--font-sans); font-size: 13px;
+  cursor: pointer;
+}

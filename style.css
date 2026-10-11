@@ -10823,3 +10823,76 @@ textarea.bcl-input { resize: vertical; }
   color: var(--boho-text-medium);
   margin: 10px 0 0;
 }
+
+/* ================================================================
+   PUBLIC — real guest reviews (homepage + venue page)
+   Rendered from public_reviews(); see fetchPublicReviews() in app.js.
+   ================================================================ */
+.testimonial-where {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--boho-text-medium, #6b5c4c);
+}
+.vd-reviews-note {
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+  color: var(--boho-text-medium, #6b5c4c);
+}
+
+/* ================================================================
+   ADMIN — Guest reviews (rvw)
+   Namespaced `rvw`; shares nothing with stt / bcl / abk.
+   ================================================================ */
+.rvw-summary { color: var(--boho-text-medium, #6b5c4c); font-size: 14px; margin: 0 0 12px; }
+.rvw-muted { color: var(--boho-text-medium, #6b5c4c); font-size: 14px; }
+.rvw-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 14px;
+}
+.rvw-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.rvw-filter {
+  min-height: 38px; padding: 0 14px;
+  border: 1px solid var(--boho-border, #e8ddd0);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--boho-text-dark, #2d1f14);
+  font-size: 14px; cursor: pointer;
+}
+.rvw-filter[data-on="1"] { background: #a84d66; border-color: #a84d66; color: #fff; }
+.rvw-n {
+  display: inline-block; min-width: 20px; margin-left: 4px; padding: 0 6px;
+  border-radius: 999px; background: rgba(45,31,20,.08); font-size: 12px;
+}
+.rvw-filter[data-on="1"] .rvw-n { background: rgba(255,255,255,.25); }
+.rvw-min-label { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--boho-text-medium, #6b5c4c); }
+.rvw-min { width: auto; min-width: 140px; }
+
+.rvw-card {
+  border: 1px solid var(--boho-border, #e8ddd0);
+  border-radius: 12px;
+  background: #fff;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+.rvw-card[data-status="hidden"] { opacity: .7; }
+.rvw-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+.rvw-stars { color: #c0821a; font-size: 18px; letter-spacing: 1px; }
+.rvw-badge {
+  font-size: 12px; font-weight: 600; text-transform: capitalize;
+  padding: 2px 9px; border-radius: 999px; border: 1px solid var(--boho-border, #e8ddd0);
+  background: #f7f1ea; color: var(--boho-text-medium, #6b5c4c);
+}
+.rvw-badge--pending  { background: #fdf6e3; border-color: #eddfb8; color: #8a6d1f; }
+.rvw-badge--approved { background: #eef2e9; border-color: #556343; color: #3f4a32; }
+.rvw-badge--live     { background: #a84d66; border-color: #a84d66; color: #fff; text-transform: none; }
+.rvw-text { margin: 4px 0; font-size: 15px; line-height: 1.5; color: var(--boho-text-dark, #2d1f14); }
+.rvw-by { margin: 0 0 8px; font-weight: 600; font-size: 14px; }
+.rvw-private {
+  margin: 0 0 8px; padding: 8px 10px;
+  background: #fdf0f3; border: 1px solid rgba(196,96,122,.3); border-radius: 8px;
+  font-size: 14px; color: #8c3f56;
+}
+.rvw-meta { margin: 0 0 6px; font-size: 13px; color: var(--boho-text-medium, #6b5c4c); line-height: 1.6; }
+.rvw-why { margin: 0 0 8px; font-size: 13px; font-style: italic; color: #8a6d1f; }
+.rvw-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.rvw-btn { min-height: 38px; }

@@ -1039,52 +1039,61 @@ function navigateHome() {
   setTimeout(() => document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
 }
 
-// ── Venue testimonials (placeholder quotes — swap for real ones as they come in) ─
-const VENUE_TESTIMONIALS = {
-  14: [ // Beige Cafe, Gurugram
-    { text: "The setup at Beige Cafe was straight out of Pinterest. We booked it for my wife's birthday and she cried happy tears. 10/10.", author: "Rohit K.", occasion: "Birthday" },
-    { text: "Came for a date night and the picnic setup was so intimate and thoughtful. The food was delicious. Perfect evening.", author: "Naina S.", occasion: "Date night" }
-  ],
-  15: [ // Terracottage Umber, Gurugram
-    { text: "Woke up to terracotta walls and golden light. It's the kind of place that slows you down. Absolutely loved every moment.", author: "Deepika & Rahul", occasion: "Anniversary stay" },
-    { text: "We did the overnight + picnic combo and it was magical. Felt like a proper escape without leaving NCR.", author: "Aisha M.", occasion: "Weekend getaway" }
-  ],
-  16: [ // Terracottage Ochre, Gurugram
-    { text: "The warm tones and cozy rooms made us never want to leave. Perfect for a slow weekend reset.", author: "Sanya & Rohit", occasion: "Weekend stay" },
-    { text: "Such a beautiful space. The terracotta aesthetic is stunning in person — even better than the photos.", author: "Komal T.", occasion: "Girls trip" }
-  ],
-  17: [ // Terracottage Sienna, Gurugram
-    { text: "Booked the whole-floor combo for our anniversary. Private, beautiful, with a picnic at sunset. Couldn't have asked for more.", author: "Ishaan & Meera", occasion: "Anniversary" },
-    { text: "The team was incredibly attentive and the space was immaculate. We're already planning a return trip.", author: "Siddharth P.", occasion: "Birthday celebration" }
-  ],
-  18: [ // The Sunroom, Gurugram
-    { text: "That skylight! The natural light in The Sunroom is unlike anything else. Our anniversary brunch photos were stunning.", author: "Priya V.", occasion: "Anniversary" },
-    { text: "Hidden gem of Gurugram — you'd never guess it's right in the city. So peaceful, so beautiful.", author: "Ishaan T.", occasion: "Date night" }
-  ],
-  19: [ // Castle Valley, Jaipur
-    { text: "The old stone walls and that view made us feel like we'd stepped into a fairytale. Perfect setting for our anniversary.", author: "Neha & Vikas", occasion: "Anniversary" },
-    { text: "Castle Valley lives up to its name. Regal, quiet, breathtaking — and the team made us feel like royalty.", author: "Pooja M.", occasion: "Birthday" }
-  ],
-  20: [ // Om Niwas Suite Hotel, Jaipur
-    { text: "A heritage property with a picnic in the garden — everything about this was perfect for our anniversary dinner.", author: "Siddharth P.", occasion: "Anniversary" },
-    { text: "We've done picnics at a few places and Om Niwas is in a league of its own. The Rajasthani vibe hits differently.", author: "Mansi & Karan", occasion: "Date night" }
-  ],
-  21: [ // Once Upon A Time At The Bagh, Jaipur
-    { text: "The garden is so lush and private. Our daughter's birthday was a storybook picnic — exactly as the name suggests.", author: "Seema T.", occasion: "Birthday" },
-    { text: "One of those experiences that makes you put down your phone and just be present. Truly magical.", author: "Arjun & Kavya", occasion: "Date night" }
-  ],
-  22: [ // Countryside Offgrid
-    { text: "Drove out of the city and felt like we'd gone to another world. The quiet here is rare — and so needed.", author: "Prateek N.", occasion: "Weekend trip" },
-    { text: "Booked it as an anniversary surprise. My husband still talks about it. The picnic under the open sky was surreal.", author: "Divya S.", occasion: "Anniversary" }
-  ],
-  23: [ // House of Amer Stay, Jaipur
-    { text: "Woke up to birdsong with the Aravalli hills in the distance. The Airbnb + picnic combo is something truly special.", author: "Ritu & Abhishek", occasion: "Anniversary stay" },
-    { text: "For anyone wanting to experience old Jaipur in comfort — this is it. The host was warm and the setup was beautiful.", author: "Shreya K.", occasion: "Weekend getaway" }
-  ],
-  24: [ // House of Amer (Cafe), Jaipur
-    { text: "The setting at House of Amer feels like a period film set. We had our anniversary picnic here and it exceeded every expectation.", author: "Shweta & Dev", occasion: "Anniversary" },
-    { text: "Stunning property, thoughtful setup, great food. Genuinely one of the best experiences we've had in Jaipur.", author: "Tarun M.", occasion: "Date night" }
-  ]
+// ── Guest reviews (real, collected in person on /staff) ──────────────────────
+// Replaced the hard-coded per-venue and homepage quotes on 2026-10-11: those
+// were invented placeholder text attributed to made-up names. The site now
+// shows only what public_reviews() returns — approved, guest-consented, at or
+// above site_settings.reviews_min_public_rating — and hides the section
+// entirely when there is nothing real to show.
+const publicReviewsCache = new Map()   // 'venueId|all:limit' -> Promise<rows>
+
+function fetchPublicReviews(venueId = null, limit = 12) {
+  const key = (venueId == null ? 'all' : String(venueId)) + ':' + limit
+  if (!publicReviewsCache.has(key)) {
+    const p = supabase.rpc('public_reviews', { p_venue_id: venueId, p_limit: limit })
+      .then(({ data, error }) => {
+        if (error) throw error
+        return Array.isArray(data) ? data : []
+      })
+      .catch(err => {
+        console.warn('[reviews] public_reviews failed', err)
+        publicReviewsCache.delete(key)   // retry on the next view
+        return []
+      })
+    publicReviewsCache.set(key, p)
+  }
+  return publicReviewsCache.get(key)
+}
+
+function reviewStarsText(n) {
+  const v = Math.max(0, Math.min(5, Number(n) || 0))
+  return '★'.repeat(v) + '☆'.repeat(5 - v)
+}
+
+async function fillVenueReviews(container, venueId) {
+  const slot = container.querySelector(`.vd-reviews-slot[data-venue-id="${venueId}"]`)
+  if (!slot) return
+  const rows = await fetchPublicReviews(venueId, 6)
+  // The guest may have navigated to another venue while this was in flight.
+  if (!slot.isConnected || !rows.length) return
+  slot.innerHTML = `
+            <div class="vd-section vd-testimonials">
+              <h2 class="vd-section-title">What guests say</h2>
+              <div class="vd-testimonial-grid">
+                ${rows.map(r => `
+                  <div class="vd-testimonial-card">
+                    <div class="vd-testimonial-stars" aria-label="${Number(r.rating)} out of 5">${reviewStarsText(r.rating)}</div>
+                    <p class="vd-testimonial-text">"${escapeHtml(r.review_text)}"</p>
+                    <div class="vd-testimonial-meta">
+                      <span class="vd-testimonial-author">— ${escapeHtml(r.display_name)}</span>
+                      <span class="vd-testimonial-occasion">${escapeHtml([r.occasion, r.month].filter(Boolean).join(' · '))}</span>
+                    </div>
+                  </div>`).join('')}
+              </div>
+              <p class="vd-reviews-note">Reviews from guests, collected at the end of their picnic.</p>
+            </div>
+            <hr class="vd-divider">`
+  slot.hidden = false
 }
 
 // Render full venue detail into venue-detail-page
@@ -1308,26 +1317,8 @@ function renderVenueDetail(venue, addOns = []) {
             <hr class="vd-divider">`
             })()}
 
-            ${(function() {
-              const quotes = VENUE_TESTIMONIALS[venue.id]
-              if (!quotes?.length) return ''
-              return `
-            <div class="vd-section vd-testimonials">
-              <h2 class="vd-section-title">What guests say</h2>
-              <div class="vd-testimonial-grid">
-                ${quotes.map(q => `
-                  <div class="vd-testimonial-card">
-                    <div class="vd-testimonial-stars">★★★★★</div>
-                    <p class="vd-testimonial-text">"${escapeHtml(q.text)}"</p>
-                    <div class="vd-testimonial-meta">
-                      <span class="vd-testimonial-author">— ${escapeHtml(q.author)}</span>
-                      ${q.occasion ? `<span class="vd-testimonial-occasion">${escapeHtml(q.occasion)}</span>` : ''}
-                    </div>
-                  </div>`).join('')}
-              </div>
-            </div>
-            <hr class="vd-divider">`
-            })()}
+            <div class="vd-reviews-slot" data-venue-id="${Number(venue.id)}" hidden></div>
+
 
             ${(function() {
               if (venue.type !== 'self_managed' || !venue.metadata) return ''
@@ -1497,6 +1488,8 @@ function renderVenueDetail(venue, addOns = []) {
 
     </div><!-- /vd-wrap -->
   `
+
+  fillVenueReviews(container, Number(venue.id))
 
   // ---- Image slider (touch swipe + auto-advance + dot indicators) ----
   if (galleryImgs.length > 1) {
@@ -8325,6 +8318,192 @@ async function sttDeactivateToken(id) {
 window.sttDeactivateToken = sttDeactivateToken
 
 
+// ================================================================
+// GUEST REVIEWS (rvw)
+// ================================================================
+// Reviews are collected in person on /staff (staff_submit_review) and land
+// here as 'pending'. Nothing reaches the website until it is approved here AND
+// the guest ticked consent AND the rating meets site_settings
+// .reviews_min_public_rating — public_reviews() enforces all three server-side,
+// so this panel cannot publish something the guest did not agree to.
+//
+// private_feedback is for the owner only: it is never returned by
+// public_reviews(). Reads booking_reviews directly under admin-only RLS.
+//
+// Namespaced `rvw`; shares no state or CSS with stt / bcl / abk.
+
+let rvw = { filter: 'pending', minRating: 4, rows: [] }
+
+function rvwStars(n) {
+  const v = Math.max(0, Math.min(5, Number(n) || 0))
+  return '★'.repeat(v) + '☆'.repeat(5 - v)
+}
+
+function rvwWhen(iso) {
+  try {
+    return new Date(iso).toLocaleString('en-IN', {
+      day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+      hour12: true, timeZone: 'Asia/Kolkata',
+    })
+  } catch { return '' }
+}
+
+// Mirrors public.review_display_name() — the name the website prints.
+function rvwDisplayName(full) {
+  const parts = String(full || '').trim().replace(/^(mr|mrs|ms|miss|dr)\.?\s+/i, '').split(/\s+/).filter(Boolean)
+  if (!parts.length) return 'Guest'
+  const cap = w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
+  return parts.length === 1 ? cap(parts[0]) : cap(parts[0]) + ' ' + parts[parts.length - 1].charAt(0).toUpperCase() + '.'
+}
+
+function rvwIsPublic(r) {
+  return r.status === 'approved' && r.publish_consent && r.rating >= rvw.minRating && !!r.review_text
+}
+
+async function loadReviewsAdmin() {
+  if (!appState.session) return
+  const host = document.getElementById('rvw-list')
+  if (!host) return
+  host.innerHTML = '<p class="loading-text">Loading reviews…</p>'
+  try {
+    const [revRes, setRes] = await Promise.all([
+      supabase.from('booking_reviews')
+        .select('id, booking_id, rating, review_text, private_feedback, publish_consent, status, collected_by, created_at, moderated_at, bookings(full_name, preferred_date, occasion, venues(name, city))')
+        .order('created_at', { ascending: false })
+        .limit(500),
+      supabase.from('site_settings').select('value').eq('key', 'reviews_min_public_rating').maybeSingle(),
+    ])
+    if (revRes.error) throw revRes.error
+    rvw.rows = revRes.data || []
+    const min = parseInt(setRes && setRes.data && setRes.data.value, 10)
+    rvw.minRating = Number.isFinite(min) ? min : 4
+    rvwRender()
+  } catch (err) {
+    console.error('[rvw] load failed', err)
+    const missing = err && (err.code === '42P01' || err.code === 'PGRST205' || /booking_reviews/.test(err.message || ''))
+    host.innerHTML = `<p class="rvw-muted">${missing
+      ? 'Reviews are not switched on yet — the guest_reviews migration has not been applied.'
+      : 'Could not load reviews.'}</p>`
+  }
+}
+
+function rvwRender() {
+  const host = document.getElementById('rvw-list')
+  const summary = document.getElementById('rvw-summary')
+  const minSel = document.getElementById('rvw-min')
+  if (!host) return
+  if (minSel) minSel.value = String(rvw.minRating)
+
+  const all = rvw.rows
+  const count = s => all.filter(r => r.status === s).length
+  document.querySelectorAll('.rvw-filter').forEach(b => {
+    const f = b.dataset.f
+    b.dataset.on = f === rvw.filter ? '1' : '0'
+    const n = f === 'all' ? all.length : count(f)
+    const badge = b.querySelector('.rvw-n')
+    if (badge) badge.textContent = n
+  })
+
+  // Honest internal picture: every rating, not just the published ones.
+  if (summary) {
+    if (!all.length) summary.textContent = ''
+    else {
+      const avg = all.reduce((a, r) => a + Number(r.rating || 0), 0) / all.length
+      const live = all.filter(rvwIsPublic).length
+      summary.textContent = `${all.length} review${all.length === 1 ? '' : 's'} · average ${avg.toFixed(1)}★ across all ratings · ${live} live on the website`
+    }
+  }
+
+  const rows = rvw.filter === 'all' ? all : all.filter(r => r.status === rvw.filter)
+  if (!rows.length) {
+    host.innerHTML = `<p class="rvw-muted">${rvw.filter === 'pending' ? 'Nothing waiting for approval.' : 'No reviews here.'}</p>`
+    return
+  }
+
+  host.innerHTML = rows.map(r => {
+    const b = r.bookings || {}
+    const v = b.venues || {}
+    const isPublic = rvwIsPublic(r)
+    let why = ''
+    if (!isPublic) {
+      if (!r.publish_consent) why = 'Marked not for publishing — never shown publicly'
+      else if (!r.review_text) why = 'Rating only, no text — not shown'
+      else if (r.rating < rvw.minRating) why = `Below the ${rvw.minRating}★ website threshold — not shown`
+      else if (r.status !== 'approved') why = 'Will show on the website once approved'
+    }
+    const btn = (status, label, cls) => r.status === status ? '' :
+      `<button type="button" class="btn ${cls} rvw-btn" onclick="rvwSetStatus(${Number(r.id)}, '${status}')">${label}</button>`
+    return `
+      <div class="rvw-card" data-status="${escapeHtml(r.status)}">
+        <div class="rvw-head">
+          <span class="rvw-stars" aria-label="${Number(r.rating)} out of 5">${rvwStars(r.rating)}</span>
+          <span class="rvw-badge rvw-badge--${escapeHtml(r.status)}">${escapeHtml(r.status)}</span>
+          ${isPublic ? '<span class="rvw-badge rvw-badge--live">Live on site</span>' : ''}
+        </div>
+        ${r.review_text
+          ? `<p class="rvw-text">“${escapeHtml(r.review_text)}”</p>`
+          : '<p class="rvw-muted">No written review.</p>'}
+        <p class="rvw-by">— ${escapeHtml(rvwDisplayName(b.full_name))} <span class="rvw-muted">(as shown on the website)</span></p>
+        ${r.private_feedback ? `<div class="rvw-private"><strong>Private feedback:</strong> ${escapeHtml(r.private_feedback)}</div>` : ''}
+        <p class="rvw-meta">
+          <span class="adm-id" title="Booking ID">#${escapeHtml(r.booking_id)}</span>
+          ${escapeHtml(b.full_name || '')} · ${escapeHtml(v.name || 'Venue not set')}${v.city ? ', ' + escapeHtml(v.city) : ''}
+          · ${escapeHtml(b.preferred_date || '')}${b.occasion ? ' · ' + escapeHtml(b.occasion) : ''}
+          <br>Collected by ${escapeHtml(r.collected_by || 'unknown')} · ${escapeHtml(rvwWhen(r.created_at))}
+        </p>
+        ${why ? `<p class="rvw-why">${escapeHtml(why)}</p>` : ''}
+        <div class="rvw-actions">
+          ${btn('approved', 'Approve', 'btn--primary')}
+          ${btn('hidden', 'Hide', 'btn--secondary')}
+          ${btn('pending', 'Back to pending', 'btn--secondary')}
+        </div>
+      </div>`
+  }).join('')
+}
+
+async function rvwSetStatus(id, status) {
+  try {
+    const { error } = await supabase.rpc('admin_set_review_status', { p_review_id: id, p_status: status })
+    if (error) throw error
+    const row = rvw.rows.find(r => r.id === id)
+    if (row) { row.status = status; row.moderated_at = new Date().toISOString() }
+    rvwRender()
+    showToast(status === 'approved' ? 'Review approved' : status === 'hidden' ? 'Review hidden' : 'Moved back to pending')
+  } catch (err) {
+    console.error('[rvw] status failed', err)
+    showToast('Could not update review: ' + (err.message || 'error'), 'error')
+  }
+}
+
+function rvwSetFilter(f) {
+  rvw.filter = f
+  rvwRender()
+}
+
+async function rvwSetMinRating(value) {
+  const n = parseInt(value, 10)
+  if (!(n >= 1 && n <= 5)) return
+  try {
+    const { error } = await supabase.from('site_settings')
+      .update({ value: String(n), updated_at: new Date().toISOString() })
+      .eq('key', 'reviews_min_public_rating')
+    if (error) throw error
+    rvw.minRating = n
+    rvwRender()
+    showToast(n === 1 ? 'Website now shows every consented review' : `Website now shows ${n}★ and up`)
+  } catch (err) {
+    console.error('[rvw] min rating failed', err)
+    showToast('Could not save setting', 'error')
+    rvwRender()
+  }
+}
+
+window.loadReviewsAdmin = loadReviewsAdmin
+window.rvwSetStatus = rvwSetStatus
+window.rvwSetFilter = rvwSetFilter
+window.rvwSetMinRating = rvwSetMinRating
+
+
 // Tab switching
 function switchTab(tabName) {
   document.querySelectorAll('.tab-content').forEach(content => {
@@ -8371,6 +8550,8 @@ function switchTab(tabName) {
     loadTeamsManager()
   } else if (tabName === 'staff-ops') {
     loadStaffOps()
+  } else if (tabName === 'reviews') {
+    loadReviewsAdmin()
   }
 }
 
@@ -10567,23 +10748,24 @@ function showOrderConfirmation(order) {
   `
 }
 
-function loadTestimonials() {
+async function loadTestimonials() {
   const testimonialsContainer = document.getElementById('testimonials-container')
   if (!testimonialsContainer) return
-  const testimonials = [
-    { text: "The Picnic Stories created the most magical evening for our anniversary. Every detail was perfect!", author: "Priya & Rahul", rating: "★★★★★" },
-    { text: "Professional service and stunning setup. Our corporate team loved the boho picnic experience.", author: "Tech Solutions Inc.", rating: "★★★★★" },
-    
-    { text: "Absolutely beautiful picnic setup in Jaipur. The food was delicious and the decor was breathtaking!", author: "Anjali M.", rating: "★★★★★" },
-  ]
-
-  testimonialsContainer.innerHTML = testimonials.map(t => `
+  const section = testimonialsContainer.closest('.testimonials')
+  // Hidden until real reviews arrive — an empty "What Our Customers Say" block
+  // reads worse than no block.
+  if (section) section.hidden = true
+  const rows = await fetchPublicReviews(null, 6)
+  if (!rows.length) return
+  testimonialsContainer.innerHTML = rows.map(r => `
     <div class="testimonial-card">
-      <div class="testimonial-rating">${t.rating}</div>
-      <p class="testimonial-text">"${t.text}"</p>
-      <p class="testimonial-author">— ${t.author}</p>
+      <div class="testimonial-rating" aria-label="${Number(r.rating)} out of 5">${reviewStarsText(r.rating)}</div>
+      <p class="testimonial-text">"${escapeHtml(r.review_text)}"</p>
+      <p class="testimonial-author">— ${escapeHtml(r.display_name)}</p>
+      <p class="testimonial-where">${escapeHtml([r.venue_name, r.city, r.month].filter(Boolean).join(' · '))}</p>
     </div>
   `).join('')
+  if (section) section.hidden = false
 }
 
 // ── Navbar state: transparent over hero, solid elsewhere ─────

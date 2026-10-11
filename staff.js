@@ -60,6 +60,9 @@ const LS_TOKEN = 'pst_staff_token'
 const LS_CACHE = 'pst_staff_cache'
 const LS_QUEUE = 'pst_staff_queue'
 const LS_TAB   = 'pst_staff_tab'
+// Guest-review mode. Persisted so a reload / pull-to-refresh while the guest
+// holds the phone lands back on the review screen, never on the list.
+const LS_GUEST = 'pst_staff_guest'
 
 const SPINE = ['reached', 'setup_done', 'payment_received', 'wrapped']
 const CHIPS = ['guests_arrived', 'guests_left']
@@ -95,7 +98,8 @@ const ACTION_LABEL = {
 
 // Errors that will never succeed on retry — drop these from the queue instead
 // of spinning forever. Anything else (network, 5xx) stays queued.
-const TERMINAL_ERRORS = new Set(['unknown_step', 'not_today', 'bad_amount', 'out_of_order', 'invalid_token', 'wrong_kind', 'unknown_item'])
+const TERMINAL_ERRORS = new Set(['unknown_step', 'not_today', 'bad_amount', 'out_of_order', 'invalid_token', 'wrong_kind', 'unknown_item',
+                                 'bad_rating', 'too_long'])
 
 const ERROR_TEXT = {
   invalid_token: 'This link is no longer valid.',
@@ -104,7 +108,9 @@ const ERROR_TEXT = {
   bad_amount:    'Amount cannot be negative.',
   out_of_order:  'Do the previous step first.',
   wrong_kind:    'That step does not apply to this booking.',
-  unknown_item:  'That checklist item changed — reloading.'
+  unknown_item:  'That checklist item changed — reloading.',
+  bad_rating:    'Review not saved: rating missing.',
+  too_long:      'Review not saved: text too long.'
 }
 
 /* -------------------------------------------------------------------- state */
@@ -115,6 +121,11 @@ let queue = load(LS_QUEUE, [])
 let flushing = false
 let refreshTimer = null
 let tab = load(LS_TAB, 'picnic')   // 'picnic' | 'airbnb'
+let reviewedIds = new Set()   // today's bookings that already have a review on the server
+// False when the server has no staff_reviewed_ids RPC yet (migration not
+// applied) — the review button is hidden rather than offered and failing.
+let reviewsEnabled = true
+let guest = load(LS_GUEST, null)  // { booking_id, venue, name, submitted } while the guest holds the phone (name = display preview only)
 
 /* --------------------------------------------------------------- dom lookup */
 
@@ -131,7 +142,19 @@ const el = {
   payGuest:  $('stf-pay-guest'),
   payAmount: $('stf-pay-amount'),
   payOk:     $('stf-pay-confirm'),
-  payCancel: $('stf-pay-cancel')
+  payCancel: $('stf-pay-cancel'),
+  header:      document.querySelector('.stf-header'),
+  guestWrap:   $('stf-guest'),
+  guestForm:   $('stf-guest-form'),
+  guestVenue:  $('stf-guest-venue'),
+  guestText:   $('stf-guest-text'),
+  guestPriv:   $('stf-guest-private'),
+  guestNotice: $('stf-guest-notice'),
+  guestSubmit: $('stf-guest-submit'),
+  guestErr:    $('stf-guest-err'),
+  guestThanks: $('stf-guest-thanks'),
+  guestDone:   $('stf-guest-done'),
+  guestCancel: $('stf-guest-cancel')
 }
 
 /* ----------------------------------------------------------------- storage */
@@ -312,6 +335,9 @@ function nextStayStep (st) {
 
 function render () {
   if (!payload) return
+  // 🔴 While a guest holds the phone, never paint the list — it carries every
+  // guest's name and phone number for today.
+  if (guest) return
   const events = payload.events || []
   const staffName = payload.staff && payload.staff.name ? payload.staff.name : ''
   const dateText = payload.date
@@ -466,7 +492,22 @@ function cardHtml (ev) {
     ${log.length ? `<ul class="stf-timeline">${timeline}</ul>` : ''}
     ${action}
     <div class="stf-chips">${chips}</div>
+    ${reviewRowHtml(ev, done)}
   </article>`
+}
+
+/* Guest review entry point. Offered once setup is done — guests are usually
+   gone before wrap-up, so gating on 'wrapped' would miss them. Picnic cards
+   only (stays are out of scope by the owner's call, 2026-10-11). */
+function isReviewed (id) {
+  return reviewedIds.has(id) || queue.some(q => q.review && q.booking_id === id)
+}
+
+function reviewRowHtml (ev, done) {
+  if (!reviewsEnabled) return ''
+  if (isReviewed(ev.id)) return '<div class="stf-review-done">\u2713 Guest review collected</div>'
+  if (!done.has('setup_done')) return ''
+  return `<button class="stf-btn stf-btn--ghost stf-review-btn" data-act="review" data-id="${ev.id}">Guest review</button>`
 }
 
 /* --------------------------------------------------------------------- tabs */
@@ -696,6 +737,9 @@ function wireCards () {
       else enqueue(id, step, null, null)
     })
   })
+  el.main.querySelectorAll('[data-act="review"]').forEach(btn => {
+    btn.addEventListener('click', () => startGuestReview(Number(btn.dataset.id)))
+  })
   el.main.querySelectorAll('[data-act="tick"]').forEach(box => {
     box.addEventListener('change', () => enqueueTick(Number(box.dataset.id), box.dataset.ref, box.checked))
   })
@@ -765,7 +809,16 @@ async function flush () {
       const job = queue[0]
       let data
       try {
-        data = (job.ref
+        data = (job.review
+          ? await rpc('staff_submit_review', {
+              p_token: token,
+              p_booking_id: job.booking_id,
+              p_rating: job.review.rating,
+              p_review_text: job.review.text,
+              p_private_feedback: job.review.private,
+              p_publish_consent: job.review.consent
+            })
+          : job.ref
           ? await rpc('staff_set_checklist_tick', {
               p_token: token,
               p_booking_id: job.booking_id,
@@ -794,7 +847,8 @@ async function flush () {
         // queue entry disappears while payload still holds the pre-tap log, the
         // tick vanishes and the button reverts — the staff member sees their tap
         // undo itself. Caught in the Phase 3 browser test.
-        if (job.ref) applyServerChecklist(job.booking_id, data.checklist)
+        if (job.review) markReviewed(job.booking_id)
+        else if (job.ref) applyServerChecklist(job.booking_id, data.checklist)
         else applyServerLog(job.booking_id, data.log)
         queue.shift()
         saveQueue()
@@ -850,13 +904,17 @@ async function refresh (quiet) {
   if (!token) { showNoAccess(); return }
   if (!quiet) el.refresh.dataset.busy = '1'
   try {
-    const data = await rpc('staff_today', { p_token: token })
+    const [data] = await Promise.all([
+      rpc('staff_today', { p_token: token }),
+      loadReviewedIds()
+    ])
     if (!data || !data.ok) {
       if (data && data.error === 'invalid_token') { showNoAccess(); return }
       throw new Error('bad payload')
     }
     payload = data
-    save(LS_CACHE, data)
+    payload.reviewed_ids = [...reviewedIds]
+    save(LS_CACHE, payload)
     el.main.hidden = false
     el.noaccess.hidden = true
     render()
@@ -880,6 +938,159 @@ async function refresh (quiet) {
   }
 }
 
+/* ------------------------------------------------------------ guest review */
+
+/* Which of today's bookings already have a review. Kept out of staff_today on
+   purpose (that payload has two allowlists and is load-bearing); this returns
+   booking ids only. A 404 means the migration has not been applied yet: turn
+   the feature off quietly instead of showing a button that cannot work. */
+async function loadReviewedIds () {
+  try {
+    const r = await rpc('staff_reviewed_ids', { p_token: token })
+    if (r && r.ok && Array.isArray(r.ids)) {
+      reviewedIds = new Set(r.ids.map(Number))
+      reviewsEnabled = true
+    }
+  } catch (err) {
+    if (err && err.status === 404) reviewsEnabled = false
+    // network errors: keep whatever we knew
+  }
+}
+
+function markReviewed (bookingId) {
+  reviewedIds.add(bookingId)
+  if (payload) { payload.reviewed_ids = [...reviewedIds]; save(LS_CACHE, payload) }
+}
+
+// 'Riya Sharma' -> 'Riya S.'   'Riya' -> 'Riya'
+// Preview only — the published name is derived server-side by
+// review_display_name(bookings.full_name). Keep the two rules in step.
+function shortName (full) {
+  const parts = String(full || '').trim().replace(/^(mr|mrs|ms|miss|dr)\.?\s+/i, '').split(/\s+/).filter(Boolean)
+  if (!parts.length) return 'Guest'
+  const first = parts[0].charAt(0).toUpperCase() + parts[0].slice(1)
+  if (parts.length === 1) return first.slice(0, 40)
+  return (first + ' ' + parts[parts.length - 1].charAt(0).toUpperCase() + '.').slice(0, 40)
+}
+
+// No unlock code (owner's call, 2026-10-11: "we trust our guests"). The list is
+// still removed from the DOM while the guest holds the phone, because the risk
+// is an accidental back-swipe onto other guests' phone numbers, not intent.
+function startGuestReview (bookingId) {
+  const ev = (payload.events || []).find(e => e.id === bookingId)
+  if (!ev || isReviewed(bookingId)) return
+  guest = {
+    booking_id: bookingId,
+    venue: (ev.venue && ev.venue.name) || '',
+    name: shortName(ev.guest_name),
+    submitted: false
+  }
+  save(LS_GUEST, guest)
+  resetGuestForm()
+  enterGuestMode()
+}
+
+let rating = 0
+
+function resetGuestForm () {
+  rating = 0
+  paintStars()
+  el.guestText.value = ''
+  el.guestPriv.value = ''
+  el.guestErr.hidden = true
+  syncSubmit()
+}
+
+function paintStars () {
+  el.guestWrap.querySelectorAll('.stf-star').forEach(b => {
+    const v = Number(b.dataset.v)
+    b.dataset.on = v <= rating ? '1' : '0'
+    b.setAttribute('aria-checked', v === rating ? 'true' : 'false')
+  })
+}
+
+function syncSubmit () {
+  el.guestSubmit.disabled = !(rating >= 1)
+}
+
+function enterGuestMode () {
+  // Strip every trace of today's list from the DOM, not just cover it.
+  el.main.innerHTML = ''
+  el.main.hidden = true
+  el.header.hidden = true
+  el.payWrap.hidden = true
+  document.body.dataset.guest = '1'
+  el.guestVenue.textContent = guest.venue ? `at ${guest.venue}` : ''
+  el.guestForm.hidden = !!guest.submitted
+  el.guestThanks.hidden = !guest.submitted
+  el.guestCancel.hidden = !!guest.submitted
+  el.guestNotice.textContent = `Your review may appear on picnicstories.com as \u201c${guest.name || 'Guest'}\u201d.`
+  syncSubmit()
+  el.guestWrap.hidden = false
+  el.guestWrap.scrollTop = 0
+  // Swallow the back gesture / button while the guest has the phone.
+  history.pushState({ stfGuest: 1 }, '', location.href)
+}
+
+function exitGuestMode () {
+  guest = null
+  save(LS_GUEST, null)
+  try { localStorage.removeItem(LS_GUEST) } catch { /* ignore */ }
+  el.guestWrap.hidden = true
+  delete document.body.dataset.guest
+  el.header.hidden = false
+  el.main.hidden = false
+  resetGuestForm()
+  render()
+  window.scrollTo({ top: 0 })
+}
+
+window.addEventListener('popstate', () => {
+  if (guest) history.pushState({ stfGuest: 1 }, '', location.href)
+})
+
+el.guestWrap.querySelectorAll('.stf-star').forEach(b => {
+  b.addEventListener('click', () => { rating = Number(b.dataset.v); paintStars(); syncSubmit() })
+})
+
+el.guestForm.addEventListener('submit', e => {
+  e.preventDefault()
+  if (!guest || guest.submitted) return
+  if (rating < 1) { syncSubmit(); return }
+  const bookingId = guest.booking_id
+  if (!queue.some(q => q.review && q.booking_id === bookingId)) {
+    queue.push({
+      booking_id: bookingId,
+      review: {
+        rating,
+        text: el.guestText.value.trim() || null,
+        private: el.guestPriv.value.trim() || null,
+        consent: true   // shown a publish notice on the form; no tick-box by owner's call
+      },
+      at: new Date().toISOString(),
+      tries: 0
+    })
+    saveQueue()
+  }
+  guest.submitted = true
+  save(LS_GUEST, guest)
+  el.guestForm.hidden = true
+  el.guestThanks.hidden = false
+  el.guestCancel.hidden = true
+  el.guestWrap.scrollTop = 0
+  // Offline is fine: the job sits in the same retry queue as step taps and
+  // staff_submit_review is idempotent per booking (ON CONFLICT DO NOTHING).
+  flush()
+})
+
+el.guestDone.addEventListener('click', () => {
+  exitGuestMode()
+  toast('Review saved \u2014 thank you')
+})
+el.guestCancel.addEventListener('click', () => {
+  exitGuestMode()
+})
+
 /* ---------------------------------------------------------------------- boot */
 
 el.refresh.addEventListener('click', () => { refresh(false); flush() })
@@ -895,11 +1106,16 @@ window.addEventListener('online', () => { paintPip(); flush(); refresh(true) })
 window.addEventListener('offline', paintPip)
 
 token = resolveToken()
+if (guest) enterGuestMode()          // locked before anything else can paint
 if (!token) {
   showNoAccess()
 } else {
   const cached = load(LS_CACHE, null)
-  if (cached) { payload = cached; render() }      // paint instantly, then update
+  if (cached) {                                   // paint instantly, then update
+    payload = cached
+    reviewedIds = new Set(cached.reviewed_ids || [])
+    render()
+  }
   refresh(true)
   flush()
   refreshTimer = setInterval(() => {

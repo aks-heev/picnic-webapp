@@ -76,6 +76,50 @@
     </div>
   </div>
 
+  <!-- Guest mode: full screen. While it is up, #stf-main is emptied and the header hidden,
+       so a stray back-swipe can never show the guest other bookings' phone numbers. -->
+  <section id="stf-guest" class="stf-guest" hidden aria-label="Review your picnic">
+    <div class="stf-guest-inner">
+      <img src="/logo-mark.png" alt="The Picnic Stories" class="stf-guest-logo" width="48" height="48">
+
+      <form id="stf-guest-form" class="stf-guest-form" novalidate>
+        <h2 class="stf-guest-title">How was your picnic?</h2>
+        <p id="stf-guest-venue" class="stf-guest-sub"></p>
+
+        <div class="stf-stars" role="radiogroup" aria-label="Rating out of 5">
+          <button type="button" class="stf-star" data-v="1" role="radio" aria-checked="false" aria-label="1 star">&#9733;</button>
+          <button type="button" class="stf-star" data-v="2" role="radio" aria-checked="false" aria-label="2 stars">&#9733;</button>
+          <button type="button" class="stf-star" data-v="3" role="radio" aria-checked="false" aria-label="3 stars">&#9733;</button>
+          <button type="button" class="stf-star" data-v="4" role="radio" aria-checked="false" aria-label="4 stars">&#9733;</button>
+          <button type="button" class="stf-star" data-v="5" role="radio" aria-checked="false" aria-label="5 stars">&#9733;</button>
+        </div>
+
+        <label class="stf-label" for="stf-guest-text">Your review</label>
+        <textarea id="stf-guest-text" class="stf-textarea" rows="4" maxlength="1000"
+                  placeholder="What did you like? What was the occasion?"></textarea>
+
+        <label class="stf-label" for="stf-guest-private">Anything we could do better? <span class="stf-label-note">Only our team sees this.</span></label>
+        <textarea id="stf-guest-private" class="stf-textarea" rows="2" maxlength="1000"></textarea>
+
+        <!-- Notice, not a tick-box (owner's call, 2026-10-11). Kept visible so a
+             guest is never published without knowing. The name is never asked:
+             it comes from the booking, shown as first name + last initial. -->
+        <p id="stf-guest-notice" class="stf-notice"></p>
+
+        <button id="stf-guest-submit" class="stf-btn stf-btn--primary" type="submit" disabled>Submit review</button>
+        <p id="stf-guest-err" class="stf-guest-err" role="alert" hidden></p>
+      </form>
+
+      <div id="stf-guest-thanks" class="stf-guest-thanks" hidden>
+        <h2 class="stf-guest-title">Thank you!</h2>
+        <p class="stf-guest-sub">Please hand the phone back to our team.</p>
+        <button id="stf-guest-done" class="stf-btn stf-btn--ghost" type="button">Done</button>
+      </div>
+
+      <button id="stf-guest-cancel" class="stf-guest-staff" type="button">Cancel review</button>
+    </div>
+  </section>
+
   <div id="stf-toast" class="stf-toast" role="status" aria-live="polite" hidden></div>
 
   <script type="module" src="staff.js"></script>

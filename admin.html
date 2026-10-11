@@ -101,6 +101,7 @@
                 <button class="tab-btn" data-tab="hero-image" role="tab" aria-selected="false">Hero Image</button>
                 <button class="tab-btn" data-tab="teams" role="tab" aria-selected="false">Teams</button>
                 <button class="tab-btn" data-tab="staff-ops" role="tab" aria-selected="false">Staff Ops</button>
+                <button class="tab-btn" data-tab="reviews" role="tab" aria-selected="false">Reviews</button>
             </div>
 
             <!-- Queries Tab -->
@@ -636,6 +637,32 @@
                 </div>
                 <div id="stt-reveal" class="stt-reveal" hidden></div>
                 <div id="stt-tokens"></div>
+            </div>
+
+            <!-- Guest reviews collected in person on /staff (rvw module in app.js) -->
+            <div id="reviews-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="tab-header">
+                    <h3>Guest reviews</h3>
+                    <button type="button" class="btn btn--secondary" onclick="loadReviewsAdmin()">Refresh</button>
+                </div>
+                <p id="rvw-summary" class="rvw-summary"></p>
+                <div class="rvw-toolbar">
+                    <div class="rvw-filters" role="group" aria-label="Filter reviews">
+                        <button type="button" class="rvw-filter" data-f="pending" onclick="rvwSetFilter('pending')">Pending <span class="rvw-n">0</span></button>
+                        <button type="button" class="rvw-filter" data-f="approved" onclick="rvwSetFilter('approved')">Approved <span class="rvw-n">0</span></button>
+                        <button type="button" class="rvw-filter" data-f="hidden" onclick="rvwSetFilter('hidden')">Hidden <span class="rvw-n">0</span></button>
+                        <button type="button" class="rvw-filter" data-f="all" onclick="rvwSetFilter('all')">All <span class="rvw-n">0</span></button>
+                    </div>
+                    <label class="rvw-min-label">Website shows
+                        <select id="rvw-min" class="form-control rvw-min" onchange="rvwSetMinRating(this.value)">
+                            <option value="5">5★ only</option>
+                            <option value="4">4★ and up</option>
+                            <option value="3">3★ and up</option>
+                            <option value="1">Every rating</option>
+                        </select>
+                    </label>
+                </div>
+                <div id="rvw-list"></div>
             </div>
 
         </div>
