@@ -1642,6 +1642,12 @@ let PACKAGE_TIERS = {
   story:   { key: 'story',   name: 'The Story',   addons: [19, 27, 23, 22, 24, 17],     tagline: 'The full production — photographer and more.' },
 }
 let PACKAGE_TIER_ORDER = ['setting', 'moment', 'story']
+// Tiers where the celebration board is a PAID add-on, not a free pick
+// (2026-10-11). On these the board field stays hidden until the
+// White Board Message add-on is ticked, and only the white arch board is
+// offered. Setting/Moment/Story include that add-on via package_add_ons.
+const BOARD_PAID_TIERS = ['the_prelude']
+const WHITE_BOARD_ADDON_ID = 37
 let packagesLoaded = false // set once loadPackages() has real DB rows
 
 // ── Stored per-venue package pricing (2026-07-10) ──────────────────────────
@@ -4040,13 +4046,15 @@ async function showBookingForm(venue) {
                        data-addon-name="${escapeHtml(a.name)}"
                        data-addon-price="${a.price}"
                        data-addon-confirm="${a.requires_confirmation || false}"
-                       onchange="${cat === 'setup' ? 'onlyOneSetup(this); ' : ''}updateBookingSummaryPrice(); updateAddonCatBadge(this.closest('.vd-bf-cat'))">
+                       onchange="${cat === 'setup' ? 'onlyOneSetup(this); ' : ''}updateBookingSummaryPrice(); updateAddonCatBadge(this.closest('.vd-bf-cat')); syncBoardGate()">
               </div>
             </label>`).join('')}
           </div>
         </div>`).join('')}
       </div>
     </div>` : ''
+
+  const boardGated = !!(pkg && BOARD_PAID_TIERS.includes(pkg.tierKey))
 
   bookView.innerHTML = `
     <div class="vd-bv-wrap container">
@@ -4132,15 +4140,15 @@ async function showBookingForm(venue) {
                   <input class="vd-bf-input" type="text" name="occasion-other" placeholder="Tell us the occasion">
                 </div>
               </div>`}
-              <div class="vd-bf-field">
-                <label class="vd-bf-label">Celebration board <span style="font-weight:400; opacity:0.6;">(optional)</span></label>
+              <div class="vd-bf-field" id="board-field"${boardGated ? ' data-gated="1" style="display:none;"' : ''}>
+                <label class="vd-bf-label">Celebration board${boardGated ? '' : ' <span style="font-weight:400; opacity:0.6;">(optional)</span>'}</label>
                 <select class="vd-bf-input vd-bf-select" name="board-type"
                         onchange="document.getElementById('board-message-wrap').style.display = this.value ? '' : 'none'">
-                  <option value="">No board</option>
+                  ${boardGated ? '<option value="white">White wooden arch board</option>' : `<option value="">No board</option>
                   <option value="black">Black chalkboard</option>
-                  <option value="white">White wooden arch board</option>
+                  <option value="white">White wooden arch board</option>`}
                 </select>
-                <div id="board-message-wrap" style="display:none; margin-top:8px;">
+                <div id="board-message-wrap" style="${boardGated ? '' : 'display:none; '}margin-top:8px;">
                   <input class="vd-bf-input" type="text" name="board-message" maxlength="100"
                          placeholder="Short one-liner only — e.g. Happy Birthday Aanya!">
                 </div>
@@ -4191,6 +4199,8 @@ async function showBookingForm(venue) {
     appState.changeModeData = null
   }
 
+  syncBoardGate()
+
   // Packages: the locked add-ons are pre-checked — recompute so the total and
   // price breakdown include them on first render.
   if (pkg) updateBookingSummaryPrice()
@@ -4224,6 +4234,15 @@ window.changePackage = function() {
   if (!venue) return
   showVenueBodyStep()
   showPackageStep(venue)
+}
+
+// Board-paid tiers: show the board field only while the White Board Message
+// add-on is ticked. No-op on every other booking (field not gated).
+window.syncBoardGate = function() {
+  const field = document.getElementById('board-field')
+  if (!field || field.dataset.gated !== '1') return
+  const on = !!document.querySelector(`.bv-addon-check[data-addon-id="${WHITE_BOARD_ADDON_ID}"]:checked`)
+  field.style.display = on ? '' : 'none'
 }
 
 // Celebration setups are single-choice: ticking one clears the others.
@@ -4537,7 +4556,11 @@ function handleInlineBookingSubmit(event) {
   // Celebration board: only stored when a type is chosen (optional)
   const boardType    = form['board-type']?.value || ''
   const boardMessage = form['board-message']?.value.trim() || ''
-  lead.board = boardType ? { type: boardType, message: boardMessage } : null
+  // Board-paid tiers (Prelude): a board is only stored when the White Board
+  // Message add-on was ticked — the field is hidden otherwise.
+  const boardField   = document.getElementById('board-field')
+  const boardAllowed = !(boardField && boardField.dataset.gated === '1' && boardField.style.display === 'none')
+  lead.board = (boardType && boardAllowed) ? { type: boardType, message: boardMessage } : null
   if (venue.type !== 'custom') lead.venue_id = venue.id
   // Packages: appState.selectedPackage is set by selectPackageTier() when the
   // package-tier flow was taken for this venue — snapshot the tier key onto
