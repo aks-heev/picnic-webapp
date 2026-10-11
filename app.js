@@ -2515,13 +2515,12 @@ function packageServiceableAt(tier, catalog) {
 }
 
 // Occasion -> default tier. This is the AOV lever; the customer can still switch.
-// Date Night / Movie Night point at their own occasion-specific "classic"
-// package (Phase 2.5) — visiblePackagesFor() replaces the universal ladder
-// with just that occasion's packages, so the default must live inside it.
+// Date Night / Movie Night had their own occasion packages until 2026-10-11
+// (deactivated: 0 bookings ever) — they now default into the universal ladder.
 const OCCASION_DEFAULT_TIER = {
   'Proposal': 'story', 'Anniversary': 'story',
   'Birthday': 'moment', 'Bridal Shower': 'moment', 'Baby Shower': 'moment',
-  'Date Night': 'date_night_classic', 'Movie Night': 'movie_night_classic',
+  'Date Night': 'setting', 'Movie Night': 'setting',
   'Just Because': 'setting',
 }
 function defaultTierForOccasion(occasion) {

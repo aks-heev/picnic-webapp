@@ -763,11 +763,11 @@ async function buildPackagesPage(supabase, template, blogPosts = []) {
   if (!pricedTiers.length) { console.warn('[prerender] no priced packages — skipping /packages page'); return null }
 
   const url = `${SITE}/packages`
-  const title = 'Picnic Packages — Date Night, Movie Night & More | The Picnic Stories'
+  const title = 'Picnic Packages — The Prelude, Setting, Moment & Story | The Picnic Stories'
   // Hand-written and kept under ~155 chars deliberately — the old version
   // concatenated every tier name into the description, which overflowed the
   // budget and got cut off mid-sentence as tiers were added.
-  const desc = 'Curated picnic packages for every occasion — pick The Setting, Date Night, Movie Night and more, then choose your venue. Flat pricing, confirmed upfront.'
+  const desc = 'Curated picnic packages for every occasion — pick The Prelude, The Setting, The Moment or The Story, then choose your venue. Flat pricing, confirmed upfront.'
   const img = HERO_FALLBACK
 
   let html = swapHead(template, [
