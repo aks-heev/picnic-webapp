@@ -36,6 +36,7 @@ Exit: deployed and checked on prod; nothing redirects yet.
 4. Verify: view-source on prod shows no noindex. Meta Pixel Helper or the Events Manager test view shows ViewContent on /brochure.
 
 ## Phase 2: /packages is the venue step only
+Status 2026-10-11: built on branch `merge-phase-2`; awaiting preview verification. Implemented as planned with one change: the redirect's `missing` condition is only `tier` (not tier+occasion), because D1 removed the occasion packages, so `?occasion=` links go to /brochure too. The 4 blog posts' `?occasion=` links were repointed to /brochure. A Meta `Contact` event was added to the brochure's WhatsApp buttons. Follow-up for Phase 3: the Offer JSON-LD still lives on the (now noindex) /packages shell; move it to /brochure.
 Exit: all rows of the verification table pass on a preview deploy.
 1. `vercel.json` `redirects`: `{ "source": "/packages", "missing": [{"type":"query","key":"tier"},{"type":"query","key":"occasion"}], "destination": "/brochure", "permanent": true }`. `missing` requires all listed conditions, so `?tier=` and `?occasion=` links still go to the SPA.
 2. `app.js` router (~L12385): `scrollToVenues` becomes `!!qsTier` instead of `step === 'venue'`. Any tier link starts at the venue step.

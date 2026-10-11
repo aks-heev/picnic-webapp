@@ -75,7 +75,7 @@ You pick these while booking — takes about two minutes — and everything is s
 
 1. **Pick the venue.** Outdoor for October–March, TerraCottage indoors when the weather's unreliable.
 2. **Pick a date and time slot.** Each venue hosts a limited number of setups per day, so lock the slot as soon as the date is fixed. Need more time? There's an extra-hour option at select venues.
-3. **Choose a package.** Our setups come in three tiers — The Setting, The Moment, and The Story — from a beautiful essential setup to the full celebration. [Browse birthday packages →](/packages?occasion=Birthday)
+3. **Choose a package.** Our setups come in three tiers — The Setting, The Moment, and The Story — from a beautiful essential setup to the full celebration. [Browse birthday packages →](/brochure)
 4. **Add the personal touches.** Cake, photographer, pyros — whatever fits your person.
 5. **Show up.** That's genuinely the last step.
 
@@ -111,4 +111,4 @@ Each venue hosts a limited number of private setups per day, so availability com
 
 ---
 
-*Planning a birthday in Gurugram? [Pick a package and a venue →](/packages?occasion=Birthday) — the setup is handled before you arrive. Celebrating something else? See [anniversary ideas →](/blog/anniversary-celebration-ideas-delhi-ncr) or [date-night picnics →](/blog/romantic-picnic-date-gurugram).*
+*Planning a birthday in Gurugram? [Pick a package and a venue →](/brochure) — the setup is handled before you arrive. Celebrating something else? See [anniversary ideas →](/blog/anniversary-celebration-ideas-delhi-ncr) or [date-night picnics →](/blog/romantic-picnic-date-gurugram).*

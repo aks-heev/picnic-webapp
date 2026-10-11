@@ -773,7 +773,11 @@ async function buildPackagesPage(supabase, template, blogPosts = []) {
   let html = swapHead(template, [
     [/<title>[\s\S]*?<\/title>/, `<title>${esc(title)}</title>`],
     [/<meta name="description"[^>]*>/, `<meta name="description" content="${esc(desc)}">`],
-    [/<link rel="canonical"[^>]*>/, `<link rel="canonical" href="${url}">`],
+    // Merge plan Phase 2 (2026-10-11): /packages is only the venue step now
+    // (bare /packages 308s to /brochure). This shell serves /packages?tier=…,
+    // so it points search engines at /brochure and stays out of the index.
+    [/<link rel="canonical"[^>]*>/, `<link rel="canonical" href="${SITE}/brochure">`],
+    [/<meta name="robots"[^>]*>/, `<meta name="robots" content="noindex, follow">`],
     [/<meta property="og:title"[^>]*>/, `<meta property="og:title" content="${esc(title)}">`],
     [/<meta property="og:description"[^>]*>/, `<meta property="og:description" content="${esc(desc)}">`],
     [/<meta property="og:url"[^>]*>/, `<meta property="og:url" content="${url}">`],
@@ -1029,7 +1033,7 @@ function blogShell({ title, desc, canonical, jsonLd, heroBlock, mainHtml, ogType
       <a href="/" class="header-brand"><img src="/logo-nav.webp" alt="The Picnic Stories logo">The Picnic Stories</a>
       <nav class="header-nav" aria-label="Site">
         <a href="/blog" class="sec-pill">All posts</a>
-        <a href="/packages" class="sec-pill">Packages</a>
+        <a href="/brochure" class="sec-pill">Packages</a>
         <a href="/#venues-section" class="sec-pill">Venues</a>
       </nav>
     </div>
@@ -1041,7 +1045,7 @@ ${mainHtml}
       <div class="cta-band-inner">
         <h2>Make it a story worth telling</h2>
         <p>Pick an occasion, pick a venue — the setup is styled and waiting before you arrive.</p>
-        <a href="/packages" class="cta-btn">Browse picnic packages</a>
+        <a href="/brochure" class="cta-btn">Browse picnic packages</a>
       </div>
     </div>
   </main>
@@ -1049,7 +1053,7 @@ ${mainHtml}
     <nav class="footer-links" aria-label="Footer links">
       <a href="/">Home</a>
       <a href="/blog">Blog</a>
-      <a href="/packages">Packages</a>
+      <a href="/brochure">Packages</a>
       <a href="/privacy.html">Privacy</a>
       <a href="/terms.html">Terms</a>
     </nav>
@@ -1212,7 +1216,7 @@ async function main() {
   const packagesPage = await buildPackagesPage(supabase, template, blogPosts)
   if (packagesPage) {
     writeFileSync(resolve(DIST, 'packages.html'), packagesPage.html)
-    urls.push(packagesPage.url)
+    // Not in the sitemap since merge plan Phase 2 — /brochure is the indexed page.
     console.log(`[prerender] packages page: /packages`)
   }
   // /brochure is a Vite page (brochure.html), not prerendered here — listed so

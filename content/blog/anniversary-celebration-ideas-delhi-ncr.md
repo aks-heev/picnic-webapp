@@ -85,4 +85,4 @@ Yes — TerraCottage Umber in DLF Phase 2 hosts groups of up to six in a private
 
 ---
 
-*This year, attend your own anniversary. [Pick a package →](/packages?occasion=Anniversary) — or if you're celebrating someone's year around the sun instead, see our [birthday picnic guide →](/blog/birthday-picnic-ideas-gurugram).*
+*This year, attend your own anniversary. [Pick a package →](/brochure) — or if you're celebrating someone's year around the sun instead, see our [birthday picnic guide →](/blog/birthday-picnic-ideas-gurugram).*

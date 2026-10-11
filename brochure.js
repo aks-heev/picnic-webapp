@@ -41,12 +41,13 @@ function waLink(city, pkgName) {
   return `https://wa.me/${WA[city]}?text=${encodeURIComponent(text)}`
 }
 
-// Website booking link. With a package: /packages?tier=<key>&step=venue opens
-// the site's packages-first flow with that package chosen, scrolled to the
-// venue picker (app.js showPackagesPage). Without one: the packages page.
+// Website booking link. With a package: /packages?tier=<key> opens the venue
+// step for that package (app.js showPackagesPage — /packages is only the venue
+// step since merge plan Phase 2). Without one: /packages, which redirects back
+// here, so a CTA without a package is never rendered in practice.
 function siteLink(pkgKey) {
   const p = new URLSearchParams()
-  if (pkgKey) { p.set('tier', pkgKey); p.set('step', 'venue') }
+  if (pkgKey) p.set('tier', pkgKey)
   p.set('utm_source', 'brochure')
   p.set('utm_medium', 'link')
   return `/packages?${p}`
@@ -67,7 +68,11 @@ function renderCtas() {
       const a = e.target.closest('a')
       if (!a) return
       if (a.hasAttribute('data-site')) track('brochure_book_online_click', { package_key: key })
-      else if (a.dataset.city) track('brochure_whatsapp_click', { package_key: key, city: a.dataset.city })
+      else if (a.dataset.city) {
+        track('brochure_whatsapp_click', { package_key: key, city: a.dataset.city })
+        // Meta "Contact" — same event app.js fires on its WhatsApp buttons.
+        if (typeof window.fbq === 'function') window.fbq('track', 'Contact')
+      }
     })
   })
 }

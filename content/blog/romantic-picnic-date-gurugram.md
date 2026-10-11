@@ -43,7 +43,7 @@ A warm, terracotta-toned studio designed as a stay-plus-picnic experience for tw
 
 Most of our setups come in universal tiers, but date nights earned their own: **Date Night** — bouquet, bonfire, and a night that's just the two of you — and **Date Night Deluxe**, which is everything in Date Night plus a little more spark. There's also **The Prelude**, an intimate setup for up to four, when the date is a double.
 
-[Browse Date Night packages →](/packages?occasion=Date+Night)
+[Browse Date Night packages →](/brochure)
 
 ## Building the date, piece by piece
 
@@ -89,4 +89,4 @@ Yes, with one adjustment: pick a venue with life around it, like a cafe setting,
 
 ---
 
-*Planning the date? [Pick a Date Night package →](/packages?occasion=Date+Night). If the date is a bigger question, read our guide to [picnic proposals in Delhi NCR →](/blog/picnic-proposal-ideas-gurugram-delhi-ncr), or celebrating years together at [anniversary ideas →](/blog/anniversary-celebration-ideas-delhi-ncr).*
+*Planning the date? [Pick a Date Night package →](/brochure). If the date is a bigger question, read our guide to [picnic proposals in Delhi NCR →](/blog/picnic-proposal-ideas-gurugram-delhi-ncr), or celebrating years together at [anniversary ideas →](/blog/anniversary-celebration-ideas-delhi-ncr).*

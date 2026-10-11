@@ -90,4 +90,4 @@ Yes — TerraCottage Ochre in DLF Phase 2 hosts fully private indoor picnic setu
 
 ---
 
-*Ready to ask? [Build your proposal setup →](/packages?occasion=Proposal). Easing into it instead? Start with a [candlelight picnic date →](/blog/romantic-picnic-date-gurugram).*
+*Ready to ask? [Build your proposal setup →](/brochure). Easing into it instead? Start with a [candlelight picnic date →](/blog/romantic-picnic-date-gurugram).*

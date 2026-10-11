@@ -2608,6 +2608,11 @@ async function showPackagesPage(push = true, opts = {}) {
   // hardcoded fallback lacks DB-only packages (the_prelude), which the router's
   // early check used to silently drop (2026-10-08).
   if (pkgPageState.tierKey && !PACKAGE_TIERS[pkgPageState.tierKey]) pkgPageState.tierKey = null
+  // /brochure is the one place packages are chosen (merge plan Phase 2,
+  // 2026-10-11). /packages is only the venue step for a chosen tier, so with
+  // no (valid) tier there is nothing to show here — send them to the brochure.
+  // Bare /packages normally never reaches this: vercel.json redirects it.
+  if (!pkgPageState.tierKey) { window.location.replace('/brochure'); return }
   if (!(appState.venues || []).length) await loadVenues()
   const venues = pkgEnabledVenues()
   await loadCatalogsForVenues(venues.map(v => v.id))
@@ -2663,6 +2668,30 @@ function renderPackagesPage() {
         <p class="pkgp-sub">Packages are coming soon — every picnic can still be booked from its venue page.</p>
         <a class="btn btn--venue-primary pkgp-fallback-btn" href="/#venues-section">Browse venues</a>
       </div>`
+    return
+  }
+
+  // Venue step for a tier chosen on /brochure (merge plan Phase 2): a one-line
+  // "your package" header + the venue picker. No occasion chips or package
+  // cards here; "Change package" goes back to the brochure's package list.
+  const chosen = pkgPageState.tierKey && PACKAGE_TIERS[pkgPageState.tierKey]
+  if (chosen) {
+    const offered = venues.filter(v => packageOfferedAt(v.id, chosen.key))
+    const prices  = offered.map(v => packageTierPriceAt(v, chosen, venueCatalog(v.id), PKG_PAGE_BASE_ADULTS)).filter(p => p != null)
+    const fromTxt = prices.length ? `${offered.length > 1 ? 'from ' : ''}₹${Math.min(...prices).toLocaleString('en-IN')} · ` : ''
+    el.innerHTML = `
+    <div class="pkgp-wrap">
+      <div class="pkgp-hero">
+        <div class="pkgp-hero-copy">
+          <p class="pkgp-eyebrow">Your package</p>
+          <h1 class="pkgp-title">${escapeHtml(chosen.name)}</h1>
+          <p class="pkgp-sub">${fromTxt}<a href="/brochure#packages">Change package</a></p>
+        </div>
+      </div>
+      ${renderPkgVenuePicker(venues)}
+    </div>`
+    const grid = document.getElementById('pkgp-venue-grid')
+    if (grid) grid.addEventListener('click', onPkgVenueGridClick)
     return
   }
 
