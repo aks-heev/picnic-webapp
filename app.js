@@ -4073,6 +4073,9 @@ async function showBookingForm(venue) {
     </div>` : ''
 
   const boardGated = !!(pkg && BOARD_PAID_TIERS.includes(pkg.tierKey))
+  // Stay-only venues: Occasion + Board only matter for a Celebration Stay, so
+  // they stay hidden until a setup add-on is ticked (see syncBoardGate).
+  const stayGated  = stayOnlyActive(venue)
 
   bookView.innerHTML = `
     <div class="vd-bv-wrap container">
@@ -4139,7 +4142,7 @@ async function showBookingForm(venue) {
                 <input type="hidden" name="occasion" value="${escapeHtml(pkg.occasion)}">
               </div>`
                     : `<input type="hidden" name="occasion" value="">`)
-                : `<div class="vd-bf-field">
+                : `<div class="vd-bf-field" id="occasion-field"${stayGated ? ' data-stay-gated="1" style="display:none;"' : ''}>
                 <label class="vd-bf-label">Occasion</label>
                 <select class="vd-bf-input vd-bf-select" name="occasion"
                         onchange="document.getElementById('occasion-other-wrap').style.display = this.value === 'Other' ? '' : 'none'">
@@ -4158,7 +4161,7 @@ async function showBookingForm(venue) {
                   <input class="vd-bf-input" type="text" name="occasion-other" placeholder="Tell us the occasion">
                 </div>
               </div>`}
-              <div class="vd-bf-field" id="board-field"${boardGated ? ' data-gated="1" style="display:none;"' : ''}>
+              <div class="vd-bf-field" id="board-field"${boardGated ? ' data-gated="1"' : ''}${stayGated ? ' data-stay-gated="1"' : ''}${(boardGated || stayGated) ? ' style="display:none;"' : ''}>
                 <label class="vd-bf-label">Celebration board${boardGated ? '' : ' <span style="font-weight:400; opacity:0.6;">(optional)</span>'}</label>
                 <select class="vd-bf-input vd-bf-select" name="board-type"
                         onchange="document.getElementById('board-message-wrap').style.display = this.value ? '' : 'none'">
@@ -4257,6 +4260,11 @@ window.changePackage = function() {
 // Board-paid tiers: show the board field only while the White Board Message
 // add-on is ticked. No-op on every other booking (field not gated).
 window.syncBoardGate = function() {
+  // Stay-only: show Occasion + Board only when a celebration setup is chosen.
+  const setupOn = !!document.querySelector('.vd-bf-cat[data-cat="setup"] .bv-addon-check:checked')
+  document.querySelectorAll('#vd-booking-view [data-stay-gated="1"]').forEach(el => {
+    el.style.display = setupOn ? '' : 'none'
+  })
   const field = document.getElementById('board-field')
   if (!field || field.dataset.gated !== '1') return
   const on = !!document.querySelector(`.bv-addon-check[data-addon-id="${WHITE_BOARD_ADDON_ID}"]:checked`)
@@ -4569,7 +4577,9 @@ function handleInlineBookingSubmit(event) {
   // Occasion: dropdown value, or the free-text "Other" entry when selected
   const occasionSel   = form['occasion']?.value || ''
   const occasionOther = form['occasion-other']?.value.trim() || ''
-  lead.occasion = (occasionSel === 'Other' ? occasionOther : occasionSel) || null
+  const occField      = document.getElementById('occasion-field')
+  const occAllowed    = !(occField && occField.dataset.stayGated === '1' && occField.style.display === 'none')
+  lead.occasion = occAllowed ? ((occasionSel === 'Other' ? occasionOther : occasionSel) || null) : null
 
   // Celebration board: only stored when a type is chosen (optional)
   const boardType    = form['board-type']?.value || ''
@@ -4577,7 +4587,8 @@ function handleInlineBookingSubmit(event) {
   // Board-paid tiers (Prelude): a board is only stored when the White Board
   // Message add-on was ticked — the field is hidden otherwise.
   const boardField   = document.getElementById('board-field')
-  const boardAllowed = !(boardField && boardField.dataset.gated === '1' && boardField.style.display === 'none')
+  const boardHidden  = !!boardField && boardField.style.display === 'none'
+  const boardAllowed = !(boardHidden && (boardField.dataset.gated === '1' || boardField.dataset.stayGated === '1'))
   lead.board = (boardType && boardAllowed) ? { type: boardType, message: boardMessage } : null
   if (venue.type !== 'custom') lead.venue_id = venue.id
   // Packages: appState.selectedPackage is set by selectPackageTier() when the
