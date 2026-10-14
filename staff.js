@@ -359,6 +359,15 @@ function render () {
    It is the thing staff most need to know before they leave — whether the
    hamper has to be picked up at all, and how many items are in it. Always
    rendered, including the negative case, so silence never means "maybe". */
+/* Black chalkboard message — staff write it by hand on site. Today's cards
+   only: staff_today puts board_message in events[], never in upcoming[]. */
+function boardHtml (ev) {
+  if (!ev.board_message) return ''
+  return '<div class="stf-board">' +
+         '<span class="stf-board-label">Black board message</span>' +
+         `<p class="stf-board-msg">${esc(ev.board_message)}</p></div>`
+}
+
 function foodHtml (ev) {
   if (!ev.includes_food) {
     return '<div class="stf-food stf-food--none">' +
@@ -481,6 +490,7 @@ function cardHtml (ev) {
     }</p>
     ${tags.length ? `<div class="stf-meta">${tags.map(t => `<span class="stf-tag">${t}</span>`).join('')}</div>` : ''}
     ${ev.special_requirements ? `<div class="stf-meta"><span class="stf-tag stf-tag--note">Note: ${esc(ev.special_requirements)}</span></div>` : ''}
+    ${boardHtml(ev)}
     ${foodHtml(ev)}
     ${checklistHtml(ev, true)}
     ${moneyRowHtml(ev, log, {

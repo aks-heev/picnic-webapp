@@ -600,3 +600,26 @@ body[data-guest="1"] { overflow: hidden; }
   font-family: var(--font-sans); font-size: 13px;
   cursor: pointer;
 }
+
+/* Black chalkboard message (today's picnic cards only) */
+.stf-board {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #2b2b2b;
+  color: #ffffff;
+}
+.stf-board-label {
+  display: block;
+  font-size: 13px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #d6d6d6;
+}
+.stf-board-msg {
+  margin: 4px 0 0;
+  font-size: 20px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
