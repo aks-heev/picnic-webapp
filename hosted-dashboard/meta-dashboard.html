@@ -217,6 +217,42 @@
 
   .err { color: var(--red); font-size: 13px; padding: 6px 0; }
   .loading { color: var(--faint); font-size: 13px; padding: 6px 0; }
+
+  /* ---------- phones: give the content the width, not the chrome ----------
+     At 360-412px the page gutter (26px) + block padding (22px) ate ~96px of a
+     ~380px screen, which is what squeezed the chart and wrapped every line. */
+  @media (max-width: 560px) {
+    body { padding: 18px 0 44px; }
+    .wrap { padding: 0 12px; }
+    .topnav { margin-bottom: 16px; }
+    .mast { flex-direction: column-reverse; gap: 12px; }
+    h1 { font-size: 28px; }
+    .mast-sub { font-size: 13px; }
+    .attention, .cards { margin-top: 18px; }
+    .card { padding: 15px 16px 16px; }
+    .card .value { font-size: 27px; }
+    .block { padding: 18px 16px 18px; margin-top: 14px; border-radius: 12px; }
+    .block-head { flex-wrap: wrap; gap: 6px 12px; }
+    .block h2 { font-size: 18px; }
+    .narrative { font-size: 13px; line-height: 1.65; margin-top: 8px; }
+    .narrative .def { display: none; }          /* static definition; the numbers stay */
+    .block-body { margin-top: 16px; }
+    .chart-box { margin: 0 -6px; }              /* let the plot use the card's edge */
+    #trend-box { height: 240px !important; }
+    .range { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+    .range::-webkit-scrollbar { display: none; }
+    .range button { padding: 8px 12px; flex-shrink: 0; }   /* ~32px tap target */
+    .sub { line-height: 1.5; }
+    .callout { font-size: 12.8px; line-height: 1.6; padding: 12px 13px; }
+    .funnel-row .f-label { width: 86px; font-size: 12px; }
+    .f-rate { margin-left: 97px; }
+    .cmp-row { flex-wrap: wrap; gap: 6px 10px; }
+    .cmp-lab { width: 100%; }
+    .cmp-val { width: auto; min-width: 84px; }
+    .mer-card .value { font-size: 21px; }
+    .hist .h-roas { font-size: 25px; }
+    footer { margin-top: 24px; }
+  }
   footer {
     margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border);
     font-size: 11.8px; color: var(--faint); line-height: 1.75;
@@ -268,7 +304,7 @@
     <div class="sub" id="trend-window" style="margin-top:10px;">…</div>
     <div class="narrative" id="trend-narrative">Aligning daily ad spend against the dates bookings were made…</div>
     <div class="block-body">
-      <div class="chart-box" style="height:270px;"><canvas id="trend"></canvas></div>
+      <div class="chart-box" id="trend-box" style="height:270px;"><canvas id="trend"></canvas></div>
       <div class="err" id="trend-err" style="display:none"></div>
       <div id="lag-readout"></div>
     </div>
@@ -623,7 +659,7 @@ function renderTrend(daily, city) {
   const darkShare = totalBookings ? onDark / totalBookings : 0;
 
   narrate("trend-narrative",
-    "Daily ad spend against the day each <b>picnic</b> booking was made — not the event date, and stays excluded since no ads run on stay. " +
+    "<span class=\"def\">Daily ad spend against the day each <b>picnic</b> booking was made — not the event date, and stays excluded since no ads run on stay. </span>" +
     "<b>" + plural(totalBookings, "picnic booking") + "</b> across " + dates.length + " days, of which <b>" + onDark +
     "</b> arrived on days with zero ad spend (" + darkDays + " such days in the window).");
 
@@ -647,42 +683,64 @@ function renderTrend(daily, city) {
 
   const canvas = document.getElementById("trend");
   const ctx = canvas.getContext("2d");
-  const grad = ctx.createLinearGradient(0, 0, 0, 270);
+  const grad = ctx.createLinearGradient(0, 0, 0, PHONE.matches ? 240 : 270);
   grad.addColorStop(0, "rgba(217,164,65,.34)");
   grad.addColorStop(1, "rgba(217,164,65,0)");
 
+  lastTrend = [daily, city];
   if (trendChart) trendChart.destroy();
+  // Phones: a 30-point zig-zag line with a dot on every day read as noise at
+  // ~340px. Daily booking counts are discrete, so bars are the honest shape
+  // there; spend stays a soft area. Fewer ticks, compact ₹, no point markers.
+  const phone = PHONE.matches;
+  const mono = "ui-monospace, Menlo, monospace";
+  const rupee = v => v >= 1000 ? "₹" + (v / 1000).toFixed(v % 1000 ? 1 : 0) + "k" : "₹" + v;
   trendChart = new Chart(canvas, {
     data: {
       labels: dates.map(k => new Date(k + "T00:00:00Z").toLocaleDateString("en-IN", { month: "short", day: "numeric" })),
       datasets: [
         { type: "line", label: "Ad spend (₹)", data: spend, borderColor: "#D9A441", backgroundColor: grad,
-          borderWidth: 2, fill: true, tension: .28, pointRadius: 0, pointHoverRadius: 4, yAxisID: "y", order: 2 },
-        { type: "line", label: "Picnic bookings", data: bookings, borderColor: "#6FC2B6", backgroundColor: "#6FC2B6",
-          borderWidth: 2, fill: false, tension: .3, pointRadius: dates.length > 100 ? 0 : 2,
-          pointHoverRadius: 5, yAxisID: "y1", order: 1 }
+          borderWidth: phone ? 1.5 : 2, fill: true, tension: .28, cubicInterpolationMode: phone ? "monotone" : "default",
+          pointRadius: 0, pointHoverRadius: 4, yAxisID: "y", order: 2 },
+        phone
+          ? { type: "bar", label: "Picnic bookings", data: bookings, backgroundColor: "rgba(111,194,182,.75)",
+              hoverBackgroundColor: "#6FC2B6", borderRadius: 2, barPercentage: .7, categoryPercentage: .9,
+              maxBarThickness: 8, yAxisID: "y1", order: 1 }
+          : { type: "line", label: "Picnic bookings", data: bookings, borderColor: "#6FC2B6", backgroundColor: "#6FC2B6",
+              borderWidth: 2, fill: false, tension: .3, pointRadius: dates.length > 100 ? 0 : 2,
+              pointHoverRadius: 5, yAxisID: "y1", order: 1 }
       ]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
+      layout: { padding: phone ? { top: 4 } : 0 },
       plugins: {
         legend: { position: "bottom", labels: { boxWidth: 8, boxHeight: 8, usePointStyle: true, pointStyle: "circle",
-          font: { size: 10.5, family: "ui-monospace, Menlo, monospace" }, color: "#8A827A", padding: 16 } },
-        tooltip: { backgroundColor: "#2A2725", borderColor: "#3A3634", borderWidth: 1, padding: 10, cornerRadius: 8,
-          titleColor: "#EFE9E1", bodyColor: "#B9B1A8", titleFont: { size: 11.5 }, bodyFont: { size: 11.5 }, displayColors: false }
+          font: { size: phone ? 10 : 10.5, family: mono }, color: "#8A827A", padding: phone ? 14 : 16 } },
+        tooltip: { backgroundColor: "#2A2725", borderColor: "#3A3634", borderWidth: 1, padding: phone ? 8 : 10, cornerRadius: 8,
+          titleColor: "#EFE9E1", bodyColor: "#B9B1A8", titleFont: { size: phone ? 11 : 11.5 }, bodyFont: { size: phone ? 11 : 11.5 },
+          displayColors: false, caretPadding: 6 }
       },
       scales: {
-        y:  { position: "left", border: { display: false }, grid: { color: "rgba(255,255,255,.045)" },
-              ticks: { font: { size: 10, family: "ui-monospace, Menlo, monospace" }, color: "#6A625B", maxTicksLimit: 4, callback: v => "₹" + v } },
+        y:  { position: "left", border: { display: false }, grid: { color: "rgba(255,255,255,.045)" }, beginAtZero: true,
+              ticks: { font: { size: phone ? 9.5 : 10, family: mono }, color: "#6A625B", maxTicksLimit: 4,
+                       padding: phone ? 4 : 3, callback: phone ? rupee : (v => "₹" + v) } },
         y1: { position: "right", border: { display: false }, grid: { drawOnChartArea: false }, beginAtZero: true,
-              ticks: { font: { size: 10, family: "ui-monospace, Menlo, monospace" }, color: "#6A625B", precision: 0, maxTicksLimit: 4 } },
+              ticks: { font: { size: phone ? 9.5 : 10, family: mono }, color: "#6A625B", precision: 0,
+                       maxTicksLimit: 4, padding: phone ? 4 : 3 } },
         x:  { border: { display: false }, grid: { display: false },
-              ticks: { font: { size: 9.5, family: "ui-monospace, Menlo, monospace" }, color: "#6A625B", maxRotation: 0, autoSkipPadding: 22 } }
+              ticks: { font: { size: 9.5, family: mono }, color: "#6A625B", maxRotation: 0,
+                       autoSkipPadding: phone ? 30 : 22, maxTicksLimit: phone ? 4 : undefined } }
       }
     }
   });
 }
+// Rebuild once when crossing the phone breakpoint (rotation, desktop resize).
+const PHONE = window.matchMedia("(max-width: 560px)");
+let lastTrend = null;
+const onPhoneChange = () => { if (lastTrend) renderTrend(lastTrend[0], lastTrend[1]); };
+if (PHONE.addEventListener) PHONE.addEventListener("change", onPhoneChange); else if (PHONE.addListener) PHONE.addListener(onPhoneChange);
 
 /* ---- Ad sets across active campaigns, with frequency/fatigue ---- */
 function renderAdsets(data) {

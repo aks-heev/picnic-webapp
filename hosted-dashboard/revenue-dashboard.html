@@ -127,6 +127,14 @@
   .chart-box.sm { height: 260px; }
   .chart-box.tall { height: 560px; }
   @media (max-width: 860px) { .chart-box.tall { height: 360px; } }
+  /* phones: thinner page gutter so cards and charts get the width */
+  @media (max-width: 560px) {
+    .wrap { padding: 16px 12px 48px; }
+    .card-h { padding: 13px 14px 0; }
+    .card-b { padding: 10px 14px 14px; }
+    .chart-box { height: 250px; }
+    .chart-box.sm { height: 230px; }
+  }
 
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 8px; }
   .kpi { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r-sm); padding: 12px 14px; transition: border-color .12s; }
