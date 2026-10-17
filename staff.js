@@ -143,6 +143,12 @@ const el = {
   payAmount: $('stf-pay-amount'),
   payOk:     $('stf-pay-confirm'),
   payCancel: $('stf-pay-cancel'),
+  waWrap:    $('stf-wa-overlay'),
+  waGuest:   $('stf-wa-guest'),
+  waChips:   $('stf-wa-chips'),
+  waText:    $('stf-wa-text'),
+  waSend:    $('stf-wa-send'),
+  waCancel:  $('stf-wa-cancel'),
   header:      document.querySelector('.stf-header'),
   guestWrap:   $('stf-guest'),
   guestForm:   $('stf-guest-form'),
@@ -402,7 +408,13 @@ function foodHtml (ev) {
    showing a bare "Collected" would hide a real shortfall. */
 function moneyRowHtml (ev, log, opts) {
   const due  = Number(opts.due || 0)
-  const call = ev.mobile ? `<a class="stf-call" href="tel:${esc(ev.mobile)}">Call</a>` : ''
+  const tel  = ev.mobile ? `<a class="stf-call" href="tel:${esc(ev.mobile)}">Call</a>` : ''
+  // WhatsApp only where the caller asks for it (picnic cards) AND the stored
+  // number is a real one — stay rows can hold 'AIRBNB-HM…' codes, not numbers.
+  const wa   = opts.whatsapp && waNumber(ev.mobile)
+    ? `<button class="stf-call stf-wa" type="button" data-act="wa" data-id="${ev.id}" data-sent="${waSentAt(ev.id) ? '1' : '0'}">WhatsApp</button>`
+    : ''
+  const call = (tel || wa) ? `<div class="stf-contact">${wa}${tel}</div>` : ''
 
   // Nothing was ever owed here — no log entry can change that.
   if (due <= 0) {
@@ -497,7 +509,8 @@ function cardHtml (ev) {
       due:        balance,
       dueLabel:   'Balance to collect',
       zeroLabel:  'Balance to collect',
-      zeroValue:  'Fully paid'
+      zeroValue:  'Fully paid',
+      whatsapp:   true
     })}
     ${log.length ? `<ul class="stf-timeline">${timeline}</ul>` : ''}
     ${action}
@@ -747,6 +760,9 @@ function wireCards () {
       else enqueue(id, step, null, null)
     })
   })
+  el.main.querySelectorAll('[data-act="wa"]').forEach(btn => {
+    btn.addEventListener('click', () => openWaSheet(Number(btn.dataset.id)))
+  })
   el.main.querySelectorAll('[data-act="review"]').forEach(btn => {
     btn.addEventListener('click', () => startGuestReview(Number(btn.dataset.id)))
   })
@@ -782,6 +798,119 @@ el.payOk.addEventListener('click', () => {
   const id = paying
   closePaySheet()
   enqueue(id, 'payment_received', null, amount)
+})
+
+/* ----------------------------------------------------------- WhatsApp sheet */
+
+/* Opens WhatsApp on the staff member's own phone with a pre-filled message.
+   Nothing is sent from here and nothing is written to the server: the guest
+   only gets a message if staff tap Send inside WhatsApp. "Opened" is
+   remembered on this phone only (LS_WA), as a nudge against double-messaging. */
+
+const LS_WA = 'pst_staff_wa'
+let waSent = load(LS_WA, {})   // { [bookingId]: iso } — opened, not proven sent
+let waBooking = null
+
+/* bookings.mobile_number is mostly a bare 10-digit Indian number (143/161
+   rows, 2026-10-17), but also holds 'AIRBNB-HM…' codes and a few malformed
+   values. Returns a wa.me-ready number, or null so the button never renders
+   for something WhatsApp would reject. */
+function waNumber (raw) {
+  const d = String(raw || '').replace(/\D/g, '')
+  if (/^[6-9]\d{9}$/.test(d)) return '91' + d
+  if (/^0[6-9]\d{9}$/.test(d)) return '91' + d.slice(1)
+  if (/^91[6-9]\d{9}$/.test(d)) return d
+  return null
+}
+
+function waSentAt (id) { return waSent[id] || null }
+
+function firstName (full) {
+  return String(full || '').trim().split(/\s+/)[0] || 'there'
+}
+
+/* Wording agreed with the owner 2026-10-17. Deliberately no "arrive early",
+   no food/outside-food line. */
+function waTemplates (ev) {
+  const hi    = `Hi ${firstName(ev.guest_name)}`
+  const staff = payload && payload.staff && payload.staff.name
+  const from  = staff ? `${staff} from The Picnic Stories` : 'the team at The Picnic Stories'
+  const venue = (ev.venue && ev.venue.name) || 'the venue'
+  const maps  = ev.venue && ev.venue.maps_url
+  const time  = slotText(ev)
+  const when  = time === 'Time not set' ? 'today' : time
+  const start = hhmm(ev.slot_start) || when
+  const hasPhoto = (ev.add_ons || []).some(a => /photo/i.test(a.name || ''))
+
+  const list = [
+    { key: 'intro', label: 'Intro',
+      text: `${hi}! 😊 This is ${from}. Your setup at ${venue} is all set for ${when}` +
+            (maps ? `, and here's the location: ${maps}` : '') + `. Can't wait to host you! ✨` },
+    { key: 'surprise', label: 'Surprise-safe',
+      text: `${hi}, ${staff ? staff + ' here' : 'this is the team'} from The Picnic Stories. Everything is on track for this evening. ` +
+            `If any part of it is a surprise, just tell me what to keep quiet about 🤫` },
+    { key: 'ready', label: 'Setup ready',
+      text: `${hi}, your setup at ${venue} is ready ✨` + (staff ? ` Ask for ${staff} when you arrive.` : '') },
+    { key: 'late', label: 'Running late',
+      text: `${hi}, ${from}. We're running about 15 mins behind on setup. Really sorry, it'll be ready before you are.` }
+  ]
+  // Only when a photographer is actually booked — asking about shots otherwise
+  // promises something the guest didn't buy.
+  if (hasPhoto) {
+    list.splice(2, 0, { key: 'photo', label: 'Photographer',
+      text: `${hi}, our photographer will be at ${venue} from ${start}. Any shots you'd specially like, or a moment you'd like captured?` })
+  }
+  return list
+}
+
+function waHref (num, text) {
+  return `https://wa.me/${num}?text=${encodeURIComponent(text)}`
+}
+
+function openWaSheet (bookingId) {
+  const ev = (payload && payload.events || []).find(e => e.id === bookingId)
+  const num = ev && waNumber(ev.mobile)
+  if (!ev || !num) { toast('No valid WhatsApp number on this booking', 'error'); return }
+  waBooking = { id: bookingId, num, templates: waTemplates(ev) }
+
+  const sent = waSentAt(bookingId)
+  el.waGuest.textContent = `${ev.guest_name}` +
+    (sent ? ` · WhatsApp opened at ${clockOf(sent)} on this phone` : '')
+  el.waChips.innerHTML = waBooking.templates.map((t, i) =>
+    `<button type="button" class="stf-chip" data-i="${i}" data-on="${i === 0 ? '1' : '0'}">${esc(t.label)}</button>`
+  ).join('')
+  el.waChips.querySelectorAll('[data-i]').forEach(b => {
+    b.addEventListener('click', () => pickWaTemplate(Number(b.dataset.i)))
+  })
+  pickWaTemplate(0)
+  el.waWrap.hidden = false
+}
+
+function pickWaTemplate (i) {
+  if (!waBooking) return
+  el.waChips.querySelectorAll('[data-i]').forEach(b => { b.dataset.on = Number(b.dataset.i) === i ? '1' : '0' })
+  el.waText.value = waBooking.templates[i].text
+  syncWaLink()
+}
+
+function syncWaLink () {
+  if (!waBooking) return
+  const text = el.waText.value.trim()
+  el.waSend.href = waHref(waBooking.num, text)
+  el.waSend.setAttribute('aria-disabled', text ? 'false' : 'true')
+}
+
+function closeWaSheet () { el.waWrap.hidden = true; waBooking = null }
+
+el.waText.addEventListener('input', syncWaLink)
+el.waCancel.addEventListener('click', closeWaSheet)
+el.waWrap.addEventListener('click', e => { if (e.target === el.waWrap) closeWaSheet() })
+el.waSend.addEventListener('click', e => {
+  if (!waBooking || !el.waText.value.trim()) { e.preventDefault(); return }
+  // Let the link navigate (it opens WhatsApp); record + close right after.
+  waSent[waBooking.id] = new Date().toISOString()
+  save(LS_WA, waSent)
+  setTimeout(() => { closeWaSheet(); render() }, 0)
 })
 
 /* -------------------------------------------------------------- write queue */
@@ -1029,6 +1158,7 @@ function enterGuestMode () {
   el.main.hidden = true
   el.header.hidden = true
   el.payWrap.hidden = true
+  closeWaSheet()      // the sheet carries a guest's number in its link
   document.body.dataset.guest = '1'
   el.guestVenue.textContent = guest.venue ? `at ${guest.venue}` : ''
   el.guestForm.hidden = !!guest.submitted

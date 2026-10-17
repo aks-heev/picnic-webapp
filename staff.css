@@ -198,6 +198,26 @@ html, body {
   text-decoration: none;
 }
 
+/* ---------- contact buttons (WhatsApp + Call) ---------- */
+.stf-contact { flex: none; display: flex; gap: 8px; }
+.stf-wa {
+  font-family: var(--font-sans);
+  cursor: pointer;
+  border-color: #25d366;
+  color: #128c4a;
+}
+/* Already opened once on this phone — quieter, so nobody double-messages. */
+.stf-wa[data-sent="1"] { border-color: var(--boho-border); color: var(--boho-text-medium); }
+.stf-wa[data-sent="1"]::before { content: '\2713\00a0'; }
+
+/* ---------- WhatsApp sheet ---------- */
+.stf-wa-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.stf-wa-chips .stf-chip { flex: 0 0 auto; padding: 0 14px; min-height: 40px; }
+.stf-wa-text { font-size: 16px; line-height: 1.4; }   /* >=16px or iOS zooms */
+.stf-btn--wa { background: #128c4a; color: #fff; text-decoration: none; }  /* 4.6:1 on white */
+.stf-btn--wa:active { background: #0e6f3a; }
+.stf-btn--wa[aria-disabled="true"] { opacity: .55; pointer-events: none; }
+
 /* ---------- timeline ---------- */
 .stf-timeline { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .stf-timeline li { display: flex; align-items: baseline; gap: 8px; font-size: 15px; color: var(--boho-text-medium); }

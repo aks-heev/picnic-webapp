@@ -76,6 +76,23 @@
     </div>
   </div>
 
+  <!-- WhatsApp sheet: pick a template, edit, then open WhatsApp on this phone.
+       Nothing is sent until staff press Send inside WhatsApp itself. -->
+  <div id="stf-wa-overlay" class="stf-overlay" hidden>
+    <div class="stf-sheet" role="dialog" aria-modal="true" aria-labelledby="stf-wa-title">
+      <h2 id="stf-wa-title">WhatsApp guest</h2>
+      <p id="stf-wa-guest" class="stf-sheet-sub"></p>
+      <div id="stf-wa-chips" class="stf-wa-chips"></div>
+      <label class="stf-label" for="stf-wa-text">Message</label>
+      <textarea id="stf-wa-text" class="stf-textarea stf-wa-text" rows="6" maxlength="1000"></textarea>
+      <p class="stf-hint">Edit anything before sending. WhatsApp opens with this message ready.</p>
+      <div class="stf-sheet-actions">
+        <button id="stf-wa-cancel" class="stf-btn stf-btn--ghost" type="button">Cancel</button>
+        <a id="stf-wa-send" class="stf-btn stf-btn--wa" href="#" target="_blank" rel="noopener">Open WhatsApp</a>
+      </div>
+    </div>
+  </div>
+
   <!-- Guest mode: full screen. While it is up, #stf-main is emptied and the header hidden,
        so a stray back-swipe can never show the guest other bookings' phone numbers. -->
   <section id="stf-guest" class="stf-guest" hidden aria-label="Review your picnic">
