@@ -4475,6 +4475,7 @@ function buildIntentSummaryHTML() {
 // Step 1: collect form data → show intent screen (no DB write yet)
 // Shared intent screen HTML builder — used by both inline and modal booking paths
 function buildIntentScreenHTML(lead, { containerClass = 'vd-intent-wrap container' } = {}) {
+  loadRazorpay()   // pre-warm so 'Lock my date' opens the modal without a wait
   const totalFmt = lead.advance_amount.toLocaleString('en-IN')
   const remainingFmt = lead.advance_amount > 0
     ? (Math.round(lead.advance_amount / 0.3) - lead.advance_amount).toLocaleString('en-IN')
@@ -4984,12 +4985,39 @@ async function submitBookingIntent(wantsToLock) {
 //   create-order (server) → Razorpay modal → verify-payment (server) → confirmed.
 // The KEY SECRET never reaches the client; signature verification is server-side.
 
+// checkout.js is loaded on demand (not in index.html) — it pulled ~157 KB onto every
+// public page while only the payment step uses it (PageSpeed 2026-10-17). The promise
+// is cached so the intent-screen pre-warm and the real call share one request; a
+// failed load clears the cache so a retry can try again.
+const RAZORPAY_SRC = 'https://checkout.razorpay.com/v1/checkout.js'
+let razorpayLoadPromise = null
+function loadRazorpay(timeoutMs = 8000) {
+  if (typeof window.Razorpay !== 'undefined') return Promise.resolve(true)
+  if (razorpayLoadPromise) return razorpayLoadPromise
+  razorpayLoadPromise = new Promise((resolve) => {
+    const s = document.createElement('script')
+    s.src = RAZORPAY_SRC
+    s.async = true
+    const done = (ok) => {
+      clearTimeout(timer)
+      if (!ok) razorpayLoadPromise = null
+      resolve(ok && typeof window.Razorpay !== 'undefined')
+    }
+    const timer = setTimeout(() => done(false), timeoutMs)
+    s.onload  = () => done(true)
+    s.onerror = () => done(false)
+    document.head.appendChild(s)
+  })
+  return razorpayLoadPromise
+}
+
 async function startRazorpayCheckout(bookingRow, lead, venue) {
   const bookingId  = bookingRow?.id
   const amountPaise = Math.round((lead.advance_amount || 0) * 100)
 
   // Razorpay's checkout.js must have loaded. If it didn't (blocked/offline),
   // don't lose the lead — keep it as an unconfirmed request.
+  await loadRazorpay()
   if (typeof window.Razorpay === 'undefined') {
     showToast('Payment couldn’t load — we’ve saved your request and will reach out.', 'success')
     finishBookingFlow(bookingRow, venue, false)
@@ -5123,6 +5151,7 @@ async function handleEmailPayLink(bookingId) {
   document.body.appendChild(overlay)
 
   try {
+    await loadRazorpay()
     if (typeof window.Razorpay === 'undefined') {
       showMsg(
         'Payment couldn’t load',

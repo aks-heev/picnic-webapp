@@ -1,6 +1,7 @@
 # Admin bundle split — plan (2026-10-17)
 
-Status: NOT started. Written via plan-optimizer (61 → 82 → 90 → 91, plateau).
+Status: Phase 0 DONE 2026-10-17 — verdict: PARK the split; lazy-load Razorpay first (see Phase 0 results).
+Written via plan-optimizer (61 → 82 → 90 → 91, plateau).
 
 ## Why
 `index.html` and `admin.html` both load the same `app.js` (12,758 lines). Roughly lines
@@ -32,6 +33,33 @@ whatever we do.
 - `npm run build` on Aksheev's machine; record raw + gzip size of every `dist/assets/*.js`.
 - PSI mobile for `/` (key + method in perf-monitoring notes). Record LCP/TBT.
 Exit: numbers written into this file.
+
+### Phase 0 results — 2026-10-17
+Local build of the working tree (vite only, no prerender), gzip:
+- `app-*.js` 98.7 KB · `setup-labels-*.js` (supabase-js etc.) 33.3 KB → **132 KB of first-party JS on every public page**.
+- `module-*.js` 71.2 KB is PostHog, loaded lazily. admin.html loads the same app + setup-labels chunks.
+- The public chunk contains admin code: `admin_add_manual_booking`, `admin_issue_staff_token`, `admin_set_booking_split`, `abkSetType`.
+- Estimated admin share of app.js is ~43% of its lines, so **~40 KB gzip** is what the split would save.
+
+PageSpeed (mobile, Lighthouse lab, cache-busted, against the deployed site):
+| Page | Score | FCP | LCP | TBT | Weight | Images | Scripts |
+|---|---|---|---|---|---|---|---|
+| `/` | 58 (49 on 08-28) | 4.3 s | 6.2 s (15.2 s on 08-28) | 340 ms | 3.0 MB | 1.17 MB | 1.14 MB |
+| `/venues/beige-cafe` | 49 | 2.9 s | 8.4 s | 840 ms | 3.3 MB | 1.66 MB | 1.08 MB |
+
+The top opportunity on both pages is unused JavaScript (1.35 s / 1.5 s est. savings). Unused bytes by file (homepage):
+| File | Transferred | Unused |
+|---|---|---|
+| Razorpay `checkout.js` → `v2-entry-app` (loaded on EVERY page, index.html:619) | 157 KB | **156 KB** |
+| our `app-*.js` | 93 KB | 84 KB (admin + not-yet-run public code) |
+| gtag | 193 KB | 77 KB |
+| fbevents | 111 KB | 39 KB |
+| PostHog | 71 KB | 37 KB |
+
+**Verdict:** scripts now outweigh images, so the image work did its job. But the admin split removes only ~40 KB of ~1.1 MB of script.
+Razorpay is ~4× that, and the fix is one tag plus a small on-demand loader, with no refactor:
+`startRazorpayCheckout` (app.js ~4987) and the pay-link path (~5126) already handle `window.Razorpay` being undefined.
+→ Do the Razorpay lazy-load first, re-measure, and revisit the split after peak season.
 
 ## Phase 1 — inventory before moving anything (Claude, ~1 h)
 Produce `docs/admin-split-inventory.md`:
