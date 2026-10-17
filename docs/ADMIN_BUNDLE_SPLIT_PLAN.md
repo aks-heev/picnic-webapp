@@ -69,6 +69,11 @@ Razorpay is ~4× that, and the fix is one tag plus a small on-demand loader, wit
 Single lab runs, so the FCP/LCP moves are inside run-to-run noise. Script weight and blocking time are the real wins: Razorpay's full chain was ~470 KB, not the 157 KB its one chunk suggested.
 The biggest unused-JS item is now our own app.js (~80 KB). That is the admin split's target, so revisit it after peak season.
 
+### After the homepage hero fix — live 2026-10-17 (commit e225d9d)
+`/` mobile: score **65**, FCP 4.0 s, LCP **5.3 s**, TBT 260 ms, weight **2.04 MB**, images 1.02 MB. No Unsplash request; `hero/mobile.webp` starts at ~0.7 s, straight from the HTML.
+Since this morning's baseline: score 58 → 65, LCP 6.2 → 5.3 s, weight 3.0 → 2.04 MB (all single lab runs).
+Next speed lever: render-blocking fonts and style.css (Todoist, p3).
+
 ## Phase 1 — inventory before moving anything (Claude, ~1 h)
 Produce `docs/admin-split-inventory.md`:
 - For each of the 29 admin-region top-level bindings: who reads it (admin only / both).
