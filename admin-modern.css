@@ -1,0 +1,203 @@
+/* ================================================================
+   ADMIN MODERN LAYER (2026-10-18)
+   Loaded only by admin.html, after style.css. Every rule is scoped
+   under body.admin-ui so the public site cannot be affected.
+   It restyles existing classes — no markup or JS depends on it, so
+   deleting this file (and its <link>) fully reverts the look.
+   ================================================================ */
+
+.admin-ui {
+  --adm-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --adm-text: #1f1a17;
+  --adm-text-2: #5f5650;
+  --adm-text-3: #8d847d;
+  --adm-surface: #ffffff;
+  --adm-subtle: #f6f4f2;
+  --adm-border: #e3ddd8;
+  --adm-border-strong: #cfc7c0;
+  --adm-accent: #c4607a;          /* brand dusty rose */
+  --adm-accent-strong: #a84d66;
+  --adm-accent-soft: #fbeef2;
+  --adm-ring: 0 0 0 3px rgba(196, 96, 122, 0.18);
+  --adm-radius: 10px;
+  --adm-radius-sm: 8px;
+  --adm-shadow: 0 1px 2px rgba(31, 26, 23, 0.05);
+}
+
+/* ---------- Type ---------- */
+.admin-ui #admin-page,
+.admin-ui #admin-page input,
+.admin-ui #admin-page select,
+.admin-ui #admin-page textarea,
+.admin-ui #admin-page button,
+.admin-ui .qedit-overlay,
+.admin-ui .qedit-overlay input,
+.admin-ui .qedit-overlay select,
+.admin-ui .qedit-overlay textarea,
+.admin-ui .qedit-overlay button {
+  font-family: var(--adm-font);
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+}
+.admin-ui #admin-page { color: var(--adm-text); }
+
+/* ---------- Tabs: segmented pill bar ---------- */
+.admin-ui .dashboard-tabs {
+  gap: 4px;
+  padding: 4px;
+  background: var(--adm-subtle);
+  border: 1px solid var(--adm-border);
+  border-radius: 12px;
+  margin-bottom: 24px;
+  scrollbar-width: none;
+}
+.admin-ui .dashboard-tabs::-webkit-scrollbar { display: none; }
+.admin-ui .tab-btn {
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--adm-text-2);
+  transition: background .15s ease, color .15s ease, box-shadow .15s ease;
+}
+.admin-ui .tab-btn:hover {
+  color: var(--adm-text);
+  background: rgba(255, 255, 255, 0.6);
+  border-bottom-color: transparent;
+}
+.admin-ui .tab-btn.active {
+  color: var(--adm-text);
+  background: var(--adm-surface);
+  border-bottom-color: transparent;
+  box-shadow: 0 1px 3px rgba(31, 26, 23, 0.10), 0 0 0 1px var(--adm-border);
+}
+.admin-ui .tab-btn:focus-visible { outline: none; box-shadow: var(--adm-ring); }
+
+/* ---------- Labels ---------- */
+.admin-ui .abk-label,
+.admin-ui .vf-label,
+.admin-ui .qedit-field > span {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--adm-text);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.admin-ui .abk-hint,
+.admin-ui .vf-hint { color: var(--adm-text-3); }
+
+/* ---------- Text inputs, selects, textareas ---------- */
+.admin-ui :is(.abk-input, .vf-input, .bcl-input, .tm-input, .adm-advance-input),
+.admin-ui .qedit-field :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--adm-border);
+  border-radius: var(--adm-radius-sm);
+  background: var(--adm-surface);
+  color: var(--adm-text);
+  box-shadow: var(--adm-shadow);
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.admin-ui :is(.abk-input, .vf-input, .bcl-input, .tm-input, .adm-advance-input):hover,
+.admin-ui .qedit-field :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea):hover {
+  border-color: var(--adm-border-strong);
+}
+.admin-ui :is(.abk-input, .vf-input, .bcl-input, .tm-input, .adm-advance-input):focus,
+.admin-ui .qedit-field :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea):focus {
+  outline: none;
+  border-color: var(--adm-accent);
+  box-shadow: var(--adm-ring);
+}
+.admin-ui :is(.abk-input, .vf-input, .bcl-input, .tm-input, .adm-advance-input):disabled {
+  background: var(--adm-subtle);
+  color: var(--adm-text-3);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.admin-ui :is(.abk-input, .vf-input, .bcl-input, .tm-input)::placeholder,
+.admin-ui .qedit-field :is(input, textarea)::placeholder { color: var(--adm-text-3); }
+
+/* Selects: one consistent chevron instead of each browser's default. */
+.admin-ui select:is(.abk-input, .vf-input),
+.admin-ui .qedit-field select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235f5650' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+
+/* Number fields: drop the tiny spinner arrows (they invite accidental changes).
+   Arrow keys still step; mouse-wheel stepping is blocked in app.js. */
+.admin-ui input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+.admin-ui input[type="number"]::-webkit-outer-spin-button,
+.admin-ui input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* Keep 16px on phones so iOS doesn't zoom on focus. */
+@media (max-width: 768px) {
+  .admin-ui :is(.abk-input, .vf-input, .bcl-input, .tm-input, .adm-advance-input),
+  .admin-ui .qedit-field :is(input, select, textarea) { font-size: 16px; }
+}
+
+/* Checkboxes and radios pick up the brand colour. */
+.admin-ui #admin-page :is(input[type="checkbox"], input[type="radio"]),
+.admin-ui .qedit-overlay :is(input[type="checkbox"], input[type="radio"]) {
+  accent-color: var(--adm-accent);
+}
+
+/* ---------- Add Booking specifics ---------- */
+.admin-ui .abk-form { gap: 18px; }
+.admin-ui .abk-type {
+  gap: 4px;
+  padding: 4px;
+  background: var(--adm-subtle);
+  border: 1px solid var(--adm-border);
+  border-radius: 12px;
+}
+.admin-ui .abk-type-btn {
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--adm-text-2);
+}
+.admin-ui .abk-type-btn:hover { color: var(--adm-text); }
+.admin-ui .abk-type-btn--on {
+  background: var(--adm-surface);
+  color: var(--adm-text);
+  box-shadow: 0 1px 3px rgba(31, 26, 23, 0.10), 0 0 0 1px var(--adm-border);
+}
+.admin-ui .abk-slot {
+  border: 1px solid var(--adm-border);
+  border-radius: var(--adm-radius);
+  background: var(--adm-surface);
+  transition: border-color .15s ease, background .15s ease;
+}
+.admin-ui .abk-slot:hover { border-color: var(--adm-border-strong); }
+.admin-ui .abk-slot--on {
+  border-color: var(--adm-accent);
+  background: var(--adm-accent-soft);
+  box-shadow: 0 0 0 1px var(--adm-accent);
+}
+.admin-ui .abk-slot-label { font-weight: 600; font-size: 14px; }
+
+/* ---------- Edit-query modal ---------- */
+.admin-ui .qedit-modal {
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(31, 26, 23, 0.20);
+}
+.admin-ui .qedit-cancel,
+.admin-ui .qedit-save {
+  min-height: 40px;
+  padding: 8px 16px;
+  border-radius: var(--adm-radius-sm);
+  font-weight: 600;
+  font-size: 14px;
+}
+.admin-ui .qedit-save { background: var(--adm-accent); border-color: var(--adm-accent); }
+.admin-ui .qedit-save:hover:not(:disabled) { background: var(--adm-accent-strong); border-color: var(--adm-accent-strong); }
