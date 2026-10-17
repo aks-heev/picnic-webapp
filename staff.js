@@ -851,6 +851,8 @@ function waTemplates (ev) {
             `If any part of it is a surprise, just tell me what to keep quiet about 🤫` },
     { key: 'ready', label: 'Setup ready',
       text: `${hi}, your setup at ${venue} is ready ✨` + (staff ? ` Ask for ${staff} when you arrive.` : '') },
+    { key: 'eta', label: 'Ask ETA',
+      text: `${hi}, ${from}. Could you share your ETA for ${venue}? Just so we have everything perfect when you arrive 😊` },
     { key: 'late', label: 'Running late',
       text: `${hi}, ${from}. We're running about 15 mins behind on setup. Really sorry, it'll be ready before you are.` }
   ]
