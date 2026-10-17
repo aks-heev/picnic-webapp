@@ -216,6 +216,23 @@
     .cal-dlg-b { max-height: 62vh; }
   }
 
+  /* setup times (added 2026-10-17) */
+  .cal-chip i em.cal-tm { font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .cal-dt { border: 1px solid var(--hair); border-radius: 12px; padding: 8px 12px 6px; }
+  .cal-dt-row { display: grid; grid-template-columns: 124px minmax(0, 1fr); align-items: center; gap: 10px; min-height: 30px; border-top: 1px solid var(--hair-2); }
+  .cal-dt-row.ax { border-top: 0; min-height: 18px; }
+  .cal-dt-lbl { min-width: 0; font-size: 12px; line-height: 1.25; }
+  .cal-dt-lbl b, .cal-dt-lbl span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cal-dt-lbl span { color: var(--muted); font-size: 11px; }
+  .cal-dt-track { position: relative; height: 26px; }
+  .cal-dt-row.ax .cal-dt-track { height: 16px; }
+  .cal-dt-tick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--hair-2); }
+  .cal-dt-hr { position: absolute; top: 0; transform: translateX(-50%); font-size: 10.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .cal-dt-bar { position: absolute; top: 4px; height: 18px; margin-left: 1px; border-radius: 5px; background: var(--terracotta); color: #fff; font-size: 10.5px; font-weight: 600; line-height: 18px; padding: 0 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+  .cal-dt-bar.clash { background: var(--red); box-shadow: 0 0 0 2px var(--red-bg); }
+  .cal-dt-none { position: absolute; left: 0; top: 4px; font-size: 11px; color: var(--muted); font-style: italic; line-height: 18px; }
+  @media (max-width: 700px) { .cal-dt-row { grid-template-columns: 86px minmax(0, 1fr); gap: 6px; } .cal-dt { padding: 6px 8px 4px; } }
+
   /* newly added booking, after the embedded form reports a save */
   .cal-chip.new { box-shadow: inset 0 0 0 2px var(--olive); }
   .cal-bk.new { border-color: var(--olive); box-shadow: 0 0 0 2px var(--olive-bg); }
@@ -324,7 +341,7 @@ async function load() {
   const availFrom = addDaysIso(istTodayIso(), -60), availTo = addDaysIso(istTodayIso(), 400);
   const [bkRes, venRes, avRes] = await Promise.all([
     sb.from('bookings')
-      .select('id, full_name, mobile_number, preferred_date, checkout_date, time_slot, occasion, ' +
+      .select('id, full_name, mobile_number, preferred_date, checkout_date, time_slot, slot_start_time, slot_end_time, occasion, ' +
               'total_amount, advance_amount, payment_status, entry_source, external_booking_ref, ' +
               'created_at, venue_id, guest_count, package_name, booking_kind, venues!inner(name, city, type)')
       .eq('confirmed', true)
@@ -407,6 +424,11 @@ async function load() {
          is left alone — every revenue figure on this page keys on it. */
       venueId: r.venue_id, venueType: (r.venues && r.venues.type) || '',
       guests: r.guest_count, pkg: r.package_name || '', slot: r.time_slot || '',
+      /* Real setup times (minutes from midnight, IST wall clock) from
+         slot_start_time / slot_end_time. time_slot is only the coarse
+         morning/afternoon/evening bucket; older rows have no times at all and
+         fall back to it. */
+      tStart: calMin(r.slot_start_time), tEnd: calMin(r.slot_end_time),
       bookingKind: r.booking_kind || '',
     };
   });
@@ -508,6 +530,26 @@ function calState() {
 function calSavePrefs() { try { localStorage.setItem(CAL_PREF_KEY, JSON.stringify({ view: S.cal.view })); } catch (e) {} }
 function calShortVenue(name) { return String(name || '').replace(/^TerraCottage\s+/i, ''); }
 function calSlot(s, short) { return (short ? SLOT_SHORT : SLOT_LBL)[s] || (s ? s : 'No slot'); }
+/* ---- setup times ---- */
+function calMin(t) {
+  const m = String(t || '').match(/^(\d{1,2}):(\d{2})/);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+function calClock(min, mer) {
+  if (min >= 1439) return 'midnight';                       // 23:59 is how "till midnight" is stored
+  const h = Math.floor(min / 60), m = min % 60;
+  return (h % 12 || 12) + (m ? ':' + String(m).padStart(2, '0') : '') + (mer ? (h < 12 ? 'am' : 'pm') : '');
+}
+/* "5–8pm", "11am–2pm", "7pm–midnight"; falls back to the slot bucket. */
+function calTime(r, short) {
+  if (r.tStart == null) return calSlot(r.slot, short);
+  const a = r.tStart, b = r.tEnd;
+  if (b == null || b <= a) return calClock(a, true);
+  if (b >= 1439) return calClock(a, true) + '–midnight';
+  return (a < 720) === (b < 720) ? calClock(a, false) + '–' + calClock(b, true) : calClock(a, true) + '–' + calClock(b, true);
+}
+/* Sort key: real start time, else the bucket's nominal start. */
+function calStartKey(r) { return r.tStart != null ? r.tStart : ({ morning: 540, afternoon: 780, evening: 1020 }[r.slot] ?? 2000); }
 function calHasPicnic(r) { return r.bookingKind ? (r.bookingKind === 'picnic' || r.bookingKind === 'picnic_stay') : r.kind === 'picnic'; }
 function calHasStay(r) { return (r.bookingKind ? (r.bookingKind === 'stay' || r.bookingKind === 'picnic_stay') : r.kind === 'stay') && r.date && r.endDate; }
 function calAddHref(p) {
@@ -535,7 +577,7 @@ function calIndex() {
       for (let i = 0; i < n; i++) nightMap.get(r.venueId).set(addDaysIso(a, i), r);
     }
   });
-  picByDay.forEach(list => list.sort((a, b) => ((SLOT_ORDER[a.slot] ?? 9) - (SLOT_ORDER[b.slot] ?? 9)) || a.venue.localeCompare(b.venue)));
+  picByDay.forEach(list => list.sort((a, b) => (calStartKey(a) - calStartKey(b)) || a.venue.localeCompare(b.venue)));
   const children = new Map();
   venues.forEach(v => { if (v.parent_venue_id) { if (!children.has(v.parent_venue_id)) children.set(v.parent_venue_id, []); children.get(v.parent_venue_id).push(v.id); } });
   const bookedOn = (vid, k) => {
@@ -610,10 +652,10 @@ function calPicnicHtml(ix) {
       .map(u => `<span class="cal-unit" title="${esc(u.name)} occupied">${esc(calShortVenue(u.name).charAt(0))}</span>`).join('');
     const blocks = (ix.adminSlot.get(k) || []).map(b => ({ blk: true, venue: (ix.vById.get(b.vid) || {}).name || '', slot: b.slot }))
       .concat(ix.venues.filter(v => v.type === 'cafe' && ix.adminDay.has(v.id) && ix.adminDay.get(v.id).has(k)).map(v => ({ blk: true, venue: v.name, slot: '' })));
-    const items = list.map(r => `<div class="cal-chip${r.bkid === S.cal.fresh ? ' new' : ''}"><b><span>${esc(r.name || '—')}</span>${r.balance > 0 ? '<i class="cal-due" title="Balance due"></i>' : ''}</b><i>${esc(r.venue)} · ${esc(calSlot(r.slot, true))}${r.bookingKind === 'picnic_stay' ? ' · +stay' : ''}</i></div>`)
+    const items = list.map(r => `<div class="cal-chip${r.bkid === S.cal.fresh ? ' new' : ''}"><b><span>${esc(r.name || '—')}</span>${r.balance > 0 ? '<i class="cal-due" title="Balance due"></i>' : ''}</b><i><em class="cal-tm">${esc(calTime(r, true))}</em> · ${esc(r.venue)}${r.bookingKind === 'picnic_stay' ? ' · +stay' : ''}</i></div>`)
       .concat(blocks.map(b => `<div class="cal-chip blk"><b><span>Blocked</span></b><i>${esc(b.venue)}${b.slot ? ' · ' + esc(calSlot(b.slot, true)) : ' · all day'}</i></div>`));
     const shown = items.slice(0, 3).join('') + (items.length > 3 ? `<div class="cal-more">+${items.length - 3} more</div>` : '');
-    const aria = `${d.getDate()} ${MON_LBL[d.getMonth()]}: ${list.length ? list.map(r => r.name).join(', ') : 'no picnics'}${full || over ? ', a slot is full' : ''}. Open day`;
+    const aria = `${d.getDate()} ${MON_LBL[d.getMonth()]}: ${list.length ? list.map(r => `${r.name} ${calTime(r)}`).join(', ') : 'no picnics'}${full || over ? ', a slot is full' : ''}. Open day`;
     cells += `<button type="button" class="cal-day${monthKey(d) !== c.month ? ' out' : ''}${k === today ? ' today' : ''}${k === selKey ? ' sel' : ''}" data-day="${k}" aria-haspopup="dialog" aria-label="${esc(aria)}">
       <div class="cal-dh"><span class="cal-dh-l"><span class="cal-n">${d.getDate() === 1 ? '1 ' + MON_LBL[d.getMonth()] : d.getDate()}</span>${flag}</span><span class="cal-units">${units}</span></div>
       ${shown}${list.length ? `<span class="cal-count${full || over ? ' full' : ''}">${list.length}</span>` : ''}
@@ -624,7 +666,7 @@ function calPicnicHtml(ix) {
     <div class="cal-dows">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(x => `<div>${x}</div>`).join('')}</div>
     <div class="cal-grid">${cells}</div>
     <div class="cal-legend">
-      <span><span class="cal-sw" style="background:var(--terracotta-bg)"></span>Picnic: guest, then venue · slot</span>
+      <span><span class="cal-sw" style="background:var(--terracotta-bg)"></span>Picnic: guest, then setup time · venue</span>
       <span><span class="cal-flag full">Full</span>Slot at the venue’s setup capacity</span>
       <span><i class="cal-due"></i>Balance due</span>
       ${unitLegend ? `<span>${unitLegend}${esc(ix.units.map(u => calShortVenue(u.name)).join(' / '))} occupied that night</span>` : ''}
@@ -751,15 +793,48 @@ function calBookingCard(r, forStay) {
   let line;
   if (forStay) {
     const a = isoDate(r.date), b = isoDate(r.endDate), n = nightsBetween(a, b);
-    line = [r.venue, `${fmtIsoShort(a)} → ${fmtIsoShort(b)}`, `${n} night${n === 1 ? '' : 's'}`, r.guests ? `${r.guests} guest${r.guests === 1 ? '' : 's'}` : ''];
+    line = [r.venue, `${fmtIsoShort(a)} → ${fmtIsoShort(b)}`, `${n} night${n === 1 ? '' : 's'}`, r.guests ? `${r.guests} guest${r.guests === 1 ? '' : 's'}` : '',
+      r.bookingKind === 'picnic_stay' && r.tStart != null ? `setup ${calTime(r)}` : ''];
   } else {
-    line = [r.venue, calSlot(r.slot), r.pkg, r.guests ? `${r.guests} guest${r.guests === 1 ? '' : 's'}` : '', r.occasion, r.bookingKind === 'picnic_stay' ? 'with a stay' : ''];
+    line = [r.venue, calTime(r), r.pkg, r.guests ? `${r.guests} guest${r.guests === 1 ? '' : 's'}` : '', r.occasion, r.bookingKind === 'picnic_stay' ? 'with a stay' : ''];
   }
   return `<div class="cal-bk${r.bkid === S.cal.fresh ? ' new' : ''}">
     <div class="cal-bk-t"><b>${esc(r.name || '—')}</b><span>${r.bkid === S.cal.fresh ? '<span class="badge b-live">Just added</span>' : ''}${chan}${esc(r.bookingId)}</span></div>
     <div class="cal-bk-l">${esc(line.filter(Boolean).join(' · '))}</div>
     ${calMoneyHtml(r)}
   </div>`;
+}
+
+/* The day's picnics on one clock: a row per booking, a bar from setup start to
+   end. Lets staff see turnaround gaps and overlaps at a glance. A bar turns red
+   only when more setups overlap at the same venue than its
+   max_concurrent_setups allows — overlaps at different venues are normal. */
+function calDayTimeline(ix, list) {
+  const timed = list.filter(r => r.tStart != null);
+  if (!timed.length) return '';
+  const endOf = r => (r.tEnd != null && r.tEnd > r.tStart) ? Math.min(r.tEnd, 1440) : r.tStart + 120;
+  let lo = Math.floor(Math.min(...timed.map(r => r.tStart)) / 60) * 60;
+  let hi = Math.ceil(Math.max(...timed.map(endOf)) / 60) * 60;
+  if (hi - lo < 240) { hi = Math.min(1440, lo + 240); lo = Math.max(0, hi - 240); }
+  const span = hi - lo, step = span > 600 ? 180 : span > 360 ? 120 : 60;
+  const pct = m => ((m - lo) / span * 100).toFixed(2) + '%';
+  const ticks = [];
+  for (let m = Math.ceil(lo / step) * step; m <= hi; m += step) ticks.push(m);
+  const grid = ticks.map(m => `<i class="cal-dt-tick" style="left:${pct(m)}"></i>`).join('');
+  const clash = r => {
+    const v = ix.vById.get(r.venueId), max = v ? (Number(v.max_concurrent_setups) || 1) : 1;
+    const same = timed.filter(o => o.venueId === r.venueId && o.tStart < endOf(r) && r.tStart < endOf(o));
+    return same.length > max;
+  };
+  const rows = list.map(r => {
+    const lbl = `<div class="cal-dt-lbl"><b>${esc(r.name || '—')}</b><span>${esc(r.venue)}</span></div>`;
+    if (r.tStart == null) return `<div class="cal-dt-row">${lbl}<div class="cal-dt-track">${grid}<span class="cal-dt-none">${esc(calSlot(r.slot))} · no time set</span></div></div>`;
+    const e = endOf(r), c = clash(r);
+    const title = `${r.name} · ${r.venue} · ${calTime(r)}${c ? ' · overlaps another setup here beyond capacity' : ''}`;
+    return `<div class="cal-dt-row">${lbl}<div class="cal-dt-track">${grid}<span class="cal-dt-bar${c ? ' clash' : ''}" style="left:${pct(r.tStart)};width:calc(${((e - r.tStart) / span * 100).toFixed(2)}% - 2px)" title="${esc(title)}">${esc(calTime(r))}</span></div></div>`;
+  }).join('');
+  const axis = `<div class="cal-dt-row ax"><div class="cal-dt-lbl"></div><div class="cal-dt-track">${ticks.map(m => `<span class="cal-dt-hr" style="left:${pct(m)}">${esc(calClock(m === 1440 ? 1439 : m, true).replace('midnight', '12am'))}</span>`).join('')}</div></div>`;
+  return `<div class="cal-dt" aria-label="Setup times on this day">${axis}${rows}</div>`;
 }
 
 /* Dialog content, resolved from S.cal.dlg on every render so a refresh (e.g.
@@ -776,7 +851,7 @@ function calDialogHtml(ix) {
     kicker = past ? 'Past day' : d.k === today ? 'Today' : 'Picnics';
     title = `${DOW_LONG[dt.getDay()]}, ${dt.getDate()} ${MON_LBL[dt.getMonth()]}`;
     sub = list.length ? `${list.length} picnic setup${list.length === 1 ? '' : 's'}${due ? ' · ' + inr(due) + ' still to collect' : ''}` : 'No picnics booked';
-    body = list.map(r => calBookingCard(r, false)).join('') || '<div class="cal-note plain">Nothing booked on this day yet.</div>';
+    body = calDayTimeline(ix, list) + (list.map(r => calBookingCard(r, false)).join('') || '<div class="cal-note plain">Nothing booked on this day yet.</div>');
     calCapacity(ix, list).forEach(x => {
       body += x.lvl === 'over'
         ? `<div class="cal-note red">${esc(x.venue)} ${esc(calSlot(x.slot).toLowerCase())}: ${x.n} setups against a capacity of ${x.max}. Check this booking before the day.</div>`
