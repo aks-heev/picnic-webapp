@@ -10845,7 +10845,15 @@ async function loadHeroImage() {
     const isMobile   = window.innerWidth <= 768
 
     if (img) {
-      if (isMobile && mobileUrl) {
+      // index.html ships the current heroes in a <picture>; only touch it when
+      // admin has changed them, so the browser doesn't re-download the same image.
+      const source = img.parentElement?.tagName === 'PICTURE'
+        ? img.parentElement.querySelector('source[media]') : null
+      if (source) {
+        const wantMobile = mobileUrl || desktopUrl
+        if (wantMobile && source.getAttribute('srcset') !== wantMobile) source.setAttribute('srcset', wantMobile)
+        if (desktopUrl && img.getAttribute('src') !== desktopUrl) img.src = desktopUrl
+      } else if (isMobile && mobileUrl) {
         img.src = mobileUrl
       } else if (desktopUrl) {
         img.src = desktopUrl

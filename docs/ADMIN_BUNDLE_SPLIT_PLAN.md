@@ -1,6 +1,6 @@
 # Admin bundle split — plan (2026-10-17)
 
-Status: Phase 0 DONE 2026-10-17 — verdict: PARK the split; lazy-load Razorpay first (see Phase 0 results).
+Status: Phase 0 DONE 2026-10-17 — verdict: PARK the split. Razorpay lazy-load SHIPPED 2026-10-17 (see results).
 Written via plan-optimizer (61 → 82 → 90 → 91, plateau).
 
 ## Why
@@ -60,6 +60,14 @@ The top opportunity on both pages is unused JavaScript (1.35 s / 1.5 s est. savi
 Razorpay is ~4× that, and the fix is one tag plus a small on-demand loader, with no refactor:
 `startRazorpayCheckout` (app.js ~4987) and the pay-link path (~5126) already handle `window.Razorpay` being undefined.
 → Do the Razorpay lazy-load first, re-measure, and revisit the split after peak season.
+
+### After Razorpay lazy-load — live 2026-10-17 (commit 6b415f9)
+| Page | Score | FCP | LCP | TBT | Weight | Scripts | Razorpay |
+|---|---|---|---|---|---|---|---|
+| `/` | 63 (58) | 4.6 s (4.3) | 6.2 s (6.2) | 190 ms (340) | 2.18 MB (3.0) | 670 KB (1,144) | 0 KB |
+| `/venues/beige-cafe` | 50 (49) | 4.5 s (2.9) | 7.9 s (8.4) | 440 ms (840) | 2.53 MB (3.3) | 670 KB (1,077) | 0 KB |
+Single lab runs, so the FCP/LCP moves are inside run-to-run noise. Script weight and blocking time are the real wins: Razorpay's full chain was ~470 KB, not the 157 KB its one chunk suggested.
+The biggest unused-JS item is now our own app.js (~80 KB). That is the admin split's target, so revisit it after peak season.
 
 ## Phase 1 — inventory before moving anything (Claude, ~1 h)
 Produce `docs/admin-split-inventory.md`:

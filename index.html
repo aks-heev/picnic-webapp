@@ -39,6 +39,7 @@
     <link rel="manifest" href="/site.webmanifest">
 
     <link rel="stylesheet" href="style.css">
+    <style id="hero-mobile-pos-style">@media (max-width: 768px) { .hero-bg-img { object-position: 57% 60% !important; } }</style>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Be+Vietnam+Pro:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -140,15 +141,21 @@
         <!-- Hero Section — Split Screen -->
         <section class="hero">
             <!-- Full-bleed background image -->
-            <img
-                id="hero-bg-img"
-                src="https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=1600&q=85"
-                alt=""
-                class="hero-bg-img"
-                aria-hidden="true"
-                fetchpriority="high"
-                decoding="async"
-            />
+            <!-- Real hero images inline (was an Unsplash placeholder that loadHeroImage()
+                 swapped out after app.js + a DB round-trip, so every visit downloaded both).
+                 site_settings still wins: loadHeroImage() updates <source>/<img> if admin changes them. -->
+            <picture>
+                <source media="(max-width: 768px)" srcset="https://evmftrogyzoudiccqkya.supabase.co/storage/v1/object/public/site-images/hero/mobile.webp?v=1784913621027">
+                <img
+                    id="hero-bg-img"
+                    src="https://evmftrogyzoudiccqkya.supabase.co/storage/v1/object/public/site-images/hero/main.webp?v=1784913621027"
+                    alt=""
+                    class="hero-bg-img"
+                    aria-hidden="true"
+                    fetchpriority="high"
+                    decoding="async"
+                />
+            </picture>
             <!-- Gradient overlay: cream on left fades to transparent on right -->
             <div class="hero-overlay" aria-hidden="true"></div>
 
