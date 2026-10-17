@@ -425,6 +425,60 @@ html, body {
 }
 .stf-tab[data-on="1"] .stf-tabcount { background: rgba(255,255,255,.25); }
 
+/* ---------- calendar tab ---------- */
+.stf-cal {
+  background: var(--boho-white);
+  border: 1px solid var(--boho-border);
+  border-radius: var(--radius);
+  padding: 12px 10px 10px;
+  margin-bottom: 16px;
+}
+.stf-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.stf-cal-title { font-family: var(--font-serif); font-size: 22px; font-weight: 600; margin: 0; }
+.stf-cal-nav {
+  width: 44px; height: 44px;
+  border: 1px solid var(--boho-border); border-radius: var(--radius-sm);
+  background: var(--boho-warm-white); color: var(--boho-text-dark);
+  font-size: 22px; line-height: 1; cursor: pointer;
+}
+.stf-cal-nav[disabled] { opacity: .35; cursor: default; }
+.stf-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.stf-cal-wk { margin-bottom: 4px; }
+.stf-cal-wk span { text-align: center; font-size: 12px; font-weight: 600; color: var(--boho-text-light); }
+.stf-cal-cell {
+  position: relative;
+  min-height: 48px;           /* 7 across a 360px phone still clears a fingertip */
+  padding: 4px 0 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  border: 1px solid transparent; border-radius: var(--radius-sm);
+  background: var(--boho-warm-white);
+  font-family: var(--font-sans); color: var(--boho-text-dark);
+  cursor: pointer;
+}
+.stf-cal-cell--pad { background: none; cursor: default; }
+.stf-cal-cell[data-past="1"] { background: none; color: var(--boho-text-light); cursor: default; }
+.stf-cal-cell[data-busy="1"] { background: #fdf0f3; border-color: rgba(196,96,122,.35); }
+.stf-cal-cell[data-today="1"] .stf-cal-num { color: var(--boho-accent-rose); font-weight: 700; }
+.stf-cal-cell[data-sel="1"] { border-color: var(--boho-accent-rose); box-shadow: 0 0 0 1px var(--boho-accent-rose) inset; }
+.stf-cal-num { font-size: 15px; line-height: 1.2; }
+.stf-cal-dots { display: flex; align-items: center; gap: 2px; }
+.stf-cal-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--boho-accent-rose); }
+.stf-cal-dots b { font-size: 10px; font-weight: 600; color: var(--boho-accent-rose); }
+.stf-cal-bar {
+  position: absolute; left: 4px; right: 4px; bottom: 3px;
+  height: 3px; border-radius: 2px; background: var(--boho-accent-sage);
+}
+.stf-cal-bar--block { background: var(--boho-text-light); }
+.stf-cal-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12px; color: var(--boho-text-medium); }
+.stf-cal-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.stf-cal-lg-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--boho-accent-rose); }
+.stf-cal-lg-bar { width: 14px; height: 3px; border-radius: 2px; background: var(--boho-accent-sage); }
+.stf-cal-lg-bar.stf-cal-bar--block { background: var(--boho-text-light); }
+.stf-cal-lg-busy { width: 12px; height: 12px; border-radius: 3px; background: #fdf0f3; border: 1px solid rgba(196,96,122,.35); }
+.stf-cal-stay-what { color: var(--boho-accent-sage); }
+.stf-cal-empty { color: var(--boho-text-medium); margin: 0; }
+.stf-cal-hint { font-size: 13px; color: var(--boho-text-light); margin: 10px 0 0; }
+
 /* ---------- food & drinks row (picnic) ---------- */
 .stf-food {
   display: flex; align-items: flex-start; gap: 9px;

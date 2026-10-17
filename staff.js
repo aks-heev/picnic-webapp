@@ -120,7 +120,7 @@ let payload = null            // last staff_today response
 let queue = load(LS_QUEUE, [])
 let flushing = false
 let refreshTimer = null
-let tab = load(LS_TAB, 'picnic')   // 'picnic' | 'airbnb'
+let tab = load(LS_TAB, 'picnic')   // 'picnic' | 'airbnb' | 'calendar'
 let reviewedIds = new Set()   // today's bookings that already have a review on the server
 // False when the server has no staff_reviewed_ids RPC yet (migration not
 // applied) — the review button is hidden rather than offered and failing.
@@ -357,7 +357,9 @@ function render () {
   el.subtitle.textContent = [staffName, regionText, dateText].filter(Boolean).join(' · ')
 
   paintTabs()
-  el.main.innerHTML = tab === 'airbnb' ? airbnbTabHtml() : picnicTabHtml()
+  el.main.innerHTML = tab === 'airbnb' ? airbnbTabHtml()
+                    : tab === 'calendar' ? calendarTabHtml()
+                    : picnicTabHtml()
   wireCards()
 }
 
@@ -546,8 +548,9 @@ function paintTabs () {
     const badge = b.querySelector('.stf-tabcount')
     if (badge) { badge.textContent = count; badge.hidden = !count }
   }
-  setBtn('stf-tab-picnic', tab !== 'airbnb', p)
+  setBtn('stf-tab-picnic', tab !== 'airbnb' && tab !== 'calendar', p)
   setBtn('stf-tab-airbnb', tab === 'airbnb', a)
+  setBtn('stf-tab-calendar', tab === 'calendar', 0)
 }
 
 function switchTab (next) {
@@ -739,6 +742,159 @@ function upcomingHtml (list) {
     </section>`
 }
 
+/* ------------------------------------------------------------ calendar tab */
+
+/* Picnics and stays on one month grid. Its whole point is the thing the two
+   list tabs can't show: a day where a picnic AND a check-in/out land together
+   (data-busy). View-only on purpose — every staff action is capped to today
+   by the server, so tapping a day only lists it; actions stay on their tabs.
+   Built entirely from the staff_today payload, which already carries every
+   future confirmed booking for this region (no date horizon, checked
+   2026-10-17), so this needs no backend change. Past days aren't in the
+   payload, which is why the grid won't page back before this month. */
+
+let calMonth = null   // 'YYYY-MM' being shown
+let calDay = null     // 'YYYY-MM-DD' selected
+
+function isoAdd (iso, n) {
+  const d = new Date(iso + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+function isoDiff (a, b) {   // days from a to b
+  return Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 86400000)
+}
+
+/* One pass over the payload into { date: {picnics, nights, ins, outs, blocks} }. */
+function calIndex () {
+  const idx = new Map()
+  const at = d => {
+    if (!idx.has(d)) idx.set(d, { picnics: [], nights: [], ins: [], outs: [], blocks: [] })
+    return idx.get(d)
+  }
+  const today = payload.date
+  for (const ev of [...(payload.events || []), ...(payload.upcoming || [])]) {
+    at(ev.date || today).picnics.push(ev)
+  }
+  for (const st of [...(payload.stays || []), ...(payload.stays_upcoming || [])]) {
+    if (!st.check_in || !st.check_out) continue
+    at(st.check_in).ins.push(st)
+    at(st.check_out).outs.push(st)
+    for (let d = st.check_in; d < st.check_out; d = isoAdd(d, 1)) at(d).nights.push(st)
+  }
+  for (const o of (payload.occupancy || [])) {
+    if (!o.from_date || !o.to_date) continue
+    // to_date is a checkout date when the span equals the night count,
+    // otherwise treat it as the last night.
+    const end = isoDiff(o.from_date, o.to_date) === Number(o.nights) ? o.to_date : isoAdd(o.to_date, 1)
+    for (let d = o.from_date; d < end; d = isoAdd(d, 1)) at(d).blocks.push(o)
+  }
+  // Each picnic in time order within its day.
+  for (const v of idx.values()) v.picnics.sort((a, b) => String(a.slot_start || '').localeCompare(String(b.slot_start || '')))
+  return idx
+}
+
+function calendarTabHtml () {
+  const today = payload.date
+  if (!calMonth) calMonth = today.slice(0, 7)
+  if (!calDay) calDay = today
+  const idx = calIndex()
+
+  const [y, m] = calMonth.split('-').map(Number)
+  const first = `${calMonth}-01`
+  const daysIn = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  const lead = (new Date(first + 'T00:00:00Z').getUTCDay() + 6) % 7   // Monday-first
+  const monthName = new Date(first + 'T00:00:00').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+  const canBack = calMonth > today.slice(0, 7)
+
+  const cells = []
+  for (let i = 0; i < lead; i++) cells.push('<span class="stf-cal-cell stf-cal-cell--pad"></span>')
+  for (let n = 1; n <= daysIn; n++) {
+    const d = `${calMonth}-${String(n).padStart(2, '0')}`
+    const v = idx.get(d)
+    const past = d < today
+    const picnics = v ? v.picnics.length : 0
+    const moves = v ? v.ins.length + v.outs.length : 0
+    const busy = picnics + moves >= 2
+    const dots = picnics
+      ? '<span class="stf-cal-dots">' + '<i></i>'.repeat(Math.min(picnics, 3)) +
+        (picnics > 3 ? `<b>+${picnics - 3}</b>` : '') + '</span>'
+      : ''
+    const bar = v && v.nights.length ? '<span class="stf-cal-bar"></span>'
+              : v && v.blocks.length ? '<span class="stf-cal-bar stf-cal-bar--block"></span>' : ''
+    cells.push(`<button type="button" class="stf-cal-cell" data-cal-day="${d}"
+        data-today="${d === today ? '1' : '0'}" data-sel="${d === calDay ? '1' : '0'}"
+        data-past="${past ? '1' : '0'}" data-busy="${busy ? '1' : '0'}" ${past ? 'disabled' : ''}
+        aria-label="${esc(dayShort(d))}${picnics ? `, ${picnics} picnic${picnics === 1 ? '' : 's'}` : ''}">
+        <span class="stf-cal-num">${n}</span>${dots}${bar}</button>`)
+  }
+
+  return `<section class="stf-cal">
+      <div class="stf-cal-head">
+        <button type="button" class="stf-cal-nav" data-cal-nav="-1" ${canBack ? '' : 'disabled'} aria-label="Previous month">‹</button>
+        <h2 class="stf-cal-title">${esc(monthName)}</h2>
+        <button type="button" class="stf-cal-nav" data-cal-nav="1" aria-label="Next month">›</button>
+      </div>
+      <div class="stf-cal-grid stf-cal-wk">${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(w => `<span>${w}</span>`).join('')}</div>
+      <div class="stf-cal-grid">${cells.join('')}</div>
+      <div class="stf-cal-legend">
+        <span><i class="stf-cal-lg-dot"></i>Picnic</span>
+        <span><i class="stf-cal-lg-bar"></i>Stay</span>
+        <span><i class="stf-cal-lg-bar stf-cal-bar--block"></i>Blocked</span>
+        <span><i class="stf-cal-lg-busy"></i>Busy day</span>
+      </div>
+    </section>
+    ${calDayHtml(calDay, idx.get(calDay))}`
+}
+
+function calDayHtml (d, v) {
+  const title = d === payload.date ? 'Today · ' + dayShort(d) : dayLabel(d)
+  if (!v || !(v.picnics.length + v.nights.length + v.outs.length + v.blocks.length)) {
+    return `<section class="stf-upcoming"><div class="stf-up-day"><h3>${esc(title)}</h3>
+      <p class="stf-cal-empty">Nothing booked.</p></div></section>`
+  }
+  const rows = []
+  for (const ev of v.picnics) {
+    const guests = ev.guests + ' guests' + (ev.children ? ` · ${ev.children} kid${ev.children === 1 ? '' : 's'}` : '')
+    const bits = []
+    if (ev.package_name) bits.push(esc(ev.package_name))
+    if (ev.occasion) bits.push(esc(ev.occasion))
+    rows.push(`<li class="stf-up-row">
+        <div class="stf-up-line"><span class="stf-up-time">Picnic · ${esc(slotText(ev))}</span>
+          <span class="stf-up-guests">${esc(guests)}</span></div>
+        <div class="stf-up-name">${esc(ev.guest_name)}</div>
+        <div class="stf-up-venue">${esc((ev.venue && ev.venue.name) || 'Venue not set')}</div>
+        ${bits.length ? `<div class="stf-up-bits">${bits.join(' · ')}</div>` : ''}
+      </li>`)
+  }
+  // A stay appears once per day, labelled by what happens to it that day.
+  const seen = new Set()
+  const stayRow = (st, what) => {
+    if (seen.has(st.id)) return
+    seen.add(st.id)
+    rows.push(`<li class="stf-up-row stf-cal-stay">
+        <div class="stf-up-line"><span class="stf-up-time stf-cal-stay-what">${what}</span>
+          <span class="stf-up-guests">${esc(st.guests + ' guests')}</span></div>
+        <div class="stf-up-name">${esc(st.guest_name)}</div>
+        <div class="stf-up-venue">${esc((st.venue && st.venue.name) || 'Venue not set')}</div>
+        <div class="stf-up-bits">${esc(dayShort(st.check_in))} → ${esc(dayShort(st.check_out))} · ${
+          st.source === 'airbnb' ? 'Airbnb' : 'Direct'}</div>
+      </li>`)
+  }
+  for (const st of v.ins) stayRow(st, 'Check-in')
+  for (const st of v.outs) stayRow(st, 'Check-out')
+  for (const st of v.nights) stayRow(st, 'In house')
+  for (const o of v.blocks) {
+    rows.push(`<li class="stf-up-row stf-occ-row">
+        <div class="stf-up-name">${esc(o.venue_name)}</div>
+        <div class="stf-up-note">Blocked on Airbnb — no guest details entered</div>
+      </li>`)
+  }
+  const hint = d === payload.date ? '<p class="stf-cal-hint">Tick-offs and payments for today are on the Picnic and Airbnb tabs.</p>' : ''
+  return `<section class="stf-upcoming"><div class="stf-up-day"><h3>${esc(title)}</h3>
+      <ul class="stf-up-list">${rows.join('')}</ul>${hint}</div></section>`
+}
+
 function dayLabel (date) {
   try {
     const d = new Date(date + 'T00:00:00')
@@ -758,6 +914,20 @@ function wireCards () {
       const step = btn.dataset.step
       if (step === 'payment_received') openPaySheet(id)
       else enqueue(id, step, null, null)
+    })
+  })
+  el.main.querySelectorAll('[data-cal-day]').forEach(btn => {
+    btn.addEventListener('click', () => { calDay = btn.dataset.calDay; render() })
+  })
+  el.main.querySelectorAll('[data-cal-nav]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const [y, m] = calMonth.split('-').map(Number)
+      const d = new Date(Date.UTC(y, m - 1 + Number(btn.dataset.calNav), 1))
+      calMonth = d.toISOString().slice(0, 7)
+      // Keep the selection inside the month on screen: today if it's this
+      // month, otherwise the 1st.
+      calDay = payload.date.startsWith(calMonth) ? payload.date : `${calMonth}-01`
+      render()
     })
   })
   el.main.querySelectorAll('[data-act="wa"]').forEach(btn => {
@@ -1239,6 +1409,8 @@ el.refresh.addEventListener('click', () => { refresh(false); flush() })
 const tabPicnic = $('stf-tab-picnic'), tabAirbnb = $('stf-tab-airbnb')
 if (tabPicnic) tabPicnic.addEventListener('click', () => switchTab('picnic'))
 if (tabAirbnb) tabAirbnb.addEventListener('click', () => switchTab('airbnb'))
+const tabCalendar = $('stf-tab-calendar')
+if (tabCalendar) tabCalendar.addEventListener('click', () => switchTab('calendar'))
 
 // Coming back to the tab is the most common "is it still accurate?" moment.
 document.addEventListener('visibilitychange', () => {
