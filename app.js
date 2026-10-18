@@ -6799,6 +6799,10 @@ function paymentBadgeHtml(b) {
 // Occasion + celebration-board detail rows shared by query/booking cards
 function occasionBoardHtml(b) {
   let html = ''
+  // package_name is the snapshot frozen at booking time; older rows have none.
+  if (b.package_name) {
+    html += `<div class="adm-detail-row">🧺 <strong>Package:</strong> ${escapeHtml(b.package_name)}</div>`
+  }
   if (b.occasion) {
     html += `<div class="adm-detail-row">🎉 <strong>Occasion:</strong> ${escapeHtml(b.occasion)}</div>`
   }
