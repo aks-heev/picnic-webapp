@@ -7732,9 +7732,16 @@ async function confirmBooking(queryId, venueId, venueType, preferredDate, checko
       // not just the bookings table. Without this, a child single could be
       // confirmed on a night the whole floor is parent-blocked. The public
       // calendar already hides these dates via fetchBookedData.
-      const { data: vaBlocks } = await supabase.from('venue_availability')
-        .select('date').eq('venue_id', venueId).in('source', ['admin', 'ical', 'parent'])
-      const blockedSet = new Set((vaBlocks || []).map(r => r.date))
+      // ical rows tagged ical_host_block (Airbnb "Not available", no guest reservation —
+      // usually the owner's own block for this very booking) are a SOFT block: collected
+      // here and asked about after the hard checks pass. Everything else stays hard.
+      const { data: vaBlocks, error: vaErr } = await supabase.from('venue_availability')
+        .select('date, source, ical_host_block').eq('venue_id', venueId).in('source', ['admin', 'ical', 'parent'])
+      if (vaErr) throw vaErr // fail closed: an unread block list must never mean "no blocks"
+      const isSoft = r => r.source === 'ical' && r.ical_host_block === true
+      const blockedSet   = new Set((vaBlocks || []).filter(r => !isSoft(r)).map(r => r.date))
+      const hostBlockSet = new Set((vaBlocks || []).filter(isSoft).map(r => r.date))
+      const hostBlockNights = []
 
       // Build date→occupancy count from existing confirmed stays
       const countMap = new Map()
@@ -7757,7 +7764,7 @@ async function confirmBooking(queryId, venueId, venueType, preferredDate, checko
       for (let d = new Date(reqStart); d < reqEnd; d.setDate(d.getDate() + 1)) {
         const ds = localDateStr(d)
         if (blockedSet.has(ds)) {
-          showToast(`Cannot confirm: ${ds} is blocked (admin block or whole-floor booking).`, 'error')
+          showToast(`Cannot confirm: ${ds} is blocked (admin block, Airbnb reservation, or whole-floor booking).`, 'error')
           return
         }
         if ((countMap.get(ds) || 0) >= maxSetups) {
@@ -7767,6 +7774,11 @@ async function confirmBooking(queryId, venueId, venueType, preferredDate, checko
           )
           return
         }
+        if (hostBlockSet.has(ds)) hostBlockNights.push(ds)
+      }
+      if (hostBlockNights.length && !confirm(abkHostBlockPrompt(hostBlockNights))) {
+        showToast('Not confirmed — the Airbnb block was left as is.', 'error')
+        return
       }
     } else if (venueType === 'combo' && preferredDate) {
       // Whole-floor: every child must be free for every requested night.
@@ -12152,7 +12164,7 @@ async function abkSave() {
   try {
     if (abk.editingId) {
       const editingId = abk.editingId
-      const { error } = await supabase.rpc('admin_edit_booking', { p_booking_id: editingId, p_booking, p_add_ons })
+      const { error } = await abkRpcHostBlockAware('admin_edit_booking', { p_booking_id: editingId, p_booking, p_add_ons })
       if (error) throw error
       // Optional "updated details" email: resend the existing confirmation
       // template with the freshly-updated row (manual-resend path on
@@ -12177,7 +12189,7 @@ async function abkSave() {
       switchTab('bookings')
       loadBookings()
     } else {
-      const { data, error } = await supabase.rpc('admin_add_manual_booking', { p_booking, p_add_ons })
+      const { data, error } = await abkRpcHostBlockAware('admin_add_manual_booking', { p_booking, p_add_ons })
       if (error) throw error
       await abkSaveSplit(data)
       await abkSaveChecklist(data)
@@ -12197,6 +12209,29 @@ async function abkSave() {
   }
 }
 window.abkSave = abkSave
+
+// Airbnb host blocks (2026-10-18). sync-ical tags Airbnb "Not available" nights that have no
+// guest reservation as ical_host_block — almost always the owner's own block for a direct
+// booking. admin_add_manual_booking / admin_edit_booking raise 'HOST_BLOCK: …' for those
+// instead of a hard refusal; we ask once, then re-send with allow_host_block. Real Airbnb
+// reservations, admin blocks and whole-floor (parent) blocks never reach this — they stay hard.
+function abkHostBlockPrompt(nights) {
+  const list = Array.isArray(nights) ? nights.join(', ') : String(nights)
+  return `${list} ${Array.isArray(nights) && nights.length > 1 ? 'are' : 'is'} blocked on Airbnb, with no guest reservation.\n\n` +
+    `OK = it's your own block for this guest — save anyway.\n` +
+    `Cancel = not sure — check the Airbnb calendar first.`
+}
+
+async function abkRpcHostBlockAware(fn, args) {
+  const res = await supabase.rpc(fn, args)
+  const msg = res.error?.message || ''
+  if (!msg.startsWith('HOST_BLOCK:')) return res
+  const night = (msg.match(/\d{4}-\d{2}-\d{2}/) || [msg])[0]
+  if (!confirm(abkHostBlockPrompt([night]))) {
+    return { data: null, error: { message: 'Not saved — the Airbnb block was left as is.' } }
+  }
+  return supabase.rpc(fn, { ...args, p_booking: { ...args.p_booking, allow_host_block: true } })
+}
 
 // Persist the picnic/stay split after the main save.
 // 🔴 This exists because admin_add_manual_booking and admin_edit_booking build their column
@@ -12450,6 +12485,19 @@ function openCustomPicnicModal() {
   // Set min date to today so users can't pick the past
   const dateInput = document.getElementById('cpm-date')
   if (dateInput) dateInput.min = new Date().toISOString().split('T')[0]
+  // Package picker: built from the live package list (active, non-occasion
+  // tiers) so it tracks admin changes. Enquiry-only — no price is shown or
+  // stored; the team quotes on WhatsApp.
+  const pkgSelect = document.getElementById('cpm-package')
+  if (pkgSelect) {
+    const keep = pkgSelect.value
+    pkgSelect.innerHTML = '<option value="">Not sure yet</option>' +
+      visiblePackagesFor(null).map(key => {
+        const t = PACKAGE_TIERS[key]
+        return t ? `<option value="${escapeHtml(key)}">${escapeHtml(t.name)}</option>` : ''
+      }).join('')
+    pkgSelect.value = keep
+  }
   modal.style.display = 'flex'
   document.body.style.overflow = 'hidden'
 }
@@ -12477,6 +12525,8 @@ async function handleCustomPicnicSubmit(e) {
   const location = form['cpm-location'].value.trim()
   const guests   = parseInt(form['cpm-guests'].value, 10)
   const occasion = form['cpm-occasion'].value || null
+  const packageKey  = form['cpm-package']?.value || ''
+  const packageName = packageKey ? (PACKAGE_TIERS[packageKey]?.name || packageKey) : null
 
   // Validate
   if (!name)                      { showToast('Please enter your name', 'error'); return }
@@ -12509,7 +12559,9 @@ async function handleCustomPicnicSubmit(e) {
       p_email_address:        '',
       p_guest_count:          guests,
       p_preferred_date:       date,
-      p_special_requirements: location,
+      // Package goes in the notes, NOT p_package_key: the RPC rejects a package
+      // with no venue_packages row, and custom venues deliberately have none.
+      p_special_requirements: packageName ? `Package: ${packageName}\n${location}` : location,
       p_advance_amount:       0,
       p_confirmed:            false,
       p_customer_intent:      'query',
@@ -12533,6 +12585,7 @@ async function handleCustomPicnicSubmit(e) {
       `📅 Date: ${date}`,
       `👥 Guests: ${guests}`,
       occasion ? `🎉 Occasion: ${occasion}` : null,
+      packageName ? `🧺 Package: ${packageName}` : null,
       `\nMy name is ${name}.`,
     ].filter(Boolean).join('\n')
 
