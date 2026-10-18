@@ -5612,6 +5612,39 @@ function toE164India(raw) {
   return '+' + d
 }
 
+// Admin phone fields: accept "+91 99999 99999", "+91-99999-99999", "099999 99999",
+// "919999999999" etc. and reduce to the bare 10-digit form every bookings row uses
+// (lead-digest exclusions, team-phone filters and WhatsApp links all key on it).
+// Anything that doesn't reduce to 10 digits is returned as digits so the caller's
+// existing 10-digit check still rejects it.
+function toIndiaMobile10(raw) {
+  let d = String(raw || '').replace(/\D/g, '')
+  if (d.length === 12 && d.startsWith('91')) d = d.slice(2)
+  else if (d.length === 13 && d.startsWith('091')) d = d.slice(3)
+  else if (d.length === 11 && d.startsWith('0')) d = d.slice(1)
+  return d
+}
+
+// onblur for admin phone inputs: show the admin the number exactly as it will be saved.
+function normalizePhoneInput(el) {
+  if (!el) return
+  const d = toIndiaMobile10(el.value)
+  if (d.length === 10) el.value = d
+}
+window.normalizePhoneInput = normalizePhoneInput
+
+// Scrolling the page while the pointer is over a focused <input type="number">
+// makes the browser step its value (a guest count or ₹ total silently changes).
+// Blurring the field on wheel stops that and lets the page scroll as usual.
+// One listener on document covers every number input, including the ones the
+// admin forms render dynamically. Arrow keys still step the value on purpose.
+document.addEventListener('wheel', (e) => {
+  const el = e.target
+  if (el instanceof HTMLInputElement && el.type === 'number' && el === document.activeElement) {
+    el.blur()
+  }
+}, { passive: true })
+
 function isValidIndiaMobile(e164) {
   return /^\+91[6-9]\d{9}$/.test(e164)
 }
@@ -6303,7 +6336,7 @@ async function openQueryEdit(id) {
           <input id="qe-name" type="text" value="${escapeHtml(query.full_name || '')}"></label>
         <div class="qedit-row">
           <label class="qedit-field"><span>Mobile</span>
-            <input id="qe-mobile" type="tel" inputmode="numeric" maxlength="10" value="${escapeHtml(query.mobile_number || '')}"></label>
+            <input id="qe-mobile" type="tel" inputmode="tel" maxlength="20" placeholder="+91 99999 99999" onblur="normalizePhoneInput(this)" value="${escapeHtml(query.mobile_number || '')}"></label>
           <label class="qedit-field"><span>Email</span>
             <input id="qe-email" type="email" value="${escapeHtml(query.email_address || '')}"></label>
         </div>
@@ -6363,7 +6396,7 @@ async function saveQueryEdit(id) {
   const val = sel => document.getElementById(sel)?.value?.trim() ?? ''
 
   const name   = val('qe-name')
-  const mobile = val('qe-mobile')
+  const mobile = toIndiaMobile10(val('qe-mobile'))
   const email  = val('qe-email')
   const guests = parseInt(val('qe-guests'), 10)
   const children = parseInt(val('qe-children') || '0', 10)
@@ -11896,7 +11929,10 @@ function renderAddBookingForm() {
           <label class="abk-label" for="abk-external-ref">Airbnb reservation code <span class="abk-hint">(required when source is Airbnb — HM + 8 characters, from the Airbnb confirmation email)</span></label>
           <input type="text" id="abk-external-ref" class="abk-input" value="${abkText(abk.externalRef)}" placeholder="e.g. HMXXXXXXXX" oninput="abkRead()" />
         </div>
-        ${abkAddonsHtml(v)}`
+        ${abk.editingId && (abk.addonIds || []).length ? abkAddonsHtml(v) : ''}`
+      // Plain stays don't sell add-ons, so the list is hidden on create. It still renders
+      // when editing a stay that already carries add-ons, so they stay visible and removable
+      // (abkRead only overwrites addonIds when checkboxes exist, so hidden ones are preserved).
     }
   }
 
@@ -11946,7 +11982,7 @@ function renderAddBookingForm() {
       <div class="abk-row2">
         <div class="abk-field">
           <label class="abk-label" for="abk-phone">Phone</label>
-          <input type="tel" id="abk-phone" class="abk-input" value="${abkText(abk.phone)}" placeholder="10-digit mobile" oninput="abkRead()" />
+          <input type="tel" id="abk-phone" class="abk-input" inputmode="tel" autocomplete="off" value="${abkText(abk.phone)}" placeholder="+91 99999 99999" oninput="abkRead()" onblur="normalizePhoneInput(this); abkRead()" />
         </div>
         <div class="abk-field">
           <label class="abk-label" for="abk-email">Email <span class="abk-hint">(optional)</span></label>
@@ -12085,7 +12121,7 @@ async function abkSave() {
   const v = abkVenue()
   // Client-side validation (RPC re-checks authoritatively).
   if (!v) return showToast('Pick a venue', 'error')
-  const phone = String(abk.phone || '').replace(/\D/g, '')
+  const phone = toIndiaMobile10(abk.phone)
   if (!String(abk.name || '').trim()) return showToast('Guest name is required', 'error')
   if (phone.length !== 10) return showToast('Phone must be a 10-digit mobile number', 'error')
   if (!(Number(abk.adults) >= 1)) return showToast('At least 1 adult is required', 'error')
