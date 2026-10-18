@@ -1,6 +1,7 @@
--- ⚠ NOT YET APPLIED to production (2026-10-11): the owner chose "build code
---   first, apply later". Apply with apply_migration (name: guest_reviews)
---   BEFORE deploying the staff.js / app.js changes that call these RPCs.
+-- ✅ APPLIED to production 2026-10-17 (owner ran it in the Supabase SQL editor;
+--   apply_migration approval kept timing out). Verified live: 13 rolled-back
+--   DO-block checks passed, zero residue. The staff.js / app.js code that calls
+--   these RPCs was already live and switched on automatically.
 -- ============================================================================
 -- Guest reviews collected in person on /staff (picnics only).
 --

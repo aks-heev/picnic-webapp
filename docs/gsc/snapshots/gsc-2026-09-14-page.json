@@ -1,0 +1,237 @@
+{
+ "property": "sc-domain:picnicstories.com",
+ "start": "2026-08-15",
+ "end": "2026-09-11",
+ "dimension": "page",
+ "site_totals": {
+  "clicks": 56,
+  "impressions": 1662,
+  "ctr": 0.03369434416365824,
+  "position": 10.88086642599278
+ },
+ "coverage_pct": 121.7,
+ "pulled_at": "2026-09-14T04:05:11",
+ "totals": {
+  "clicks": 56,
+  "impressions": 2023,
+  "ctr": 2.77
+ },
+ "rows": [
+  {
+   "keys": [
+    "https://www.picnicstories.com/"
+   ],
+   "clicks": 23,
+   "impressions": 366,
+   "ctr": 0.06284153005464481,
+   "position": 10.169398907103826
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/blog/picnic-proposal-ideas-gurugram-delhi-ncr"
+   ],
+   "clicks": 9,
+   "impressions": 115,
+   "ctr": 0.0782608695652174,
+   "position": 7.069565217391304
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/blog/birthday-picnic-ideas-gurugram"
+   ],
+   "clicks": 7,
+   "impressions": 85,
+   "ctr": 0.08235294117647059,
+   "position": 6.258823529411765
+  },
+  {
+   "keys": [
+    "http://www.picnicstories.com/"
+   ],
+   "clicks": 5,
+   "impressions": 147,
+   "ctr": 0.034013605442176874,
+   "position": 7.591836734693878
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/blog/anniversary-celebration-ideas-delhi-ncr"
+   ],
+   "clicks": 3,
+   "impressions": 121,
+   "ctr": 0.024793388429752067,
+   "position": 8.537190082644628
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/venues/terracottage-umber"
+   ],
+   "clicks": 3,
+   "impressions": 32,
+   "ctr": 0.09375,
+   "position": 3.65625
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/picnic-venues-gurugram"
+   ],
+   "clicks": 2,
+   "impressions": 46,
+   "ctr": 0.043478260869565216,
+   "position": 19.195652173913043
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/blog/proposal-setups-in-delhi-ncr"
+   ],
+   "clicks": 1,
+   "impressions": 1,
+   "ctr": 1,
+   "position": 1
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/packages"
+   ],
+   "clicks": 1,
+   "impressions": 86,
+   "ctr": 0.011627906976744186,
+   "position": 6.837209302325581
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/venues/beige-cafe"
+   ],
+   "clicks": 1,
+   "impressions": 240,
+   "ctr": 0.004166666666666667,
+   "position": 9.95
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/venues/terracottage-sienna"
+   ],
+   "clicks": 1,
+   "impressions": 1,
+   "ctr": 1,
+   "position": 2
+  },
+  {
+   "keys": [
+    "https://picnicstories.com/"
+   ],
+   "clicks": 0,
+   "impressions": 61,
+   "ctr": 0,
+   "position": 4.39344262295082
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/blog"
+   ],
+   "clicks": 0,
+   "impressions": 40,
+   "ctr": 0,
+   "position": 14.3
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/blog/romantic-picnic-date-gurugram"
+   ],
+   "clicks": 0,
+   "impressions": 59,
+   "ctr": 0,
+   "position": 8.796610169491526
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/cancellation"
+   ],
+   "clicks": 0,
+   "impressions": 14,
+   "ctr": 0,
+   "position": 4.857142857142858
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/cancellation.html"
+   ],
+   "clicks": 0,
+   "impressions": 10,
+   "ctr": 0,
+   "position": 6.8
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/picnic-venues-jaipur"
+   ],
+   "clicks": 0,
+   "impressions": 40,
+   "ctr": 0,
+   "position": 36.05
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/terms"
+   ],
+   "clicks": 0,
+   "impressions": 14,
+   "ctr": 0,
+   "position": 6.142857142857143
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/venues/castle-valley"
+   ],
+   "clicks": 0,
+   "impressions": 50,
+   "ctr": 0,
+   "position": 13.04
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/venues/countryside-offgrid"
+   ],
+   "clicks": 0,
+   "impressions": 405,
+   "ctr": 0,
+   "position": 10.646913580246913
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/venues/om-niwas-suite-hotel-stay"
+   ],
+   "clicks": 0,
+   "impressions": 30,
+   "ctr": 0,
+   "position": 25.766666666666666
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/venues/once-upon-a-time-at-the-bagh"
+   ],
+   "clicks": 0,
+   "impressions": 34,
+   "ctr": 0,
+   "position": 7.823529411764706
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/venues/terracottage-ochre"
+   ],
+   "clicks": 0,
+   "impressions": 5,
+   "ctr": 0,
+   "position": 2.6
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/venues/the-sunroom"
+   ],
+   "clicks": 0,
+   "impressions": 21,
+   "ctr": 0,
+   "position": 8.904761904761905
+  }
+ ]
+}

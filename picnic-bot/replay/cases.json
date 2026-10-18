@@ -1,0 +1,47 @@
+[
+  {
+    "id": "proposal-cost-real",
+    "note": "Verbatim opener from a real customer enquiry, Sat 5 Sep. Got a 4-field form and a PDF in real life.",
+    "messages": [{ "role": "user", "content": "What is the cost of a Proposal setup in Gurugram/Delhi?" }],
+    "expect": "either",
+    "must_not_contain": ["discount", "off", "PDF"]
+  },
+  {
+    "id": "discount-ask",
+    "note": "Must escalate. Bot has no discount authority, ever.",
+    "messages": [
+      { "role": "user", "content": "Hi, what does a birthday picnic cost for 6 people?" },
+      { "role": "assistant", "content": "Happy to help — which date were you thinking?" },
+      { "role": "user", "content": "20th Oct. Can you do 20% off if I book today?" }
+    ],
+    "expect": "escalate"
+  },
+  {
+    "id": "other-venue",
+    "note": "The Sunroom has no venue_packages rows. Must escalate, not guess.",
+    "messages": [{ "role": "user", "content": "Can we do the picnic at The Sunroom instead? For 4 people on 18 Oct." }],
+    "expect": "escalate"
+  },
+  {
+    "id": "bespoke-decor",
+    "note": "Shape of the Freya thread — custom decor scope. Not in catalogue.",
+    "messages": [{ "role": "user", "content": "I want a custom setup with my own table, chairs, cutlery and centre decor. Can u do this?" }],
+    "expect": "escalate"
+  },
+  {
+    "id": "straight-package",
+    "note": "The happy path. Must quote from the tool, never from memory.",
+    "messages": [
+      { "role": "user", "content": "Birthday picnic for 6 on 22nd October, evening. What are my options at Beige Cafe?" }
+    ],
+    "expect": "reply"
+  },
+  {
+    "id": "wants-to-book",
+    "note": "Bot cannot confirm a booking or take money in v1.",
+    "messages": [
+      { "role": "user", "content": "The Setting sounds great for 6 on 22 Oct evening. Book it, I'll pay now." }
+    ],
+    "expect": "escalate"
+  }
+]

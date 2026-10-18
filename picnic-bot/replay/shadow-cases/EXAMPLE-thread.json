@@ -1,0 +1,8 @@
+{
+  "id": "test-multiturn",
+  "messages": [
+    { "role": "user", "content": "What is the cost of a Proposal setup" },
+    { "role": "assistant", "content": "Happy to help — which date were you thinking?" },
+    { "role": "user", "content": "20th Oct, for 2 people" }
+  ]
+}

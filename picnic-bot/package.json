@@ -1,0 +1,21 @@
+{
+  "name": "picnic-bot",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "WhatsApp closer for The Picnic Stories. Zero dependencies. Swappable LLM provider.",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "scripts": {
+    "catalogue": "node --env-file=.env src/catalogue.mjs",
+    "selftest": "node src/verify.mjs --selftest && node src/providers/selftest.mjs",
+    "replay": "node --env-file=.env replay/run.mjs",
+    "replay:gemini": "node --env-file=.env replay/run.mjs --provider=gemini",
+    "replay:anthropic": "node --env-file=.env replay/run.mjs --provider=anthropic",
+    "replay:both": "npm run replay:gemini && npm run replay:anthropic",
+    "probe": "node --env-file=.env src/probe-tier.mjs",
+    "chat": "node --env-file=.env replay/chat-server.mjs",
+    "shadow": "node --env-file=.env replay/shadow.mjs"
+  }
+}

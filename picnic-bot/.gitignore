@@ -1,0 +1,7 @@
+.env
+node_modules/
+
+# real customer conversation text — never commit
+replay/shadow-log.csv
+replay/shadow-cases/*.json
+!replay/shadow-cases/EXAMPLE-thread.json
