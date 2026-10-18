@@ -11508,6 +11508,12 @@ function abkAddonsForVenue(venueId) {
 // Packages offered at a venue = its active venue_packages rows, resolved to
 // the package (key/name/occasion) via package_id.
 function abkPackagesForVenue(venueId) {
+  // Custom venues (Your Own Space) have no venue_packages rows on purpose —
+  // that keeps them out of the public /packages price list. Admin can still
+  // tag the booking with any active package; price stays manual (vp: null →
+  // abkVenuePackagePrice returns null → total is entered by hand).
+  const venue = abk.venues.find(x => x.id === venueId)
+  if (venue && venue.type === 'custom') return abk.packages.map(p => ({ ...p, vp: null }))
   return abk.venuePackages
     .filter(r => r.venue_id === venueId)
     .map(r => {
@@ -11857,8 +11863,8 @@ function renderAddBookingForm() {
         .join('')
       const pkgField = pkgs.length ? `
         <div class="abk-field">
-          <label class="abk-label" for="abk-package">Package</label>
-          <select id="abk-package" class="abk-input" onchange="abkChanged()">${pkgOptions}</select>
+          <label class="abk-label" for="abk-package">Package${v.type === 'custom' ? ' <span class="abk-hint">(no set price here — enter the total by hand)</span>' : ''}</label>
+          <select id="abk-package" class="abk-input" onchange="${v.type === 'custom' ? 'abkChangedKeepTotal()' : 'abkChanged()'}">${pkgOptions}</select>
         </div>` : ''
       const occOptions = ['<option value="">No occasion</option>']
         .concat(OCCASIONS.map(o => `<option value="${abkText(o)}" ${abk.occasion === o ? 'selected' : ''}>${abkText(o)}</option>`))
