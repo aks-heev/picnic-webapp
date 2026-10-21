@@ -1,6 +1,6 @@
 # PLAN — Package price table: food / guests / weekday-weekend / Countryside cottages
 
-Status: Phase 0 done; **Phase 1 SHIPPED-verified 2026-10-21** (table + seed + grid view live, inert). Phases 2–6 NOT done. Written 2026-10-21 via plan-optimizer (score 88/100, trajectory 66 → 78 → 86 → 88 → 88).
+Status: Phase 0 done; **Phases 1–2 SHIPPED-verified 2026-10-21.** Phases 3–6 NOT done. Written 2026-10-21 via plan-optimizer (score 88/100, trajectory 66 → 78 → 86 → 88 → 88).
 Supersedes nothing; extends `SPEC_stored_package_pricing_2026-07-10.md` (one price per venue × package) to many prices per venue × package.
 Source of the numbers: OneDrive `Ledger Picnic stories.xlsx` → Packages tab (read 2026-10-21) + Aksheev's answers in chat the same day.
 
@@ -198,7 +198,7 @@ prove `count(*)=0`. Tell Aksheev which team@ admin emails to ignore. Handoff wit
 5. 🔴 "Request-only" is enforced ONLY in the frontend (`app.js:4487`); `submit_booking_intent` forces query mode only for `combo`.
    Acceptable today (existing behaviour), but a crafted RPC call could lock a request-only venue. Not in scope; noted.
 6. 🔴 G5 trap: venue 22 has a CONFIRMED upcoming picnic_stay — booking **263, 2026-11-02, ₹14,900**. Conflict checks are per `venue_id`,
-   so deactivating 22 means that night will NOT block either new cottage. Before deactivating 22, Aksheev must say which cottage 263 is,
+   so deactivating 22 means that night will NOT block either new cottage. **Answered 2026-10-21: booking 263 is the SMALL cottage.** Before deactivating 22,
    and Phase 4 adds a `venue_availability` block (source `admin`) on that cottage for 2026-11-02. Same check for any other future 22 booking.
 7. Pending lead **276** (venue 27, Moment, 2026-10-22, unconfirmed) was quoted ₹18,900 at the old stay-inclusive price. Stored totals are
    never rewritten by this plan — Aksheev to decide the quote by hand.
@@ -216,3 +216,21 @@ prove `count(*)=0`. Tell Aksheev which team@ admin emails to ignore. Handoff wit
 - RLS (rolled-back tests): anon reads 40 rows / grid 9; anon INSERT → 42501; non-admin authenticated INSERT → 42501; admin INSERT ok. Residue: 40 rows after tests.
 - Inert: 0 functions reference the table; `compute_booking_total` still returns 8,900 (Beige Setting) and 11,900 (venue 27 Prelude, old price — fixed in Phase 2/4).
 - `get_advisors` security: 48 findings before and after, none naming the new table or view.
+
+## 11. Phase 2 result — SHIPPED-verified 2026-10-21
+
+- Applied by Aksheev in the Supabase SQL editor (the MCP `apply_migration` call was cancelled twice at the DROP-confirmation step),
+  from `supabase/migrations/20261021_compute_booking_total_price_table.sql`. Because it went through the SQL editor it is NOT recorded in
+  `supabase_migrations.schema_migrations` — the repo file is the record.
+- Rollback: `supabase/migrations/_rollback/20261021_compute_booking_{total,advance}_before.sql` — md5 verified byte-identical to the
+  pre-change live definitions (0bdff1fc… / afd2b6bf…).
+- Live: exactly one overload of each function (8 args), SECURITY DEFINER, `search_path = public, pg_temp`, grants unchanged.
+- Regression vs the old body (rebuilt as a pg_temp function): 5,544 combinations (every active venue × package incl. none × guests 0–10
+  × nights 0–2 × slot/none × add-ons/none) → 264 differ, **0 unexpected** (all are venue 27 packages or picnic_stay via venue 22).
+- 54/54 assertions: all 40 table rows; picnic_stay v22 1n Setting 18,800 (still the old 9,900 stay tier until Phase 4); Prelude food 5,
+  v27 food 3, food 7+ and Sunroom-without-date → PRICE_NOT_AVAILABLE; no-food 8 guests keeps +2×2,000; Sun = weekend, Fri = weekday;
+  6-arg positional advance call still works (3,870).
+- Real path: `submit_booking_intent` (unchanged, calls compute positionally) in a rolled-back txn → v27 Moment total 12,900 / advance 3,870.
+  Residue 0.
+- `get_advisors` security: 48 before and after.
+- ⚠ Until Phase 4: Countryside picnic+stay prices = 9,900/night (venue 22 tier) + Beige picnic price. Quote by hand if one comes in.
