@@ -1,6 +1,6 @@
 # PLAN — Package price table: food / guests / weekday-weekend / Countryside cottages
 
-Status: Phase 0 done; **Phases 1–3 SHIPPED-verified 2026-10-21.** Phases 4–6 NOT done. Written 2026-10-21 via plan-optimizer (score 88/100, trajectory 66 → 78 → 86 → 88 → 88).
+Status: Phase 0 done; **Phases 1–4 SHIPPED-verified 2026-10-21.** Phases 5–6 NOT done. Written 2026-10-21 via plan-optimizer (score 88/100, trajectory 66 → 78 → 86 → 88 → 88).
 Supersedes nothing; extends `SPEC_stored_package_pricing_2026-07-10.md` (one price per venue × package) to many prices per venue × package.
 Source of the numbers: OneDrive `Ledger Picnic stories.xlsx` → Packages tab (read 2026-10-21) + Aksheev's answers in chat the same day.
 
@@ -249,3 +249,16 @@ prove `count(*)=0`. Tell Aksheev which team@ admin emails to ignore. Handoff wit
 - 🔴 Sunroom is still NOT bookable: `submit_booking_intent` requires a `venue_packages` row (offering + max_guests). Phase 4 adds
   `venue_packages(18, setting, max_guests 6)` and `packages_enabled = true`.
 - `get_advisors` security: 48 findings, same set (two pricing fns + submit appear under their new signatures, as before).
+
+## 13. Phase 4 result — SHIPPED-verified 2026-10-21
+
+- Migration `20261021_countryside_cottages_sunroom` applied via MCP (recorded in migration history); self-checks inside abort on any failure.
+  Dry-run first (rolled back) — that consumed venue ids 29/30, so the live ids are **31 / 32**.
+- **Venue 31 "Countryside Offgrid — Small Cottage"** (slug `countryside-offgrid-small-cottage`) and **32 "— Big Cottage"**: partner_bnb,
+  capacity 2–2, base 5,000 / 7,000, free_guests_upto 2, overage 0, request-only, `picnic_venue_id = 27`, 8 add-ons each (copied from 22),
+  images/description copied from 22, no external_url / iCal (Todoist p3 tracks getting them).
+- Live prices: Moment 1 night small 17,900 / big 19,900; with food 18,900 / 20,900; Prelude 10,900 / 12,900; small Setting 2 nights 18,900.
+- 2026-11-02 blocked on venue 31 (source admin, no booking_id) for booking 263, which stays on venue 22.
+- Venue 22 `is_active = false`. Venue 27 capacity 2–2; its venue_packages prices now 5,900 / 8,900 / 12,900 / 24,900.
+- Sunroom: `venue_packages(18, setting, 13900, included 6, max 6)`; `packages_enabled` still **false** (hidden until Phase 5).
+- Note: `package_price_grid` lists picnic venues only; the brochure must show cottage prices as nightly rate + venue 27 price.
