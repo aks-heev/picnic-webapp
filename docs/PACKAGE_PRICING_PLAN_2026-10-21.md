@@ -1,6 +1,6 @@
 # PLAN — Package price table: food / guests / weekday-weekend / Countryside cottages
 
-Status: Phase 0 done; **Phases 1–2 SHIPPED-verified 2026-10-21.** Phases 3–6 NOT done. Written 2026-10-21 via plan-optimizer (score 88/100, trajectory 66 → 78 → 86 → 88 → 88).
+Status: Phase 0 done; **Phases 1–3 SHIPPED-verified 2026-10-21.** Phases 4–6 NOT done. Written 2026-10-21 via plan-optimizer (score 88/100, trajectory 66 → 78 → 86 → 88 → 88).
 Supersedes nothing; extends `SPEC_stored_package_pricing_2026-07-10.md` (one price per venue × package) to many prices per venue × package.
 Source of the numbers: OneDrive `Ledger Picnic stories.xlsx` → Packages tab (read 2026-10-21) + Aksheev's answers in chat the same day.
 
@@ -234,3 +234,18 @@ prove `count(*)=0`. Tell Aksheev which team@ admin emails to ignore. Handoff wit
   Residue 0.
 - `get_advisors` security: 48 before and after.
 - ⚠ Until Phase 4: Countryside picnic+stay prices = 9,900/night (venue 22 tier) + Beige picnic price. Quote by hand if one comes in.
+
+## 12. Phase 3 result — SHIPPED-verified 2026-10-21
+
+- Applied by Aksheev in the SQL editor from `supabase/migrations/20261021_bookings_with_food.sql` (not in migration history; repo file is the record).
+- `bookings.with_food boolean`, `bookings.food_credit numeric` — 0 existing rows non-null (no backfill).
+- `submit_booking_intent`: exactly one overload (21 args, `p_with_food boolean default false`), SECURITY DEFINER, ACL unchanged.
+  Generated from the md5-verified live body by 7 exact one-occurrence replacements; rollback `_rollback/20261021_submit_booking_intent_before.sql` (md5 bc352562…).
+- `admin_set_booking_food(bigint, boolean, numeric)`: INVOKER, admin-email guard, EXECUTE revoked from public/anon.
+- Live tests (rolled back, residue 0): website's current named-arg call (no food) → 12,900 / 3,870 / with_food=false;
+  Story with food 3 → 27,400 / true; admin helper: non-admin "Admin login required", admin sets true/3,000 without touching the total,
+  negative credit refused. Pre-apply tests also covered: update path keeps the same id, children not billed, food 7 → PRICE_NOT_AVAILABLE,
+  Sunroom Sat 3 guests → 16,900 with credit 4,000 (using a temporary venue_packages row).
+- 🔴 Sunroom is still NOT bookable: `submit_booking_intent` requires a `venue_packages` row (offering + max_guests). Phase 4 adds
+  `venue_packages(18, setting, max_guests 6)` and `packages_enabled = true`.
+- `get_advisors` security: 48 findings, same set (two pricing fns + submit appear under their new signatures, as before).
