@@ -6256,9 +6256,9 @@ function renderSuccessPage({ booking, venueName, venueTeamId, confirmed = false 
 
         <!-- Actions -->
         <div class="bsc-actions">
-          <button class="btn btn--primary btn--lg" onclick="showPage('menu-preview-page')">
-            Explore the Menu
-          </button>
+          <a class="btn btn--primary btn--lg" href="/brochure#packages">
+            Explore other packages
+          </a>
           <button class="btn btn--outline btn--lg" onclick="navigateHome()">
             Back to Venues
           </button>
