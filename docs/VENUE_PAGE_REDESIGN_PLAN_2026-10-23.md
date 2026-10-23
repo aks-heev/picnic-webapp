@@ -87,3 +87,11 @@ Design: the "Venue Page Redesign" canvas (desktop, phone, phone package sheet), 
   check_dates_opened.
 - Known gaps: phone back button doesn't close the sheets (no history entry); the sheet keeps the existing two
   screens (calendar+slot, then guests) rather than the canvas's single screen.
+- Booking form redesign built 2026-10-23 (canvas "Booking Form Redesign"): summary card right on desktop with
+  "Pay now · 30% advance" / "On the day"; package card + full contents; extras as one collapsible panel of photo
+  cards with category chips; occasion chips; board as 3-way choice (included · optional on Setting/Moment/Story,
+  white-only paid on Prelude — 2026-10-11 rule kept); WhatsApp +91 field. The "You're almost there!" intent screen
+  is skipped: "Continue to payment" → Razorpay, "Continue on WhatsApp" → lead captured (whatsapp_clicked) + wa.me;
+  request-only venues (combo / requires_confirmation) keep one "Send a request". Fixed: "Change date" lost
+  name/email/add-ons (wrong field names). Doodles: side-margin layer >=1440px on venue + form pages, basket in
+  the summary card corner, sprig by "Add extras". Test leads 300 (lock) and 301 (WhatsApp) to delete.

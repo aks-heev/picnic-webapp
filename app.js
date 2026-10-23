@@ -4505,17 +4505,14 @@ async function showBookingForm(venue) {
   if (STAY_NIGHTLY_TYPES.includes(venue.type) && appState.checkinDate && appState.checkoutDate) {
     const nights = calcNights(appState.checkinDate, appState.checkoutDate)
     dateChips = `
-      <span class="vd-bv-chip">🛬 Check-in &nbsp;<strong>${formatSelectedDate(appState.checkinDate)}</strong></span>
-      <span class="vd-bv-chip">🛫 Checkout &nbsp;<strong>${formatSelectedDate(appState.checkoutDate)}</strong></span>
-      <span class="vd-bv-chip">🌙 ${nights} night${nights !== 1 ? 's' : ''}</span>`
+      <li class="vd-bv-fact">${BF_ICON.cal}<span>${formatSelectedDate(appState.checkinDate)} → ${formatSelectedDate(appState.checkoutDate)} · ${nights} night${nights !== 1 ? 's' : ''}</span></li>`
   } else if (appState.selectedDate && appState.selectedTimeSlot) {
     const slot = CAFE_SLOTS.find(s => s.key === appState.selectedTimeSlot)
     dateChips = `
-      <span class="vd-bv-chip">📅 <strong>${formatSelectedDate(appState.selectedDate)}</strong></span>
-      <span class="vd-bv-chip">${slot?.icon || ''} ${slot?.label || ''} · ${slot?.time || ''}</span>`
+      <li class="vd-bv-fact">${BF_ICON.cal}<span>${formatSelectedDate(appState.selectedDate)} · ${slot?.label || ''}, ${slot?.time || ''}</span></li>`
   }
   const guestLabel = `${appState.adults} adult${appState.adults !== 1 ? 's' : ''}${appState.children ? ` · ${appState.children} child${appState.children !== 1 ? 'ren' : ''}` : ''}`
-  const guestChips = `<span class="vd-bv-chip">👤 ${guestLabel}</span>`
+  const guestChips = `<li class="vd-bv-fact">${BF_ICON.guests}<span>${guestLabel}</span></li>`
 
   // Price breakdown rows
   let priceRows = ''
@@ -4550,10 +4547,22 @@ async function showBookingForm(venue) {
   // Locked "included in your package" section — real checked .bv-addon-check inputs
   // (hidden via CSS) so the existing price + submit logic counts them automatically;
   // the visible row carries the name for the price-breakdown lookup.
-  const lockedHtml = lockedAddons.length ? `
+  const inclNames = pkgTier ? bfPackageContents(venue, pkgTier) : []
+  const lockedHtml = (pkgTier && (lockedAddons.length || inclNames.length)) ? `
     <div class="vd-bf-section pkg-included-section">
-      <h3 class="vd-bf-section-title">Included in ${escapeHtml(pkgTier?.name || 'your package')}</h3>
-      <div class="pkg-included-list">
+      <div class="bf-pkg-card">
+        <div class="bf-pkg-card-main">
+          <p class="bf-pkg-card-label">Your package</p>
+          <p class="bf-pkg-card-name">${escapeHtml(pkgTier.name)}${effectiveWithFood(venue.id, pkgTier.key, appState.withFood) ? ' <span>· with food &amp; drinks</span>' : ''}</p>
+          ${(() => { const n = pkgFoodItemsCount(venue.id, pkgTier.key); return effectiveWithFood(venue.id, pkgTier.key, appState.withFood) && n ? `<p class="bf-pkg-card-sub">Includes ${pkgFoodItemsText(n)} from the café menu, any mix</p>` : '' })()}
+        </div>
+        <button type="button" class="bf-link" onclick="changePackage()">Change package</button>
+      </div>
+      ${inclNames.length ? `<details class="bf-pkg-incl">
+        <summary>What’s included · ${inclNames.length} items</summary>
+        <p>${inclNames.map(escapeHtml).join(', ')}.</p>
+      </details>` : ''}
+      <div class="pkg-included-list" hidden>
         ${lockedAddons.map(a => `
         <label class="vd-bf-addon-row pkg-included-row">
           <div class="vd-bf-addon-info">
@@ -4577,39 +4586,51 @@ async function showBookingForm(venue) {
       </div>
     </div>` : ''
 
+  // Extras (booking-form redesign 2026-10-23): one collapsible panel, photo
+  // cards, category chips. Same .bv-addon-check inputs / data-* attributes the
+  // pricing + submit code reads; same .vd-bf-cat[data-cat] groups the stay
+  // "setup" single-choice + syncBoardGate logic relies on.
+  const extrasCount = addonsByCategory.reduce((n, g) => n + g.items.length, 0)
+  const extrasOpen  = addonsByCategory.some(g => g.cat === 'setup')
   const addOnsHtml = addonsByCategory.length ? `
-    <div class="vd-bf-section">
-      <h3 class="vd-bf-section-title">${pkg ? 'Add more to your experience' : 'Add to your experience'}</h3>
-      <div class="vd-bf-addon-cats">
+    <div class="vd-bf-section bf-extras${extrasOpen ? ' is-open' : ''}" id="bf-extras">
+      <button type="button" class="bf-extras-head" onclick="toggleBfExtras()" aria-expanded="${extrasOpen}" aria-controls="bf-extras-body">
+        <span class="bf-extras-head-text">
+          <span class="bf-extras-title">${pkg ? 'Add extras' : 'Add to your experience'} <span>· optional</span></span>
+          <span class="bf-extras-sum" id="bf-extras-sum">${extrasCount} available</span>
+        </span>
+        <span class="bf-extras-chev" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+      </button>
+      <div class="bf-extras-body" id="bf-extras-body"${extrasOpen ? '' : ' hidden'}>
+        ${addonsByCategory.length > 1 ? `<div class="bf-extras-chips" role="group" aria-label="Filter extras">
+          <button type="button" class="bf-chip is-on" aria-pressed="true" onclick="filterBfExtras(this, '')">All</button>
+          ${addonsByCategory.map(({ cat, label }) => `<button type="button" class="bf-chip" aria-pressed="false" onclick="filterBfExtras(this, '${cat}')">${escapeHtml(bfCatLabel(cat, label))}</button>`).join('')}
+        </div>` : ''}
+        <div class="vd-bf-addon-cats">
         ${addonsByCategory.map(({ cat, label, items }) => `
         <div class="vd-bf-cat" data-cat="${cat}">
-          <button type="button" class="vd-bf-cat-header" onclick="toggleAddonCat(this)" aria-expanded="${cat === 'setup' ? 'true' : 'false'}">
-            <span class="vd-bf-cat-label">${label}</span>
-            <span class="vd-bf-cat-meta">
-              <span class="vd-bf-cat-count hidden">${items.length}</span>
-              <span class="vd-bf-cat-selected"></span>
-              <span class="vd-bf-cat-chevron">›</span>
-            </span>
-          </button>
-          <div class="vd-bf-cat-body"${cat === 'setup' ? '' : ' hidden'}>
+          ${cat === 'setup' ? `<p class="bf-cat-note">${escapeHtml(bfCatLabel(cat, label))} · pick one</p>` : ''}
+          <div class="bf-cards">
             ${items.map(a => `
-            <label class="vd-bf-addon-row">
-              <div class="vd-bf-addon-info">
+            <label class="vd-bf-addon-row bf-card">
+              <input type="checkbox" class="bv-addon-check bf-card-check"
+                     data-addon-id="${a.id}"
+                     data-addon-name="${escapeHtml(a.name)}"
+                     data-addon-price="${a.price}"
+                     data-addon-confirm="${a.requires_confirmation || false}"
+                     onchange="${cat === 'setup' ? 'onlyOneSetup(this); ' : ''}updateBookingSummaryPrice(); syncBoardGate(); syncBfExtras()">
+              ${a.image_url ? `<img class="bf-card-img" src="${escapeHtml(a.image_url)}" alt="" loading="lazy">` : `<span class="bf-card-img bf-card-img--ph" aria-hidden="true">${BF_ICON.sparkle}</span>`}
+              <span class="bf-card-body">
                 <span class="vd-bf-addon-name">${escapeHtml(a.name)}</span>
                 ${a.description ? `<span class="vd-bf-addon-desc">${escapeHtml(a.description)}</span>` : ''}
-              </div>
-              <div class="vd-bf-addon-right">
-                <span class="vd-bf-addon-price">+₹${Number(a.price).toLocaleString('en-IN')}</span>
-                <input type="checkbox" class="bv-addon-check"
-                       data-addon-id="${a.id}"
-                       data-addon-name="${escapeHtml(a.name)}"
-                       data-addon-price="${a.price}"
-                       data-addon-confirm="${a.requires_confirmation || false}"
-                       onchange="${cat === 'setup' ? 'onlyOneSetup(this); ' : ''}updateBookingSummaryPrice(); updateAddonCatBadge(this.closest('.vd-bf-cat')); syncBoardGate()">
-              </div>
+                <span class="bf-card-price">+₹${Number(a.price).toLocaleString('en-IN')}${a.requires_confirmation ? ' <span>· on request</span>' : ''}</span>
+                <span class="bf-card-btn" aria-hidden="true"><span class="bf-card-btn-off">Add</span><span class="bf-card-btn-on">Added ✓</span></span>
+              </span>
             </label>`).join('')}
           </div>
         </div>`).join('')}
+        </div>
+        <button type="button" class="bf-extras-done" onclick="toggleBfExtras(false)">Done</button>
       </div>
     </div>` : ''
 
@@ -4622,26 +4643,14 @@ async function showBookingForm(venue) {
     <div class="vd-bv-wrap container">
       <div class="vd-bv-layout">
 
-        <!-- Left: booking summary -->
+        <!-- Booking summary (right on desktop, top on phone) -->
         <div class="vd-bv-summary">
           <div class="vd-bv-venue-row">
             <span class="vd-bv-venue-name">${escapeHtml(venue.name)}</span>
+            ${venue.area ? `<span class="vd-bv-venue-area">${escapeHtml(venue.area)}, ${escapeHtml(venue.city || '')}</span>` : ''}
           </div>
-          <div class="vd-bv-chips-wrap">
-            <div class="vd-bv-chips">${dateChips}${guestChips}</div>
-            <button class="vd-bv-change-btn" onclick="goBackToVenueDetail('form')">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              Change date &amp; time
-            </button>
-          </div>
-          ${pkgTier ? `
-          <div class="vd-bv-pkg-row">
-            <div class="pkg-summary-badge">${escapeHtml(pkgTier.name)} package</div>
-            <button class="vd-bv-change-btn" onclick="changePackage()">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              Change package
-            </button>
-          </div>` : ''}
+          <ul class="vd-bv-facts">${dateChips}${guestChips}</ul>
+          <button type="button" class="bf-link" onclick="goBackToVenueDetail('form')">Change date, time or guests</button>
           ${inclusionBannerHtml(venue, appState.adults) ? `<div class="vd-inclusion vd-inclusion--summary">${inclusionBannerHtml(venue, appState.adults)}</div>` : ''}
           <div class="vd-bv-price-table">
             ${priceRows}
@@ -4651,7 +4660,14 @@ async function showBookingForm(venue) {
               <span id="bv-total-price">₹${baseTotal.toLocaleString('en-IN')}</span>
             </div>
           </div>
-          <p class="vd-bv-note">Final total confirmed after we review your requirements.</p>
+          ${bfQueryOnly(venue)
+            ? `<p class="vd-bv-note">We’ll confirm availability with you first — nothing to pay now.</p>`
+            : `<div class="bf-advance" id="bf-advance">
+            <div><span>Pay now · 30% advance</span><strong id="bf-advance-now">₹${Math.round(baseTotal * 0.3).toLocaleString('en-IN')}</strong></div>
+            <div><span>On the day</span><span id="bf-advance-rest">₹${(baseTotal - Math.round(baseTotal * 0.3)).toLocaleString('en-IN')}</span></div>
+          </div>
+          <p class="vd-bv-note">Your date is locked once the advance is paid. The advance isn’t refundable; if you postpone, it stays with you as credit.</p>`}
+          <p class="vd-bv-note bf-onreq-note" id="bf-onreq-note" hidden>Items marked “on request” are confirmed by our team before your date.</p>
         </div>
 
         <!-- Right: add-ons + contact form -->
@@ -4661,67 +4677,72 @@ async function showBookingForm(venue) {
           <div class="vd-bf-section">
             <h3 class="vd-bf-section-title">Your details</h3>
             <form id="inline-booking-form" class="vd-bf-form" onsubmit="handleInlineBookingSubmit(event)">
-              <div class="vd-bf-field">
-                <label class="vd-bf-label">Full name *</label>
-                <input class="vd-bf-input" type="text" name="full-name" placeholder="Your name" required>
-              </div>
               <div class="vd-bf-row">
                 <div class="vd-bf-field">
-                  <label class="vd-bf-label">Email *</label>
-                  <input class="vd-bf-input" type="email" name="email-address" placeholder="your@email.com" required>
+                  <label class="vd-bf-label" for="bf-name">Full name</label>
+                  <input class="vd-bf-input" id="bf-name" type="text" name="full-name" placeholder="Your name" autocomplete="name" required>
                 </div>
                 <div class="vd-bf-field">
-                  <label class="vd-bf-label">Phone *</label>
-                  <input class="vd-bf-input" type="tel" name="mobile-number" placeholder="10-digit mobile number" required inputmode="numeric" maxlength="10" pattern="[0-9]{10}" onkeydown="if(!/[0-9]/.test(event.key)&&!['Backspace','Delete','ArrowLeft','ArrowRight','Tab'].includes(event.key))event.preventDefault()" onpaste="setTimeout(()=>{this.value=this.value.replace(/\D/g,'').slice(0,10)},0)" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)">
+                  <label class="vd-bf-label" for="bf-phone">WhatsApp number</label>
+                  <div class="bf-phone">
+                    <span class="bf-phone-cc" aria-hidden="true">+91</span>
+                    <input class="vd-bf-input" id="bf-phone" type="tel" name="mobile-number" placeholder="10-digit mobile" autocomplete="tel-national" required inputmode="numeric" maxlength="10" pattern="[0-9]{10}" title="10-digit mobile number" onkeydown="if(!/[0-9]/.test(event.key)&&!['Backspace','Delete','ArrowLeft','ArrowRight','Tab'].includes(event.key)&&!event.ctrlKey&&!event.metaKey)event.preventDefault()" onpaste="setTimeout(()=>{this.value=this.value.replace(/\D/g,'').slice(-10)},0)" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)">
+                  </div>
                 </div>
+              </div>
+              <div class="vd-bf-field">
+                <label class="vd-bf-label" for="bf-email">Email <span class="bf-hint">Booking confirmation is sent here</span></label>
+                <input class="vd-bf-input" id="bf-email" type="email" name="email-address" placeholder="you@email.com" autocomplete="email" required>
               </div>
               ${pkg
                 ? (pkg.occasion
                     ? `<div class="vd-bf-field">
-                <label class="vd-bf-label">Occasion</label>
-                <div class="pkg-occasion-chip">${escapeHtml(pkg.occasion)}</div>
+                <span class="vd-bf-label">Occasion</span>
+                <div class="bf-chips"><span class="bf-chip is-on is-static">${escapeHtml(pkg.occasion)}</span></div>
                 <input type="hidden" name="occasion" value="${escapeHtml(pkg.occasion)}">
               </div>`
                     : `<input type="hidden" name="occasion" value="">`)
                 : `<div class="vd-bf-field" id="occasion-field"${stayGated ? ' data-stay-gated="1" style="display:none;"' : ''}>
-                <label class="vd-bf-label">Occasion</label>
-                <select class="vd-bf-input vd-bf-select" name="occasion"
-                        onchange="document.getElementById('occasion-other-wrap').style.display = this.value === 'Other' ? '' : 'none'">
-                  <option value="">Select an occasion (optional)</option>
-                  <option value="Birthday">Birthday</option>
-                  <option value="Anniversary">Anniversary</option>
-                  <option value="Proposal">Proposal</option>
-                  <option value="Baby Shower">Baby Shower</option>
-                  <option value="Bridal Shower">Bridal Shower</option>
-                  <option value="Date Night">Date Night</option>
-                  <option value="Graduation">Graduation</option>
-                  <option value="Just Because">Just Because</option>
-                  <option value="Other">Other…</option>
-                </select>
+                <span class="vd-bf-label" id="bf-occ-label">What’s the occasion? <span class="bf-hint">optional</span></span>
+                <div class="bf-chips" role="group" aria-labelledby="bf-occ-label">
+                  ${['Birthday', 'Anniversary', 'Proposal', 'Date Night', 'Baby Shower', 'Bridal Shower', 'Graduation', 'Just Because', 'Other'].map(o => `<button type="button" class="bf-chip${appState.bookingOccasion === o ? ' is-on' : ''}" aria-pressed="${appState.bookingOccasion === o}" data-occ="${o}" onclick="pickBfOccasion(this)">${o === 'Other' ? 'Other…' : o}</button>`).join('')}
+                </div>
+                <input type="hidden" name="occasion" value="${OCCASIONS.includes(appState.bookingOccasion) ? escapeHtml(appState.bookingOccasion) : ''}">
                 <div id="occasion-other-wrap" style="display:none; margin-top:8px;">
                   <input class="vd-bf-input" type="text" name="occasion-other" placeholder="Tell us the occasion">
                 </div>
               </div>`}
               <div class="vd-bf-field" id="board-field"${boardGated ? ' data-gated="1"' : ''}${stayGated ? ' data-stay-gated="1"' : ''}${(boardGated || stayGated) ? ' style="display:none;"' : ''}>
-                <label class="vd-bf-label">Celebration board${boardGated ? '' : ' <span style="font-weight:400; opacity:0.6;">(optional)</span>'}</label>
-                <select class="vd-bf-input vd-bf-select" name="board-type"
-                        onchange="document.getElementById('board-message-wrap').style.display = this.value ? '' : 'none'">
-                  ${boardGated ? '<option value="white">White wooden arch board</option>' : `<option value="">No board</option>
-                  <option value="black">Black chalkboard</option>
-                  <option value="white">White wooden arch board</option>`}
-                </select>
+                <span class="vd-bf-label" id="bf-board-label">Celebration board ${boardGated ? '' : pkg ? '<span class="bf-hint bf-hint--ok">included · optional</span>' : '<span class="bf-hint">optional</span>'}</span>
+                <div class="bf-board-opts" role="radiogroup" aria-labelledby="bf-board-label">
+                  ${(boardGated ? [['white', 'White arch board']] : [['white', 'White arch board'], ['black', 'Black chalkboard'], ['', 'No board']]).map(([v, l], i) => `
+                  <label class="bf-board-opt"><input type="radio" name="board-type" value="${v}"${(boardGated ? i === 0 : v === '') ? ' checked' : ''} onchange="document.getElementById('board-message-wrap').style.display = this.value ? '' : 'none'"><span>${l}</span></label>`).join('')}
+                </div>
                 <div id="board-message-wrap" style="${boardGated ? '' : 'display:none; '}margin-top:8px;">
-                  <input class="vd-bf-input" type="text" name="board-message" maxlength="100"
+                  <label class="vd-bf-label" for="bf-board-msg">What should it say?</label>
+                  <input class="vd-bf-input" id="bf-board-msg" type="text" name="board-message" maxlength="100"
                          placeholder="Short one-liner only — e.g. Happy Birthday Aanya!">
                 </div>
               </div>
               <div class="vd-bf-field">
-                <label class="vd-bf-label">Special requests</label>
-                <textarea class="vd-bf-input vd-bf-textarea" name="special-requirements" placeholder="Allergies, dietary needs, anything else we should know…" rows="3"></textarea>
+                <label class="vd-bf-label" for="bf-notes">Anything we should know? <span class="bf-hint">Allergies, surprises, accessibility</span></label>
+                <textarea class="vd-bf-input vd-bf-textarea" id="bf-notes" name="special-requirements" placeholder="Allergies, dietary needs, anything else we should know…" rows="3"></textarea>
               </div>
-              <button type="submit" class="btn btn--venue-primary vd-bf-submit" id="inline-submit-btn">
-                Continue →
-              </button>
+              <div class="bf-ctas">
+                ${bfQueryOnly(venue) ? `
+                <button type="submit" name="bf-intent" value="request" class="btn btn--venue-primary vd-bf-submit bf-cta" id="inline-submit-btn">
+                  <span class="bf-cta-title">${venue.type === 'combo' ? 'Request the whole floor' : 'Send a request'}</span>
+                  <span class="bf-cta-sub">We’ll confirm availability and reach out</span>
+                </button>` : `
+                <button type="submit" name="bf-intent" value="pay" class="btn btn--venue-primary vd-bf-submit bf-cta" id="inline-submit-btn">
+                  <span class="bf-cta-title">Continue to payment</span>
+                  <span class="bf-cta-sub" id="bf-cta-pay-sub">Pay ₹${Math.round(baseTotal * 0.3).toLocaleString('en-IN')} now</span>
+                </button>
+                <button type="submit" name="bf-intent" value="whatsapp" class="bf-cta bf-cta--wa">
+                  <span class="bf-cta-title"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5z"/></svg>Continue on WhatsApp</span>
+                  <span class="bf-cta-sub">Talk to us, pay later</span>
+                </button>`}
+              </div>
             </form>
           </div>
         </div>
@@ -4743,11 +4764,21 @@ async function showBookingForm(venue) {
   // If user came back to change date from the booking form, restore their saved values
   if (appState.changeMode === 'form' && appState.changeModeData) {
     const saved = appState.changeModeData
-    ;['name','email','mobile-number','special-requirements','occasion','occasion-other','board-type','board-message']
+    ;['full-name','email-address','mobile-number','special-requirements','occasion','occasion-other','board-message']
       .forEach(f => { const el = bookView.querySelector(`[name="${f}"]`); if (el && saved[f] !== undefined) el.value = saved[f] })
+    if (saved['board-type'] !== undefined) {
+      const r = bookView.querySelector(`input[name="board-type"][value="${CSS.escape(saved['board-type'])}"]`)
+      if (r) r.checked = true
+    }
+    if (saved.occasion) {
+      bookView.querySelectorAll('.bf-chip[data-occ]').forEach(c => {
+        const on = c.dataset.occ === saved.occasion || (c.dataset.occ === 'Other' && !OCCASIONS.includes(saved.occasion))
+        c.classList.toggle('is-on', on); c.setAttribute('aria-pressed', String(on))
+      })
+    }
     if (saved.addons) {
-      saved.addons.forEach(val => {
-        const cb = bookView.querySelector(`.vd-bf-addon[value="${val}"]`)
+      saved.addons.forEach(id => {
+        const cb = bookView.querySelector(`.bv-addon-check:not(.pkg-locked-check)[data-addon-id="${CSS.escape(String(id))}"]`)
         if (cb) { cb.checked = true; cb.dispatchEvent(new Event('change')) }
       })
     }
@@ -4765,7 +4796,73 @@ async function showBookingForm(venue) {
 
   // Packages: the locked add-ons are pre-checked — recompute so the total and
   // price breakdown include them on first render.
-  if (pkg) updateBookingSummaryPrice()
+  updateBookingSummaryPrice()
+  syncBfExtras()
+  // Payment now starts from this form (no intent screen) — warm checkout.js.
+  if (!bfQueryOnly(venue)) loadRazorpay()
+}
+
+// ── Booking form helpers (redesign 2026-10-23) ─────────────────────────────
+const BF_ICON = {
+  cal:     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+  guests:  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  sparkle: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><path d="M12 9.5l.8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8z"/></svg>',
+}
+// Venues where the guest sends a request instead of paying (same rule as the
+// old intent screen): whole-floor combos and requires_confirmation venues.
+function bfQueryOnly(venue) {
+  return venue?.type === 'combo' || !!venue?.requires_confirmation
+}
+function bfCatLabel(cat, label) {
+  return ({ setup: 'Celebration setup', photography: 'Photography', decor: 'Decor', food: 'Food', entertainment: 'Experiences', extension: 'Extra time' })[cat]
+    || String(label || cat).replace(/^[^A-Za-z]+/, '')
+}
+// Everything the chosen package contains, as one list: the venue's base setup
+// (+ what each rung adds) or a standalone package's own inclusions.
+function bfPackageContents(venue, tier) {
+  if (pkgStandalone(tier)) return tier.inclusions || []
+  const catalog = appState.currentVenueAddOns || []
+  const ladder = PACKAGE_TIER_ORDER.filter(k => PACKAGE_TIERS[k] && !PACKAGE_TIERS[k].occasion && !pkgStandalone(PACKAGE_TIERS[k]))
+  const baseKey = ladder[0]
+  const baseIds = baseKey ? (PACKAGE_TIERS[baseKey].addons || []) : []
+  const extra = (tier.addons || []).filter(id => !baseIds.includes(id))
+    .map(id => catalog.find(a => a.id === id)?.name).filter(Boolean)
+  return [...venueSetupLabels(venue), ...extra]
+}
+window.toggleBfExtras = function(force) {
+  const box = document.getElementById('bf-extras')
+  if (!box) return
+  const open = typeof force === 'boolean' ? force : !box.classList.contains('is-open')
+  box.classList.toggle('is-open', open)
+  box.querySelector('.bf-extras-head')?.setAttribute('aria-expanded', String(open))
+  const body = document.getElementById('bf-extras-body')
+  if (body) body.hidden = !open
+  if (!open) box.querySelector('.bf-extras-head')?.focus()
+}
+window.filterBfExtras = function(btn, cat) {
+  btn.parentElement.querySelectorAll('.bf-chip').forEach(c => { const on = c === btn; c.classList.toggle('is-on', on); c.setAttribute('aria-pressed', String(on)) })
+  document.querySelectorAll('#bf-extras .vd-bf-cat').forEach(g => { g.hidden = !!cat && g.dataset.cat !== cat })
+}
+window.syncBfExtras = function() {
+  const sum = document.getElementById('bf-extras-sum')
+  if (!sum) return
+  const picked = [...document.querySelectorAll('#bf-extras .bv-addon-check:checked')]
+  const all = document.querySelectorAll('#bf-extras .bv-addon-check').length
+  sum.classList.toggle('is-picked', picked.length > 0)
+  sum.textContent = picked.length
+    ? picked.map(cb => `${cb.dataset.addonName} · +₹${Number(cb.dataset.addonPrice).toLocaleString('en-IN')}`).join(', ')
+    : `${all} available`
+}
+window.pickBfOccasion = function(btn) {
+  const wrap = btn.closest('.vd-bf-field')
+  const already = btn.classList.contains('is-on')
+  wrap.querySelectorAll('.bf-chip[data-occ]').forEach(c => { c.classList.remove('is-on'); c.setAttribute('aria-pressed', 'false') })
+  const val = already ? '' : btn.dataset.occ
+  if (val) { btn.classList.add('is-on'); btn.setAttribute('aria-pressed', 'true') }
+  const input = wrap.querySelector('input[name="occasion"]')
+  if (input) input.value = val
+  const other = document.getElementById('occasion-other-wrap')
+  if (other) other.style.display = val === 'Other' ? '' : 'none'
 }
 
 // Restore venue body — undo showBookingForm
@@ -4887,7 +4984,18 @@ function updateBookingSummaryPrice() {
   const totalEl   = document.getElementById('bv-total-price')
   const submitBtn = document.getElementById('inline-submit-btn')
   if (totalEl)   totalEl.textContent   = `₹${total.toLocaleString('en-IN')}`
-  if (submitBtn) submitBtn.textContent = `Continue →`
+  // Same 30% rounding as lead.advance_amount in handleInlineBookingSubmit
+  // (and compute_booking_advance on the server).
+  const adv = Math.round(total * 0.3)
+  const advNow  = document.getElementById('bf-advance-now')
+  const advRest = document.getElementById('bf-advance-rest')
+  const paySub  = document.getElementById('bf-cta-pay-sub')
+  if (advNow)  advNow.textContent  = `₹${adv.toLocaleString('en-IN')}`
+  if (advRest) advRest.textContent = `₹${(total - adv).toLocaleString('en-IN')}`
+  if (paySub)  paySub.textContent  = adv > 0 ? `Pay ₹${adv.toLocaleString('en-IN')} now` : 'Lock my date'
+  void submitBtn
+  const onReq = document.getElementById('bf-onreq-note')
+  if (onReq) onReq.hidden = !document.querySelector('.bv-addon-check:checked:not(.pkg-locked-check)[data-addon-confirm="true"]')
 
   // Update add-on rows in the price breakdown. Package add-ons
   // (.pkg-locked-check) are already folded into the package price row built
@@ -5212,15 +5320,29 @@ function handleInlineBookingSubmit(event) {
     addon_count:  (pendingAddOns || []).length,
   })
 
-  // Replace booking form with intent screen
-  const bookView = document.getElementById('vd-booking-view')
-  if (!bookView) return
+  // Booking-form redesign (2026-10-23): no intent screen. The button pressed
+  // decides: pay now (Razorpay), continue on WhatsApp, or send a request.
+  const intent = event.submitter?.value || (bfQueryOnly(venue) ? 'request' : 'pay')
 
-  bookView.innerHTML = buildIntentScreenHTML(lead, { containerClass: 'vd-intent-wrap container' })
+  if (intent === 'whatsapp') {
+    // Open the tab inside the click (popup blockers), point it at wa.me once
+    // the lead row exists so the message carries the booking ref.
+    let waWin = null
+    try { waWin = window.open('', '_blank') } catch (_) { waWin = null }
+    captureLeadOnIntent()
+    Promise.resolve(appState.pendingLeadCapture).then(() => {
+      const href = intentWaHref(lead)
+      if (waWin && !waWin.closed) waWin.location.href = href
+      else window.location.href = href
+    })
+    intentWhatsAppClick()
+    return
+  }
 
-  // Capture the lead NOW — contact details are in hand, and anyone who
-  // abandons at this screen should still be reachable for follow-up.
+  // Pay / request: record the lead first (same row the submit then updates),
+  // then run the existing submit path.
   captureLeadOnIntent()
+  submitBookingIntent(intent === 'pay')
 }
 
 // ── Intent-screen lead capture ─────────────────────────────────────────────
@@ -5358,12 +5480,14 @@ async function submitBookingIntent(wantsToLock) {
     return
   }
 
-  // Disable both buttons
-  document.querySelectorAll('.vd-intent-btn').forEach(b => { b.disabled = true })
+  // Disable both buttons (old intent screen + the booking form's CTAs)
+  document.querySelectorAll('.vd-intent-btn, .bf-cta').forEach(b => { b.disabled = true })
   const activeBtn = wantsToLock
-    ? document.querySelector('.vd-intent-btn--lock')
-    : document.querySelector('.vd-intent-btn--query')
-  if (activeBtn) activeBtn.querySelector('.vd-intent-btn-title').textContent = 'Submitting…'
+    ? document.querySelector('.vd-intent-btn--lock, .bf-cta[value="pay"]')
+    : document.querySelector('.vd-intent-btn--query, .bf-cta[value="request"]')
+  const activeTitle = activeBtn?.querySelector('.vd-intent-btn-title, .bf-cta-title')
+  const activeTitleWas = activeTitle?.innerHTML
+  if (activeTitle) activeTitle.textContent = wantsToLock ? 'Opening payment…' : 'Submitting…'
 
   // confirmed:true = customer locked (payment done), confirmed:false = query only
   // customer_intent mirrors this for audit purposes
@@ -5526,9 +5650,8 @@ async function submitBookingIntent(wantsToLock) {
   } catch (err) {
     console.error(err)
     showToast(err.message || 'Error submitting. Please try again.', 'error')
-    document.querySelectorAll('.vd-intent-btn').forEach(b => { b.disabled = false })
-    if (activeBtn) activeBtn.querySelector('.vd-intent-btn-title').textContent =
-      wantsToLock ? `Lock my date — ₹${lead.advance_amount.toLocaleString('en-IN')}` : 'Just checking — call me'
+    document.querySelectorAll('.vd-intent-btn, .bf-cta').forEach(b => { b.disabled = false })
+    if (activeTitle && activeTitleWas != null) activeTitle.innerHTML = activeTitleWas
   }
 }
 
@@ -11903,9 +12026,11 @@ function goBackToVenueDetail(mode) {
   } else if (mode === 'form') {
     appState.changeMode = 'form'
     const saved = {}
-    ;['name','email','mobile-number','special-requirements','occasion','occasion-other','board-type','board-message']
+    const form = document.getElementById('inline-booking-form')
+    ;['full-name','email-address','mobile-number','special-requirements','occasion','occasion-other','board-message']
       .forEach(f => { const el = document.querySelector(`[name="${f}"]`); if (el) saved[f] = el.value })
-    saved.addons = [...document.querySelectorAll('.vd-bf-addon:checked')].map(cb => cb.value)
+    if (form && form['board-type']) saved['board-type'] = form['board-type'].value
+    saved.addons = [...document.querySelectorAll('.bv-addon-check:checked:not(.pkg-locked-check)')].map(cb => cb.dataset.addonId)
     appState.changeModeData = saved
   }
 
