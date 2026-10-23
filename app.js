@@ -1712,7 +1712,19 @@ function bookingFoodOpts(venue, tierKey) {
 
 // " · with food & drinks" on the package line when food is part of the price.
 function pkgFoodSuffix(venue, tierKey) {
-  return effectiveWithFood(venue?.id, tierKey, appState.withFood) ? ' · with food &amp; drinks' : ''
+  if (!effectiveWithFood(venue?.id, tierKey, appState.withFood)) return ''
+  const n = pkgFoodItemsCount(venue?.id, tierKey)
+  return n ? ` · with ${pkgFoodItemsText(n)}` : ' · with food &amp; drinks'
+}
+// Combined food & drink item count for the guest's party/date (package_prices.food_items,
+// pricing-sheet rule: Prelude 1x guests, others 1.5x rounded up). null when not itemised.
+function pkgFoodItemsCount(venueId, tierKey) {
+  const fr = packageFoodRow(venueId, tierKey, appState.adults, appState.selectedDate || appState.checkinDate || null)
+  const n = fr && Number(fr.food_items || 0)
+  return n > 0 ? n : null
+}
+function pkgFoodItemsText(n) {
+  return `${n} food &amp; drink item${n !== 1 ? 's' : ''}`
 }
 // Sunroom-style voucher line (food_credit) under the package line. Wording
 // decided by Aksheev 2026-10-23 — "voucher", never "credit", guest-facing.
@@ -1757,7 +1769,7 @@ async function loadPackages() {
         .eq('is_active', true),
       supabase
         .from('package_prices')
-        .select('venue_id, package_id, with_food, guests, day_type, price, food_credit')
+        .select('venue_id, package_id, with_food, guests, day_type, price, food_credit, food_items')
         .eq('is_active', true),
     ])
     if (pkgRes.error) throw pkgRes.error
@@ -3884,9 +3896,11 @@ function showPackageStep(venue) {
     let foodNote = ''
     if (foodMode === 'optional' && !appState.withFood && price != null) {
       const fr = packageFoodRow(venue.id, key, appState.adults, eventDate)
-      if (fr && Number(fr.price) > price) foodNote = `<div class="pkg-card-food-note">+ ₹${(Number(fr.price) - price).toLocaleString('en-IN')} with food &amp; drinks</div>`
+      const n  = fr && Number(fr.food_items || 0)
+      if (fr && Number(fr.price) > price) foodNote = `<div class="pkg-card-food-note">+ ₹${(Number(fr.price) - price).toLocaleString('en-IN')} with ${n ? pkgFoodItemsText(n) : 'food &amp; drinks'}</div>`
     } else if (foodMode === 'optional' && appState.withFood && price != null) {
-      foodNote = `<div class="pkg-card-food-note">Includes food &amp; drinks</div>`
+      const n = pkgFoodItemsCount(venue.id, key)
+      foodNote = `<div class="pkg-card-food-note">Includes ${n ? pkgFoodItemsText(n) + ' (any mix)' : 'food &amp; drinks'}</div>`
     } else if (foodMode === 'only' && price != null) {
       const fr = packageFoodRow(venue.id, key, appState.adults, eventDate)
       const v = fr && Number(fr.food_credit || 0)
