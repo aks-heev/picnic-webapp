@@ -10892,3 +10892,36 @@ textarea.bcl-input { resize: vertical; }
 .rvw-why { margin: 0 0 8px; font-size: 13px; font-style: italic; color: #8a6d1f; }
 .rvw-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .rvw-btn { min-height: 38px; }
+
+/* Package step — food & drinks toggle + per-card food notes (Phase 5b, 2026-10) */
+.pkg-food-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--boho-border);
+  border-radius: 999px;
+  background: var(--boho-white);
+  color: var(--boho-text-dark);
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  cursor: pointer;
+  min-height: 44px;
+}
+.pkg-food-toggle input { width: 18px; height: 18px; accent-color: var(--boho-accent-pink); margin: 0; }
+.pkg-food-toggle:has(input:checked) { border-color: var(--boho-accent-pink); background: var(--boho-light-pink); }
+.pkg-card-food-note {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+  color: var(--boho-text-medium);
+}
+.pkg-voucher-note {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--boho-cream);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--boho-text-medium);
+}

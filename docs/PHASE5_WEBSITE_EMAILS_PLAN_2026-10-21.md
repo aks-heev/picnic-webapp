@@ -126,3 +126,12 @@ Cottages are request-only, so their rows are checked via the quote RPC + an admi
 - Repo sync: `supabase/functions/notify-booking-{confirmed,received}/index.ts` now match deployed. `_shared/` NOT synced — the two
   deployed functions carry different `resend.ts` copies (confirmed's supports cc + logs), so one shared local folder can't match both.
 - Owed by Aksheev: open the two test emails and eyeball the INCLUDED row (desktop + phone).
+
+## 8. 5b–5e result — built 2026-10-23, awaiting push + phone check
+
+- **Client/server parity:** `packageTierPriceAt` from the new `app.js` was run verbatim in Node against live `package_prices` + `venue_packages` and compared with live `compute_booking_total` across every active venue × package × guests 1–8 × food on/off × date (none / Sat 2026-11-07 / Wed 2026-11-04). **736 compared, 0 mismatches.** 32 skipped by design: food-only packages with no date (page shows a "from" price; the server needs a date) and no-food requests on food-only packages (the UI never sends them).
+- **app.js:** food toggle (starts off, G7), per-card food/voucher notes (G8), custom-quote state for guest counts without a food row, `p_with_food` passed to `submit_booking_intent`, admin booking editor reads the price table and saves food via `admin_set_booking_food`, admin query-edit recompute now passes package/food/date and takes the advance from `compute_booking_advance` (closes Todoist p2 bug).
+- **brochure.js / brochure.html:** prices from `package_price_grid`; new "with food from ₹Y" line.
+- **style.css:** `.pkg-food-toggle`, `.pkg-card-food-note`, `.pkg-voucher-note`.
+- **5e:** venue 27 renamed to "Countryside Offgrid — Picnic only" (slug unchanged).
+- **Still open:** 5f Sunroom `packages_enabled = true` only after the production check; request-only status is enforced in the frontend only; `prerender-venues.mjs` still shows `venue_packages` no-food prices (unchanged and correct for no-food).

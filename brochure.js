@@ -4,8 +4,10 @@
 // Supabase Storage egress). Prices and inclusions are filled LIVE so this page
 // can never quote something the booking flow doesn't charge or /packages
 // doesn't say:
-//   - package "from" price = lowest ACTIVE venue_packages.price for that package
-//     (the same rows compute_booking_total prices from)
+//   - package "from" price = lowest no-food price in package_price_grid (the
+//     view over package_prices — the same rows compute_booking_total prices
+//     from), plus "with food from" the lowest with-food price (2026-10-23, G4).
+//     Falls back to the lowest venue_packages.price if the view is unavailable.
 //   - add-ons menu = active add_ons rows
 //   - inclusions = the same rules as app.js's /packages cards:
 //       standalone package (non-empty packages.inclusions, e.g. The Prelude)
@@ -82,13 +84,14 @@ async function fillLivePrices() {
   const key = import.meta.env.VITE_SUPABASE_ANON_KEY
   if (!url || !key) return
   const supabase = createClient(url, key)
-  const [pkgRes, vpRes, addRes] = await Promise.all([
+  const [pkgRes, vpRes, addRes, gridRes] = await Promise.all([
     supabase.from('packages').select('id, key, is_active, inclusions, package_add_ons(addon_id, sort_order)').eq('is_active', true),
     supabase.from('venue_packages').select('package_id, price').eq('is_active', true),
     // category 'setup' = stay-only celebration setups (named like packages,
     // e.g. "The Prelude ₹4,300") — not layerable add-ons, so never on this menu.
     supabase.from('add_ons').select('id, name, price, category').eq('is_active', true).neq('category', 'setup')
       .order('price', { ascending: true }).order('sort_order', { ascending: true }),
+    supabase.from('package_price_grid').select('package_key, from_price_no_food, from_price_with_food'),
   ])
 
   if (!pkgRes.error && !addRes.error) fillInclusions(pkgRes.data || [], addRes.data || [])
@@ -101,14 +104,30 @@ async function fillLivePrices() {
       if (!(p > 0)) continue
       if (!minById.has(r.package_id) || p < minById.get(r.package_id)) minById.set(r.package_id, p)
     }
+    // Price table (preferred): lowest no-food and lowest with-food price per package.
+    const gridNoFood = new Map()
+    const gridFood = new Map()
+    if (!gridRes.error) {
+      for (const r of gridRes.data || []) {
+        const nf = Number(r.from_price_no_food), wf = Number(r.from_price_with_food)
+        if (nf > 0 && (!gridNoFood.has(r.package_key) || nf < gridNoFood.get(r.package_key))) gridNoFood.set(r.package_key, nf)
+        if (wf > 0 && (!gridFood.has(r.package_key) || wf < gridFood.get(r.package_key))) gridFood.set(r.package_key, wf)
+      }
+    }
     const shown = []
     document.querySelectorAll('[data-pkg]').forEach(card => {
       const id = idByKey.get(card.dataset.pkg)
       // Package switched off in admin → don't advertise it here either. Only
       // trusted when the query returned rows; an empty result keeps the page.
       if (id === undefined) { if (idByKey.size) card.hidden = true; return }
-      const min = minById.get(id)
+      const min = gridNoFood.get(card.dataset.pkg) || minById.get(id)
       if (min) card.querySelector('[data-price]').textContent = inr(min)
+      const foodEl = card.querySelector('[data-price-food]')
+      const food = gridFood.get(card.dataset.pkg)
+      if (foodEl) {
+        if (food) foodEl.textContent = `with food from ${inr(food)}`
+        else if (!gridRes.error) foodEl.hidden = true
+      }
       shown.push({ key: card.dataset.pkg, min })
     })
     // Meta Pixel ViewContent — same shape as showPackagesPage in app.js, so

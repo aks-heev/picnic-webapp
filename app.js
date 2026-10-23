@@ -95,6 +95,7 @@ const appState = {
   bookingStep: 'calendar',   // 'calendar' | 'guests' | 'package' | 'booking'
   bookingOccasion: '',       // packages: occasion captured at the guest step
   selectedPackage: null,     // packages: { occasion, tierKey, addonIds } once a tier is chosen
+  withFood: false,           // package price table (2026-10-21): guest ticked "Add food & drinks" at the package step
   pendingPackage: null,      // packages-first (/packages page): { occasion, tierKey, venueId } handoff,
                              // consumed after the guest step via selectPackageTier() — see docs/PHASE2_PACKAGES_FIRST_PLAN.md
   venueCatalogCache: null,   // Map<venueId, addon[]> — batched catalogs loaded by loadCatalogsForVenues()
@@ -1009,6 +1010,7 @@ async function showVenuePage(venueId, pushState = true) {
   }
   appState.bookingOccasion  = appState.pendingPackage?.occasion || ''
   appState.selectedPackage  = null
+  appState.withFood         = false
 
   const needsCalendar = true
   const [addOns, bookedData] = await Promise.all([
@@ -1657,6 +1659,69 @@ let packagesLoaded = false // set once loadPackages() has real DB rows
 // derived fallback).
 let VENUE_PACKAGES = new Map()
 
+// ── Package price table (2026-10-21) ─────────────────────────────────────────
+// docs/PACKAGE_PRICING_PLAN_2026-10-21.md. package_prices rows (anon-readable)
+// keyed "<venueId>:<packageKey>" → row[]. When a venue×package has rows, they
+// ARE its price — the same rows compute_booking_total reads, looked up the same
+// way (no arithmetic beyond today's no-food extra-guest rule), so the page and
+// the server agree by construction. No rows → the old venue_packages path.
+let PACKAGE_PRICES = new Map()
+
+function packagePriceRows(venueId, packageKey) {
+  return PACKAGE_PRICES.get(`${venueId}:${packageKey}`) || null
+}
+// Weekend = Sat/Sun of the event date (a plain date — no timezone shift).
+function pkgDayType(dateStr) {
+  if (!dateStr) return null
+  const dow = new Date(dateStr + 'T00:00:00').getDay()
+  return (dow === 0 || dow === 6) ? 'weekend' : 'weekday'
+}
+// 'none' (no table rows) | 'optional' (food can be added) | 'only' (food always
+// included, e.g. Sunroom's voucher) | 'never' (table rows, no food option)
+function packageFoodMode(venueId, packageKey) {
+  const rows = packagePriceRows(venueId, packageKey)
+  if (!rows) return 'none'
+  const hasFood = rows.some(r => r.with_food)
+  const hasPlain = rows.some(r => !r.with_food)
+  return hasFood && hasPlain ? 'optional' : hasFood ? 'only' : 'never'
+}
+function effectiveWithFood(venueId, packageKey, wanted) {
+  const mode = packageFoodMode(venueId, packageKey)
+  return mode === 'only' ? true : mode === 'optional' ? !!wanted : false
+}
+// The with-food row compute_booking_total would pick (specific day beats 'any').
+// With no date yet (cards / "from" prices) the cheapest matching day is used.
+function packageFoodRow(venueId, packageKey, adults, dateStr) {
+  const rows = (packagePriceRows(venueId, packageKey) || [])
+    .filter(r => r.with_food && r.guests === Number(adults))
+  if (!rows.length) return null
+  const day = pkgDayType(dateStr)
+  if (day) return rows.find(r => r.day_type === day) || rows.find(r => r.day_type === 'any') || null
+  return rows.slice().sort((a, b) => Number(a.price) - Number(b.price))[0]
+}
+// Booking-flow options for packageTierPriceAt: the guest's food choice (forced
+// on for food-only packages) and the event date.
+function bookingFoodOpts(venue, tierKey) {
+  return {
+    withFood: effectiveWithFood(venue?.id, tierKey, appState.withFood),
+    date: appState.selectedDate || appState.checkinDate || null,
+  }
+}
+
+// " · with food & drinks" on the package line when food is part of the price.
+function pkgFoodSuffix(venue, tierKey) {
+  return effectiveWithFood(venue?.id, tierKey, appState.withFood) ? ' · with food &amp; drinks' : ''
+}
+// Sunroom-style voucher line (food_credit) under the package line. Wording
+// decided by Aksheev 2026-10-23 — "voucher", never "credit", guest-facing.
+function pkgVoucherNoteHtml(venue, tierKey) {
+  if (!effectiveWithFood(venue?.id, tierKey, appState.withFood)) return ''
+  const fr = packageFoodRow(venue.id, tierKey, appState.adults, appState.selectedDate || appState.checkinDate || null)
+  const v = fr && Number(fr.food_credit || 0)
+  if (!v) return ''
+  return `<div class="vd-bv-price-note pkg-voucher-note">Includes ₹${v.toLocaleString('en-IN')} food &amp; drinks voucher. Anything above is paid at the café; unused voucher lapses.</div>`
+}
+
 function venuePackageRow(venueId, packageKey) {
   return VENUE_PACKAGES.get(`${venueId}:${packageKey}`) || null
 }
@@ -1678,7 +1743,7 @@ function pkgStandalone(tier) {
 // public site.
 async function loadPackages() {
   try {
-    const [pkgRes, vpRes] = await Promise.all([
+    const [pkgRes, vpRes, ppRes] = await Promise.all([
       supabase
         .from('packages')
         .select('*, package_add_ons(addon_id, sort_order)')
@@ -1687,6 +1752,10 @@ async function loadPackages() {
       supabase
         .from('venue_packages')
         .select('venue_id, package_id, price, included_guests, overage_per_person, max_guests')
+        .eq('is_active', true),
+      supabase
+        .from('package_prices')
+        .select('venue_id, package_id, with_food, guests, day_type, price, food_credit')
         .eq('is_active', true),
     ])
     if (pkgRes.error) throw pkgRes.error
@@ -1715,9 +1784,25 @@ async function loadPackages() {
       const key = idToKey.get(row.package_id)
       if (key) vp.set(`${row.venue_id}:${key}`, row)
     })
+    // Price table rows. A failed fetch leaves the map empty, which falls back to
+    // venue_packages (no-food prices are identical there) and hides the food
+    // option — fail-safe, never a guessed food price.
+    const pp = new Map()
+    if (ppRes && !ppRes.error) {
+      ;(ppRes.data || []).forEach(row => {
+        const key = idToKey.get(row.package_id)
+        if (!key) return
+        const k = `${row.venue_id}:${key}`
+        if (!pp.has(k)) pp.set(k, [])
+        pp.get(k).push({ ...row, guests: row.guests == null ? null : Number(row.guests), price: Number(row.price) })
+      })
+    } else if (ppRes?.error) {
+      console.error('Failed to load package price table:', ppRes.error)
+    }
     PACKAGE_TIERS = tiers
     PACKAGE_TIER_ORDER = order
     VENUE_PACKAGES = vp
+    PACKAGE_PRICES = pp
     packagesLoaded = true
   } catch (err) {
     console.error('Failed to load packages, using fallback tier definitions:', err)
@@ -3705,17 +3790,34 @@ function setBookingOccasion(value) {
 // display-only and price at ₹0, so the booking form's checkbox sum still
 // matches this card price exactly when no extras are added.
 // `catalog` is kept in the signature (unused) so call sites didn't all churn.
-function packageTierPriceAt(venue, tier, catalog, adults) {
+// opts (2026-10-21 price table): { withFood, date }. Mirrors compute_booking_total:
+// table rows win; with food = the exact guest-count row (null → custom quote);
+// no food = the guests-any row + today's extra-guest charge. Food-only packages
+// (Sunroom) always price with food, so "From ₹X" pages still show a price.
+function packageTierPriceAt(venue, tier, catalog, adults, opts = {}) {
   const row = venuePackageRow(venue?.id, tier?.key)
   if (!row) return null
+  const mode = packageFoodMode(venue?.id, tier?.key)
   const extra = Math.max(0, (Number(adults) || 0) - row.included_guests)
-  return Number(row.price) + extra * Number(row.overage_per_person || 0)
+  if (mode === 'none') {
+    if (opts.withFood) return null
+    return Number(row.price) + extra * Number(row.overage_per_person || 0)
+  }
+  const withFood = mode === 'only' ? true : (mode === 'optional' && !!opts.withFood)
+  if (withFood) {
+    const fr = packageFoodRow(venue.id, tier.key, adults, opts.date || null)
+    return fr ? Number(fr.price) : null
+  }
+  const plain = (packagePriceRows(venue.id, tier.key) || []).find(r => !r.with_food && r.guests == null)
+  if (!plain) return null
+  return Number(plain.price) + extra * Number(row.overage_per_person || 0)
 }
-// Current-booking flavour: prices at whatever guest count the flow has.
-// The /packages page uses packageTierPriceAt directly with a fixed baseline
-// (PKG_PAGE_BASE_ADULTS) so a leftover appState.adults never skews "From" prices.
+// Current-booking flavour: prices at whatever guest count the flow has, with
+// the guest's food choice and event date. The /packages page uses
+// packageTierPriceAt directly with a fixed baseline (PKG_PAGE_BASE_ADULTS) and
+// no food, so a leftover booking choice never skews "From" prices.
 function packageTierPrice(venue, tier, catalog) {
-  return packageTierPriceAt(venue, tier, catalog, appState.adults)
+  return packageTierPriceAt(venue, tier, catalog, appState.adults, bookingFoodOpts(venue, tier?.key))
 }
 
 // ── Packages: tier selection step (cafe + flag only) ──────────────────────
@@ -3757,6 +3859,11 @@ function showPackageStep(venue) {
   }
 
   const totalGuests = appState.adults + appState.children
+  // Food toggle (G7: off by default) — only when some visible package offers
+  // food as an option. Food-only packages (Sunroom) need no toggle.
+  const showFoodToggle = visibleKeys.some(k => packageFoodMode(venue.id, k) === 'optional')
+  if (!showFoodToggle) appState.withFood = false
+  const eventDate = appState.selectedDate || appState.checkinDate || null
 
   const cards = visibleKeys.map((key, idx) => {
     const tier     = PACKAGE_TIERS[key]
@@ -3765,6 +3872,21 @@ function showPackageStep(venue) {
     // Hard cap (venue_packages.max_guests): the setup physically can't host
     // more — card stays visible but can't be chosen with this party size.
     const overCap  = row?.max_guests != null && totalGuests > row.max_guests
+    // No price row for this choice (e.g. food for more guests than the table
+    // covers) → custom quote, never a guessed number.
+    const noPrice  = price == null
+    const foodMode = packageFoodMode(venue.id, key)
+    let foodNote = ''
+    if (foodMode === 'optional' && !appState.withFood && price != null) {
+      const fr = packageFoodRow(venue.id, key, appState.adults, eventDate)
+      if (fr && Number(fr.price) > price) foodNote = `<div class="pkg-card-food-note">+ ₹${(Number(fr.price) - price).toLocaleString('en-IN')} with food &amp; drinks</div>`
+    } else if (foodMode === 'optional' && appState.withFood && price != null) {
+      foodNote = `<div class="pkg-card-food-note">Includes food &amp; drinks</div>`
+    } else if (foodMode === 'only' && price != null) {
+      const fr = packageFoodRow(venue.id, key, appState.adults, eventDate)
+      const v = fr && Number(fr.food_credit || 0)
+      foodNote = v ? `<div class="pkg-card-food-note">Includes ₹${v.toLocaleString('en-IN')} food &amp; drinks voucher</div>` : ''
+    }
     // Ladder copy ("Everything in <prev>, plus:") chains within whatever
     // group this tier belongs to — the universal three, or one occasion's
     // own tiers (e.g. Movie Night Deluxe chains off Movie Night, not off
@@ -3813,10 +3935,11 @@ function showPackageStep(venue) {
           ${pkgCardTopHtml(tier, key)}
           <h4 class="pkg-card-name">${escapeHtml(tier.name)}</h4>
           <p class="pkg-card-tagline">${escapeHtml(tier.tagline)}</p>
-          ${pkgPriceRowHtml(price)}
-          <div class="pkg-card-price-note">${priceNote}</div>
+          ${noPrice ? `<div class="pkg-card-price-row"><span class="pkg-card-price">Custom quote</span></div>` : pkgPriceRowHtml(price)}
+          <div class="pkg-card-price-note">${noPrice ? `for ${appState.adults} adult${appState.adults !== 1 ? 's' : ''} with food &amp; drinks — message us on WhatsApp` : priceNote}</div>
+          ${foodNote}
           ${inclList}
-          <button type="button" class="btn ${tier.featured ? 'btn--venue-primary' : 'btn--venue-secondary'} pkg-card-cta" ${overCap ? 'disabled' : ''} onclick="selectPackageTier('${key}')">${overCap ? `Up to ${row.max_guests} guests only` : `Choose ${escapeHtml(tier.name)}`}</button>
+          <button type="button" class="btn ${tier.featured ? 'btn--venue-primary' : 'btn--venue-secondary'} pkg-card-cta" ${(overCap || noPrice) ? 'disabled' : ''} onclick="selectPackageTier('${key}')">${overCap ? `Up to ${row.max_guests} guests only` : noPrice ? 'Custom quote on WhatsApp' : `Choose ${escapeHtml(tier.name)}`}</button>
         </div>`
   }).join('')
 
@@ -3828,6 +3951,7 @@ function showPackageStep(venue) {
       </button>
       <h3 class="pkg-step-title">Choose your package</h3>
       <p class="pkg-step-sub">Curated for the occasion — you can add more on the next step.</p>
+      ${showFoodToggle ? `<label class="pkg-food-toggle"><input type="checkbox" id="pkg-food-toggle" ${appState.withFood ? 'checked' : ''} onchange="setPackageFood(this.checked)"> <span>Add food &amp; drinks</span></label>` : ''}
       <div class="pkg-cards">${cards}</div>
     </div>
   `
@@ -3869,6 +3993,10 @@ function selectPackageTier(key) {
     showToast(`${tier.name} hosts up to ${vpRow.max_guests} guests — reduce the guest count or pick another package`, 'error')
     return
   }
+  if (packageTierPriceAt(venue, tier, null, appState.adults, bookingFoodOpts(venue, key)) == null) {
+    showToast(`${tier.name} with food for ${appState.adults} adult${appState.adults !== 1 ? 's' : ''} is a custom quote — message us on WhatsApp`, 'error')
+    return
+  }
   const catalog  = appState.currentVenueAddOns || []
   const addonIds = (tier.addons || []).filter(id => catalog.some(a => a.id === id))
   appState.selectedPackage = { occasion: appState.bookingOccasion || null, tierKey: key, addonIds }
@@ -3884,12 +4012,13 @@ function selectPackageTier(key) {
   if (appState.changeMode === 'intent-package' && appState.changeModeData) {
     // Stored pricing: the tier's price IS the package price (bundled add-ons
     // included at ₹0) — no more base + add-on summing.
-    const pkgPrice  = packageTierPriceAt(venue, tier, catalog, appState.adults)
+    const pkgPrice  = packageTierPriceAt(venue, tier, catalog, appState.adults, bookingFoodOpts(venue, key))
     const addonObjs = addonIds.map(id => catalog.find(a => a.id === id)).filter(Boolean)
     const lead = {
       ...appState.changeModeData,
       advance_amount: Math.round((pkgPrice ?? getPicnicPrice(venue, appState.adults)) * 0.3),
       package_key:    key, // "Change package" from the intent screen — this IS the new tier
+      with_food:      effectiveWithFood(venue.id, key, appState.withFood),
     }
     appState.pendingLead   = lead
     appState.pendingAddOns = addonObjs.map(a => ({
@@ -3989,10 +4118,10 @@ async function showBookingForm(venue) {
   // Packages: the stored venue_packages price IS the package line (bundled
   // add-ons are included in it, priced at ₹0 below) — only add-ons chosen
   // beyond the package get itemized.
-  const pkgPrice = (pkg && pkgTier) ? packageTierPriceAt(venue, pkgTier, addOns, appState.adults) : null
+  const pkgPrice = (pkg && pkgTier) ? packageTierPriceAt(venue, pkgTier, addOns, appState.adults, bookingFoodOpts(venue, pkgTier.key)) : null
   if (pkg && pkgTier && pkgPrice != null) {
     baseTotal = pkgPrice
-    priceRows += `<div class="vd-bv-price-row vd-bv-price-row--package"><span>${escapeHtml(pkgTier.name)} package</span><span>₹${baseTotal.toLocaleString('en-IN')}</span></div>`
+    priceRows += `<div class="vd-bv-price-row vd-bv-price-row--package"><span>${escapeHtml(pkgTier.name)} package${pkgFoodSuffix(venue, pkgTier.key)}</span><span>₹${baseTotal.toLocaleString('en-IN')}</span></div>${pkgVoucherNoteHtml(venue, pkgTier.key)}`
   } else {
     const baseLabel = hasStay
       ? `Stay · ${stayNights} night${stayNights !== 1 ? 's' : ''} × ₹${picnicPrice.toLocaleString('en-IN')}`
@@ -4320,7 +4449,7 @@ function updateBookingSummaryPrice() {
   // replaces the venue base entirely (bundled checkboxes carry price 0, so the
   // checkbox sum below only ever adds true extras).
   const pkgTier = (appState.selectedPackage && venue.type === 'cafe') ? PACKAGE_TIERS[appState.selectedPackage.tierKey] : null
-  const pkgPrice = pkgTier ? packageTierPriceAt(venue, pkgTier, [], appState.adults) : null
+  const pkgPrice = pkgTier ? packageTierPriceAt(venue, pkgTier, [], appState.adults, bookingFoodOpts(venue, pkgTier.key)) : null
   const picnicPrice = pkgPrice != null ? pkgPrice : getPicnicPrice(venue, appState.adults)
   const addonSum      = Array.from(document.querySelectorAll('.bv-addon-check:checked'))
     .reduce((sum, cb) => sum + Number(cb.dataset.addonPrice), 0)
@@ -4408,9 +4537,9 @@ function buildIntentSummaryHTML() {
     // at ₹0); only itemize add-ons chosen beyond the package.
     const extraAddOns  = lockedIds.length ? addOns.filter(ao => !lockedIds.includes(ao.addon_id)) : addOns
 
-    const pkgLinePrice = pkgTier ? packageTierPriceAt(venue, pkgTier, [], appState.adults) : null
+    const pkgLinePrice = pkgTier ? packageTierPriceAt(venue, pkgTier, [], appState.adults, bookingFoodOpts(venue, pkgTier.key)) : null
     if (pkgTier && pkgLinePrice != null) {
-      rows += `<div class="vd-bv-price-row vd-bv-price-row--package"><span>${escapeHtml(pkgTier.name)} package</span><span>₹${pkgLinePrice.toLocaleString('en-IN')}</span></div>`
+      rows += `<div class="vd-bv-price-row vd-bv-price-row--package"><span>${escapeHtml(pkgTier.name)} package${pkgFoodSuffix(venue, pkgTier.key)}</span><span>₹${pkgLinePrice.toLocaleString('en-IN')}</span></div>${pkgVoucherNoteHtml(venue, pkgTier.key)}`
     } else if (setupBase) {
       const setupLabel = hasStay
         ? `Stay · ${stayNights} night${stayNights !== 1 ? 's' : ''} × ₹${picnicPrice.toLocaleString('en-IN')}`
@@ -4557,7 +4686,7 @@ function handleInlineBookingSubmit(event) {
   // when a tier is selected; bundled checkboxes carry price 0 so addonSum is
   // extras-only. (Server recomputes authoritatively either way.)
   const subPkgTier  = (venue.type === 'cafe' && appState.selectedPackage) ? PACKAGE_TIERS[appState.selectedPackage.tierKey] : null
-  const subPkgPrice = subPkgTier ? packageTierPriceAt(venue, subPkgTier, [], appState.adults) : null
+  const subPkgPrice = subPkgTier ? packageTierPriceAt(venue, subPkgTier, [], appState.adults, bookingFoodOpts(venue, subPkgTier.key)) : null
   const picnicPrice = subPkgPrice != null ? subPkgPrice : getPicnicPrice(venue, appState.adults)
   const addonSum      = Array.from(document.querySelectorAll('.bv-addon-check:checked'))
     .reduce((s, cb) => s + Number(cb.dataset.addonPrice), 0)
@@ -4598,6 +4727,7 @@ function handleInlineBookingSubmit(event) {
   // which resolves it to a name/tagline snapshot on the booking row.
   if (venue.type === 'cafe' && appState.selectedPackage) {
     lead.package_key = appState.selectedPackage.tierKey
+    lead.with_food   = effectiveWithFood(venue.id, lead.package_key, appState.withFood)
   }
   if (venue.type === 'cafe' && appState.selectedTimeSlot) {
     lead.time_slot      = appState.selectedTimeSlot
@@ -4705,6 +4835,7 @@ function captureLeadOnIntent() {
     p_children_count:       lead.children_count ?? 0,
     p_booking_id:           lead.booking_id ?? null,
     p_package_key:          lead.package_key ?? null,
+    p_with_food:            !!lead.with_food,
     p_add_ons:              addOns.map(a => ({
       addon_id:              a.addon_id,
       name:                  a.name,
@@ -4917,6 +5048,7 @@ async function submitBookingIntent(wantsToLock) {
       // match; otherwise it inserts fresh.
       p_booking_id:           lead.booking_id ?? null,
       p_package_key:          lead.package_key ?? null,
+      p_with_food:            !!lead.with_food,
       p_add_ons:              addOnsToInsert.map(a => ({
         addon_id:              a.addon_id,
         name:                  a.name,
@@ -6486,19 +6618,28 @@ async function saveQueryEdit(id) {
     // 2. Recompute server-authoritative total + 30% advance so the card stays in sync with the
     //    edited guests / dates / slot / add-ons. compute_booking_total returns 0 for combo/partner/custom.
     try {
-      const { data: t, error: tErr } = await supabase.rpc('compute_booking_total', {
+      // Package + food + event date ride along (2026-10-21): without p_package_key this used to
+      // reset a packaged lead's total to the venue base price. The advance comes from
+      // compute_booking_advance — the only place the 30% rate lives.
+      const priceArgs = {
         p_venue_id:       venueId,
         p_billing_guests: billingGuests,
         p_nights:         nights,
         p_addon_ids:      finalAddonIds.length ? finalAddonIds : null,
         p_time_slot:      slotForCalc,
-      })
-      if (!tErr) {
-        const total = Number(t) || 0
-        patch.total_amount   = total
-        patch.advance_amount = Math.round(total * 0.3)
+        p_package_key:    qRow?.package_key ?? null,
+        p_with_food:      qRow?.with_food === true,
+        p_date:           date || null,
+      }
+      const [{ data: t, error: tErr }, { data: adv, error: aErr }] = await Promise.all([
+        supabase.rpc('compute_booking_total', priceArgs),
+        supabase.rpc('compute_booking_advance', priceArgs),
+      ])
+      if (!tErr && !aErr) {
+        patch.total_amount   = Number(t) || 0
+        patch.advance_amount = Number(adv) || 0
       } else {
-        console.warn('price recompute failed', tErr)
+        console.warn('price recompute failed', tErr || aErr)
       }
     } catch (priceErr) {
       console.warn('price recompute skipped', priceErr)
@@ -11292,6 +11433,12 @@ window.pkgPageSelectVenue         = pkgPageSelectVenue
 window.pkgPageSelectCity          = pkgPageSelectCity
 window.showPackageBack            = showPackageBack
 window.selectPackageTier          = selectPackageTier
+window.setPackageFood             = function(on) {
+  appState.withFood = !!on
+  const venue = appState.currentVenue
+  track('package_food_toggled', { venue_id: venue?.id, venue_name: venue?.name, with_food: !!on, guests: appState.adults + appState.children })
+  if (venue) showPackageStep(venue)
+}
 window.updateBookingSummaryPrice  = updateBookingSummaryPrice
 window.handleInlineBookingSubmit  = handleInlineBookingSubmit
 window.submitBookingIntent        = submitBookingIntent
@@ -11560,13 +11707,25 @@ function abkPackagesForVenue(venueId) {
     .filter(Boolean)
 }
 
-function abkVenuePackagePrice(venueId, pkgKey, adults) {
+function abkVenuePackagePrice(venueId, pkgKey, adults, withFood = false, date = null) {
   const p = abk.packages.find(pk => pk.key === pkgKey)
   if (!p) return null
   const vp = abk.venuePackages.find(r => r.venue_id === venueId && r.package_id === p.id)
   if (!vp) return null
+  // Price table (2026-10-21): same row lookup as the public site and
+  // compute_booking_total. This is only the PREFILL — admin totals are saved verbatim.
+  if (packageFoodMode(venueId, pkgKey) !== 'none') {
+    return packageTierPriceAt({ id: venueId }, { key: pkgKey }, null, adults, { withFood, date })
+  }
   const extra = Math.max(0, (Number(adults) || 0) - Number(vp.included_guests || 0))
   return Number(vp.price) + extra * Number(vp.overage_per_person || 0)
+}
+// The venue whose price table prices this booking's picnic (the twin for picnic+stay).
+function abkPricedVenueId() {
+  const v = abkVenue()
+  if (!v) return null
+  if (abk.type === 'picnic_stay') return v.picnic_venue_id ? Number(v.picnic_venue_id) : null
+  return abk.type === 'picnic' ? v.id : null
 }
 
 // Prefill total from venue/package/nights + extras. Editable afterward.
@@ -11577,7 +11736,7 @@ function abkComputeTotal() {
   const children = Number(abk.children) || 0
   let base = 0
   if (abk.type === 'picnic') {
-    const pkgPrice = abk.packageKey ? abkVenuePackagePrice(v.id, abk.packageKey, adults) : null
+    const pkgPrice = abk.packageKey ? abkVenuePackagePrice(v.id, abk.packageKey, adults, !!abk.includesFood, abk.date || null) : null
     base = pkgPrice != null ? pkgPrice : getVenuePrice(v, adults)
   } else if (abk.type === 'picnic_stay') {
     // Mirrors compute_booking_total's picnic_stay branch: nights x this venue's nightly rate,
@@ -11588,7 +11747,7 @@ function abkComputeTotal() {
     const tw = abk.venues.find(x => x.id === Number(v.picnic_venue_id))
     let picnicPart = 0
     if (tw) {
-      const pkgPrice = abk.packageKey ? abkVenuePackagePrice(tw.id, abk.packageKey, adults) : null
+      const pkgPrice = abk.packageKey ? abkVenuePackagePrice(tw.id, abk.packageKey, adults, !!abk.includesFood, abk.checkin || null) : null
       picnicPart = pkgPrice != null ? pkgPrice : getVenuePrice(tw, adults)
     }
     base = stayPart + picnicPart
@@ -12055,6 +12214,7 @@ function renderAddBookingForm() {
           </div>
         </div>
         <span class="abk-hint">Totals for the whole booking, not per guest. These override the venue's own food/drink multipliers in the guest email.</span>` : ''}
+        ${(abk.packageKey && abkPricedVenueId() && packageFoodMode(abkPricedVenueId(), abk.packageKey) !== 'none') ? `<span class="abk-hint">This package has food prices — ticking “Includes food” also prefills the with-food price and records the booking as with food.</span>` : ''}
       </div>
 
       <label class="abk-toggle">
@@ -12229,6 +12389,7 @@ async function abkSave() {
         }
       }
       await abkSaveSplit(editingId)
+      await abkSaveFood(editingId)
       await abkSaveChecklist(editingId)
       showToast(`Booking #${editingId} updated`, 'success')
       abkResetForm()
@@ -12238,6 +12399,7 @@ async function abkSave() {
       const { data, error } = await abkRpcHostBlockAware('admin_add_manual_booking', { p_booking, p_add_ons })
       if (error) throw error
       await abkSaveSplit(data)
+      await abkSaveFood(data)
       await abkSaveChecklist(data)
       showToast(`Booking #${data} added`, 'success')
       // Embedded in the hosted calendar: tell it which booking was added (it closes the
@@ -12297,6 +12459,29 @@ async function abkSaveSplit(bookingId) {
   } catch (err) {
     console.error('admin_set_booking_split failed:', err)
     showToast(`Booking #${bookingId} saved, but the picnic/stay split didn’t — set it before trusting the ad numbers`, 'error')
+  }
+}
+
+// Persist the price-table food choice (bookings.with_food / food_credit) after the main save —
+// same reason as abkSaveSplit: the admin booking RPCs build explicit column lists and would drop
+// these. Only for packages that HAVE price-table rows; never re-prices (admin totals are verbatim).
+async function abkSaveFood(bookingId) {
+  const pv = abkPricedVenueId()
+  if (!bookingId || !pv || !abk.packageKey) return
+  const mode = packageFoodMode(pv, abk.packageKey)
+  if (mode === 'none') return
+  const withFood = effectiveWithFood(pv, abk.packageKey, !!abk.includesFood)
+  const adults = Number(abk.adults) || 0
+  const fr = withFood ? packageFoodRow(pv, abk.packageKey, adults, (abk.type === 'picnic_stay' ? abk.checkin : abk.date) || null) : null
+  const credit = fr && fr.food_credit != null ? Number(fr.food_credit) : null
+  try {
+    const { error } = await supabase.rpc('admin_set_booking_food', {
+      p_booking_id: bookingId, p_with_food: withFood, p_food_credit: credit,
+    })
+    if (error) throw error
+  } catch (err) {
+    console.error('admin_set_booking_food failed:', err)
+    showToast(`Booking #${bookingId} saved, but the food choice didn’t — re-save or set it before the guest email goes`, 'error')
   }
 }
 
@@ -12379,7 +12564,7 @@ async function abkStartEdit(id) {
     abk.total = b.total_amount == null ? '' : Number(b.total_amount)
     abk.advance = Number(b.advance_amount || 0)
     abk.discount = Number(b.discount_amount || 0)
-    abk.includesFood = !!b.includes_food
+    abk.includesFood = !!b.includes_food || b.with_food === true
     abk.foodItems = b.food_items_count == null ? '' : Number(b.food_items_count)
     abk.bevItems  = b.beverage_items_count == null ? '' : Number(b.beverage_items_count)
     // Stored times are `time` values (HH:MM:SS); <input type="time"> wants HH:MM.
