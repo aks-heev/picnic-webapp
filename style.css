@@ -11190,3 +11190,15 @@ body.vd-scroll-lock { overflow: hidden; }
 @media (max-width: 768px) {
   .vd-wrap--sheet-mode.is-sheet-open .avail-cal-title { display: none; }
 }
+/* Package dialog: setup-only vs with-food is a choice (carried to booking) */
+.pkg-detail-price--opt {
+  text-align: left; font-family: var(--font-sans); color: var(--boho-text-dark); cursor: pointer;
+  position: relative; min-height: 44px; transition: border-color 140ms ease, background 140ms ease;
+}
+.pkg-detail-price--opt::after {
+  content: ''; position: absolute; top: 12px; right: 12px; width: 18px; height: 18px; border-radius: 50%;
+  border: 1.5px solid #c9b8aa; background: #fff; box-sizing: border-box;
+}
+.pkg-detail-price--opt[aria-checked="true"] { border: 2px solid var(--boho-accent-rose); background: var(--boho-light-pink); padding: 11px 13px; }
+.pkg-detail-price--opt[aria-checked="true"]::after { border: 5px solid var(--boho-accent-rose); }
+.pkg-detail-price--opt:focus-visible { outline: 2px solid var(--boho-accent-rose); outline-offset: 2px; }

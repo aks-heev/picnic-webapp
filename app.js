@@ -1206,6 +1206,13 @@ function vdPkgIncluded(venue, key) {
 }
 
 let pkgDetailLastFocus = null
+let pkgDetailFood = false      // food choice made in the details dialog (off by default, G7)
+let pkgDetailKey = null
+window.setPkgDetailFood = function(on) {
+  pkgDetailFood = !!on
+  if (pkgDetailKey) openPkgDetails(pkgDetailKey, { keepFood: true })
+  document.querySelector(`.pkg-detail-price--opt[aria-checked="true"]`)?.focus()
+}
 function pkgDetailsInnerHtml(venue, key) {
   const t = PACKAGE_TIERS[key]
   const keys = venuePkgKeys(venue)
@@ -1241,19 +1248,26 @@ function pkgDetailsInnerHtml(venue, key) {
           ${t.featured ? '<span class="pkg-detail-badge">Most picked</span>' : ''}
         </div>
         ${t.tagline ? `<p class="pkg-detail-tagline">${escapeHtml(t.tagline)}</p>` : ''}
+        ${fp != null && foodMode === 'optional' ? `
+        <div class="pkg-detail-prices pkg-detail-prices--choice" role="radiogroup" aria-label="Food and drinks">
+          <button type="button" role="radio" aria-checked="${!pkgDetailFood}" class="pkg-detail-price pkg-detail-price--opt" onclick="setPkgDetailFood(false)">
+            <span class="pkg-detail-price-label">Setup only</span>
+            <span class="pkg-detail-price-value">${price != null ? inr(price) : 'Custom quote'}</span>
+            <span class="pkg-detail-price-sub">${cap ? `up to ${cap} guest${cap !== 1 ? 's' : ''}` : ''}</span>
+          </button>
+          <button type="button" role="radio" aria-checked="${pkgDetailFood}" class="pkg-detail-price pkg-detail-price--opt" onclick="setPkgDetailFood(true)">
+            <span class="pkg-detail-price-label">With food &amp; drinks</span>
+            <span class="pkg-detail-price-value">${inr(fp)}</span>
+            <span class="pkg-detail-price-sub">${g} guest${g !== 1 ? 's' : ''}${fItems ? ` · ${fItems} item${fItems !== 1 ? 's' : ''}` : ''}</span>
+          </button>
+        </div>` : `
         <div class="pkg-detail-prices">
           <div class="pkg-detail-price">
             <span class="pkg-detail-price-label">${foodMode === 'only' ? 'Price' : 'Setup only'}</span>
             <span class="pkg-detail-price-value">${price != null ? inr(price) : 'Custom quote'}</span>
             <span class="pkg-detail-price-sub">${cap ? `up to ${cap} guest${cap !== 1 ? 's' : ''}` : ''}</span>
           </div>
-          ${fp != null && foodMode === 'optional' ? `
-          <div class="pkg-detail-price">
-            <span class="pkg-detail-price-label">With food &amp; drinks</span>
-            <span class="pkg-detail-price-value">${inr(fp)}</span>
-            <span class="pkg-detail-price-sub">${g} guest${g !== 1 ? 's' : ''}${fItems ? ` · ${fItems} item${fItems !== 1 ? 's' : ''}` : ''}</span>
-          </div>` : ''}
-        </div>
+        </div>`}
         ${overNote || (fp != null && foodMode === 'optional') ? `<p class="pkg-detail-note">${fp != null && foodMode === 'optional' ? 'Food price rises with guests. ' : ''}${overNote}</p>` : ''}
 
         <h3 class="pkg-detail-h3">What’s included</h3>
@@ -1280,15 +1294,17 @@ function pkgDetailsInnerHtml(venue, key) {
           ${nextK ? `<button type="button" onclick="openPkgDetails('${escapeHtml(nextK)}')">${priceName(nextK)} ›</button>` : '<span></span>'}
         </nav>
         <button type="button" class="btn btn--venue-primary pkg-detail-cta" onclick="choosePkgFromDetails('${escapeHtml(key)}')">
-          <span>Choose ${escapeHtml(t.name)}</span>
+          <span>Choose ${escapeHtml(t.name)}${fp != null && foodMode === 'optional' && pkgDetailFood ? ' with food' : ''}</span>
           <small>Next: pick your date</small>
         </button>
       </div>`
 }
 
-window.openPkgDetails = function(key) {
+window.openPkgDetails = function(key, opts = {}) {
   const venue = appState.lastViewedVenue || appState.currentVenue
   if (!venue || !PACKAGE_TIERS[key]) return
+  if (!opts.keepFood && pkgDetailKey !== key) pkgDetailFood = !!appState.withFood
+  pkgDetailKey = key
   let el = document.getElementById('pkg-detail')
   if (!el) {
     el = document.createElement('div')
@@ -1307,12 +1323,13 @@ window.openPkgDetails = function(key) {
   }
   if (el.hidden !== false || !el.classList.contains('is-open')) pkgDetailLastFocus = document.activeElement
   const panel = el.querySelector('.pkg-detail-panel')
+  const keepScroll = opts.keepFood ? el.querySelector('.pkg-detail-scroll')?.scrollTop || 0 : 0
   panel.innerHTML = pkgDetailsInnerHtml(venue, key)
-  panel.scrollTop = 0
-  el.querySelector('.pkg-detail-scroll')?.scrollTo?.(0, 0)
+  el.querySelector('.pkg-detail-scroll')?.scrollTo?.(0, keepScroll)
   el.hidden = false
   el.classList.add('is-open')
   document.body.classList.add('vd-scroll-lock')
+  if (opts.keepFood) return
   panel.querySelector('.pkg-detail-close')?.focus()
   track('package_details_opened', { venue_id: venue.id, venue_name: venue.name, tier: key })
 }
@@ -1328,14 +1345,17 @@ window.choosePkgFromDetails = function(key) {
   const venue = appState.lastViewedVenue || appState.currentVenue
   if (!venue) return
   closePkgDetails()
-  track('package_details_chosen', { venue_id: venue.id, venue_name: venue.name, tier: key })
+  const foodDecided = packageFoodMode(venue.id, key) === 'optional'
+  const withFood = foodDecided && pkgDetailFood
+  track('package_details_chosen', { venue_id: venue.id, venue_name: venue.name, tier: key, with_food: withFood })
+  if (foodDecided) appState.withFood = withFood
   if (appState.bookingStep === 'package') {
     // Already past date + guests: just show this package (with its food toggle).
     appState.pkgStepOnlyKey = key
     showPackageStep(venue)
     return
   }
-  const pending = { occasion: appState.bookingOccasion || null, tierKey: key, venueId: venue.id }
+  const pending = { occasion: appState.bookingOccasion || null, tierKey: key, venueId: venue.id, ...(foodDecided ? { withFood, foodChosen: true } : {}) }
   appState.pendingPackage = pending
   try { sessionStorage.setItem('ps_pending_pkg', JSON.stringify(pending)) } catch (err) { /* private mode */ }
   if (vdSheetEligible()) { openVdSheet(); return }
@@ -1371,7 +1391,7 @@ window.openVdSheet = function() {
   if (chip) {
     chip.hidden = !pkg
     const nm = chip.querySelector('.vd-sheet-pkg-name')
-    if (nm && pkg) nm.textContent = pkg.name
+    if (nm && pkg) nm.textContent = pkg.name + (appState.pendingPackage.foodChosen && appState.pendingPackage.withFood ? ' · with food & drinks' : '')
   }
   wrap.querySelector('.vd-sheet-close')?.focus()
   track('check_dates_opened', { venue_id: appState.currentVenue?.id, from_package: !!pkg })
@@ -13455,9 +13475,13 @@ document.addEventListener('DOMContentLoaded', () => {
             // remains the escape hatch.
             appState.pendingPackage = null
             try { sessionStorage.removeItem('ps_pending_pkg') } catch (err) { /* ignore */ }
-            if (packageFoodMode(venue.id, pending.tierKey) === 'optional') {
-              // Food is optional for this package here — show just this
-              // package with the food toggle instead of skipping the step.
+            const foodOptional = packageFoodMode(venue.id, pending.tierKey) === 'optional'
+            if (foodOptional && pending.foodChosen) appState.withFood = !!pending.withFood
+            const priced = packageTierPriceAt(venue, PACKAGE_TIERS[pending.tierKey], null, appState.adults, bookingFoodOpts(venue, pending.tierKey)) != null
+            if (foodOptional && (!pending.foodChosen || !priced)) {
+              // Food not chosen yet (brochure entry), or no price for this
+              // party with that choice (custom quote): show just this package
+              // with the food toggle instead of skipping the step.
               appState.pkgStepOnlyKey = pending.tierKey
               showPackageStep(venue)
             } else {
