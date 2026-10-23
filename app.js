@@ -96,6 +96,7 @@ const appState = {
   bookingOccasion: '',       // packages: occasion captured at the guest step
   selectedPackage: null,     // packages: { occasion, tierKey, addonIds } once a tier is chosen
   withFood: false,           // package price table (2026-10-21): guest ticked "Add food & drinks" at the package step
+  pkgStepOnlyKey: null,      // brochure entry: package already chosen — package step shows only that card (for the food toggle)
   pendingPackage: null,      // packages-first (/packages page): { occasion, tierKey, venueId } handoff,
                              // consumed after the guest step via selectPackageTier() — see docs/PHASE2_PACKAGES_FIRST_PLAN.md
   venueCatalogCache: null,   // Map<venueId, addon[]> — batched catalogs loaded by loadCatalogsForVenues()
@@ -1011,6 +1012,7 @@ async function showVenuePage(venueId, pushState = true) {
   appState.bookingOccasion  = appState.pendingPackage?.occasion || ''
   appState.selectedPackage  = null
   appState.withFood         = false
+  appState.pkgStepOnlyKey   = null
 
   const needsCalendar = true
   const [addOns, bookedData] = await Promise.all([
@@ -3847,7 +3849,10 @@ function showPackageStep(venue) {
   // tiers are; if NOTHING is offered here, skip the tier step entirely —
   // straight to the plain booking form (venue is packages_enabled but has no
   // priced rows yet).
-  let visibleKeys = visiblePackagesFor(appState.bookingOccasion || null)
+  // Brochure entry with a food-optional package: show only that package so the
+  // guest can choose food before continuing (they already picked the package).
+  const onlyKey = appState.pkgStepOnlyKey && packageOfferedAt(venue.id, appState.pkgStepOnlyKey) ? appState.pkgStepOnlyKey : null
+  let visibleKeys = onlyKey ? [onlyKey] : visiblePackagesFor(appState.bookingOccasion || null)
     .filter(k => packageOfferedAt(venue.id, k))
   if (!visibleKeys.length) {
     visibleKeys = PACKAGE_TIER_ORDER.filter(k => !PACKAGE_TIERS[k]?.occasion && packageOfferedAt(venue.id, k))
@@ -3939,7 +3944,7 @@ function showPackageStep(venue) {
           <div class="pkg-card-price-note">${noPrice ? `for ${appState.adults} adult${appState.adults !== 1 ? 's' : ''} with food &amp; drinks — message us on WhatsApp` : priceNote}</div>
           ${foodNote}
           ${inclList}
-          <button type="button" class="btn ${tier.featured ? 'btn--venue-primary' : 'btn--venue-secondary'} pkg-card-cta" ${(overCap || noPrice) ? 'disabled' : ''} onclick="selectPackageTier('${key}')">${overCap ? `Up to ${row.max_guests} guests only` : noPrice ? 'Custom quote on WhatsApp' : `Choose ${escapeHtml(tier.name)}`}</button>
+          <button type="button" class="btn ${tier.featured ? 'btn--venue-primary' : 'btn--venue-secondary'} pkg-card-cta" ${(overCap || noPrice) ? 'disabled' : ''} onclick="selectPackageTier('${key}')">${overCap ? `Up to ${row.max_guests} guests only` : noPrice ? 'Custom quote on WhatsApp' : onlyKey ? 'Continue' : `Choose ${escapeHtml(tier.name)}`}</button>
         </div>`
   }).join('')
 
@@ -3949,8 +3954,8 @@ function showPackageStep(venue) {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
         <span class="vd-guest-back-label">Back to guests</span>
       </button>
-      <h3 class="pkg-step-title">Choose your package</h3>
-      <p class="pkg-step-sub">Curated for the occasion — you can add more on the next step.</p>
+      <h3 class="pkg-step-title">${onlyKey ? 'Your package' : 'Choose your package'}</h3>
+      <p class="pkg-step-sub">${onlyKey ? 'Add food &amp; drinks if you like, then continue.' : 'Curated for the occasion — you can add more on the next step.'}</p>
       ${showFoodToggle ? `<label class="pkg-food-toggle"><input type="checkbox" id="pkg-food-toggle" ${appState.withFood ? 'checked' : ''} onchange="setPackageFood(this.checked)"> <span>Add food &amp; drinks</span></label>` : ''}
       <div class="pkg-cards">${cards}</div>
     </div>
@@ -4054,6 +4059,7 @@ window.changePackageFromIntent = function() {
   appState.changeModeData = { ...appState.pendingLead }
   appState.pendingLead    = null
   appState.pendingAddOns  = null
+  appState.pkgStepOnlyKey = null
   showVenueBodyStep()
   showPackageStep(venue)
 }
@@ -4382,6 +4388,7 @@ function showVenueBodyStep() {
 window.changePackage = function() {
   const venue = appState.currentVenue
   if (!venue) return
+  appState.pkgStepOnlyKey = null
   showVenueBodyStep()
   showPackageStep(venue)
 }
@@ -13052,7 +13059,14 @@ document.addEventListener('DOMContentLoaded', () => {
             // remains the escape hatch.
             appState.pendingPackage = null
             try { sessionStorage.removeItem('ps_pending_pkg') } catch (err) { /* ignore */ }
-            selectPackageTier(pending.tierKey)
+            if (packageFoodMode(venue.id, pending.tierKey) === 'optional') {
+              // Food is optional for this package here — show just this
+              // package with the food toggle instead of skipping the step.
+              appState.pkgStepOnlyKey = pending.tierKey
+              showPackageStep(venue)
+            } else {
+              selectPackageTier(pending.tierKey)
+            }
           } else {
             // Packages flow: insert the tier step between guests and the form.
             showPackageStep(venue)
