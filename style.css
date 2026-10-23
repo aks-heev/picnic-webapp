@@ -11372,3 +11372,28 @@ body.vd-scroll-lock { overflow: hidden; }
 /* Phones: the summary is a normal block — drop the desktop sticky offset
    (top:88px) that position:relative was turning into an 88px shift. */
 @media (max-width: 768px) { .vd-bv-summary { top: auto; } }
+
+/* Booking form: no floating "Chat with us" (the form has its own WhatsApp
+   button); that button takes the floating button's look — filled green
+   pill, WhatsApp glyph, soft shadow — in a deeper green (#15803d, 5:1 with
+   white) so the 12px subline stays readable. */
+#venue-detail-page:has(#vd-booking-view:not([style*="none"])) .vd-wa-float { display: none; }
+.bf-cta--wa {
+  border: 0; border-radius: 999px; background: #15803d; color: #fff;
+  box-shadow: 0 4px 18px rgba(37, 211, 102, 0.35);
+  transition: background 0.18s, box-shadow 0.18s, transform 0.18s;
+}
+.bf-cta--wa .bf-cta-sub { color: #fff; opacity: 0.92; }
+.bf-cta--wa:hover { background: #166534; box-shadow: 0 6px 24px rgba(37, 211, 102, 0.45); transform: translateY(-1px); }
+.bf-cta--wa:focus-visible { outline: 2px solid #15803d; outline-offset: 3px; }
+.bf-cta--wa svg { flex: none; }
+
+/* Homepage package teaser: short inclusions block, fixed height so the
+   index.html skeletons (same block) reserve exactly this space — no CLS. */
+.pkg-card-incl-home { height: 104px; overflow: hidden; margin: 10px 0 4px; font-family: var(--font-sans); font-size: 13px; line-height: 1.5; color: #4f4236; text-align: left; }
+.pkg-card-incl-home-lead { margin: 0 0 2px; font-weight: 600; color: var(--boho-text-dark); }
+.pkg-card-incl-home ul { list-style: none; margin: 0; padding: 0; }
+.pkg-card-incl-home li { position: relative; padding-left: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pkg-card-incl-home li::before { content: "✓"; position: absolute; left: 0; color: var(--boho-accent-sage); font-weight: 600; }
+.pkg-card-incl-home li.pkg-card-incl-home-more { color: var(--boho-text-medium); }
+.pkg-card-incl-home li.pkg-card-incl-home-more::before { content: "+"; }

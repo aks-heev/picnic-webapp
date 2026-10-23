@@ -3423,6 +3423,40 @@ function revealPackagesEntryPoints() {
   }
 }
 
+// Short "what's in it" block for the homepage teaser cards (2026-10-23): a
+// fixed-height block (the index.html skeletons reserve the same height, so no
+// layout shift) — same ladder rule as the package sheet: standalone → own
+// list; first rung → the shared setup; later rungs → "Everything in <prev>,
+// plus:" the add-ons they introduce.
+function homePkgInclHtml(key, visible, offeredVenues) {
+  const tier = PACKAGE_TIERS[key]
+  const catalog = offeredVenues.length ? venueCatalog(offeredVenues[0].id) : []
+  const ladder = visible.filter(k => !pkgStandalone(PACKAGE_TIERS[k]))
+  let lead = ''
+  let items = []
+  if (pkgStandalone(tier)) {
+    items = tier.inclusions || []
+  } else {
+    const idx = ladder.indexOf(key)
+    const prev = idx > 0 ? PACKAGE_TIERS[ladder[idx - 1]] : null
+    if (!prev) {
+      lead = 'The signature setup:'
+      items = SHARED_SETUP_LABELS
+    } else {
+      lead = `Everything in ${prev.name}, plus:`
+      items = (tier.addons || []).filter(id => !(prev.addons || []).includes(id))
+        .map(id => catalog.find(a => a.id === id)?.name).filter(Boolean)
+    }
+  }
+  const MAX = 3
+  const shown = items.slice(0, MAX)
+  const more = items.length - shown.length
+  return `<div class="pkg-card-incl-home">
+          ${lead ? `<p class="pkg-card-incl-home-lead">${escapeHtml(lead)}</p>` : ''}
+          <ul>${shown.map(n => `<li>${escapeHtml(n)}</li>`).join('')}${more > 0 ? `<li class="pkg-card-incl-home-more">and ${more} more</li>` : ''}</ul>
+        </div>`
+}
+
 // Homepage "Our Packages" section (Phase 2B, docs/PHASE2_PACKAGES_FIRST_PLAN.md).
 // A matched-height skeleton lives in index.html (#packages-section, visible from
 // first paint so it reserves the final height and never causes CLS — see the
@@ -3471,6 +3505,7 @@ async function renderHomePackagesSection() {
         <p class="pkg-card-tagline">${escapeHtml(tier.tagline)}</p>
         ${pkgPriceRowHtml(from, 'From ')}
         <div class="pkg-card-price-note">for upto ${fromRow ? fromRow.included_guests : 6} guests</div>
+        ${homePkgInclHtml(key, visible, offeredVenues)}
         ${occasionLine}
         <a class="btn ${tier.featured ? 'btn--venue-primary' : 'btn--venue-secondary'} pkg-card-cta" href="/packages?tier=${encodeURIComponent(key)}" onclick="event.preventDefault(); showPackagesPage(true, {tierKey:'${escapeHtml(key)}'})">Explore ${escapeHtml(tier.name)}</a>
       </div>`
