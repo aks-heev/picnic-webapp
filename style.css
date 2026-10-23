@@ -11397,3 +11397,11 @@ body.vd-scroll-lock { overflow: hidden; }
 .pkg-card-incl-home li::before { content: "✓"; position: absolute; left: 0; color: var(--boho-accent-sage); font-weight: 600; }
 .pkg-card-incl-home li.pkg-card-incl-home-more { color: var(--boho-text-medium); }
 .pkg-card-incl-home li.pkg-card-incl-home-more::before { content: "+"; }
+
+/* Package chosen before arriving (homepage / brochure) — highlighted card */
+.vd-pkg-card--chosen { border: 2px solid var(--boho-accent-rose); padding: 17px; background: #fdf6f8; box-shadow: 0 6px 18px rgba(196, 96, 122, 0.12); }
+@media (max-width: 768px) { .vd-pkg-card--chosen { padding: 13px 15px; } }
+/* Desktop sidebar: package chosen before arriving (the phone sheet has its own chip) */
+.vd-card-pkg { margin: 0 0 14px; padding: 9px 12px; background: #fdf6f8; border: 1px solid rgba(196, 96, 122, 0.35); border-radius: 12px; font-family: var(--font-sans); font-size: 14px; color: var(--boho-text-medium); }
+.vd-card-pkg strong { color: var(--boho-accent-rose); font-weight: 600; }
+@media (max-width: 768px) { .vd-card-pkg { display: none; } }

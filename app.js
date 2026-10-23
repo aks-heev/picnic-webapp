@@ -754,7 +754,9 @@ function venueSetting(venue) {
 // the /packages venue picker uses it to show the chosen tier's firm price.
 function venueCardHtml(venue, opts = {}) {
   const capacityText = venue.capacity_max
-    ? `${venue.capacity_min}–${venue.capacity_max} guests`
+    ? (venue.capacity_min && venue.capacity_min !== venue.capacity_max
+        ? `${venue.capacity_min}–${venue.capacity_max} guests`
+        : `Up to ${venue.capacity_max} guest${venue.capacity_max !== 1 ? 's' : ''}`)
     : `${venue.capacity_min}+ guests`
   const priceText = opts.priceHtml || (venue.base_price ? `From ${formatPrice(venue.base_price)}` : 'Get a quote')
   // Only cafe venues get the tier-card packages flow, and only while the
@@ -1153,17 +1155,31 @@ function vdPkgFoodLine(venue, key) {
   const n = fr && Number(fr.food_items || 0)
   return `With food: ₹${Number(fp).toLocaleString('en-IN')}${n ? ` · ${n} item${n !== 1 ? 's' : ''}` : ''}`
 }
+// Package already chosen before reaching this venue (homepage card → /packages
+// → venue, or brochure) — null on an organic visit.
+function vdChosenPkgKey(venue) {
+  const p = appState.pendingPackage
+  if (!p || p.venueId !== venue.id || !PACKAGE_TIERS[p.tierKey]) return null
+  return venuePkgKeys(venue).includes(p.tierKey) ? p.tierKey : null
+}
 function venuePackagesSectionHtml(venue) {
   const keys = venuePkgKeys(venue)
   if (!keys.length) return ''
   const g = vdPkgPairGuests(venue)
+  const chosenKey = vdChosenPkgKey(venue)
   const cards = keys.map(k => {
     const t = PACKAGE_TIERS[k]
     const price = vdPkgPrice(venue, k, g, false)
     const food = vdPkgFoodLine(venue, k)
+    const chosen = chosenKey === k
+    // With a package already chosen (homepage / brochure entry), that card is
+    // the highlighted one; "Most picked" styling steps back.
+    const cls = chosen ? ' vd-pkg-card--chosen' : (t.featured && !chosenKey ? ' vd-pkg-card--featured' : '')
+    const badge = chosen ? '<span class="vd-pkg-card-badge">Your pick</span>'
+      : (t.featured && !chosenKey ? '<span class="vd-pkg-card-badge">Most picked</span>' : '')
     return `
-                <button type="button" class="vd-pkg-card${t.featured ? ' vd-pkg-card--featured' : ''}" onclick="openPkgDetails('${escapeHtml(k)}')" aria-haspopup="dialog">
-                  ${t.featured ? '<span class="vd-pkg-card-badge">Most picked</span>' : ''}
+                <button type="button" class="vd-pkg-card${cls}" onclick="openPkgDetails('${escapeHtml(k)}')" aria-haspopup="dialog">
+                  ${badge}
                   <span class="vd-pkg-card-main">
                     <span class="vd-pkg-card-name">${escapeHtml(t.name)}</span>
                     <span class="vd-pkg-card-tagline">${escapeHtml(t.tagline || '')}</span>
@@ -1550,6 +1566,8 @@ function renderVenueDetail(venue, addOns = []) {
 
   const sheetMode = venue.type === 'cafe'
   const vdFrom = venueCheapestPackage(venue)
+  const vdBarChosen = sheetMode ? vdChosenPkgKey(venue) : null
+  const vdBarChosenPrice = vdBarChosen ? vdPkgPrice(venue, vdBarChosen, vdPkgPairGuests(venue), false) : null
   container.innerHTML = `
     <div class="vd-wrap${sheetMode ? ' vd-wrap--sheet-mode' : ''}">
       ${sheetMode ? '<div class="vd-sheet-backdrop" hidden onclick="closeVdSheet()"></div>' : ''}
@@ -1770,6 +1788,7 @@ function renderVenueDetail(venue, addOns = []) {
                 </div>
                 <p class="vd-sheet-pkg" hidden>Package: <strong class="vd-sheet-pkg-name"></strong></p>
               </div>` : ''}
+              ${vdBarChosen ? `<p class="vd-card-pkg">Package: <strong>${escapeHtml(PACKAGE_TIERS[vdBarChosen].name)}</strong></p>` : ''}
               <div id="vd-price-block"${packageFlowActive(venue) ? ' style="display:none"' : ''}>
               ${venue.base_price ? `
               <div class="vd-price-row">
@@ -1862,7 +1881,7 @@ function renderVenueDetail(venue, addOns = []) {
              <button class="btn btn--venue-primary" data-action="reveal-bnb-calendar" data-book-venue-id="${venue.id}">Add picnic setup</button>`
           : sheetMode
           ? `<div class="vd-mobile-book-price">
-               <span class="vd-mobile-book-amount">${vdFrom ? `From ₹${Number(vdFrom.price).toLocaleString('en-IN')}` : venue.base_price ? escapeHtml(formatPrice(venue.base_price)) : 'Custom pricing'}</span>
+               <span class="vd-mobile-book-amount">${vdBarChosen ? `${escapeHtml(PACKAGE_TIERS[vdBarChosen].name)}${vdBarChosenPrice != null ? ` · ₹${Number(vdBarChosenPrice).toLocaleString('en-IN')}` : ''}` : vdFrom ? `From ₹${Number(vdFrom.price).toLocaleString('en-IN')}` : venue.base_price ? escapeHtml(formatPrice(venue.base_price)) : 'Custom pricing'}</span>
                <span class="vd-mobile-book-label">30% advance locks your date</span>
              </div>
              <button type="button" class="btn btn--venue-primary" onclick="openVdSheet()">Check dates</button>`
@@ -3077,7 +3096,15 @@ async function loadCatalogsForVenues(venueIds) {
 async function showPackagesPage(push = true, opts = {}) {
   showPage('packages-page')
   document.title = 'Picnic Packages — The Picnic Stories'
-  if (push) history.pushState({ page: 'packages' }, document.title, '/packages')
+  if (push) {
+    // Keep the chosen package in the URL so a refresh / shared link lands on
+    // the same venue step (bare /packages redirects to /brochure).
+    const qs = new URLSearchParams()
+    if (opts.tierKey) qs.set('tier', opts.tierKey)
+    if (opts.occasion) qs.set('occasion', opts.occasion)
+    const q = qs.toString()
+    history.pushState({ page: 'packages' }, document.title, '/packages' + (q ? '?' + q : ''))
+  }
   pkgPageState = { occasion: opts.occasion || '', tierKey: opts.tierKey || null, city: '' }
   const el = document.getElementById('packages-content')
   if (!el) return
@@ -3350,7 +3377,10 @@ function renderPkgVenuePicker(venues) {
   const cards = shown.map(v => {
     const row = venuePackageRow(v.id, tier.key)
     const price = packageTierPriceAt(v, tier, venueCatalog(v.id), PKG_PAGE_BASE_ADULTS)
-    const priceHtml = `₹${price.toLocaleString('en-IN')} <span class="venue-card-price-sub">for upto ${row.included_guests} guests</span>`
+    // Cap the "for up to N" line at the venue's own capacity — a couples-only
+    // venue must not read "for up to 6 guests".
+    const incl = v.capacity_max ? Math.min(row.included_guests, v.capacity_max) : row.included_guests
+    const priceHtml = `₹${price.toLocaleString('en-IN')} <span class="venue-card-price-sub">for up to ${incl} guest${incl !== 1 ? 's' : ''}</span>`
     return venueCardHtml(v, { priceHtml })
   }).join('')
   return `
