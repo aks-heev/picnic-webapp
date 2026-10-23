@@ -9815,10 +9815,12 @@ body.menu-viewer-open {
    are inert there and mobile keeps its normal stacked flow. */
 .vd-layout--pkg-active {
   grid-template-columns: 1fr;
+  /* Package step first — it is what the guest is acting on; venue facts,
+     reviews etc. follow below (was after "main", i.e. under the reviews). */
   grid-template-areas:
+    "sidebar"
     "facts"
     "main"
-    "sidebar"
     "addons";
 }
 .vd-layout--pkg-active .vd-sidebar {
@@ -9853,6 +9855,11 @@ body.menu-viewer-open {
   .vd-layout--pkg-active .pkg-step-sub {
     text-align: center;
     margin-bottom: 26px;
+  }
+  .vd-layout--pkg-active .pkg-food-toggle {
+    display: flex;
+    width: fit-content;
+    margin: -10px auto 22px;
   }
   /* auto-fit + a calc'd max keeps card width identical to the old fixed
      repeat(3, 1fr) when there are 3 cards, but lets 2-card occasion tiers

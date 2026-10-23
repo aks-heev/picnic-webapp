@@ -3931,9 +3931,8 @@ function showPackageStep(venue) {
       : (key === defaultKey ? '<span class="pkg-card-badge pkg-card-badge--suggested">Suggested</span>' : '')
     // Guest note: flat price through included_guests; past it the shown price
     // already carries the per-head overage for the current party size.
-    const priceNote = row && appState.adults <= row.included_guests
-      ? `for upto ${row.included_guests} guests`
-      : `for ${appState.adults} adult${appState.adults !== 1 ? 's' : ''}`
+    // Always the party actually entered — the price shown is for exactly them.
+    const priceNote = `for ${appState.adults} adult${appState.adults !== 1 ? 's' : ''}${appState.children ? ` · ${appState.children} child${appState.children !== 1 ? 'ren' : ''}` : ''}`
     return `
         <div class="pkg-card${tier.featured ? ' pkg-card--featured' : ''}${key === defaultKey ? ' pkg-card--suggested' : ''}">
           ${badge}
@@ -3966,6 +3965,13 @@ function showPackageStep(venue) {
   const mobileBtn  = document.getElementById('mobile-bar-book-btn')
   if (sidebarBtn) sidebarBtn.style.display = 'none'
   if (mobileBtn)  mobileBtn.style.display  = 'none'
+
+  // Desktop: the step now sits at the top of the full-width layout — bring it
+  // into view (the guest was scrolled to the sidebar's old position).
+  if (window.matchMedia('(min-width: 769px)').matches) {
+    const navH = document.querySelector('.navbar')?.offsetHeight || 0
+    window.scrollTo({ top: widget.getBoundingClientRect().top + window.scrollY - navH - 16, behavior: 'smooth' })
+  }
 
   track('package_step_viewed', {
     venue_id: venue.id, venue_name: venue.name,
