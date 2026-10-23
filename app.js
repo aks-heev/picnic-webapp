@@ -1226,6 +1226,9 @@ function vdPkgIncluded(venue, key) {
 let pkgDetailLastFocus = null
 let pkgDetailFood = false      // food choice made in the details dialog (off by default, G7)
 let pkgDetailKey = null
+// Opened after date + guests (package chosen before arriving — homepage /
+// brochure): prices use the real party size and Choose goes straight to the form.
+let pkgDetailAfterGuests = false
 window.setPkgDetailFood = function(on) {
   pkgDetailFood = !!on
   if (pkgDetailKey) openPkgDetails(pkgDetailKey, { keepFood: true })
@@ -1237,7 +1240,7 @@ function pkgDetailsInnerHtml(venue, key) {
   const i = keys.indexOf(key)
   const prevK = i > 0 ? keys[i - 1] : null
   const nextK = i < keys.length - 1 ? keys[i + 1] : null
-  const g = vdPkgPairGuests(venue)
+  const g = pkgDetailAfterGuests ? appState.adults : vdPkgPairGuests(venue)
   const price = vdPkgPrice(venue, key, g, false)
   const row = venuePackageRow(venue.id, key)
   let cap = row?.max_guests || row?.included_guests || null
@@ -1314,7 +1317,7 @@ function pkgDetailsInnerHtml(venue, key) {
         </nav>
         <button type="button" class="btn btn--venue-primary pkg-detail-cta" onclick="choosePkgFromDetails('${escapeHtml(key)}')">
           <span>Choose ${escapeHtml(t.name)}${fp != null && foodMode === 'optional' && pkgDetailFood ? ' with food' : ''}</span>
-          <small>Next: pick your date</small>
+          <small>${pkgDetailAfterGuests ? 'Next: your details' : 'Next: pick your date'}</small>
         </button>
       </div>`
 }
@@ -1324,6 +1327,8 @@ window.openPkgDetails = function(key, opts = {}) {
   if (!venue || !PACKAGE_TIERS[key]) return
   if (!opts.keepFood && pkgDetailKey !== key) pkgDetailFood = !!appState.withFood
   pkgDetailKey = key
+  const wasOpen = !!document.querySelector('#pkg-detail.is-open')
+  if (!wasOpen) pkgDetailAfterGuests = !!opts.afterGuests
   let el = document.getElementById('pkg-detail')
   if (!el) {
     el = document.createElement('div')
@@ -1357,17 +1362,26 @@ window.closePkgDetails = function() {
   if (!el) return
   el.classList.remove('is-open')
   el.hidden = true
+  pkgDetailAfterGuests = false
   if (!document.querySelector('.vd-wrap.is-sheet-open')) document.body.classList.remove('vd-scroll-lock')
   pkgDetailLastFocus?.focus?.()
 }
 window.choosePkgFromDetails = function(key) {
   const venue = appState.lastViewedVenue || appState.currentVenue
   if (!venue) return
+  const afterGuests = pkgDetailAfterGuests
   closePkgDetails()
   const foodDecided = packageFoodMode(venue.id, key) === 'optional'
   const withFood = foodDecided && pkgDetailFood
   track('package_details_chosen', { venue_id: venue.id, venue_name: venue.name, tier: key, with_food: withFood })
   if (foodDecided) appState.withFood = withFood
+  if (afterGuests) {
+    // Date + guests are done: same as the venue-first path from here on.
+    appState.pendingPackage = null
+    try { sessionStorage.removeItem('ps_pending_pkg') } catch (err) { /* ignore */ }
+    selectPackageTier(key)
+    return
+  }
   if (appState.bookingStep === 'package') {
     // Already past date + guests: just show this package (with its food toggle).
     appState.pkgStepOnlyKey = key
@@ -1398,6 +1412,16 @@ window.openVdSheet = function() {
   if (!wrap) return
   if (!vdSheetEligible()) {
     document.getElementById('avail-calendar-widget')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    return
+  }
+  // Package picked on the homepage / brochure, food not decided yet: show its
+  // package sheet first, exactly like tapping a package card here. Its Choose
+  // button records the food choice and comes back to this date sheet.
+  const pend = appState.pendingPackage
+  const curV = appState.lastViewedVenue || appState.currentVenue
+  if (pend && curV && pend.venueId === curV.id && PACKAGE_TIERS[pend.tierKey] && !pend.foodChosen
+      && packageFoodMode(curV.id, pend.tierKey) === 'optional') {
+    openPkgDetails(pend.tierKey)
     return
   }
   wrap.classList.remove('is-sheet-off')
@@ -13681,11 +13705,19 @@ document.addEventListener('DOMContentLoaded', () => {
             // skipping the tier step. Occasion was pre-filled at venue entry
             // and stays user-editable; "Change package" on the intent screen
             // remains the escape hatch.
-            appState.pendingPackage = null
-            try { sessionStorage.removeItem('ps_pending_pkg') } catch (err) { /* ignore */ }
             const foodOptional = packageFoodMode(venue.id, pending.tierKey) === 'optional'
             if (foodOptional && pending.foodChosen) appState.withFood = !!pending.withFood
             const priced = packageTierPriceAt(venue, PACKAGE_TIERS[pending.tierKey], null, appState.adults, bookingFoodOpts(venue, pending.tierKey)) != null
+            if (foodOptional && !pending.foodChosen && priced) {
+              // Food not decided yet (homepage / brochure entry, e.g. desktop
+              // where the calendar is inline): the same package sheet the
+              // venue-first path uses, priced for this party. Pending is
+              // cleared only when they choose, so closing it loses nothing.
+              openPkgDetails(pending.tierKey, { afterGuests: true })
+              return
+            }
+            appState.pendingPackage = null
+            try { sessionStorage.removeItem('ps_pending_pkg') } catch (err) { /* ignore */ }
             if (foodOptional && (!pending.foodChosen || !priced)) {
               // Food not chosen yet (brochure entry), or no price for this
               // party with that choice (custom quote): show just this package
