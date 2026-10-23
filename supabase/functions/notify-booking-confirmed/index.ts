@@ -1,4 +1,6 @@
 // Triggered by: Database trigger on bookings UPDATE (on_booking_confirmed_notify)
+// Changed 2026-10-23 (v45): INCLUDED row also renders bookings.with_food / food_credit (price-table food option;
+// docs/PHASE5_WEBSITE_EMAILS_PLAN_2026-10-21.md 5a). Admin food/beverage counts still win; false/NULL unchanged.
 // and bookings INSERT when confirmed=true (on_booking_insert_confirmed — admin manual entries)
 // Only fires when confirmed flips false → true (guard enforced in trigger WHEN clause)
 // Sends: T3 — booking confirmation email to customer
@@ -92,6 +94,9 @@
 // The sunburst (DSC03089.JPG) stays on the STAY email; the PICNIC email now
 // uses images/picnic-hero.jpg (couple at a rooftop setup, 1200x799 JPG —
 // JPG not WebP on purpose: Outlook desktop doesn't render WebP).
+//
+// Changed 2026-10-05 (v43): logo moved off the old Hostinger CDN to
+// https://www.picnicstories.com/logo-mark.png (pixel-identical image).
 
 import { sendEmail } from "./_shared/resend.ts"
 import { getVenueInfo } from "./_shared/venue.ts"
@@ -101,8 +106,10 @@ const APP_URL = Deno.env.get("APP_URL") || "https://picnicstories.com"
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 
-const LOGO_URL =
-  "https://cdn-reach.hostinger.com/settings/0a27628d960484a8a3d2b3e50518a32b/307542/logo_1780982818.png"
+// Logo served from our own site (public/logo-mark.png, git-tracked) instead of
+// the old Hostinger CDN. Do NOT rename/delete public/logo-mark.png without
+// updating this URL — every guest email would show a broken logo.
+const LOGO_URL = "https://www.picnicstories.com/logo-mark.png"
 const STAY_HERO_IMG =
   "https://evmftrogyzoudiccqkya.supabase.co/storage/v1/object/public/images/DSC03089.JPG"
 const PICNIC_HERO_IMG =
@@ -725,6 +732,16 @@ Deno.serve(async (req) => {
       if (foodCt || bevCt) {
         inclusionText = `${foodCt} food item${foodCt !== 1 ? "s" : ""} · ${bevCt} beverage${bevCt !== 1 ? "s" : ""}`
       }
+    }
+    // v45 (2026-10-21 price table): food bought as part of the package price
+    // (bookings.with_food, set by submit_booking_intent / admin_set_booking_food).
+    // Admin item counts above win when present. false/NULL render nothing, as before.
+    // food_credit = Sunroom-style voucher; guest-facing word is "voucher" (Aksheev 2026-10-23).
+    if (!inclusionText && record.with_food === true) {
+      const voucher = Number(record.food_credit || 0)
+      inclusionText = voucher > 0
+        ? `Food & drinks · ₹${voucher.toLocaleString("en-IN")} voucher. Anything above is paid at the café; unused voucher lapses.`
+        : "Food & drinks"
     }
 
     const isStay = Boolean(record.checkout_date)

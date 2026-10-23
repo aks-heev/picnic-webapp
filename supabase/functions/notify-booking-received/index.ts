@@ -1,4 +1,6 @@
 // Triggered by: Database trigger on bookings INSERT (on_booking_insert_notify)
+// Changed 2026-10-23 (v47): INCLUDED row also renders bookings.with_food / food_credit (price-table food
+// option; docs/PHASE5_WEBSITE_EMAILS_PLAN_2026-10-21.md 5a). Admin food/beverage counts still win.
 // Sends: T1 — acknowledgement email to customer (branded, matches confirmation email design)
 //        T2 — alert email to admin
 // T1 is skipped for confirmed inserts (they get T3 from notify-booking-confirmed),
@@ -117,12 +119,24 @@ function slotTimeText(record: Record<string, unknown>): string {
 
 // Mirrors notify-booking-confirmed v30 exactly. No venue-multiplier fallback:
 // includes_food false OR null both render nothing.
+// v47 (mirrors notify-booking-confirmed v45): when no admin item counts are set,
+// bookings.with_food = true renders "Food & drinks", plus the Sunroom-style voucher
+// from food_credit. Guest-facing word is "voucher" (Aksheev 2026-10-23). false/NULL unchanged.
 function inclusionText(record: Record<string, unknown>): string {
-  if (!record.includes_food) return ""
-  const foodCt = Number(record.food_items_count || 0)
-  const bevCt = Number(record.beverage_items_count || 0)
-  if (!foodCt && !bevCt) return ""
-  return `${foodCt} food item${foodCt !== 1 ? "s" : ""} · ${bevCt} beverage${bevCt !== 1 ? "s" : ""}`
+  if (record.includes_food) {
+    const foodCt = Number(record.food_items_count || 0)
+    const bevCt = Number(record.beverage_items_count || 0)
+    if (foodCt || bevCt) {
+      return `${foodCt} food item${foodCt !== 1 ? "s" : ""} · ${bevCt} beverage${bevCt !== 1 ? "s" : ""}`
+    }
+  }
+  if (record.with_food === true) {
+    const voucher = Number(record.food_credit || 0)
+    return voucher > 0
+      ? `Food & drinks · ₹${voucher.toLocaleString("en-IN")} voucher. Anything above is paid at the café; unused voucher lapses.`
+      : "Food & drinks"
+  }
+  return ""
 }
 
 function esc(s: unknown): string {

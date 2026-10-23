@@ -1,6 +1,6 @@
 # PLAN — Phase 5: website, admin and emails for the package price table
 
-Status: PLAN ONLY — nothing built. Written 2026-10-21 via plan-optimizer (score 89/100, trajectory 72 → 83 → 89 → 89).
+Status: **5a (emails) SHIPPED-verified 2026-10-23**; 5b–5f NOT done. Written 2026-10-21 via plan-optimizer (score 89/100, trajectory 72 → 83 → 89 → 89).
 Parent plan: `docs/PACKAGE_PRICING_PLAN_2026-10-21.md` (Phases 1–4 SHIPPED-verified). Live facts below were probed 2026-10-21.
 
 ## 0. Done means
@@ -29,11 +29,13 @@ Parent plan: `docs/PACKAGE_PRICING_PLAN_2026-10-21.md` (Phases 1–4 SHIPPED-ver
 
 ## 2. Decisions needed before building
 
-| # | Question | Default |
+DECIDED by Aksheev 2026-10-23:
+
+| # | Question | Decision |
 |---|---|---|
-| G6 | Venue 27's card next to the cottages: rename it, or hide it from the gallery? | Rename to "Countryside Offgrid — Picnic only" (slug unchanged, so links keep working) |
-| G7 | Food toggle default | Off; label "Add food & drinks" with the price difference shown, e.g. "+ ₹1,000" |
-| G8 | Sunroom credit copy | "Includes ₹3,000 food & drinks credit — anything above is paid at the café. Unused credit lapses." |
+| G6 | Venue 27's card next to the cottages | Rename to "Countryside Offgrid — Picnic only" (slug unchanged) |
+| G7 | Food toggle default | Off; label "Add food & drinks (+₹X)" with the real difference |
+| G8 | Sunroom wording — say **voucher**, not credit, everywhere guest-facing (site + emails) | "Includes ₹3,000 food & drinks voucher. Anything above is paid at the café; unused voucher lapses." |
 
 ## 3. Design
 
@@ -107,3 +109,20 @@ Rollback: set it back to false (instant, nothing else depends on it).
 | Sunroom | Setting | 8 | (always) | any | custom quote |
 
 Cottages are request-only, so their rows are checked via the quote RPC + an admin-entered booking, not the self-serve lock path.
+
+## 7. 5a result — SHIPPED-verified 2026-10-23
+
+- `notify-booking-confirmed` v44 → **v45**, `notify-booking-received` v46 → **v47**; both `verify_jwt=false` (confirmed in the deploy response and re-fetch).
+- Rule (both functions, one place each): admin `includes_food` item counts still win; otherwise `with_food = true` → INCLUDED row
+  "Food & drinks", or "Food & drinks · ₹X voucher. Anything above is paid at the café; unused voucher lapses." when `food_credit` is set.
+  `with_food` false/NULL → no row (unchanged from v30's "only real inclusions render" rule — deliberately NO "not included" line).
+- Edited from the DEPLOYED source, not the repo: the repo copies were already stale (logo URL, v41/v43 security changes).
+  esbuild bundle check passed for both. Confirmed v45 re-fetched and **byte-identical** to the intended files (all 4).
+  Received v47 re-fetched and spot-checked section by section (too small to persist for a byte diff).
+- Smoke test through the real path: `submit_booking_intent` (Sunroom, Sat 2026-11-07, 4 guests, food) → booking 298:
+  total 17,900 / advance 5,370 / with_food true / food_credit 5,000; both trigger calls `200 {"ok":true}` (19:06:36 ack, 19:06:46 confirmation).
+  Test emails went to aksheevs+food@gmail.com (+ team@ admin alert and CC).
+- 🔴 Cleanup DELETE was cancelled at the MCP approval step; Aksheev to delete booking 298 in the SQL editor (SQL given in chat).
+- Repo sync: `supabase/functions/notify-booking-{confirmed,received}/index.ts` now match deployed. `_shared/` NOT synced — the two
+  deployed functions carry different `resend.ts` copies (confirmed's supports cc + logs), so one shared local folder can't match both.
+- Owed by Aksheev: open the two test emails and eyeball the INCLUDED row (desktop + phone).
