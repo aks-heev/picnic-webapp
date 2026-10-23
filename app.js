@@ -1268,6 +1268,7 @@ function pkgDetailsInnerHtml(venue, key) {
             <span class="pkg-detail-price-sub">${cap ? `up to ${cap} guest${cap !== 1 ? 's' : ''}` : ''}</span>
           </div>
         </div>`}
+        ${(foodMode === 'optional' && !pkgDetailFood) || foodMode === 'none' ? venueMenuNoteHtml(venue, foodMode === 'none' ? 'Food isn’t part of this package.' : 'Not adding food?') : ''}
         ${overNote || (fp != null && foodMode === 'optional') ? `<p class="pkg-detail-note">${fp != null && foodMode === 'optional' ? 'Food price rises with guests. ' : ''}${overNote}</p>` : ''}
 
         <h3 class="pkg-detail-h3">What’s included</h3>
@@ -1481,7 +1482,7 @@ function venueFactsHtml(venue, capacityText) {
   if (modes.includes('optional') || modes.includes('only')) {
     facts.push(fact(icon('<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/>'),
       'Food &amp; drinks', modes.includes('optional') ? 'Optional add' : 'Included',
-      modes.includes('optional') ? 'Choose it with your package' : 'Café voucher in the price', ' vd-fact--sage'))
+      modes.includes('optional') ? 'Add with a package, or order there' : 'Café voucher in the price', ' vd-fact--sage'))
   }
 
   return `<div class="vd-facts vd-facts--grid">${facts.join('')}
@@ -4355,6 +4356,7 @@ function showPackageStep(venue) {
       <h3 class="pkg-step-title">${onlyKey ? 'Your package' : 'Choose your package'}</h3>
       <p class="pkg-step-sub">${onlyKey ? 'Add food &amp; drinks if you like, then continue.' : 'Curated for the occasion — you can add more on the next step.'}</p>
       ${showFoodToggle ? `<label class="pkg-food-toggle"><input type="checkbox" id="pkg-food-toggle" ${appState.withFood ? 'checked' : ''} onchange="setPackageFood(this.checked)"> <span>Add food &amp; drinks</span></label>` : ''}
+      ${showFoodToggle && !appState.withFood ? `<div class="pkg-step-menu-note">${venueMenuNoteHtml(venue)}</div>` : ''}
       <div class="pkg-cards">${cards}</div>
     </div>
   `
@@ -4558,6 +4560,7 @@ async function showBookingForm(venue) {
         </div>
         <button type="button" class="bf-link" onclick="changePackage()">Change package</button>
       </div>
+      ${effectiveWithFood(venue.id, pkgTier.key, appState.withFood) ? '' : venueMenuNoteHtml(venue, 'Food isn’t included.')}
       ${inclNames.length ? `<details class="bf-pkg-incl">
         <summary>What’s included · ${inclNames.length} items</summary>
         <p>${inclNames.map(escapeHtml).join(', ')}.</p>
@@ -4808,6 +4811,20 @@ const BF_ICON = {
   guests:  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
   sparkle: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><path d="M12 9.5l.8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8z"/></svg>',
 }
+// "Not adding food? Order from the menu there" — only where the venue has a
+// menu uploaded (venues.menu_pages), so it never promises what isn't there.
+function venueHasMenu(venue) {
+  return Array.isArray(venue?.menu_pages) && venue.menu_pages.some(p => p && p.url)
+}
+// Every picnic venue is a café (Aksheev 2026-10-23), so the note shows for all
+// cafe-type venues; "View menu" only where a menu is uploaded.
+function venueMenuNoteHtml(venue, lead = 'Not adding food?') {
+  if (venue?.type !== 'cafe' && !venueHasMenu(venue)) return ''
+  const link = venueHasMenu(venue) ? ` <button type="button" class="vd-menu-note-link" onclick="openMenuViewer(${Number(venue.id)}, 0)">View menu</button>` : ''
+  return `<p class="vd-menu-note">${BF_ICON_MENU}<span>${lead} You can order from the café menu at the venue and pay there.${link}</span></p>`
+}
+const BF_ICON_MENU = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg>'
+
 // Venues where the guest sends a request instead of paying (same rule as the
 // old intent screen): whole-floor combos and requires_confirmation venues.
 function bfQueryOnly(venue) {

@@ -11363,3 +11363,12 @@ body.vd-scroll-lock { overflow: hidden; }
   background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2224%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23556343%22 stroke-width=%221.3%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M12 22V7%22/%3E%3Cpath d=%22M12 11c-3 0-5-2-5-5 3 0 5 2 5 5z%22/%3E%3Cpath d=%22M12 8c3 0 5-2 5-5-3 0-5 2-5 5z%22/%3E%3Cpath d=%22M12 16c-3 0-5-2-5-5 3 0 5 2 5 5z%22/%3E%3Cpath d=%22M12 13c3 0 5-2 5-5-3 0-5 2-5 5z%22/%3E%3C/svg%3E") center / contain no-repeat; opacity: 0.5;
 }
 @media (min-width: 769px) { .vd-bv-summary { position: sticky; } }
+
+/* "Not adding food? Order from the menu there" note (2026-10-23) */
+.vd-menu-note { display: flex; align-items: flex-start; gap: 8px; margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--boho-sage); color: #3f4a31; font-family: var(--font-sans); font-size: 13px; line-height: 1.45; text-align: left; }
+.vd-menu-note svg { flex: none; margin-top: 1px; color: var(--boho-accent-sage); }
+.vd-menu-note-link { padding: 0; border: 0; background: none; font: inherit; font-weight: 600; color: var(--boho-accent-sage); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.pkg-step-menu-note .vd-menu-note { margin: -8px auto 16px; max-width: 520px; }
+/* Phones: the summary is a normal block — drop the desktop sticky offset
+   (top:88px) that position:relative was turning into an 88px shift. */
+@media (max-width: 768px) { .vd-bv-summary { top: auto; } }
