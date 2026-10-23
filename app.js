@@ -1015,14 +1015,20 @@ async function showVenuePage(venueId, pushState = true) {
   appState.pkgStepOnlyKey   = null
 
   const needsCalendar = true
+  if (packageFlowActive(venue) && !packagesLoaded) await loadPackages()
   const [addOns, bookedData] = await Promise.all([
     loadVenueAddOns(venue.id),
     needsCalendar ? fetchBookedData(venue.id, venue.type, venue.max_concurrent_setups || 1) : Promise.resolve(null),
   ])
   appState.currentVenueAddOns = addOns
   appState.lastViewedVenue = venue
+  document.getElementById('pkg-detail')?.classList.remove('is-open')
+  if (document.getElementById('pkg-detail')) document.getElementById('pkg-detail').hidden = true
+  document.body.classList.remove('vd-scroll-lock')
   renderVenueDetail(venue, addOns)
   showPage('venue-detail-page')
+  requestAnimationFrame(syncVdDescMore)
+  document.fonts?.ready?.then(syncVdDescMore)
   track('venue_viewed', { venue_id: venue.id, venue_name: venue.name, venue_type: venue.type, venue_city: venue.city })
 
   if (needsCalendar && bookedData) {
@@ -1100,6 +1106,368 @@ async function fillVenueReviews(container, venueId) {
   slot.hidden = false
 }
 
+window.addEventListener('resize', () => requestAnimationFrame(syncVdDescMore))
+// "Read more" only when the 5-line clamp actually hides text. Must run while
+// the page is visible (a hidden page measures 0 for both heights).
+function syncVdDescMore() {
+  const desc = document.getElementById('vd-description')
+  const more = document.getElementById('vd-desc-more')
+  if (!desc || !more || !desc.classList.contains('vd-description--clamp')) return
+  more.hidden = desc.scrollHeight <= desc.clientHeight + 2
+}
+
+// Universal (non-occasion) packages offered at this venue, in ladder order.
+function venuePkgKeys(venue) {
+  if (!packageFlowActive(venue)) return []
+  return PACKAGE_TIER_ORDER.filter(k => PACKAGE_TIERS[k] && !PACKAGE_TIERS[k].occasion && packageOfferedAt(venue.id, k))
+}
+// Lowest no-food package price for 2 adults, with the guest cap it covers
+// (package cap, never above the venue's own capacity_max).
+function venueCheapestPackage(venue) {
+  let best = null
+  venuePkgKeys(venue).forEach(k => {
+    const price = packageTierPriceAt(venue, PACKAGE_TIERS[k], null, 2, { withFood: false })
+    if (price != null && (!best || price < best.price)) best = { key: k, price }
+  })
+  if (!best) return null
+  const row = venuePackageRow(venue.id, best.key)
+  let cap = row?.max_guests || row?.included_guests || null
+  if (cap && venue.capacity_max) cap = Math.min(cap, venue.capacity_max)
+  return { ...best, cap }
+}
+// Price for N adults at a venue, food on or off (null = custom quote / no row).
+function vdPkgPrice(venue, key, adults, withFood) {
+  return packageTierPriceAt(venue, PACKAGE_TIERS[key], null, adults, { withFood })
+}
+
+// ── Venue page: "Packages here" + package details dialog (redesign P2) ──────
+function vdPkgPairGuests(venue) {
+  return Math.min(2, venue.capacity_max || 2)
+}
+function vdPkgFoodLine(venue, key) {
+  if (packageFoodMode(venue.id, key) === 'none') return ''
+  const g = vdPkgPairGuests(venue)
+  const fp = vdPkgPrice(venue, key, g, true)
+  if (fp == null) return ''
+  const fr = packageFoodRow(venue.id, key, g, null)
+  const n = fr && Number(fr.food_items || 0)
+  return `With food: ₹${Number(fp).toLocaleString('en-IN')}${n ? ` · ${n} item${n !== 1 ? 's' : ''}` : ''}`
+}
+function venuePackagesSectionHtml(venue) {
+  const keys = venuePkgKeys(venue)
+  if (!keys.length) return ''
+  const g = vdPkgPairGuests(venue)
+  const cards = keys.map(k => {
+    const t = PACKAGE_TIERS[k]
+    const price = vdPkgPrice(venue, k, g, false)
+    const food = vdPkgFoodLine(venue, k)
+    return `
+                <button type="button" class="vd-pkg-card${t.featured ? ' vd-pkg-card--featured' : ''}" onclick="openPkgDetails('${escapeHtml(k)}')" aria-haspopup="dialog">
+                  ${t.featured ? '<span class="vd-pkg-card-badge">Most picked</span>' : ''}
+                  <span class="vd-pkg-card-main">
+                    <span class="vd-pkg-card-name">${escapeHtml(t.name)}</span>
+                    <span class="vd-pkg-card-tagline">${escapeHtml(t.tagline || '')}</span>
+                  </span>
+                  <span class="vd-pkg-card-prices">
+                    <span class="vd-pkg-card-price">${price != null ? `₹${Number(price).toLocaleString('en-IN')}` : 'Custom quote'}</span>
+                    ${food ? `<span class="vd-pkg-card-food">${food}</span>` : ''}
+                  </span>
+                  <span class="vd-pkg-card-more">What’s included
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+                  </span>
+                </button>`
+  }).join('')
+  return `
+            <div class="vd-section vd-pkgs">
+              <div class="vd-pkgs-head">
+                <h2 class="vd-section-title">Packages here</h2>
+                <p class="vd-pkgs-sub">Prices for ${g} guest${g !== 1 ? 's' : ''}. Tap one to see what’s in it.</p>
+              </div>
+              <div class="vd-pkgs-grid">${cards}
+              </div>
+            </div>
+            <hr class="vd-divider">`
+}
+
+// What a package adds: standalone → its own list; first rung → venue setup;
+// later rungs → add-ons new over the previous rung (same rule as the package step).
+function vdPkgIncluded(venue, key) {
+  const tier = PACKAGE_TIERS[key]
+  const catalog = appState.currentVenueAddOns || []
+  if (pkgStandalone(tier)) return { lead: '', tiles: [], list: tier.inclusions || [], base: null }
+  const ladder = venuePkgKeys(venue).filter(k => !pkgStandalone(PACKAGE_TIERS[k]))
+  const idx = ladder.indexOf(key)
+  const prevKey = idx > 0 ? ladder[idx - 1] : null
+  if (!prevKey) return { lead: '', tiles: [], list: venueSetupLabels(venue), base: null }
+  const prev = PACKAGE_TIERS[prevKey]
+  const newIds = (tier.addons || []).filter(id => !(prev.addons || []).includes(id))
+  const tiles = newIds.map(id => catalog.find(a => a.id === id)).filter(Boolean)
+  return { lead: `Everything in ${prev.name}, plus:`, tiles, list: [], base: { name: ladder[0] ? PACKAGE_TIERS[ladder[0]].name : '', items: venueSetupLabels(venue) } }
+}
+
+let pkgDetailLastFocus = null
+function pkgDetailsInnerHtml(venue, key) {
+  const t = PACKAGE_TIERS[key]
+  const keys = venuePkgKeys(venue)
+  const i = keys.indexOf(key)
+  const prevK = i > 0 ? keys[i - 1] : null
+  const nextK = i < keys.length - 1 ? keys[i + 1] : null
+  const g = vdPkgPairGuests(venue)
+  const price = vdPkgPrice(venue, key, g, false)
+  const row = venuePackageRow(venue.id, key)
+  let cap = row?.max_guests || row?.included_guests || null
+  if (cap && venue.capacity_max) cap = Math.min(cap, venue.capacity_max)
+  const foodMode = packageFoodMode(venue.id, key)
+  const fp = foodMode !== 'none' ? vdPkgPrice(venue, key, g, true) : null
+  const fr = fp != null ? packageFoodRow(venue.id, key, g, null) : null
+  const fItems = fr && Number(fr.food_items || 0)
+  const inr = n => '₹' + Number(n).toLocaleString('en-IN')
+  const img = (t.images && t.images[0] && (t.images[0].url || t.images[0])) || venue.images?.[0]?.url || ''
+  const inc = vdPkgIncluded(venue, key)
+  const overNote = row && Number(row.overage_per_person) > 0 && (venue.capacity_max == null || venue.capacity_max > row.included_guests)
+    ? `Over ${row.included_guests} guests: ${inr(row.overage_per_person)} each.` : ''
+  const priceName = k => { const p = vdPkgPrice(venue, k, g, false); return `${escapeHtml(PACKAGE_TIERS[k].name)}${p != null ? ` · ${inr(p)}` : ''}` }
+  return `
+      <div class="pkg-detail-scroll">
+        <div class="pkg-detail-grab" aria-hidden="true"></div>
+        <div class="pkg-detail-media">
+          ${img ? `<img src="${escapeHtml(typeof img === 'string' ? img : '')}" alt="" loading="lazy">` : ''}
+          <button type="button" class="pkg-detail-close" onclick="closePkgDetails()" aria-label="Close">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="pkg-detail-titlerow">
+          <h2 class="pkg-detail-title" id="pkg-detail-title">${escapeHtml(t.name)}</h2>
+          ${t.featured ? '<span class="pkg-detail-badge">Most picked</span>' : ''}
+        </div>
+        ${t.tagline ? `<p class="pkg-detail-tagline">${escapeHtml(t.tagline)}</p>` : ''}
+        <div class="pkg-detail-prices">
+          <div class="pkg-detail-price">
+            <span class="pkg-detail-price-label">${foodMode === 'only' ? 'Price' : 'Setup only'}</span>
+            <span class="pkg-detail-price-value">${price != null ? inr(price) : 'Custom quote'}</span>
+            <span class="pkg-detail-price-sub">${cap ? `up to ${cap} guest${cap !== 1 ? 's' : ''}` : ''}</span>
+          </div>
+          ${fp != null && foodMode === 'optional' ? `
+          <div class="pkg-detail-price">
+            <span class="pkg-detail-price-label">With food &amp; drinks</span>
+            <span class="pkg-detail-price-value">${inr(fp)}</span>
+            <span class="pkg-detail-price-sub">${g} guest${g !== 1 ? 's' : ''}${fItems ? ` · ${fItems} item${fItems !== 1 ? 's' : ''}` : ''}</span>
+          </div>` : ''}
+        </div>
+        ${overNote || (fp != null && foodMode === 'optional') ? `<p class="pkg-detail-note">${fp != null && foodMode === 'optional' ? 'Food price rises with guests. ' : ''}${overNote}</p>` : ''}
+
+        <h3 class="pkg-detail-h3">What’s included</h3>
+        ${inc.lead ? `<p class="pkg-detail-lead">${escapeHtml(inc.lead)}</p>` : ''}
+        ${inc.tiles.length ? `<ul class="pkg-detail-tiles">${inc.tiles.map(a => `
+          <li class="pkg-detail-tile">
+            <span class="pkg-detail-tile-icon" aria-hidden="true">${a.image_url ? `<img src="${escapeHtml(a.image_url)}" alt="" loading="lazy">` : '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><path d="M12 9.5l.8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8z"/></svg>'}</span>
+            <span class="pkg-detail-tile-name">${escapeHtml(a.name)}</span>
+            <span class="pkg-detail-tile-price">₹${Number(a.price).toLocaleString('en-IN')} if added</span>
+          </li>`).join('')}
+        </ul>` : ''}
+        ${inc.list.length ? `<ul class="pkg-detail-list">${inc.list.map(n => `<li>${escapeHtml(n)}</li>`).join('')}</ul>` : ''}
+        ${inc.base ? `
+        <details class="pkg-detail-base">
+          <summary><span>${escapeHtml(inc.base.name)} includes · ${inc.base.items.length} items</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
+          <p>${inc.base.items.map(escapeHtml).join(', ')}.</p>
+        </details>` : ''}
+        ${venue.type === 'cafe' ? '<p class="pkg-detail-slot">3-hour slot · morning, afternoon or evening</p>' : ''}
+      </div>
+      <div class="pkg-detail-foot">
+        <nav class="pkg-detail-nav" aria-label="Other packages">
+          ${prevK ? `<button type="button" onclick="openPkgDetails('${escapeHtml(prevK)}')">‹ ${priceName(prevK)}</button>` : '<span></span>'}
+          ${nextK ? `<button type="button" onclick="openPkgDetails('${escapeHtml(nextK)}')">${priceName(nextK)} ›</button>` : '<span></span>'}
+        </nav>
+        <button type="button" class="btn btn--venue-primary pkg-detail-cta" onclick="choosePkgFromDetails('${escapeHtml(key)}')">
+          <span>Choose ${escapeHtml(t.name)}</span>
+          <small>Next: pick your date</small>
+        </button>
+      </div>`
+}
+
+window.openPkgDetails = function(key) {
+  const venue = appState.lastViewedVenue || appState.currentVenue
+  if (!venue || !PACKAGE_TIERS[key]) return
+  let el = document.getElementById('pkg-detail')
+  if (!el) {
+    el = document.createElement('div')
+    el.id = 'pkg-detail'
+    el.className = 'pkg-detail'
+    el.innerHTML = '<div class="pkg-detail-backdrop" onclick="closePkgDetails()"></div><div class="pkg-detail-panel" role="dialog" aria-modal="true" aria-labelledby="pkg-detail-title" tabindex="-1"></div>'
+    document.body.appendChild(el)
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { e.preventDefault(); closePkgDetails(); return }
+      if (e.key !== 'Tab') return
+      const f = [...el.querySelectorAll('button, a[href], summary, [tabindex]:not([tabindex="-1"])')].filter(n => n.offsetParent)
+      if (!f.length) return
+      if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus() }
+      else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus() }
+    })
+  }
+  if (el.hidden !== false || !el.classList.contains('is-open')) pkgDetailLastFocus = document.activeElement
+  const panel = el.querySelector('.pkg-detail-panel')
+  panel.innerHTML = pkgDetailsInnerHtml(venue, key)
+  panel.scrollTop = 0
+  el.querySelector('.pkg-detail-scroll')?.scrollTo?.(0, 0)
+  el.hidden = false
+  el.classList.add('is-open')
+  document.body.classList.add('vd-scroll-lock')
+  panel.querySelector('.pkg-detail-close')?.focus()
+  track('package_details_opened', { venue_id: venue.id, venue_name: venue.name, tier: key })
+}
+window.closePkgDetails = function() {
+  const el = document.getElementById('pkg-detail')
+  if (!el) return
+  el.classList.remove('is-open')
+  el.hidden = true
+  if (!document.querySelector('.vd-wrap.is-sheet-open')) document.body.classList.remove('vd-scroll-lock')
+  pkgDetailLastFocus?.focus?.()
+}
+window.choosePkgFromDetails = function(key) {
+  const venue = appState.lastViewedVenue || appState.currentVenue
+  if (!venue) return
+  closePkgDetails()
+  track('package_details_chosen', { venue_id: venue.id, venue_name: venue.name, tier: key })
+  if (appState.bookingStep === 'package') {
+    // Already past date + guests: just show this package (with its food toggle).
+    appState.pkgStepOnlyKey = key
+    showPackageStep(venue)
+    return
+  }
+  const pending = { occasion: appState.bookingOccasion || null, tierKey: key, venueId: venue.id }
+  appState.pendingPackage = pending
+  try { sessionStorage.setItem('ps_pending_pkg', JSON.stringify(pending)) } catch (err) { /* private mode */ }
+  if (vdSheetEligible()) { openVdSheet(); return }
+  const widget = document.getElementById('avail-calendar-widget')
+  if (widget) {
+    const navH = document.querySelector('.navbar')?.offsetHeight || 0
+    window.scrollTo({ top: widget.getBoundingClientRect().top + window.scrollY - navH - 16, behavior: 'smooth' })
+  }
+  showToast(`${PACKAGE_TIERS[key].name} selected — now pick your date`, 'success')
+}
+
+// ── Phone: date / slot / guests in a bottom sheet (redesign P2b) ────────────
+// Picnic (cafe) venues only. The booking card itself becomes the sheet, so the
+// calendar, slot picker and guest step keep their existing code paths. At the
+// package step / form the sheet hands back to the page ("off").
+function vdSheetEligible() {
+  return !!document.querySelector('.vd-wrap.vd-wrap--sheet-mode') && window.matchMedia('(max-width: 768px)').matches
+}
+window.openVdSheet = function() {
+  const wrap = document.querySelector('.vd-wrap.vd-wrap--sheet-mode')
+  if (!wrap) return
+  if (!vdSheetEligible()) {
+    document.getElementById('avail-calendar-widget')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    return
+  }
+  wrap.classList.remove('is-sheet-off')
+  wrap.classList.add('is-sheet-open')
+  const bd = wrap.querySelector('.vd-sheet-backdrop')
+  if (bd) bd.hidden = false
+  document.body.classList.add('vd-scroll-lock')
+  const pkg = appState.pendingPackage && PACKAGE_TIERS[appState.pendingPackage.tierKey]
+  const chip = wrap.querySelector('.vd-sheet-pkg')
+  if (chip) {
+    chip.hidden = !pkg
+    const nm = chip.querySelector('.vd-sheet-pkg-name')
+    if (nm && pkg) nm.textContent = pkg.name
+  }
+  wrap.querySelector('.vd-sheet-close')?.focus()
+  track('check_dates_opened', { venue_id: appState.currentVenue?.id, from_package: !!pkg })
+}
+window.closeVdSheet = function() {
+  const wrap = document.querySelector('.vd-wrap.vd-wrap--sheet-mode')
+  if (!wrap) return
+  wrap.classList.remove('is-sheet-open')
+  const bd = wrap.querySelector('.vd-sheet-backdrop')
+  if (bd) bd.hidden = true
+  document.body.classList.remove('vd-scroll-lock')
+}
+// Leaving date/guests (package step, form, intent): show the booking card in
+// the page again and bring it into view.
+function vdSheetOff() {
+  const wrap = document.querySelector('.vd-wrap.vd-wrap--sheet-mode')
+  if (!wrap || wrap.classList.contains('is-sheet-off')) return
+  const wasOpen = wrap.classList.contains('is-sheet-open')
+  closeVdSheet()
+  wrap.classList.add('is-sheet-off')
+  if (wasOpen && window.matchMedia('(max-width: 768px)').matches) {
+    requestAnimationFrame(() => {
+      const w = document.getElementById('avail-calendar-widget')
+      if (!w || w.offsetParent === null) return
+      const navH = document.querySelector('.navbar')?.offsetHeight || 0
+      window.scrollTo({ top: w.getBoundingClientRect().top + window.scrollY - navH - 12 })
+    })
+  }
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.querySelector('.vd-wrap.is-sheet-open') && !document.querySelector('#pkg-detail.is-open')) closeVdSheet()
+})
+
+// Quick-facts strip (venue redesign P1, 2026-10-23). Every value comes from
+// data: packages + price table for cafe package venues, base_price otherwise,
+// CAFE_SLOTS for times. No "7 days a week"-style filler on picnic venues.
+function venueFactsHtml(venue, capacityText) {
+  const icon = paths => `<span class="vd-fact-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths}</svg></span>`
+  const rupee = '<span class="vd-fact-icon vd-fact-icon--glyph" aria-hidden="true">₹</span>'
+  const fact = (iconHtml, label, value, sub = '', mod = '') => `
+              <div class="vd-fact${mod}">
+                ${iconHtml}
+                <div class="vd-fact-text">
+                  <span class="vd-fact-label">${label}</span>
+                  <span class="vd-fact-value">${value}</span>
+                  ${sub ? `<span class="vd-fact-sub">${sub}</span>` : ''}
+                </div>
+              </div>`
+  const inr = n => '₹' + Number(n).toLocaleString('en-IN')
+  const facts = []
+
+  // Price
+  const pkgKeys = venuePkgKeys(venue)
+  const cheapest = venueCheapestPackage(venue)
+  if (cheapest) {
+    facts.push(fact(rupee, 'Packages from', inr(cheapest.price),
+      `${escapeHtml(PACKAGE_TIERS[cheapest.key].name)}${cheapest.cap ? `, up to ${cheapest.cap} guests` : ''}`))
+  } else if (venue.base_price) {
+    // partner_bnb stays the neutral "Starting price": its base_price is the picnic
+    // price for Airbnb partners but the nightly rate for the Countryside cottages.
+    const label = stayOnlyActive(venue) ? 'Per night' : 'Starting price'
+    facts.push(fact(rupee, label, escapeHtml(formatPrice(venue.base_price))))
+  }
+
+  // Guests — package venues add the included-guests / overage rule
+  const overRow = pkgKeys.map(k => venuePackageRow(venue.id, k))
+    .filter(r => r && Number(r.overage_per_person) > 0 && r.included_guests
+      && (venue.capacity_max == null || venue.capacity_max > r.included_guests))
+    .sort((a, b) => Number(a.price) - Number(b.price))[0]
+  facts.push(fact(icon('<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>'),
+    'Guests', escapeHtml(venue.capacity_max && venue.capacity_max === venue.capacity_min
+      ? `${venue.capacity_max} guest${venue.capacity_max !== 1 ? 's' : ''}` : capacityText),
+    overRow ? `${overRow.included_guests} included, then ${inr(overRow.overage_per_person)} each` : ''))
+
+  // Time slots (picnic venues) / availability (others, unchanged)
+  if (venue.type === 'cafe') {
+    const short = t => t.replace(/ (AM|PM)/g, '').replace(' – ', '–')
+    facts.push(fact(icon('<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>'),
+      'Time slots, every day', '3 hours each', CAFE_SLOTS.map(s => short(s.time)).join(' · ')))
+  } else {
+    facts.push(fact(icon('<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'),
+      'Availability', '7 days a week'))
+  }
+
+  // Food — only when the price table has with-food rows here
+  const modes = pkgKeys.map(k => packageFoodMode(venue.id, k))
+  if (modes.includes('optional') || modes.includes('only')) {
+    facts.push(fact(icon('<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/>'),
+      'Food &amp; drinks', modes.includes('optional') ? 'Optional add' : 'Included',
+      modes.includes('optional') ? 'Choose it with your package' : 'Café voucher in the price', ' vd-fact--sage'))
+  }
+
+  return `<div class="vd-facts vd-facts--grid">${facts.join('')}
+            </div>`
+}
+
 // Render full venue detail into venue-detail-page
 function renderVenueDetail(venue, addOns = []) {
   const container = document.getElementById('venue-detail-content')
@@ -1157,8 +1525,11 @@ function renderVenueDetail(venue, addOns = []) {
          Select a date to book
        </button>`
 
+  const sheetMode = venue.type === 'cafe'
+  const vdFrom = venueCheapestPackage(venue)
   container.innerHTML = `
-    <div class="vd-wrap">
+    <div class="vd-wrap${sheetMode ? ' vd-wrap--sheet-mode' : ''}">
+      ${sheetMode ? '<div class="vd-sheet-backdrop" hidden onclick="closeVdSheet()"></div>' : ''}
 
       <!-- Full-bleed hero -->
       <div class="vd-hero" id="vd-hero-slider">
@@ -1199,30 +1570,7 @@ function renderVenueDetail(venue, addOns = []) {
                the booking card on mobile, independent of the long-form
                content below it. -->
           <div class="vd-facts-outer">
-            <div class="vd-facts">
-              <div class="vd-fact">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                <div>
-                  <span class="vd-fact-label">Capacity</span>
-                  <span class="vd-fact-value">${escapeHtml(capacityText)}</span>
-                </div>
-              </div>
-              ${venue.base_price ? `
-              <div class="vd-fact">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                <div>
-                  <span class="vd-fact-label">Starting price</span>
-                  <span class="vd-fact-value">${escapeHtml(formatPrice(venue.base_price))}</span>
-                </div>
-              </div>` : ''}
-              <div class="vd-fact">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                <div>
-                  <span class="vd-fact-label">Availability</span>
-                  <span class="vd-fact-value">7 days a week</span>
-                </div>
-              </div>
-            </div>
+            ${venueFactsHtml(venue, capacityText)}
             <hr class="vd-divider">
           </div>
 
@@ -1230,16 +1578,14 @@ function renderVenueDetail(venue, addOns = []) {
           <div class="vd-main">
 
             ${venue.description ? `
-            <div class="vd-section vd-about">
-              <button type="button" class="vd-about-header" onclick="toggleVdAccordion(this)" aria-expanded="false">
-                <h2 class="vd-section-title">About this venue</h2>
-                <svg class="vd-about-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
-              </button>
-              <div class="vd-about-body" hidden>
-                <p class="vd-description">${escapeHtml(venue.description)}</p>
-              </div>
+            <div class="vd-section vd-about vd-about--open">
+              <h2 class="vd-section-title">About this venue</h2>
+              <p class="vd-description vd-description--clamp" id="vd-description">${escapeHtml(venue.description)}</p>
+              <button type="button" class="vd-desc-more" id="vd-desc-more" hidden aria-controls="vd-description" aria-expanded="false" onclick="toggleVdDescription(this)">Read more</button>
             </div>
             <hr class="vd-divider">` : ''}
+
+            ${venuePackagesSectionHtml(venue)}
 
             <!-- What's included — in the packages flow this moves into The
                  Setting package card instead (see showPackageStep). -->
@@ -1391,6 +1737,16 @@ function renderVenueDetail(venue, addOns = []) {
           <!-- Sticky booking sidebar -->
           <aside class="vd-sidebar">
             <div class="vd-booking-card">
+              ${sheetMode ? `<div class="vd-sheet-head">
+                <span class="vd-sheet-grab" aria-hidden="true"></span>
+                <div class="vd-sheet-headrow">
+                  <h2 class="vd-sheet-title">When’s your picnic?</h2>
+                  <button type="button" class="vd-sheet-close" onclick="closeVdSheet()" aria-label="Close">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                </div>
+                <p class="vd-sheet-pkg" hidden>Package: <strong class="vd-sheet-pkg-name"></strong></p>
+              </div>` : ''}
               <div id="vd-price-block"${packageFlowActive(venue) ? ' style="display:none"' : ''}>
               ${venue.base_price ? `
               <div class="vd-price-row">
@@ -1481,6 +1837,12 @@ function renderVenueDetail(venue, addOns = []) {
                <span class="vd-mobile-book-label">picnic setup · from</span>
              </div>
              <button class="btn btn--venue-primary" data-action="reveal-bnb-calendar" data-book-venue-id="${venue.id}">Add picnic setup</button>`
+          : sheetMode
+          ? `<div class="vd-mobile-book-price">
+               <span class="vd-mobile-book-amount">${vdFrom ? `From ₹${Number(vdFrom.price).toLocaleString('en-IN')}` : venue.base_price ? escapeHtml(formatPrice(venue.base_price)) : 'Custom pricing'}</span>
+               <span class="vd-mobile-book-label">30% advance locks your date</span>
+             </div>
+             <button type="button" class="btn btn--venue-primary" onclick="openVdSheet()">Check dates</button>`
           : `<div class="vd-mobile-book-price">
                <span class="vd-mobile-book-amount" id="mobile-bar-date-text">Pick a date ↑</span>
                <span class="vd-mobile-book-label">${venue.base_price ? escapeHtml(formatPrice(venue.base_price)) : 'Custom pricing'}</span>
@@ -1494,6 +1856,8 @@ function renderVenueDetail(venue, addOns = []) {
   `
 
   fillVenueReviews(container, Number(venue.id))
+
+  requestAnimationFrame(syncVdDescMore)
 
   // ---- Image slider (touch swipe + auto-advance + dot indicators) ----
   if (galleryImgs.length > 1) {
@@ -3838,6 +4202,7 @@ function packageTierPrice(venue, tier, catalog) {
 function showPackageStep(venue) {
   appState.bookingStep  = 'package'
   appState.currentVenue = venue
+  vdSheetOff()
   const widget = document.getElementById('avail-calendar-widget')
   if (!widget) return
 
@@ -4087,6 +4452,7 @@ window.changePackageFromIntent = function() {
 async function showBookingForm(venue) {
   appState.bookingStep  = 'booking'
   appState.currentVenue = venue
+  vdSheetOff()
   // Undo the package step's full-width takeover, if it was engaged.
   const pkgLayout = document.querySelector('.vd-layout')
   if (pkgLayout) pkgLayout.classList.remove('vd-layout--pkg-active')
@@ -4446,6 +4812,15 @@ window.toggleAddonCat = function(btn) {
 // Generic collapse/expand for section-level accordions (e.g. "About this
 // venue") — same mechanic as toggleAddonCat, kept separate since it's a
 // different visual scale/context.
+window.toggleVdDescription = function(btn) {
+  const desc = document.getElementById('vd-description')
+  if (!desc) return
+  const open = btn.getAttribute('aria-expanded') === 'true'
+  desc.classList.toggle('vd-description--clamp', open)
+  btn.setAttribute('aria-expanded', String(!open))
+  btn.textContent = open ? 'Read more' : 'Show less'
+}
+
 window.toggleVdAccordion = function(btn) {
   const body = btn.nextElementSibling
   const open = btn.getAttribute('aria-expanded') === 'true'
@@ -13050,6 +13425,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // that function for the fbq('track', 'InitiateCheckout', ...) call.
       if (appState.bookingStep === 'guests') {
         if (appState.changeMode === 'intent' && appState.changeModeData) {
+          vdSheetOff()
           // Fast-resume: update date/slot on saved lead, skip the form entirely
           const lead = {
             ...appState.changeModeData,
