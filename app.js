@@ -1202,7 +1202,9 @@ function vdPkgIncluded(venue, key) {
   const prev = PACKAGE_TIERS[prevKey]
   const newIds = (tier.addons || []).filter(id => !(prev.addons || []).includes(id))
   const tiles = newIds.map(id => catalog.find(a => a.id === id)).filter(Boolean)
-  return { lead: `Everything in ${prev.name}, plus:`, tiles, list: [], base: { name: ladder[0] ? PACKAGE_TIERS[ladder[0]].name : '', items: venueSetupLabels(venue) } }
+  // The folded list describes the package named in "Everything in <prev>" —
+  // its full contents (setup + what it adds), not always the first rung.
+  return { lead: `Everything in ${prev.name}, plus:`, tiles, list: [], base: { name: prev.name, items: bfPackageContents(venue, prev) } }
 }
 
 let pkgDetailLastFocus = null
