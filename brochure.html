@@ -14,7 +14,8 @@
              connect-src 'self' https://*.supabase.co https://app.posthog.com https://us.i.posthog.com https://us-assets.i.posthog.com https://connect.facebook.net https://www.facebook.com;
              style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
              font-src https://fonts.gstatic.com;
-             img-src 'self' data: https:;">
+             img-src 'self' data: https:;
+             frame-src https://www.instagram.com;">
   <title>Our Packages | The Picnic Stories</title>
   <meta name="description" content="Curated picnic experiences in Delhi NCR, Gurugram and Jaipur — packages, add-ons, venues and themes.">
   <!-- Link preview card (WhatsApp / Instagram) -->
@@ -100,7 +101,7 @@
         <ul class="pk-incl">
           <li>Cozy macramé tent setup</li><li>Ambient fairy lighting</li><li>Curated lamps &amp; floor seating</li><li>Wax candles</li><li>Electric candles</li><li>Fresh flowers</li><li>Bluetooth speaker</li><li>Crockery &amp; cutlery</li><li>Dedicated host support</li>
         </ul>
-        <div class="pk-gallery pk-gallery--prelude">
+        <div class="pk-gallery pk-gallery--prelude" data-gallery>
           <img src="/brochure/prelude-1.webp" width="900" height="1125" loading="lazy" alt="A couple toasting inside a lit macramé tent">
           <img src="/brochure/prelude-2.webp" width="458" height="572" loading="lazy" alt="Prelude setup under a macramé tent in daylight">
           <img src="/brochure/prelude-3.webp" width="460" height="575" loading="lazy" alt="Candles, roses and a low table set for two">
@@ -120,7 +121,12 @@
         <ul class="pk-incl">
           <li>Fresh Fruits</li><li>Fresh Flowers</li><li>Wax Candles</li><li>Electric Candles</li><li>Macrame Tent</li><li>Picnic Umbrella</li><li>Portable Speaker</li><li>Board with Message</li><li>Cutlery &amp; Essentials</li><li>Setup &amp; cleanup</li><li>Dedicated host support</li>
         </ul>
-        <img class="pk-collage" src="/brochure/setting.webp" width="1200" height="960" loading="lazy" alt="The Setting: long table with candles, florals and a macramé tent">
+        <div class="pk-gallery pk-gallery--four" data-gallery>
+          <img src="/brochure/setting-1.webp" width="836" height="365" loading="lazy" alt="A long table with candles, florals and wooden figurines">
+          <img src="/brochure/setting-2.webp" width="480" height="286" loading="lazy" alt="A macramé tent over a table set in a garden">
+          <img src="/brochure/setting-3.webp" width="697" height="572" loading="lazy" alt="Wooden figurines, candles and glassware on a white runner">
+          <img src="/brochure/setting-4.webp" width="341" height="365" loading="lazy" alt="Pampas grass, roses and violet glasses at a place setting">
+        </div>
         <div class="pk-cta" data-cta></div>
       </article>
 
@@ -137,7 +143,12 @@
         <ul class="pk-incl">
           <li>Photo Printouts (10 pics)</li><li>Bouquet</li><li>Cake</li>
         </ul>
-        <img class="pk-collage" src="/brochure/moment.webp" width="1200" height="960" loading="lazy" alt="The Moment: couples with a bouquet, cake and printed photos">
+        <div class="pk-gallery pk-gallery--four" data-gallery>
+          <img src="/brochure/moment-1.webp" width="836" height="365" loading="lazy" alt="A couple with a bouquet at a candlelit picnic">
+          <img src="/brochure/moment-2.webp" width="697" height="572" loading="lazy" alt="A cake with roses, candles and printed photos">
+          <img src="/brochure/moment-3.webp" width="341" height="365" loading="lazy" alt="Printed photos around a place setting with gerberas">
+          <img src="/brochure/moment-4.webp" width="480" height="278" loading="lazy" alt="A couple smiling in a macramé swing">
+        </div>
         <div class="pk-cta" data-cta></div>
       </article>
 
@@ -154,7 +165,12 @@
         <ul class="pk-incl">
           <li>Photographer</li><li>Cold Pyros</li><li>Skyshots (fireworks)</li>
         </ul>
-        <img class="pk-collage" src="/brochure/story.webp" width="1200" height="960" loading="lazy" alt="The Story: fireworks and cold pyros over a picnic setup">
+        <div class="pk-gallery pk-gallery--four" data-gallery>
+          <img src="/brochure/story-1.webp" width="836" height="365" loading="lazy" alt="A couple under fireworks at night">
+          <img src="/brochure/story-2.webp" width="697" height="572" loading="lazy" alt="A couple kissing in front of cold pyros">
+          <img src="/brochure/story-3.webp" width="480" height="286" loading="lazy" alt="A couple cutting a cake with cold pyros behind">
+          <img src="/brochure/story-4.webp" width="341" height="365" loading="lazy" alt="A cake, roses and printed photos on a pink runner">
+        </div>
         <div class="pk-cta" data-cta></div>
       </article>
 
@@ -220,7 +236,7 @@
       <p class="pk-eyebrow">Choose your theme</p>
       <h2>Real setups, real moments</h2>
       <p class="pk-sub">Every theme, styled with your occasion in mind</p>
-      <div class="pk-theme">
+      <div class="pk-theme" data-theme="blush_pink">
         <h3 class="pk-theme-name pk-theme--pink"><i>blush</i> PINK</h3>
         <div class="pk-theme-row">
           <img src="/brochure/theme-pink-1.webp" width="389" height="236" loading="lazy" alt="Blush pink theme: roses on a pink runner">
@@ -228,7 +244,7 @@
           <img src="/brochure/theme-pink-3.webp" width="173" height="232" loading="lazy" alt="Blush pink theme: place setting with roses">
         </div>
       </div>
-      <div class="pk-theme">
+      <div class="pk-theme" data-theme="ivory_beige">
         <h3 class="pk-theme-name pk-theme--beige"><i>ivory</i> BEIGE</h3>
         <div class="pk-theme-row">
           <img src="/brochure/theme-beige-1.webp" width="390" height="236" loading="lazy" alt="Ivory beige theme: white florals and candles">
@@ -236,7 +252,7 @@
           <img src="/brochure/theme-beige-3.webp" width="173" height="235" loading="lazy" alt="Ivory beige theme: tent with wooden figurines">
         </div>
       </div>
-      <div class="pk-theme">
+      <div class="pk-theme" data-theme="sage_green">
         <h3 class="pk-theme-name pk-theme--green"><i>sage</i> GREEN</h3>
         <div class="pk-theme-row">
           <img src="/brochure/theme-green-1.webp" width="390" height="236" loading="lazy" alt="Sage green theme: table with candles and greenery">

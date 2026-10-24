@@ -201,3 +201,25 @@
 }
 .admin-ui .qedit-save { background: var(--adm-accent); border-color: var(--adm-accent); }
 .admin-ui .qedit-save:hover:not(:disabled) { background: var(--adm-accent-strong); border-color: var(--adm-accent-strong); }
+
+/* ---------- Brochure reels (Packages tab) ---------- */
+.pkg-adm-reels { margin: 0 0 24px; padding: 18px 20px; background: var(--adm-surface); border: 1px solid var(--adm-border); border-radius: var(--adm-radius); }
+.pkg-adm-reels > .vf-hint { margin: 2px 0 12px; }
+.pkg-adm-reel-note--err { color: #b42318 !important; }
+.pkg-adm-reel-input--err { border-color: #b42318 !important; }
+.pkg-adm-reel-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-top: 10px; border-top: 1px solid var(--adm-subtle); }
+.pkg-adm-reel-actions .btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.pkg-adm-reel-groups { display: flex; flex-direction: column; gap: 12px; margin-top: 18px; }
+.pkg-adm-reel-group { padding: 12px 14px; border: 1px solid var(--adm-border); border-radius: var(--adm-radius-sm); }
+.pkg-adm-reel-group-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 6px; font-size: 14px; }
+.pkg-adm-reel-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 8px 10px; margin-top: 6px; border: 1px solid var(--adm-subtle); border-radius: var(--adm-radius-sm); background: var(--adm-surface); }
+.pkg-adm-reel-row--hidden { background: var(--adm-subtle); }
+.pkg-adm-reel-row--hidden .pkg-adm-reel-link { color: var(--adm-text-3); }
+.pkg-adm-reel-move { display: flex; gap: 4px; }
+.pkg-adm-reel-link { flex: 1 1 240px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: var(--adm-accent-strong); }
+.pkg-adm-reel-cap { flex: 1 1 200px; min-width: 0; font-size: 12.5px; color: var(--adm-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pkg-adm-reel-chip { padding: 2px 9px; border-radius: 999px; background: var(--adm-subtle); border: 1px solid var(--adm-border); font-size: 12px; color: var(--adm-text-2); }
+.pkg-adm-reel-toggle { height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--adm-border); background: var(--adm-surface); color: var(--adm-text-2); font: 600 12.5px var(--adm-font); cursor: pointer; }
+.pkg-adm-reel-toggle.is-on { background: var(--adm-accent-soft); border-color: #f0c9d4; color: var(--adm-accent-strong); }
+.pkg-adm-reel-icon { width: 32px; height: 32px; border: 1px solid var(--adm-border); border-radius: var(--adm-radius-sm); background: var(--adm-surface); color: var(--adm-text-2); font-size: 14px; line-height: 1; cursor: pointer; }
+.pkg-adm-reel-icon[disabled] { opacity: 0.35; cursor: default; }

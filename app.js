@@ -2259,19 +2259,20 @@ async function loadPackages() {
 // card's "Venue pricing" table (SPEC_stored_package_pricing_2026-07-10.md).
 // Derived pricing (base + add-on sum) is dead — enabling a package at a venue
 // means creating its priced row here.
-let packagesManagerState = { packages: [], addons: [], venues: [], venuePackages: [] }
+let packagesManagerState = { packages: [], addons: [], venues: [], venuePackages: [], reels: [] }
 
 async function loadPackagesManager() {
   const container = document.getElementById('packages-manager-container')
   if (!container) return
   container.innerHTML = '<p class="admin-loading">Loading packages…</p>'
   try {
-    const [pkgRes, addonRes, venueRes, vpRes] = await Promise.all([
+    const [pkgRes, addonRes, venueRes, vpRes, reelRes] = await Promise.all([
       supabase.from('packages').select('*, package_add_ons(addon_id, sort_order)').order('sort_order', { ascending: true }),
       supabase.from('add_ons').select('id, name, price').eq('is_active', true).order('sort_order', { ascending: true }),
       supabase.from('venues').select('id, name, type, packages_enabled, base_price, metadata, venue_add_ons(addon_id)')
         .eq('type', 'cafe').eq('is_active', true).order('id', { ascending: true }),
       supabase.from('venue_packages').select('*'), // incl. inactive rows — admin sees everything
+      supabase.from('reels').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true }),
     ])
     if (pkgRes.error) throw pkgRes.error
     if (addonRes.error) throw addonRes.error
@@ -2282,7 +2283,11 @@ async function loadPackagesManager() {
       addons: addonRes.data || [],
       venues: venueRes.data || [],
       venuePackages: vpRes.data || [],
+      // Brochure reels: a load failure (e.g. table missing) must not take the
+      // whole Packages tab down — the section just shows empty.
+      reels: reelRes.error ? [] : (reelRes.data || []),
     }
+    if (reelRes.error) console.error('Failed to load reels:', reelRes.error)
     renderPackagesManager()
   } catch (err) {
     console.error('Failed to load packages manager:', err)
@@ -2370,6 +2375,257 @@ async function createNewPackage() {
 }
 window.createNewPackage = createNewPackage
 
+// ── Brochure reels (admin) ─────────────────────────────────────────────────
+// public.reels rows shown on /brochure (2026-10-24). The admin pastes an
+// Instagram share link; we keep only /reel/<code>/ (or /p/<code>/) — the
+// ?igsh= tracking tail is dropped. package_id set = the reel can sit on that
+// package's brochure card, so the admin must confirm everything visible in it
+// is part of the package. package_id null = theme rows / "Get inspired" only.
+// No images are stored: the brochure shows a branded tile.
+const REEL_THEMES = [
+  { value: 'blush_pink', label: 'Blush pink' },
+  { value: 'ivory_beige', label: 'Ivory beige' },
+  { value: 'sage_green', label: 'Sage green' },
+  { value: 'custom', label: 'Custom' },
+]
+// Site occasions + Bachelorette (the brochure's "Get inspired" uses it). Must
+// match the reels_occasion_check constraint. A function, not a const array:
+// OCCASIONS is declared further down this module (TDZ at load time).
+const reelOccasions = () => [...OCCASIONS, 'Bachelorette']
+
+function parseInstagramLink(raw) {
+  const m = String(raw || '').match(/instagram\.com\/(?:[A-Za-z0-9_.]+\/)?(reel|reels|p)\/([A-Za-z0-9_-]{5,40})/)
+  if (!m) return null
+  return { kind: m[1] === 'p' ? 'p' : 'reel', code: m[2] }
+}
+const reelUrl = (r) => `https://www.instagram.com/${r.ig_kind}/${r.ig_code}/`
+
+function pkgAdmReelPackages() {
+  return (packagesManagerState.packages || []).filter(p => p.is_active)
+}
+
+function pkgAdmReelsSectionHtml() {
+  return '<div class="pkg-adm-reels" id="pkg-adm-reels"></div>'
+}
+
+function renderPkgAdmReels() {
+  const el = document.getElementById('pkg-adm-reels')
+  if (!el) return
+  const pkgs = pkgAdmReelPackages()
+  const reels = packagesManagerState.reels || []
+  const pkgOpts = pkgs.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')
+    + '<option value="">None (themes and Get inspired only)</option>'
+  const themeOpts = '<option value="">None</option>' + REEL_THEMES.map(t => `<option value="${t.value}">${t.label}</option>`).join('')
+  const occOpts = '<option value="">None</option>' + reelOccasions().map(o => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('')
+
+  const groups = pkgs.map(p => ({ id: p.id, name: p.name }))
+    .concat([{ id: null, name: 'Not tied to a package' }])
+    .map(g => ({ ...g, rows: reels.filter(r => (r.package_id ?? null) === g.id) }))
+
+  const groupHtml = groups.map(g => {
+    const shown = g.rows.filter(r => r.is_active).length
+    const count = g.rows.length
+      ? `${shown} showing${g.rows.length > shown ? `, ${g.rows.length - shown} hidden` : ''}`
+      : ''
+    const empty = !g.rows.length
+      ? `<p class="vf-hint">${g.id ? 'No reel yet. The brochure card keeps its photos.' : 'Nothing here yet.'}</p>`
+      : ''
+    const rows = g.rows.map((r, i) => {
+      const theme = REEL_THEMES.find(t => t.value === r.theme)?.label
+      return `
+        <div class="pkg-adm-reel-row${r.is_active ? '' : ' pkg-adm-reel-row--hidden'}">
+          <div class="pkg-adm-reel-move">
+            <button type="button" class="pkg-adm-reel-icon" aria-label="Move up" ${i === 0 ? 'disabled' : ''} onclick="movePkgReel(${r.id}, -1)">↑</button>
+            <button type="button" class="pkg-adm-reel-icon" aria-label="Move down" ${i === g.rows.length - 1 ? 'disabled' : ''} onclick="movePkgReel(${r.id}, 1)">↓</button>
+          </div>
+          <a class="pkg-adm-reel-link" href="${reelUrl(r)}" target="_blank" rel="noopener noreferrer">instagram.com/${r.ig_kind}/${escapeHtml(r.ig_code)}/</a>
+          ${r.caption ? `<span class="pkg-adm-reel-cap">${escapeHtml(r.caption)}</span>` : ''}
+          ${theme ? `<span class="pkg-adm-reel-chip">${theme}</span>` : ''}
+          ${r.occasion ? `<span class="pkg-adm-reel-chip">${escapeHtml(r.occasion)}</span>` : ''}
+          <button type="button" class="pkg-adm-reel-toggle${r.is_active ? ' is-on' : ''}" aria-pressed="${r.is_active}" onclick="togglePkgReel(${r.id})">${r.is_active ? 'Showing' : 'Hidden'}</button>
+          <button type="button" class="pkg-adm-reel-icon" aria-label="Delete reel ${escapeHtml(r.ig_code)}" onclick="deletePkgReel(${r.id})">✕</button>
+        </div>`
+    }).join('')
+    return `
+      <div class="pkg-adm-reel-group">
+        <div class="pkg-adm-reel-group-head"><strong>${escapeHtml(g.name)}</strong><span class="vf-hint">${count}</span></div>
+        ${empty}${rows}
+      </div>`
+  }).join('')
+
+  el.innerHTML = `
+    <div class="vf-section-title">Brochure reels</div>
+    <p class="vf-hint">Shown on /brochure. In Instagram, open the reel, tap Share, then Copy link, and paste it here. The first showing reel of a package is the one its card opens.</p>
+    <div class="vf-row">
+      <div class="vf-field" style="flex:2 1 320px">
+        <label class="vf-label" for="pkg-reel-link">Instagram link</label>
+        <input type="url" class="vf-input" id="pkg-reel-link" placeholder="https://www.instagram.com/reel/…" oninput="pkgReelFormUpdate()" />
+      </div>
+      <div class="vf-field">
+        <label class="vf-label" for="pkg-reel-pkg">Package</label>
+        <select class="vf-input" id="pkg-reel-pkg" onchange="pkgReelPackageChanged()">${pkgOpts}</select>
+      </div>
+      <div class="vf-field">
+        <label class="vf-label" for="pkg-reel-theme">Theme <span class="vf-hint">(optional)</span></label>
+        <select class="vf-input" id="pkg-reel-theme">${themeOpts}</select>
+      </div>
+      <div class="vf-field">
+        <label class="vf-label" for="pkg-reel-occ">Occasion <span class="vf-hint">(optional)</span></label>
+        <select class="vf-input" id="pkg-reel-occ">${occOpts}</select>
+      </div>
+    </div>
+    <div class="vf-row">
+      <div class="vf-field" style="flex:1 1 100%">
+        <label class="vf-label" for="pkg-reel-cap">Caption <span class="vf-hint">(optional, for your reference)</span></label>
+        <input type="text" class="vf-input" id="pkg-reel-cap" maxlength="200" placeholder="e.g. Anniversary at Beige, sage green" />
+      </div>
+    </div>
+    <p class="vf-hint" id="pkg-reel-note" aria-live="polite"></p>
+    <div class="pkg-adm-reel-actions">
+      <label class="vf-toggle-label" id="pkg-reel-confirm-wrap"><input type="checkbox" id="pkg-reel-confirm" onchange="pkgReelFormUpdate()" /> <span id="pkg-reel-confirm-text"></span></label>
+      <button type="button" class="btn btn--primary" id="pkg-reel-add" onclick="addPkgReel()" disabled>Add reel</button>
+    </div>
+    <div class="pkg-adm-reel-groups">${groupHtml}</div>`
+  pkgReelPackageChanged()
+}
+
+function pkgReelPackageChanged() {
+  const sel = document.getElementById('pkg-reel-pkg')
+  const wrap = document.getElementById('pkg-reel-confirm-wrap')
+  const txt = document.getElementById('pkg-reel-confirm-text')
+  const cb = document.getElementById('pkg-reel-confirm')
+  if (!sel || !wrap || !txt || !cb) return
+  cb.checked = false
+  if (sel.value) {
+    const name = sel.options[sel.selectedIndex].text
+    txt.innerHTML = `Everything visible in this reel is part of <strong>${escapeHtml(name)}</strong>`
+    cb.disabled = false
+  } else {
+    txt.textContent = 'Not tied to a package: shows in theme rows and Get inspired only.'
+    cb.disabled = true
+  }
+  pkgReelFormUpdate()
+}
+window.pkgReelPackageChanged = pkgReelPackageChanged
+
+// Live validation: normalised link preview, duplicate check, confirm gate.
+function pkgReelFormUpdate() {
+  const link = document.getElementById('pkg-reel-link')
+  const sel = document.getElementById('pkg-reel-pkg')
+  const cb = document.getElementById('pkg-reel-confirm')
+  const note = document.getElementById('pkg-reel-note')
+  const btn = document.getElementById('pkg-reel-add')
+  if (!link || !sel || !cb || !note || !btn) return
+  const typed = link.value.trim().length > 0
+  const parsed = parseInstagramLink(link.value)
+  const pkgId = sel.value ? parseInt(sel.value, 10) : null
+  const dup = parsed && (packagesManagerState.reels || []).some(r => r.ig_code === parsed.code && (r.package_id ?? null) === pkgId)
+  note.classList.toggle('pkg-adm-reel-note--err', !!((typed && !parsed) || dup))
+  if (typed && !parsed) note.textContent = 'That doesn’t look like an Instagram reel or post link.'
+  else if (dup) note.textContent = `Already added to ${pkgId ? sel.options[sel.selectedIndex].text : 'the unassigned list'}.`
+  else if (parsed) note.textContent = `Will save as instagram.com/${parsed.kind}/${parsed.code}/ (tracking part removed).`
+  else note.textContent = ''
+  link.classList.toggle('pkg-adm-reel-input--err', typed && !parsed)
+  btn.disabled = !parsed || !!dup || (pkgId !== null && !cb.checked)
+}
+window.pkgReelFormUpdate = pkgReelFormUpdate
+
+async function reloadPkgReels() {
+  const { data, error } = await supabase.from('reels').select('*')
+    .order('sort_order', { ascending: true }).order('id', { ascending: true })
+  if (error) throw error
+  packagesManagerState.reels = data || []
+  renderPkgAdmReels()
+}
+
+async function addPkgReel() {
+  if (!appState.session) return showToast('Admin login required', 'error')
+  const parsed = parseInstagramLink(document.getElementById('pkg-reel-link')?.value)
+  if (!parsed) return
+  const pkgVal = document.getElementById('pkg-reel-pkg')?.value
+  const pkgId = pkgVal ? parseInt(pkgVal, 10) : null
+  if (pkgId !== null && !document.getElementById('pkg-reel-confirm')?.checked) return
+  const group = (packagesManagerState.reels || []).filter(r => (r.package_id ?? null) === pkgId)
+  const row = {
+    package_id: pkgId,
+    ig_kind: parsed.kind,
+    ig_code: parsed.code,
+    theme: document.getElementById('pkg-reel-theme')?.value || null,
+    occasion: document.getElementById('pkg-reel-occ')?.value || null,
+    caption: document.getElementById('pkg-reel-cap')?.value.trim() || null,
+    sort_order: group.reduce((m, r) => Math.max(m, r.sort_order || 0), 0) + 1,
+  }
+  const btn = document.getElementById('pkg-reel-add')
+  if (btn) btn.disabled = true
+  try {
+    const { error } = await supabase.from('reels').insert([row])
+    if (error) {
+      if (error.code === '23505') return showToast('That reel is already added there', 'error')
+      throw error
+    }
+    showToast('Reel added', 'success')
+    await reloadPkgReels()
+  } catch (err) {
+    console.error(err)
+    showToast('Failed to add reel: ' + err.message, 'error')
+    pkgReelFormUpdate()
+  }
+}
+window.addPkgReel = addPkgReel
+
+async function togglePkgReel(id) {
+  if (!appState.session) return showToast('Admin login required', 'error')
+  const r = (packagesManagerState.reels || []).find(x => x.id === id)
+  if (!r) return
+  try {
+    const { error } = await supabase.from('reels').update({ is_active: !r.is_active }).eq('id', id)
+    if (error) throw error
+    await reloadPkgReels()
+  } catch (err) {
+    console.error(err)
+    showToast('Failed to update reel: ' + err.message, 'error')
+  }
+}
+window.togglePkgReel = togglePkgReel
+
+async function deletePkgReel(id) {
+  if (!appState.session) return showToast('Admin login required', 'error')
+  const r = (packagesManagerState.reels || []).find(x => x.id === id)
+  if (!r || !confirm(`Delete reel instagram.com/${r.ig_kind}/${r.ig_code}/ from the brochure?`)) return
+  try {
+    const { error } = await supabase.from('reels').delete().eq('id', id)
+    if (error) throw error
+    showToast('Reel deleted', 'success')
+    await reloadPkgReels()
+  } catch (err) {
+    console.error(err)
+    showToast('Failed to delete reel: ' + err.message, 'error')
+  }
+}
+window.deletePkgReel = deletePkgReel
+
+async function movePkgReel(id, dir) {
+  if (!appState.session) return showToast('Admin login required', 'error')
+  const all = packagesManagerState.reels || []
+  const r = all.find(x => x.id === id)
+  if (!r) return
+  const group = all.filter(x => (x.package_id ?? null) === (r.package_id ?? null))
+  const i = group.findIndex(x => x.id === id)
+  const j = i + dir
+  if (j < 0 || j >= group.length) return
+  const ids = group.map(x => x.id)
+  ;[ids[i], ids[j]] = [ids[j], ids[i]]
+  try {
+    const { error } = await supabase.rpc('admin_reorder_reels', { p_ids: ids })
+    if (error) throw error
+    await reloadPkgReels()
+  } catch (err) {
+    console.error(err)
+    showToast('Failed to reorder: ' + err.message, 'error')
+  }
+}
+window.movePkgReel = movePkgReel
+
 function renderPackagesManager() {
   const container = document.getElementById('packages-manager-container')
   if (!container) return
@@ -2380,7 +2636,7 @@ function renderPackagesManager() {
     return
   }
 
-  container.innerHTML = pkgAdmNewFormHtml() + packages.map(pkg => {
+  container.innerHTML = pkgAdmNewFormHtml() + pkgAdmReelsSectionHtml() + packages.map(pkg => {
     const addonIds = (pkg.package_add_ons || []).slice().sort((a, b) => a.sort_order - b.sort_order).map(pa => pa.addon_id)
 
     const checklist = addons.map(a => `
@@ -2479,6 +2735,7 @@ function renderPackagesManager() {
   // rendered as a second pass after the card markup above is in the document
   // (same reason the venue form calls renderVfImages() after populating).
   packages.forEach(pkg => renderPkgAdmImages(pkg.id, pkg.images || []))
+  renderPkgAdmReels()
 }
 
 // Persists name/tagline/featured/inclusions + the add-on checklist for one
