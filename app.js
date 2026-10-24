@@ -1489,9 +1489,13 @@ function venueFactsHtml(venue, capacityText) {
   // Price
   const pkgKeys = venuePkgKeys(venue)
   const cheapest = venueCheapestPackage(venue)
+  const factPick = cottagePkgPick(venue)
   if (cheapest) {
     facts.push(fact(rupee, 'Packages from', inr(cheapest.price),
       `${escapeHtml(PACKAGE_TIERS[cheapest.key].name)}${cheapest.cap ? `, up to ${cheapest.cap} guests` : ''}`))
+  } else if (factPick) {
+    facts.push(fact(rupee, 'Your package', inr(factPick.price),
+      `${escapeHtml(factPick.tier.name)} · 1 night + picnic`))
   } else if (venue.base_price) {
     // partner_bnb stays the neutral "Starting price": its base_price is the picnic
     // price for Airbnb partners but the nightly rate for the Countryside cottages.
@@ -1559,7 +1563,18 @@ function renderVenueDetail(venue, addOns = []) {
        </div>`
     : ''
 
-  const ctaBlock = venue.type === 'partner_bnb'
+  // Cottage reached from the package picker = a stay + picnic ENQUIRY: no Airbnb
+  // step, dates/guests/details go straight to "Send a request" (requires_confirmation
+  // venues are query-only — no payment). Calendar + date button start revealed.
+  const cottagePick = cottagePkgPick(venue)
+  const ctaBlock = cottagePick
+    ? `<p class="vd-steps-intro">Request ${escapeHtml(cottagePick.tier.name)} at ${escapeHtml(venue.name)}</p>
+       <div id="avail-calendar-widget" class="avail-calendar-widget"></div>
+       <button class="btn btn--venue-secondary" id="sidebar-book-btn"
+               data-book-venue-id="${venue.id}" disabled>
+         Select a date to book
+       </button>`
+    : venue.type === 'partner_bnb'
     ? `<p class="vd-steps-intro">Two steps to book</p>
        <div id="bnb-step-ui">
          <div class="vd-cta-stack">
@@ -1649,6 +1664,8 @@ function renderVenueDetail(venue, addOns = []) {
               <button type="button" class="vd-desc-more" id="vd-desc-more" hidden aria-controls="vd-description" aria-expanded="false" onclick="toggleVdDescription(this)">Read more</button>
             </div>
             <hr class="vd-divider">` : ''}
+
+            ${cottagePkgBannerHtml(venue)}
 
             ${venuePackagesSectionHtml(venue)}
 
@@ -1814,7 +1831,11 @@ function renderVenueDetail(venue, addOns = []) {
               </div>` : ''}
               ${vdBarChosen ? `<p class="vd-card-pkg">Package: <strong>${escapeHtml(PACKAGE_TIERS[vdBarChosen].name)}</strong></p>` : ''}
               <div id="vd-price-block"${packageFlowActive(venue) ? ' style="display:none"' : ''}>
-              ${venue.base_price ? `
+              ${cottagePick ? `
+              <div class="vd-price-row">
+                <span class="vd-price-amount" id="sidebar-price-amount">₹${cottagePick.price.toLocaleString('en-IN')}</span>
+                <span class="vd-price-label" id="sidebar-price-label">${escapeHtml(cottagePick.tier.name)} · 1 night + picnic · without food</span>
+              </div>` : venue.base_price ? `
               <div class="vd-price-row">
                 <span class="vd-price-amount" id="sidebar-price-amount">${escapeHtml(formatPrice(venue.base_price))}</span>
                 <span class="vd-price-label" id="sidebar-price-label">${venue.type === 'partner_bnb' ? 'starting price · picnic setup only' : stayOnlyActive(venue) ? 'per night · stay only' : 'starting price'}</span>
@@ -1897,7 +1918,14 @@ function renderVenueDetail(venue, addOns = []) {
 
       <!-- Mobile-only sticky booking bar -->
       <div class="vd-mobile-book-bar">
-        ${venue.type === 'partner_bnb'
+        ${cottagePick
+          ? `<div class="vd-mobile-book-price">
+               <span class="vd-mobile-book-amount" id="mobile-bar-date-text">Pick a date ↑</span>
+               <span class="vd-mobile-book-label">${escapeHtml(cottagePick.tier.name)} · ₹${cottagePick.price.toLocaleString('en-IN')}</span>
+             </div>
+             <button class="btn btn--venue-primary" id="mobile-bar-book-btn"
+                     data-book-venue-id="${venue.id}" disabled>Select a date to book</button>`
+          : venue.type === 'partner_bnb'
           ? `<div class="vd-mobile-book-price">
                <span class="vd-mobile-book-amount">${venue.base_price ? escapeHtml(formatPrice(venue.base_price)) : 'Custom'}</span>
                <span class="vd-mobile-book-label">picnic setup · from</span>
@@ -3625,12 +3653,62 @@ function renderPackagesPage() {
   if (grid) grid.addEventListener('click', onPkgVenueGridClick)
 }
 
+// Stay cottages (partner_bnb) sold as "stay + picnic" in the package picker. A
+// cottage has no package rows of its own — its picnic is priced off the linked
+// twin venue (venues.picnic_venue_id, same rule as compute_booking_total's
+// picnic_stay branch), so it is offered iff the twin is a live packages venue
+// that offers this tier. Card price = 1 night + the twin's no-food package price.
+function pkgCottageTwin(cottage) {
+  if (cottage?.type !== 'partner_bnb' || !cottage.picnic_venue_id) return null
+  return (appState.venues || []).find(x => x.id === Number(cottage.picnic_venue_id)) || null
+}
+function pkgCottageOptions(tier) {
+  return (appState.venues || []).filter(v => {
+    const twin = pkgCottageTwin(v)
+    return !!twin && packageFlowActive(twin) && packageOfferedAt(twin.id, tier.key)
+  })
+}
+// Mirrors compute_booking_total's picnic_stay branch for 1 night, no food:
+// stay (getVenuePrice on the cottage) + package (price table on the twin).
+// The server re-prices authoritatively on submit; this is display.
+function pkgCottagePriceParts(cottage, tier, adults = PKG_PAGE_BASE_ADULTS) {
+  const twin = pkgCottageTwin(cottage)
+  if (!twin) return null
+  const picnic = packageTierPriceAt(twin, tier, venueCatalog(twin.id), adults)
+  if (picnic == null) return null
+  const stay = getVenuePrice(cottage, adults)
+  return { stay, picnic, total: stay + picnic }
+}
+function pkgCottagePriceAt(cottage, tier, adults = PKG_PAGE_BASE_ADULTS) {
+  return pkgCottagePriceParts(cottage, tier, adults)?.total ?? null
+}
+// The package a guest carried into a cottage page from the picker (null otherwise).
+function cottagePkgPick(venue) {
+  const p = appState.pendingPackage
+  if (venue?.type !== 'partner_bnb' || !p || p.venueId !== venue.id) return null
+  const tier = PACKAGE_TIERS[p.tierKey]
+  if (!tier) return null
+  const price = pkgCottagePriceAt(venue, tier)
+  return price == null ? null : { tier, price }
+}
+function cottagePkgBannerHtml(venue) {
+  const pick = cottagePkgPick(venue)
+  if (!pick) return ''
+  return `
+            <div class="vd-section vd-pkg-pick">
+              <h2 class="vd-section-title">Your pick: ${escapeHtml(pick.tier.name)}</h2>
+              <p class="vd-description">${escapeHtml(venue.name)} + picnic · 1 night · ₹${pick.price.toLocaleString('en-IN')} (without food, ${PKG_PAGE_BASE_ADULTS} guests). Pick your check-in date and picnic slot — we'll confirm availability before anything is paid.</p>
+            </div>
+            <hr class="vd-divider">`
+}
+
 function renderPkgVenuePicker(venues) {
   const tier = PACKAGE_TIERS[pkgPageState.tierKey]
   if (!tier) return ''
   // Stored pricing: only venues with an active venue_packages row offer this
   // package — the admin panel is where a package gets enabled per venue.
-  const serviceable = venues.filter(v => packageOfferedAt(v.id, tier.key))
+  // Stay cottages whose picnic twin offers it are listed after the picnic venues.
+  const serviceable = [...venues.filter(v => packageOfferedAt(v.id, tier.key)), ...pkgCottageOptions(tier)]
   if (!serviceable.length) {
     return `
       <div class="pkgp-venues" id="pkgp-venues">
@@ -3656,6 +3734,11 @@ function renderPkgVenuePicker(venues) {
   // Same cards as the homepage grid (venueCardHtml) — only the price line
   // differs: it shows THIS tier's firm price at the venue.
   const cards = shown.map(v => {
+    if (v.type === 'partner_bnb') {
+      const cp = pkgCottagePriceAt(v, tier)
+      const cg = v.capacity_max ? Math.min(PKG_PAGE_BASE_ADULTS, v.capacity_max) : PKG_PAGE_BASE_ADULTS
+      return venueCardHtml(v, { priceHtml: `₹${cp.toLocaleString('en-IN')} <span class="venue-card-price-sub">1 night + picnic · ${cg} guest${cg !== 1 ? 's' : ''}</span>` })
+    }
     const row = venuePackageRow(v.id, tier.key)
     const price = packageTierPriceAt(v, tier, venueCatalog(v.id), PKG_PAGE_BASE_ADULTS)
     // Cap the "for up to N" line at the venue's own capacity — a couples-only
@@ -5414,7 +5497,19 @@ function buildIntentSummaryHTML() {
 
   // Price rows — only if there's a price to show
   let priceSection = ''
-  if (lead.advance_amount > 0 && venue) {
+  const cottagePick = cottagePkgPick(venue)
+  const cottageParts = (cottagePick && lead.package_key) ? pkgCottagePriceParts(venue, cottagePick.tier, appState.adults) : null
+  if (cottageParts) {
+    // Cottage + picnic request: stay + package, nothing due now (request-only).
+    priceSection = `
+      <div class="vd-bv-price-table">
+        <div class="vd-bv-price-row"><span>Stay · 1 night</span><span>₹${cottageParts.stay.toLocaleString('en-IN')}</span></div>
+        <div class="vd-bv-price-row vd-bv-price-row--package"><span>${escapeHtml(cottagePick.tier.name)} package</span><span>₹${cottageParts.picnic.toLocaleString('en-IN')}</span></div>
+        <div class="vd-bv-price-divider"></div>
+        <div class="vd-bv-price-row vd-bv-price-row--total"><span>Total</span><span>₹${cottageParts.total.toLocaleString('en-IN')}</span></div>
+        <div class="vd-bv-price-row vd-bv-price-row--remaining"><span>Nothing to pay now — we'll confirm availability first</span><span></span></div>
+      </div>`
+  } else if (lead.advance_amount > 0 && venue) {
     const picnicPrice = getPicnicPrice(venue, appState.adults)
     let rows = ''
     let setupBase = picnicPrice
@@ -5570,6 +5665,14 @@ function handleInlineBookingSubmit(event) {
     showToast('Please select a time slot to continue', 'error')
     return
   }
+  // Cottage + picnic enquiry (reached from the package picker): check-in date
+  // + picnic slot are required — together with a 1-night checkout they make
+  // the server price it as a picnic_stay (booking_price_venue).
+  const cottagePick = cottagePkgPick(venue)
+  if (cottagePick && (!appState.selectedDate || !appState.selectedTimeSlot)) {
+    showToast('Please pick a date and time slot to continue', 'error')
+    return
+  }
   // Guard: BnB must have both check-in and checkout
   if (venue.type === 'self_managed' && (!appState.checkinDate || !appState.checkoutDate)) {
     showToast('Please select your check-in and checkout dates', 'error')
@@ -5640,7 +5743,20 @@ function handleInlineBookingSubmit(event) {
   // Stay-only leads record their channel (web-ig / web-google / web-direct).
   if (stayOnlyActive(venue)) lead.external_booking_ref = stayChannelRef()
   // partner_bnb: picnic setup only, never multiplied by nights.
-  if (venue.type === 'partner_bnb') {
+  if (venue.type === 'partner_bnb' && cottagePick) {
+    // Cottage + picnic enquiry: 1 night from the picked date + the picnic slot
+    // + the package. The server stores it as a picnic_stay and prices it
+    // (stay on the cottage, package on its picnic twin). Request-only venue,
+    // so nothing is charged; advance stays 0 on the client.
+    const checkout = new Date(appState.selectedDate + 'T00:00:00')
+    checkout.setDate(checkout.getDate() + 1)
+    lead.preferred_date = appState.selectedDate
+    lead.checkout_date  = localDateStr(checkout)
+    lead.time_slot      = appState.selectedTimeSlot
+    lead.package_key    = cottagePick.tier.key
+    lead.with_food      = false
+    lead.advance_amount = 0
+  } else if (venue.type === 'partner_bnb') {
     if (appState.checkinDate)  lead.preferred_date = appState.checkinDate
     if (appState.checkoutDate) lead.checkout_date  = appState.checkoutDate
     lead.advance_amount = Math.round((picnicPrice + addonSum) * 0.3)
