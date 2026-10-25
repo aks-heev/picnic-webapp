@@ -21,48 +21,33 @@
       }
     </script>
     <style>
-      html.admin-embed .navbar,
-      html.admin-embed .database-status,
-      html.admin-embed .dashboard-header,
-      html.admin-embed .dashboard-tabs,
+      html.admin-embed .adm-side,
       html.admin-embed #add-booking-tab .tab-header { display: none !important; }
-      html.admin-embed .page.active:not(#home-page) { padding-top: 16px; }
+      html.admin-embed .adm-main { padding-top: 16px !important; }
     </style>
     <!-- Admin is private: keep it out of search engines and AI crawlers. -->
     <meta name="robots" content="noindex, nofollow">
-    <meta name="theme-color" content="#7a6a55">
+    <meta name="theme-color" content="#f7f6f4">
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="admin-modern.css">
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Be+Vietnam+Pro:wght@300;400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Be+Vietnam+Pro:wght@300;400;500;600&display=swap" rel="stylesheet">
 </head>
 <body class="admin-ui">
     <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>
 
-    <!-- Navigation -->
-    <nav class="navbar navbar--solid">
-        <div class="container">
-            <a href="/" class="nav-brand" aria-label="The Picnic Stories — back to site">
-                <img src="/logo3.png" alt="The Picnic Stories logo" class="nav-logo" width="44" height="44">
-                <span class="nav-brand-text">
-                    <h2>The Picnic Stories</h2>
-                    <p class="brand-tagline">Admin</p>
-                </span>
-            </a>
-            <div class="nav-links">
-                <a href="/" class="nav-link">&larr; View site</a>
-            </div>
-        </div>
-    </nav>
-
     <!-- Admin Page -->
-    <section id="admin-page" class="page container active">
+    <section id="admin-page" class="page active">
         <!-- Admin login -->
         <div id="admin-login" class="login-card">
-            <h2>Admin Login</h2>
+            <div class="adm-brand adm-brand--login">
+                <svg class="adm-mark" width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="5" fill="currentColor"/><g fill="#fff" opacity=".92"><rect x="3" y="3" width="6" height="6"/><rect x="15" y="3" width="6" height="6"/><rect x="9" y="9" width="6" height="6"/><rect x="3" y="15" width="6" height="6"/><rect x="15" y="15" width="6" height="6"/></g></svg>
+                <span><span class="adm-brand-name">The Picnic Stories</span><span class="adm-brand-sub">Admin</span></span>
+            </div>
+            <h2>Log in</h2>
             <form id="admin-login-form" novalidate>
                 <div class="form-group">
                     <label for="admin-email" class="form-label">Email</label>
@@ -76,67 +61,92 @@
                 </div>
                 <button type="submit" class="btn btn--primary">Login</button>
             </form>
+            <a href="/" class="adm-login-back">&larr; Back to the site</a>
         </div>
 
-        <!-- Admin dashboard -->
-        <div id="admin-dashboard" class="admin-section hidden">
-            <div class="database-status">
-                <span class="status-indicator connected"></span>
-                <span class="status-text">Database Status: Connected</span>
-            </div>
+        <!-- Admin dashboard: sidebar + canvas. On a phone the sidebar folds into a top bar. -->
+        <div id="admin-dashboard" class="admin-section hidden adm-shell">
+            <aside class="adm-side" aria-label="Admin">
+                <div class="adm-side-top">
+                    <a href="/" class="adm-brand" aria-label="The Picnic Stories — back to site">
+                        <svg class="adm-mark" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="5" fill="currentColor"/><g fill="#fff" opacity=".92"><rect x="3" y="3" width="6" height="6"/><rect x="15" y="3" width="6" height="6"/><rect x="9" y="9" width="6" height="6"/><rect x="3" y="15" width="6" height="6"/><rect x="15" y="15" width="6" height="6"/></g></svg>
+                        <span><span class="adm-brand-name">The Picnic Stories</span><span class="adm-brand-sub">Admin</span></span>
+                    </a>
+                    <button type="button" id="adm-menu-btn" class="adm-menu-btn" aria-controls="adm-side-body" aria-expanded="false" aria-label="Menu">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+                    </button>
+                </div>
+                <div class="adm-side-body" id="adm-side-body">
+                    <div class="adm-side-team">
+                        <span class="adm-side-label" id="adm-team-label">Team</span>
+                        <div class="adm-team-pills adm-seg" role="group" aria-labelledby="adm-team-label">
+                            <button type="button" class="adm-team-pill active" data-team="" onclick="setAdminTeamFilter(null, this)">All</button>
+                            <button type="button" class="adm-team-pill" data-team="gurugram" onclick="setAdminTeamFilter('gurugram', this)">Gurugram</button>
+                            <button type="button" class="adm-team-pill" data-team="jaipur" onclick="setAdminTeamFilter('jaipur', this)">Jaipur</button>
+                        </div>
+                    </div>
+                    <nav class="adm-nav dashboard-tabs" role="tablist" aria-label="Admin sections">
+                        <span class="adm-side-label">Daily</span>
+                        <button class="tab-btn active" data-tab="queries" role="tab" aria-selected="true">Queries <span id="nav-q-count" class="adm-nav-count num" hidden></span></button>
+                        <button class="tab-btn" data-tab="bookings" role="tab" aria-selected="false">Bookings</button>
+                        <button class="tab-btn" data-tab="add-booking" role="tab" aria-selected="false">Add booking</button>
+                        <button class="tab-btn" data-tab="availability" role="tab" aria-selected="false">Availability</button>
+                        <button class="tab-btn" data-tab="staff-ops" role="tab" aria-selected="false">Staff ops</button>
+                        <span class="adm-side-label">Catalogue</span>
+                        <button class="tab-btn" data-tab="venues" role="tab" aria-selected="false">Venues</button>
+                        <button class="tab-btn" data-tab="packages" role="tab" aria-selected="false">Packages</button>
+                        <button class="tab-btn" data-tab="add-ons" role="tab" aria-selected="false">Add-ons</button>
+                        <button class="tab-btn" data-tab="hero-image" role="tab" aria-selected="false">Hero image</button>
+                        <span class="adm-side-label">Settings</span>
+                        <button class="tab-btn" data-tab="teams" role="tab" aria-selected="false">Teams</button>
+                        <button class="tab-btn" data-tab="menu-link" role="tab" aria-selected="false">Menu links</button>
+                        <button class="tab-btn" data-tab="reviews" role="tab" aria-selected="false">Reviews</button>
+                    </nav>
+                    <div class="adm-side-foot">
+                        <a href="/" class="adm-side-link">View site</a>
+                        <button type="button" id="admin-logout" class="adm-side-link">Log out</button>
+                    </div>
+                </div>
+            </aside>
 
-            <div class="dashboard-header">
-                <h2>Admin Dashboard</h2>
-                <button id="admin-logout" class="btn btn--secondary">Logout</button>
-            </div>
-
-            <div class="dashboard-tabs" role="tablist">
-                <button class="tab-btn active" data-tab="queries" role="tab" aria-selected="true">Queries</button>
-                <button class="tab-btn" data-tab="add-booking" role="tab" aria-selected="false">+ Add Booking</button>
-                <button class="tab-btn" data-tab="bookings" role="tab" aria-selected="false">Bookings</button>
-                <button class="tab-btn" data-tab="venues" role="tab" aria-selected="false">Venues</button>
-                <button class="tab-btn" data-tab="availability" role="tab" aria-selected="false">Availability</button>
-                <button class="tab-btn" data-tab="menu-link" role="tab" aria-selected="false">Menu Link Generator</button>
-                <button class="tab-btn" data-tab="add-ons" role="tab" aria-selected="false">Add-ons</button>
-                <button class="tab-btn" data-tab="packages" role="tab" aria-selected="false">Packages</button>
-                <button class="tab-btn" data-tab="hero-image" role="tab" aria-selected="false">Hero Image</button>
-                <button class="tab-btn" data-tab="teams" role="tab" aria-selected="false">Teams</button>
-                <button class="tab-btn" data-tab="staff-ops" role="tab" aria-selected="false">Staff Ops</button>
-                <button class="tab-btn" data-tab="reviews" role="tab" aria-selected="false">Reviews</button>
-            </div>
-
+            <main class="adm-main">
             <!-- Queries Tab -->
             <div id="queries-tab" class="tab-content active" role="tabpanel">
                 <div class="tab-header">
-                    <h3>Customer Queries</h3>
-                    <div class="search-filters">
-                        <input id="leads-search" class="search-input" type="search" placeholder="Search queries..." />
+                    <div>
+                        <h1>Queries</h1>
+                        <p id="q-summary" class="adm-sub"></p>
                     </div>
+                    <button id="export-queries" type="button" class="adm-btn">Export CSV</button>
                 </div>
-                <div class="adm-team-pills" role="group" aria-label="Filter by team">
-                    <button class="adm-team-pill active" data-team="" onclick="setAdminTeamFilter(null, this)">All</button>
-                    <button class="adm-team-pill" data-team="jaipur" onclick="setAdminTeamFilter('jaipur', this)">Jaipur</button>
-                    <button class="adm-team-pill" data-team="gurugram" onclick="setAdminTeamFilter('gurugram', this)">Gurugram</button>
-                </div>
-                <div class="adm-status-filters" role="group" aria-label="Filter by status">
-                    <button class="adm-status-filter-pill active" onclick="setQueryStatusFilter(null, this)">All</button>
-                    <button class="adm-status-filter-pill" onclick="setQueryStatusFilter('new', this)">New</button>
-                    <button class="adm-status-filter-pill" onclick="setQueryStatusFilter('in_talk', this)">In talk</button>
-                    <button class="adm-status-filter-pill" onclick="setQueryStatusFilter('quoted', this)">Quoted</button>
-                    <button class="adm-status-filter-pill" onclick="setQueryStatusFilter('no_reply', this)">No reply</button>
-                    <button class="adm-status-filter-pill" onclick="setQueryStatusFilter('lost', this)">Lost</button>
+                <div class="adm-toolbar">
+                    <label class="adm-search">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                        <span class="adm-sr">Search queries</span>
+                        <input id="leads-search" type="search" placeholder="Name, phone, email or #ID" autocomplete="off" />
+                        <kbd>/</kbd>
+                    </label>
+                    <div class="adm-status-filters adm-seg" role="group" aria-label="Filter by status">
+                        <button type="button" class="adm-status-filter-pill active" data-qs="" onclick="setQueryStatusFilter(null, this)">All</button>
+                        <button type="button" class="adm-status-filter-pill" data-qs="new" onclick="setQueryStatusFilter('new', this)">New</button>
+                        <button type="button" class="adm-status-filter-pill" data-qs="in_talk" onclick="setQueryStatusFilter('in_talk', this)">In talk</button>
+                        <button type="button" class="adm-status-filter-pill" data-qs="quoted" onclick="setQueryStatusFilter('quoted', this)">Quoted</button>
+                        <button type="button" class="adm-status-filter-pill" data-qs="no_reply" onclick="setQueryStatusFilter('no_reply', this)">No reply</button>
+                        <button type="button" class="adm-status-filter-pill" data-qs="lost" onclick="setQueryStatusFilter('lost', this)">Lost</button>
+                    </div>
                 </div>
                 <div id="queries-container" class="data-container">
                     <!-- Queries will be populated here by JavaScript -->
                 </div>
-                <button id="export-queries" class="btn btn--outline">Export Queries (CSV)</button>
             </div>
 
             <!-- Add Booking Tab (manual offline booking entry) -->
             <div id="add-booking-tab" class="tab-content" role="tabpanel" hidden>
                 <div class="tab-header">
-                    <h3>Add a Booking</h3>
-                    <p>Enter a confirmed offline booking — it blocks the public calendar and (for stays) exports to Airbnb, just like a site booking.</p>
+                    <div>
+                        <h1>Add a booking</h1>
+                        <p class="adm-sub">Enter a confirmed offline booking — it blocks the public calendar and (for stays) exports to Airbnb, just like a site booking.</p>
+                    </div>
                 </div>
                 <div id="add-booking-container" class="data-container">
                     <!-- Manual booking form rendered here by JavaScript (renderAddBookingForm) -->
@@ -146,48 +156,63 @@
             <!-- Bookings Tab -->
             <div id="bookings-tab" class="tab-content" role="tabpanel" hidden>
                 <div class="tab-header">
-                    <h3>Confirmed Bookings</h3>
-                    <p>Bookings that have been confirmed with advance payment</p>
+                    <div>
+                        <h1>Bookings</h1>
+                        <p id="bk-summary" class="adm-sub"></p>
+                    </div>
+                    <button type="button" class="adm-btn adm-btn--primary" onclick="document.querySelector('.adm-nav [data-tab=&quot;add-booking&quot;]').click()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                        Add booking
+                    </button>
                 </div>
-                <div class="adm-filter-row">
-                    <div class="adm-filter-group">
-                        <div class="adm-filter-label">Team</div>
-                        <div class="adm-team-pills" role="group" aria-label="Filter by team">
-                            <button class="adm-team-pill active" data-team="" onclick="setAdminTeamFilter(null, this)">All</button>
-                            <button class="adm-team-pill" data-team="jaipur" onclick="setAdminTeamFilter('jaipur', this)">Jaipur</button>
-                            <button class="adm-team-pill" data-team="gurugram" onclick="setAdminTeamFilter('gurugram', this)">Gurugram</button>
-                        </div>
+                <div class="adm-toolbar">
+                    <label class="adm-search">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                        <span class="adm-sr">Search bookings</span>
+                        <input id="bk-search" type="search" placeholder="Name, phone, email, #ID or Airbnb code" autocomplete="off" />
+                        <kbd>/</kbd>
+                    </label>
+                    <div class="adm-date-filters adm-seg bk-pausable" role="group" aria-label="When">
+                        <button type="button" class="adm-date-filter-pill active" data-when="upcoming" onclick="setBookingsDateFilter('upcoming', this)">Upcoming</button>
+                        <button type="button" class="adm-date-filter-pill" data-when="past" onclick="setBookingsDateFilter('past', this)">Past</button>
+                        <button type="button" class="adm-date-filter-pill" data-when="all" onclick="setBookingsDateFilter('all', this)">All</button>
                     </div>
-                    <span class="adm-filter-divider"></span>
-                    <div class="adm-filter-group">
-                        <div class="adm-filter-label">When</div>
-                        <div class="adm-date-filters" role="group" aria-label="Filter by date">
-                            <button class="adm-date-filter-pill active" onclick="setBookingsDateFilter('upcoming', this)">Upcoming</button>
-                            <button class="adm-date-filter-pill" onclick="setBookingsDateFilter('past', this)">Past</button>
-                            <button class="adm-date-filter-pill" onclick="setBookingsDateFilter('all', this)">All</button>
-                        </div>
-                    </div>
-                    <span class="adm-filter-divider"></span>
-                    <div class="adm-filter-group">
-                        <div class="adm-filter-label">Type</div>
-                        <div class="adm-type-filters" role="group" aria-label="Filter by type">
-                            <button class="adm-type-filter-pill active" onclick="setBookingsTypeFilter('all', this)">All types</button>
-                            <button class="adm-type-filter-pill" onclick="setBookingsTypeFilter('stay', this)">🏡 Stay</button>
-                            <button class="adm-type-filter-pill" onclick="setBookingsTypeFilter('picnic', this)">🧺 Picnic</button>
-                        </div>
-                    </div>
-                    <span class="adm-filter-divider"></span>
-                    <div class="adm-filter-group">
-                        <div class="adm-filter-label">Status</div>
-                        <div class="adm-bstatus-filters" role="group" aria-label="Filter by status">
-                            <button class="adm-bstatus-filter-pill active" onclick="setBookingsStatusFilter('all', this)">All</button>
-                            <button class="adm-bstatus-filter-pill" onclick="setBookingsStatusFilter('confirmed', this)">Confirmed</button>
-                            <button class="adm-bstatus-filter-pill" onclick="setBookingsStatusFilter('postponed', this)">Postponed</button>
-                            <button class="adm-bstatus-filter-pill" onclick="setBookingsStatusFilter('closed', this)">Closed</button>
-                            <button class="adm-bstatus-filter-pill" onclick="setBookingsStatusFilter('cancelled', this)">Cancelled</button>
-                        </div>
-                    </div>
+                    <label class="adm-select bk-pausable">
+                        <span>Type</span>
+                        <select id="bk-type" onchange="setBookingsTypeFilter(this.value)">
+                            <option value="all">All</option>
+                            <option value="picnic">Picnic</option>
+                            <option value="stay">Stay</option>
+                            <option value="picnic_stay">Picnic + stay</option>
+                        </select>
+                    </label>
+                    <label class="adm-select bk-pausable">
+                        <span>Status</span>
+                        <select id="bk-status" onchange="setBookingsStatusFilter(this.value)">
+                            <option value="all">All</option>
+                            <option value="confirmed">Confirmed</option>
+                            <option value="postponed">Postponed</option>
+                            <option value="closed">Closed</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
+                    </label>
                 </div>
+                <section class="bk-strip" aria-labelledby="bk-strip-title">
+                    <div class="bk-strip-head">
+                        <h2 id="bk-strip-title">Next 14 days</h2>
+                        <div class="bk-strip-key">
+                            <span><i class="bk-key-dot"></i>Picnic</span>
+                            <span><i class="bk-key-bar"></i>Stay night</span>
+                            <label class="bk-day-pick">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+                                <span class="adm-sr">Any date</span>
+                                <input id="bk-day-input" type="date" />
+                            </label>
+                        </div>
+                    </div>
+                    <div id="bk-days" class="bk-days"></div>
+                </section>
+                <div id="bk-scope" class="bk-scope" hidden></div>
                 <div id="bookings-container" class="data-container">
                     <!-- Bookings will be populated here by JavaScript -->
                 </div>
@@ -196,7 +221,7 @@
             <!-- Venues Tab -->
             <div id="venues-tab" class="tab-content" role="tabpanel" hidden>
                 <div class="tab-header">
-                    <h3>Venue Manager</h3>
+                    <h1>Venue Manager</h1>
                     <p>Add, edit, or deactivate venues without SQL</p>
                     <button id="add-venue-btn" class="btn btn--primary" onclick="openVenueForm()">+ Add Venue</button>
                 </div>
@@ -456,7 +481,7 @@
             <!-- Menu Link Generator Tab -->
             <div id="menu-link-tab" class="tab-content" role="tabpanel" hidden>
                 <div class="tab-header">
-                    <h3>Generate Menu Links</h3>
+                    <h1>Generate Menu Links</h1>
                     <p>Create custom menu links with specific item limits for customers</p>
                 </div>
 
@@ -490,7 +515,7 @@
             <!-- Add-ons Tab -->
             <div id="add-ons-tab" class="tab-content" role="tabpanel" hidden>
                 <div class="tab-header">
-                    <h3>Add-ons</h3>
+                    <h1>Add-ons</h1>
                     <button class="btn btn--primary" onclick="openAddOnForm()">+ New Add-on</button>
                 </div>
                 <div id="addons-manager-container">
@@ -501,7 +526,7 @@
             <!-- Packages Tab -->
             <div id="packages-tab" class="tab-content" role="tabpanel" hidden>
                 <div class="tab-header">
-                    <h3>Packages</h3>
+                    <h1>Packages</h1>
                     <p class="vf-hint">Setting / Moment / Story tiers used in the venue-first packages flow (cafe venues). Price shown per venue is derived live from base price + this tier's add-ons — it is never typed in directly. Food-included reflects each venue's own setting and can't be overridden here.</p>
                 </div>
                 <div id="packages-manager-container">
@@ -512,7 +537,7 @@
             <!-- Hero Image Tab -->
             <div id="hero-image-tab" class="tab-content" role="tabpanel" hidden>
                 <div class="tab-header">
-                    <h3>Hero Image</h3>
+                    <h1>Hero Image</h1>
                 </div>
                 <div class="hero-img-admin-grid">
 
@@ -604,7 +629,7 @@
             <!-- Teams Tab -->
             <div id="teams-tab" class="tab-content" role="tabpanel" hidden>
                 <div class="tab-header">
-                    <h3>Team Details</h3>
+                    <h1>Team Details</h1>
                     <p>Edit phone, WhatsApp, email, and address per city team. Changes are live immediately — no redeploy needed.</p>
                 </div>
                 <div id="teams-manager-container">
@@ -615,7 +640,7 @@
             <!-- Staff Ops: owner-side half of the token-gated /staff tool -->
             <div id="staff-ops-tab" class="tab-content" role="tabpanel" hidden>
                 <div class="tab-header">
-                    <h3>Today</h3>
+                    <h1>Today</h1>
                     <button type="button" class="btn btn--secondary" onclick="loadStaffOps()">Refresh</button>
                 </div>
                 <div id="stt-today"></div>
@@ -643,7 +668,7 @@
             <!-- Guest reviews collected in person on /staff (rvw module in app.js) -->
             <div id="reviews-tab" class="tab-content" role="tabpanel" hidden>
                 <div class="tab-header">
-                    <h3>Guest reviews</h3>
+                    <h1>Guest reviews</h1>
                     <button type="button" class="btn btn--secondary" onclick="loadReviewsAdmin()">Refresh</button>
                 </div>
                 <p id="rvw-summary" class="rvw-summary"></p>
@@ -666,6 +691,7 @@
                 <div id="rvw-list"></div>
             </div>
 
+            </main>
         </div>
     </section>
 

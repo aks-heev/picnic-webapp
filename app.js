@@ -138,6 +138,12 @@ let adminTeamFilter = null   // null = all | 'jaipur' | 'gurugram'
 let adminBookingsDateFilter = 'upcoming'   // 'upcoming' | 'past' | 'all' — Bookings tab only
 let adminBookingsTypeFilter = 'all'        // 'all' | 'stay' | 'picnic' — Bookings tab only
 let adminBookingsStatusFilter = 'all'      // 'all' | 'confirmed' | 'closed' | 'cancelled' — Bookings tab only
+// 2026-10-25 admin redesign. A search term searches EVERY booking (When/Type/Status pause, Team
+// still applies); a picked day ('YYYY-MM-DD') replaces the When bucket. Expanded rows survive re-renders.
+let adminBookingsSearch = ''
+let adminBookingsDay = ''
+let adminQueriesSearch = ''
+const admOpenRows = new Set()   // 'b:<id>' | 'q:<id>'
 
 // Helper: format a Date object as a local YYYY-MM-DD string (avoids UTC offset shift from toISOString)
 function localDateStr(d) {
@@ -7804,22 +7810,503 @@ function bookingWhatsAppHref(booking) {
   return `https://wa.me/91${digits}?text=${encodeURIComponent(buildBookingWhatsAppMessage(booking))}`
 }
 
+// ── Admin list rows (2026-10-25 redesign) ─────────────────────
+// Queries and Bookings render as one-line rows; clicking a row opens the full detail (contact,
+// package, add-ons, postponement strip, close summary, and every action the old cards had).
+// Search, the picked day and the open rows are client-side state over loadedBookings/loadedQueries.
+const ADM_DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const ADM_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec']
+const ADM_STATUS = { confirmed: 'Confirmed', postponed: 'Postponed', closed: 'Closed', cancelled: 'Cancelled' }
+const ADM_CHEVRON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>'
+const ADM_WA_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>'
+
+function admD(s) { return new Date(String(s).slice(0, 10) + 'T00:00:00') }
+function admDay(s) { if (!s) return ''; const d = admD(s); return `${ADM_DOW[d.getDay()]} ${d.getDate()} ${ADM_MON[d.getMonth()]}` }
+function admShort(s) { if (!s) return ''; const d = admD(s); return `${d.getDate()} ${ADM_MON[d.getMonth()]}` }
+function admMoney(n) { return '₹' + Number(n || 0).toLocaleString('en-IN') }
+function admAddDays(s, n) { const d = admD(s); d.setDate(d.getDate() + n); return localDateStr(d) }
+function admDayLabel(k, today) {
+  if (!k) return 'No date'
+  if (k === today) return 'Today · ' + admDay(k)
+  if (k === admAddDays(today, 1)) return 'Tomorrow · ' + admDay(k)
+  if (k === admAddDays(today, -1)) return 'Yesterday · ' + admDay(k)
+  const y = admD(k).getFullYear()
+  return admDay(k) + (y !== admD(today).getFullYear() ? ' ' + y : '')
+}
+
+// booking_kind is the truth. The checkout_date shape is only a fallback for rows created before
+// the column existed — a picnic at a stay property carries a checkout_date with no stay sold.
+function admKind(b) { return b.booking_kind || (b.checkout_date ? 'stay' : 'picnic') }
+function admKindText(b) { return { picnic: 'Picnic', stay: 'Stay', picnic_stay: 'Picnic + stay' }[admKind(b)] || 'Picnic' }
+function admHasNights(b) { return admKind(b) !== 'picnic' && !!b.checkout_date }
+
+// The dates a booking occupies. A postponed booking keeps its ORIGINAL dates (from its open
+// booking_postponements row) so it still shows up when that day is picked — at the end.
+function admRange(b) {
+  let start = String(b.preferred_date || '').slice(0, 10)
+  let endRaw = b.checkout_date
+  if (b.booking_status === 'Postponed') {
+    const row = ppOpenRow(b)
+    if (row && row.original_date) { start = String(row.original_date).slice(0, 10); endRaw = row.original_checkout_date || b.checkout_date }
+  }
+  const end = admHasNights(b) && endRaw ? String(endRaw).slice(0, 10) : start
+  return { start, end }
+}
+// A picked day matches a picnic on that date, and a stay when the day falls anywhere from
+// check-in to check-out, both days included (cleaning/handover happens on check-out day).
+function admCoversDay(b, day) { const r = admRange(b); return !!r.start && r.start <= day && day <= r.end }
+
+function admTeamId() { return adminTeamFilter ? (appState.teams.find(t => t.city === adminTeamFilter)?.id ?? null) : null }
+function admInTeam(b, teamId) { return teamId === null || b.venues?.team_id === teamId }
+
+// Name, email, #ID, Airbnb/channel ref, package or venue; phone by any 4+ digits, ignoring
+// +91, spaces and dashes (a WhatsApp number arrives in every format).
+function admMatches(b, raw) {
+  const q = String(raw || '').trim().toLowerCase()
+  if (!q) return true
+  const idq = q.replace(/^#/, '')
+  if (/^\d+$/.test(idq) && String(b.id) === idq) return true
+  const hay = [b.full_name, b.email_address, b.external_booking_ref, b.package_name, b.venues?.name, b.venue_address]
+    .filter(Boolean).join(' \u0000 ').toLowerCase()
+  if (hay.includes(q)) return true
+  // A pasted full number carries +91 / a leading 0; the stored number may or may not. Compare
+  // the last 10 digits of a long query.
+  let digits = q.replace(/\D/g, '')
+  if (digits.length > 10) digits = digits.slice(-10)
+  const phone = String(b.mobile_number || '').replace(/\D/g, '')
+  if (digits.length >= 4 && (phone.includes(digits) || (phone.length > 10 && phone.slice(-10).includes(digits)))) return true
+  return false
+}
+
+const ADM_SLOT_START = { morning: '09:00', afternoon: '13:00', evening: '17:00' }
+function admSlotStart(b) {
+  if (b.slot_start_time) return String(b.slot_start_time).slice(0, 5)
+  return ADM_SLOT_START[b.time_slot] || '12:00'
+}
+function admSlotText(b) {
+  const s = CAFE_SLOTS.find(x => x.key === b.time_slot)
+  return { name: s ? s.label : (b.time_slot || ''), time: slotTimeLabel(b) || (s ? s.time : '') }
+}
+// Order within one day, the way the day runs: check-outs, in-house stays, picnics by start
+// time, then check-ins (a picnic + stay checks in at its setup time).
+function admOpsKey(b, day) {
+  if (!admHasNights(b)) return admSlotStart(b)
+  const r = admRange(b)
+  if (day === r.end) return '00:00'
+  if (day === r.start) return admKind(b) === 'picnic_stay' ? admSlotStart(b) : '14:00'
+  return '00:30'
+}
+function admFollowUp(b) { const row = ppOpenRow(b); return row && row.follow_up_by ? String(row.follow_up_by).slice(0, 10) : '' }
+
+function admToggleRow(key) {
+  const open = !admOpenRows.has(key)
+  if (open) admOpenRows.add(key); else admOpenRows.delete(key)
+  document.querySelectorAll(`[data-row="${key}"]`).forEach(item => {
+    item.classList.toggle('is-open', open)
+    item.querySelector('.adm-row-main')?.setAttribute('aria-expanded', String(open))
+    const det = item.querySelector('.adm-detail')
+    if (det) det.hidden = !open
+  })
+}
+window.admToggleRow = admToggleRow
+
+function admKvHtml(pairs) {
+  const items = pairs.filter(([, v]) => v !== '' && v != null)
+  if (!items.length) return ''
+  return `<dl class="adm-kv">${items.map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>`
+}
+function admAddonsText(b) {
+  return (b.booking_add_ons || []).map(a =>
+    `${escapeHtml(a.name || 'Add-on')} <span class="adm-muted">+₹${Number(a.price_at_booking || 0).toLocaleString('en-IN')}${a.requires_confirmation ? ' · on request' : ''}</span>`
+  ).join('<br>')
+}
+function admBoardText(b) {
+  if (!b.board || !(b.board.type || b.board.message)) return ''
+  const type = b.board.type ? b.board.type.charAt(0).toUpperCase() + b.board.type.slice(1) + ' board' : 'Board'
+  return escapeHtml(type) + (b.board.message ? ` — “${escapeHtml(b.board.message)}”` : '')
+}
+function admDatesText(b) {
+  const r = admRange(b)
+  if (!r.start) return ''
+  const y = admD(r.start).getFullYear()
+  if (!admHasNights(b)) return escapeHtml(`${admDay(r.start)} ${y}`)
+  const n = calcNights(r.start, r.end)
+  return escapeHtml(`${admDay(r.start)} → ${admDay(r.end)} ${y} · ${n} night${n !== 1 ? 's' : ''}`)
+}
+function admSlotDetail(b) {
+  if (!b.time_slot) return ''
+  const s = admSlotText(b)
+  return escapeHtml([s.name, s.time].filter(Boolean).join(' · '))
+}
+function admVenueDetail(b) {
+  if (b.venues) return `${escapeHtml(b.venues.name)}${b.venues.area ? ` <span class="adm-muted">· ${escapeHtml(b.venues.area)} · ${escapeHtml(formatVenueType(b.venues.type))}</span>` : ''}`
+  return b.venue_address ? escapeHtml(b.venue_address) : ''
+}
+function admRefDetail(b) {
+  if (!b.external_booking_ref) return ''
+  return isAirbnbRef(b.external_booking_ref)
+    ? `Airbnb <code>${escapeHtml(b.external_booking_ref)}</code>`
+    : `<code>${escapeHtml(b.external_booking_ref)}</code>`
+}
+function admGroupHtml(label, sub, rowsHtml, extraClass) {
+  return `
+  <section class="adm-group${extraClass || ''}">
+    <header class="adm-group-head"><h3>${escapeHtml(label)}</h3><span>${escapeHtml(sub)}</span></header>
+    ${rowsHtml}
+  </section>`
+}
+// The unit is hidden in the desktop column (its header says Guests) and shown when the row
+// folds to two lines.
+function admGuestsHtml(b) {
+  const n = b.guest_count
+  if (n == null) return '—'
+  return `${escapeHtml(String(n))}<span class="adm-unit"> guest${Number(n) !== 1 ? 's' : ''}</span>`
+}
+function admPlural(n, word) { return `${n} ${word}${n !== 1 ? 's' : ''}` }
+
+// ── Bookings ──
+const ADM_BK_THEAD = `
+  <div class="adm-thead" aria-hidden="true">
+    <span class="adm-thead-main"><span>When</span><span>Guest</span><span>Venue</span><span class="adm-cell--num">Guests</span><span>Status</span><span class="adm-cell--money">Paid</span><span></span></span>
+    <span class="adm-row-actions"></span>
+  </div>`
+
+function admBookingRowHtml(b, ctx) {
+  const mod = bookingStatusMod(b)
+  const key = 'b:' + b.id
+  const open = admOpenRows.has(key)
+  const r = admRange(b)
+  const slot = admSlotText(b)
+  let whenTop, whenSub, whenInk = false
+  if (mod === 'postponed') {
+    whenTop = 'No new date'; whenSub = r.start ? 'Was ' + admShort(r.start) : ''
+  } else if (admHasNights(b)) {
+    whenTop = `${admShort(r.start)} → ${admShort(r.end)}`
+    whenSub = admPlural(calcNights(r.start, r.end), 'night')
+    if (ctx.day) {
+      whenInk = true
+      if (ctx.day === r.end) whenSub = 'Checks out'
+      else if (ctx.day === r.start) whenSub = admKind(b) === 'picnic_stay' && slot.time ? `Checks in · picnic ${slot.time.split(' – ')[0]}` : 'Checks in'
+      else whenSub = 'In house'
+    }
+  } else if (ctx.showDate) {
+    whenTop = admDay(r.start) || '—'; whenSub = [slot.name, slot.time].filter(Boolean).join(' · ')
+  } else {
+    whenTop = slot.time || slot.name || admDay(r.start) || '—'; whenSub = slot.time ? slot.name : ''
+  }
+  const venueName = b.venues?.name || b.venue_address || '—'
+  const venueSub = [admKindText(b), b.venues?.area].filter(Boolean).join(' · ')
+  const adv = Number(b.advance_amount || 0)
+  const tot = Number(b.total_amount || 0)
+  let moneyTop = `${admMoney(adv)} paid`
+  let moneySub = tot ? `of ${admMoney(tot)}` : ''
+  if (mod === 'closed') { moneyTop = admMoney(tot || adv); moneySub = 'closed' }
+  if (mod === 'postponed') { const row = ppOpenRow(b); moneyTop = `${admMoney(row ? row.credit_amount : adv)} credit` }
+  if (mod === 'cancelled') moneyTop = `${admMoney(adv)} advance`
+  const wa = bookingWhatsAppHref(b)
+  return `
+  <div class="adm-item adm-item--${mod}${open ? ' is-open' : ''}" data-row="${key}" data-id="${escapeHtml(String(b.id))}">
+    <div class="adm-row">
+      <button type="button" class="adm-row-main" aria-expanded="${open}" onclick="admToggleRow('${key}')">
+        <span class="adm-cell adm-cell--when"><span class="adm-c1 num">${escapeHtml(whenTop)}</span><span class="adm-c2${whenInk ? ' adm-c2--ink' : ''}">${escapeHtml(whenSub)}</span></span>
+        <span class="adm-cell adm-cell--guest"><span class="adm-c1 adm-c1--name">${escapeHtml(b.full_name || '—')}</span><span class="adm-c2 num">#${escapeHtml(String(b.id))}${b.mobile_number ? ' · ' + escapeHtml(b.mobile_number) : ''}</span></span>
+        <span class="adm-cell adm-cell--venue"><span class="adm-c1">${escapeHtml(venueName)}</span><span class="adm-c2">${escapeHtml(venueSub)}</span></span>
+        <span class="adm-cell adm-cell--num adm-cell--guests num">${admGuestsHtml(b)}</span>
+        <span class="adm-cell adm-cell--status"><span class="adm-pill adm-pill--${mod}">${ADM_STATUS[mod]}</span></span>
+        <span class="adm-cell adm-cell--money"><span class="adm-c1 num">${escapeHtml(moneyTop)}</span><span class="adm-c2 num">${escapeHtml(moneySub)}</span></span>
+        <span class="adm-chev" aria-hidden="true">${ADM_CHEVRON}</span>
+      </button>
+      <span class="adm-row-actions">${wa ? `<a class="adm-icon-btn adm-icon-btn--wa" href="${wa}" target="_blank" rel="noopener noreferrer" title="Message on WhatsApp" aria-label="WhatsApp ${escapeHtml(b.full_name || '')}">${ADM_WA_ICON}</a>` : ''}</span>
+    </div>
+    <div class="adm-detail"${open ? '' : ' hidden'}>${admBookingDetailHtml(b, mod)}</div>
+  </div>`
+}
+
+function admBookingDetailHtml(b, mod) {
+  const isCancelled = mod === 'cancelled'
+  const isPostponed = mod === 'postponed'
+  const isClosed = mod === 'closed'
+  const bCost = bclCostsOf(b)
+  const closeLabel = isPostponed ? 'Cancel booking' : bCost ? 'Edit close' : 'Close booking'
+  const wa = bookingWhatsAppHref(b)
+  const resched = isPostponed ? 0 : ppReschedulesUsed(b)
+  const created = b.created_at ? new Date(b.created_at) : null
+  const ordersHtml = b.orders?.length
+    ? `<div class="adm-orders-section">
+        <span class="adm-orders-label">Previous orders</span>
+        <div class="adm-orders-list">
+          ${b.orders.map(o => `
+            <div class="adm-order-row">
+              <span class="adm-order-id">#${escapeHtml(o.id)}</span>
+              <span class="adm-order-items">${(o.selected_items || []).map(i => `${escapeHtml(i.name)} ×${escapeHtml(i.quantity)}`).join(', ')}</span>
+            </div>`).join('')}
+        </div>
+      </div>`
+    : ''
+  return `
+    <div class="adm-actions">
+      <button type="button" class="adm-btn" onclick="abkStartEdit(${b.id})">Edit</button>
+      ${wa ? `<a class="adm-btn" href="${wa}" target="_blank" rel="noopener noreferrer">${ADM_WA_ICON} WhatsApp</a>` : ''}
+      ${ppHeaderButtons(b, isPostponed, isCancelled, isClosed)}
+      <button type="button" class="bcl-open-btn${bCost ? ' bcl-open-btn--done' : ''}" data-booking-id="${escapeHtml(b.id)}" onclick="bclOpen(${b.id})" title="${escapeHtml(closeLabel)}">${escapeHtml(closeLabel)}</button>
+    </div>
+    ${ppStripHtml(b)}
+    ${admKvHtml([
+      ['Phone', b.mobile_number ? `<a href="tel:${escapeHtml(b.mobile_number)}">${escapeHtml(b.mobile_number)}</a>` : ''],
+      ['Email', b.email_address ? `<a href="mailto:${escapeHtml(b.email_address)}">${escapeHtml(b.email_address)}</a>` : ''],
+      [admHasNights(b) ? 'Stay' : 'Date', admDatesText(b)],
+      ['Time slot', admSlotDetail(b)],
+      ['Venue', admVenueDetail(b)],
+      ['Package', b.package_name ? escapeHtml(b.package_name) : ''],
+      ['Occasion', b.occasion ? escapeHtml(b.occasion) : ''],
+      ['Board', admBoardText(b)],
+      ['Add-ons', admAddonsText(b)],
+      ['Reference', admRefDetail(b)],
+      ['Payment', paymentBadgeHtml(b)],
+      ['Booked', created ? `<span title="${escapeHtml(created.toLocaleString())}">${escapeHtml(formatTimeAgo(created))}</span>` : ''],
+      ['Rescheduled', resched ? `Moved to this date after a postponement${resched > 1 ? ' (' + resched + ' times)' : ''}` : ''],
+    ])}
+    ${b.special_requirements ? `<blockquote class="adm-requirements">${escapeHtml(b.special_requirements)}</blockquote>` : ''}
+    ${ordersHtml}
+    ${bclSummaryHtml(b, bCost)}`
+}
+
+function admRenderBookingsSummary(rows, today) {
+  const el = document.getElementById('bk-summary')
+  if (!el) return
+  const end = admAddDays(today, 6)
+  const week = rows.filter(b => bookingStatusMod(b) === 'confirmed' && (() => { const r = admRange(b); return r.start && r.start <= end && r.end >= today })()).length
+  const post = rows.filter(b => bookingStatusMod(b) === 'postponed')
+  const overdue = post.filter(b => { const fu = admFollowUp(b); return fu && fu < today })
+  let html = `${admPlural(week, 'booking')} in the next 7 days · ${post.length} postponed`
+  if (overdue.length) {
+    html += ` · <span class="adm-overdue">${overdue.length === 1
+      ? escapeHtml(String(overdue[0].full_name || 'A guest').split(' ')[0]) + '’s follow-up is overdue'
+      : overdue.length + ' follow-ups overdue'}</span>`
+  }
+  el.innerHTML = html
+}
+
+// "Next 14 days": the date filter and a glance at load. A dot per picnic (incl. a picnic + stay's
+// setup day), a bar under every night a stay is in house.
+function admRenderDayStrip(rows, today) {
+  const el = document.getElementById('bk-days')
+  if (!el) return
+  const live = rows.filter(b => { const m = bookingStatusMod(b); return m === 'confirmed' || m === 'closed' })
+  let html = ''
+  for (let i = 0; i < 14; i++) {
+    const d = admAddDays(today, i)
+    const picnics = live.filter(b => admKind(b) !== 'stay' && admRange(b).start === d).length
+    const nights = live.filter(b => { if (!admHasNights(b)) return false; const r = admRange(b); return r.start <= d && d < r.end }).length
+    const sel = adminBookingsDay === d
+    const dt = admD(d)
+    const label = `${admDay(d)}: ${admPlural(picnics, 'picnic')}, ${admPlural(nights, 'stay night')}`
+    html += `
+      <button type="button" class="bk-day${sel ? ' is-on' : ''}${i === 0 ? ' is-today' : ''}" aria-pressed="${sel}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}" onclick="setBookingsDay('${d}')">
+        <span class="bk-day-dow">${i === 0 ? 'Today' : ADM_DOW[dt.getDay()]}</span>
+        <span class="bk-day-num num">${dt.getDate()}</span>
+        <span class="bk-day-dots">${'<i></i>'.repeat(Math.min(picnics, 4))}</span>
+        <span class="bk-day-bar${nights > 1 ? ' bk-day-bar--2' : nights ? ' bk-day-bar--1' : ''}"></span>
+      </button>`
+  }
+  el.innerHTML = html
+  const input = document.getElementById('bk-day-input')
+  if (input && input.value !== adminBookingsDay) input.value = adminBookingsDay
+}
+
+function admSyncBookingControls(mode) {
+  document.querySelectorAll('.adm-date-filter-pill').forEach(p =>
+    p.classList.toggle('active', mode === 'bucket' && p.dataset.when === adminBookingsDateFilter))
+  const t = document.getElementById('bk-type'); if (t && t.value !== adminBookingsTypeFilter) t.value = adminBookingsTypeFilter
+  const s = document.getElementById('bk-status'); if (s && s.value !== adminBookingsStatusFilter) s.value = adminBookingsStatusFilter
+  const q = document.getElementById('bk-search')
+  if (q && document.activeElement !== q && q.value !== adminBookingsSearch) q.value = adminBookingsSearch
+}
+
+function admRenderScope(mode, q, n, hiddenByTeam) {
+  const el = document.getElementById('bk-scope')
+  if (!el) return
+  if (mode === 'bucket') { el.hidden = true; el.innerHTML = ''; return }
+  el.hidden = false
+  const text = mode === 'search'
+    ? `${n} ${n === 1 ? 'match' : 'matches'} for “${q}”`
+    : `${admDay(adminBookingsDay)} ${admD(adminBookingsDay).getFullYear()}`
+  const sub = mode === 'search'
+    ? 'Searching all bookings — When, Type and Status are paused' + (hiddenByTeam ? ` · ${hiddenByTeam} more in the other team` : '')
+    : 'Picnics that day, plus every stay whose check-in to check-out includes it. Postponed bookings at the end.'
+  el.innerHTML = `<strong>${escapeHtml(text)}</strong><span>${escapeHtml(sub)}</span><button type="button" class="adm-btn adm-btn--sm" onclick="clearBookingsScope()">Clear</button>`
+}
+
+function setBookingsDay(d) {
+  adminBookingsDay = d === adminBookingsDay ? '' : (d || '')
+  adminBookingsSearch = ''
+  renderBookings(loadedBookings)
+}
+function pickBookingsDay(d) {
+  adminBookingsDay = d || ''
+  adminBookingsSearch = ''
+  renderBookings(loadedBookings)
+}
+function clearBookingsScope() {
+  adminBookingsDay = ''
+  adminBookingsSearch = ''
+  const i = document.getElementById('bk-search')
+  if (i) i.value = ''
+  renderBookings(loadedBookings)
+}
+window.setBookingsDay = setBookingsDay
+window.pickBookingsDay = pickBookingsDay
+window.clearBookingsScope = clearBookingsScope
+
+// ── Queries ──
+const ADM_Q_THEAD = `
+  <div class="adm-thead" aria-hidden="true">
+    <span class="adm-thead-main"><span>Received</span><span>Guest</span><span>Asked for</span><span class="adm-cell--num">Guests</span><span class="adm-cell--money">Estimate</span><span></span></span>
+    <span class="adm-row-actions">Status</span>
+  </div>`
+
+function admLeadSource(q) {
+  if (q.external_booking_ref) return isAirbnbRef(q.external_booking_ref) ? 'Airbnb' : String(q.external_booking_ref)
+  return q.entry_source === 'admin' ? 'Added in admin' : 'Website'
+}
+
+function admQueryRowHtml(query) {
+  const key = 'q:' + query.id
+  const open = admOpenRows.has(key)
+  const st = normalizedQueryStatus(query)
+  const r = admRange(query)
+  const slot = admSlotText(query)
+  const asked = admHasNights(query)
+    ? `${admShort(r.start)} → ${admShort(r.end)} · ${admKindText(query).toLowerCase()}`
+    : [admDay(r.start), slot.name].filter(Boolean).join(' · ')
+  const venueName = query.venues?.name || query.venue_address || '—'
+  const total = Number(query.total_amount || 0)
+  const adv = Number(query.advance_amount || 0)
+  const created = new Date(query.created_at)
+  const stale = st === 'new' && (Date.now() - created) >= 24 * 3600e3
+  const wa = queryWhatsAppHref(query)
+  return `
+  <div class="adm-item adm-item--q adm-item--q-${st}${open ? ' is-open' : ''}" data-row="${key}" data-id="${escapeHtml(String(query.id))}">
+    <div class="adm-row">
+      <button type="button" class="adm-row-main" aria-expanded="${open}" onclick="admToggleRow('${key}')">
+        <span class="adm-cell adm-cell--when"><span class="adm-c1${stale ? ' adm-overdue' : ''}" title="${escapeHtml(created.toLocaleString())}">${escapeHtml(formatTimeAgo(created))}</span><span class="adm-c2">${escapeHtml(admLeadSource(query))}</span></span>
+        <span class="adm-cell adm-cell--guest"><span class="adm-c1 adm-c1--name">${escapeHtml(query.full_name || '—')}</span><span class="adm-c2 num">#${escapeHtml(String(query.id))}${query.mobile_number ? ' · ' + escapeHtml(query.mobile_number) : ''}</span></span>
+        <span class="adm-cell adm-cell--venue"><span class="adm-c1">${escapeHtml(venueName)}</span><span class="adm-c2">${escapeHtml(asked)}</span></span>
+        <span class="adm-cell adm-cell--num adm-cell--guests num">${admGuestsHtml(query)}</span>
+        <span class="adm-cell adm-cell--money"><span class="adm-c1 num">${total ? admMoney(total) : '—'}</span><span class="adm-c2 num">${adv ? admMoney(adv) + ' advance' : ''}</span></span>
+        <span class="adm-chev" aria-hidden="true">${ADM_CHEVRON}</span>
+      </button>
+      <span class="adm-row-actions">${queryStatusSelectHtml(query)}${wa ? `<a class="adm-icon-btn adm-icon-btn--wa" href="${wa}" target="_blank" rel="noopener noreferrer" title="Message on WhatsApp" aria-label="WhatsApp ${escapeHtml(query.full_name || '')}">${ADM_WA_ICON}</a>` : ''}</span>
+    </div>
+    <div class="adm-detail"${open ? '' : ' hidden'}>${admQueryDetailHtml(query)}</div>
+  </div>`
+}
+
+function admQueryDetailHtml(query) {
+  const isCombo = query.venues?.type === 'combo'
+  const isHeld = !!query.held_at
+  const heldAgo = isHeld ? formatTimeAgo(new Date(query.held_at)) : ''
+  const holdStatus = query.hold_status || ''
+  const conflictDates = Array.isArray(query.hold_conflict_dates) ? query.hold_conflict_dates : []
+  const checkedAgo = query.hold_checked_at ? formatTimeAgo(new Date(query.hold_checked_at)) : ''
+  const created = new Date(query.created_at)
+  return `
+    ${admKvHtml([
+      ['Phone', query.mobile_number ? `<a href="tel:${escapeHtml(query.mobile_number)}">${escapeHtml(query.mobile_number)}</a>` : ''],
+      ['Email', query.email_address ? `<a href="mailto:${escapeHtml(query.email_address)}">${escapeHtml(query.email_address)}</a>` : ''],
+      [admHasNights(query) ? 'Stay' : 'Date', admDatesText(query)],
+      ['Time slot', admSlotDetail(query)],
+      ['Venue', admVenueDetail(query)],
+      ['Package', query.package_name ? escapeHtml(query.package_name) : ''],
+      ['Occasion', query.occasion ? escapeHtml(query.occasion) : ''],
+      ['Board', admBoardText(query)],
+      ['Add-ons', admAddonsText(query)],
+      ['Reference', admRefDetail(query)],
+      ['Payment', paymentBadgeHtml(query)],
+      ['Received', escapeHtml(created.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }))],
+    ])}
+    ${query.special_requirements ? `<blockquote class="adm-requirements">${escapeHtml(query.special_requirements)}</blockquote>` : ''}
+
+    ${isCombo ? `<div class="adm-floor-note">Whole floor = TerraCottage Ochre + TerraCottage Umber</div>` : ''}
+
+    ${isCombo && isHeld ? `
+      <div class="adm-hold-banner">
+        <span class="adm-hold-dot"></span>
+        On hold · singles blocked ${escapeHtml(heldAgo)} — confirm once Airbnb has synced
+      </div>
+      <div class="adm-hold-recheck-row">
+        <button class="recheck-hold-btn adm-recheck-btn"
+          data-id="${escapeHtml(query.id)}"
+          data-venue-id="${escapeHtml(String(query.venue_id || ''))}"
+          data-preferred-date="${escapeHtml(query.preferred_date || '')}"
+          data-checkout-date="${escapeHtml(query.checkout_date || '')}">↻ Re-check availability</button>
+        <span class="adm-hold-recheck" id="hold-recheck-${escapeHtml(query.id)}">Verify against Airbnb before you confirm.</span>
+      </div>
+      ${holdStatus === 'conflict' ? `
+        <div class="adm-hold-verdict adm-hold-verdict--bad">
+          Auto-check ${escapeHtml(checkedAgo)}: now taken on a single${conflictDates.length ? ` — ${escapeHtml(conflictDates.join(', '))}` : ''}. Release recommended — don't confirm.
+        </div>` : ''}
+      ${holdStatus === 'ripe' ? `
+        <div class="adm-hold-verdict adm-hold-verdict--good">
+          Auto-check ${escapeHtml(checkedAgo)}: clear past the buffer — ready to confirm once the guest pays.
+        </div>` : ''}` : ''}
+
+    <div class="adm-card-footer">
+      <button class="adm-edit-btn" type="button" onclick="openQueryEdit('${escapeHtml(String(query.id))}')">Edit</button>
+      ${isCombo && !isHeld ? `
+        <button class="hold-booking-btn adm-hold-btn"
+          data-id="${escapeHtml(query.id)}"
+          data-venue-id="${escapeHtml(String(query.venue_id || ''))}"
+          data-preferred-date="${escapeHtml(query.preferred_date || '')}"
+          data-checkout-date="${escapeHtml(query.checkout_date || '')}">Hold floor</button>` : ''}
+
+      <label class="adm-advance-group">
+        <span class="adm-advance-label">Advance received ₹</span>
+        <input class="adm-advance-input" type="number" id="advance-${escapeHtml(query.id)}" placeholder="0" min="0" step="1">
+      </label>
+
+      ${(!isCombo || isHeld) ? `
+        <button class="confirm-booking-btn adm-confirm-btn" data-id="${escapeHtml(query.id)}" data-venue-id="${escapeHtml(String(query.venue_id || ''))}" data-venue-type="${escapeHtml(query.venues?.type || '')}" data-preferred-date="${escapeHtml(query.preferred_date || '')}" data-checkout-date="${escapeHtml(query.checkout_date || '')}" data-time-slot="${escapeHtml(query.time_slot || '')}" data-held-at="${escapeHtml(query.held_at || '')}">Confirm booking</button>` : ''}
+
+      ${isCombo && isHeld ? `
+        <button class="release-hold-btn adm-release-btn" data-id="${escapeHtml(query.id)}">Release</button>` : ''}
+    </div>`
+}
+
+function admRenderQueryCounts(rows) {
+  const counts = { '': rows.length }
+  rows.forEach(q => { const s = normalizedQueryStatus(q); counts[s] = (counts[s] || 0) + 1 })
+  document.querySelectorAll('.adm-status-filter-pill[data-qs]').forEach(p => {
+    const s = p.dataset.qs
+    const label = s ? QUERY_STATUS_META[s].label : 'All'
+    p.innerHTML = `${escapeHtml(label)} <span class="adm-pill-count num">${counts[s] || 0}</span>`
+  })
+  const nNew = counts.new || 0
+  const badge = document.getElementById('nav-q-count')
+  if (badge) { badge.textContent = String(nNew); badge.hidden = !nNew }
+  const sum = document.getElementById('q-summary')
+  if (!sum) return
+  const news = rows.filter(q => normalizedQueryStatus(q) === 'new')
+  if (!news.length) { sum.textContent = `${rows.length} open ${rows.length === 1 ? 'query' : 'queries'} · nothing new waiting`; return }
+  const oldest = news.reduce((a, b) => (new Date(a.created_at) < new Date(b.created_at) ? a : b))
+  const when = formatTimeAgo(new Date(oldest.created_at))
+  const late = (Date.now() - new Date(oldest.created_at)) >= 24 * 3600e3
+  sum.innerHTML = `${news.length} new and unanswered · the oldest came in ${late ? `<span class="adm-overdue">${escapeHtml(when)}</span>` : escapeHtml(when)}`
+}
+
 function renderQueries(queries) {
   const container = document.getElementById('queries-container')
   if (!container) return
 
-  // Apply team filter
-  const teamIdForFilter = adminTeamFilter
-    ? (appState.teams.find(t => t.city === adminTeamFilter)?.id ?? null)
-    : null
-  const teamFiltered = teamIdForFilter !== null
-    ? (queries || []).filter(q => q.venues?.team_id === teamIdForFilter)
-    : (queries || [])
+  const teamId = admTeamId()
+  const teamFiltered = (queries || []).filter(q => admInTeam(q, teamId))
+  admRenderQueryCounts(teamFiltered)
 
-  // Status filter (null = all)
-  const filtered = adminQueryStatusFilter
-    ? teamFiltered.filter(q => normalizedQueryStatus(q) === adminQueryStatusFilter)
-    : teamFiltered
+  // A search looks through every query in the team, whatever the status pill says.
+  const term = adminQueriesSearch.trim()
+  const filtered = term
+    ? teamFiltered.filter(q => admMatches(q, term))
+    : (adminQueryStatusFilter ? teamFiltered.filter(q => normalizedQueryStatus(q) === adminQueryStatusFilter) : teamFiltered)
 
   // Sort: status priority (actionable on top, lost at bottom), then newest-first.
   const sorted = [...filtered].sort((a, b) => {
@@ -7830,153 +8317,12 @@ function renderQueries(queries) {
   })
 
   if (!sorted.length) {
-    container.innerHTML = `
-      <div class="adm-empty">
-        <div class="adm-empty-icon">📭</div>
-        <h3>${adminQueryStatusFilter ? 'No queries with this status' : 'No queries yet'}</h3>
-        <p>${adminQueryStatusFilter ? 'Try a different status filter.' : 'New customer queries will appear here.'}</p>
-      </div>`
+    const title = term ? `No query matches “${term}”` : (adminQueryStatusFilter ? 'No queries with this status' : 'No queries yet')
+    const body = term ? 'Searched every query in this team, whatever its status.' : (adminQueryStatusFilter ? 'Try a different status.' : 'New customer queries will appear here.')
+    container.innerHTML = `<div class="adm-list adm-list--queries">${ADM_Q_THEAD}<div class="adm-empty-row"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(body)}</span></div></div>`
     return
   }
-
-  container.innerHTML = sorted.map(query => {
-    // Venue chip
-    let venueChip = ''
-    if (query.venues) {
-      venueChip = `
-        <span class="adm-chip adm-chip--venue">
-          <span class="admin-venue-badge ${venueTypeBadgeClass(query.venues.type)}">${escapeHtml(formatVenueType(query.venues.type))}</span>
-          ${escapeHtml(query.venues.name)}${query.venues.area ? ` · <span class="adm-chip-area">${escapeHtml(query.venues.area)}</span>` : ''}
-        </span>`
-    } else if (query.venue_address) {
-      venueChip = `<span class="adm-chip adm-chip--venue">📍 ${escapeHtml(query.venue_address)}</span>`
-    }
-
-    const airbnbHtml = query.external_booking_ref
-      ? `<div class="adm-airbnb-ref">🔗 Airbnb ref: <code>${escapeHtml(query.external_booking_ref)}</code></div>`
-      : ''
-
-    const reqHtml = query.special_requirements
-      ? `<div class="adm-requirements">"${escapeHtml(query.special_requirements)}"</div>`
-      : ''
-
-    const timeAgo = formatTimeAgo(new Date(query.created_at))
-
-    // Auto-computed pricing (set at submit). Shown as a guide; admin still
-    // types the final advance at confirm. Custom/query-only leads are 0 → hidden.
-    const qTotal = Number(query.total_amount || 0)
-    const qAdv   = Number(query.advance_amount || 0)
-    const priceBadges = qTotal > 0
-      ? `<span class="adm-price-badge adm-price-badge--total" title="Auto-calculated total">Total ₹${qTotal.toLocaleString('en-IN')}</span>
-         <span class="adm-price-badge adm-price-badge--adv" title="Suggested 30% advance">Advance ₹${qAdv.toLocaleString('en-IN')}</span>`
-      : ''
-
-    // Hold state (combo / whole-floor only)
-    const isCombo = query.venues?.type === 'combo'
-    const isHeld  = !!query.held_at
-    const heldAgo = isHeld ? formatTimeAgo(new Date(query.held_at)) : ''
-    // Hourly-cron verdict (set by sync-ical's reconcileHolds)
-    const holdStatus    = query.hold_status || ''
-    const conflictDates = Array.isArray(query.hold_conflict_dates) ? query.hold_conflict_dates : []
-    const checkedAgo    = query.hold_checked_at ? formatTimeAgo(new Date(query.hold_checked_at)) : ''
-
-    return `
-    <div class="adm-card adm-card--query" data-id="${escapeHtml(query.id)}">
-      <div class="adm-card-header">
-        <div class="adm-card-header-name">
-          ${queryStatusSelectHtml(query)}
-          <span class="adm-id" title="Lead ID">#${escapeHtml(query.id)}</span>
-          <span class="adm-name">${escapeHtml(query.full_name)}</span>
-        </div>
-        <div class="adm-card-header-meta">
-          ${paymentBadgeHtml(query)}
-          ${priceBadges}
-          <span class="adm-timestamp" title="${new Date(query.created_at).toLocaleString()}">${timeAgo}</span>
-        </div>
-      </div>
-
-      <div class="adm-chips">
-        ${venueChip}
-        <span class="adm-chip">📅 ${new Date(query.preferred_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-        ${query.time_slot ? (() => { const s = CAFE_SLOTS.find(sl => sl.key === query.time_slot); const t = slotTimeLabel(query); return `<span class="adm-chip">${s ? s.icon : '⏰'} ${s ? s.label + ' · ' + (t || s.time) : escapeHtml(query.time_slot)}</span>` })() : ''}
-        <span class="adm-chip">👥 ${escapeHtml(query.guest_count)} guest${query.guest_count !== 1 ? 's' : ''}</span>
-      </div>
-
-      <div class="adm-contact-row">
-        <a class="adm-contact-link" href="tel:${escapeHtml(query.mobile_number)}">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.5 19.79 19.79 0 01.21 .88 2 2 0 012.18 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.91 7.09a16 16 0 006 6l1.45-1.45a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 13.92z"/></svg>
-          ${escapeHtml(query.mobile_number)}
-        </a>
-        <a class="adm-contact-link" href="mailto:${escapeHtml(query.email_address)}">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-          ${escapeHtml(query.email_address)}
-        </a>
-        ${queryWhatsAppHref(query) ? `
-        <a class="adm-contact-link adm-contact-link--wa" href="${queryWhatsAppHref(query)}" target="_blank" rel="noopener noreferrer">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>
-          Message on WhatsApp
-        </a>` : ''}
-      </div>
-
-      ${reqHtml}
-      ${occasionBoardHtml(query)}
-      ${query.booking_add_ons?.length ? `<div class="adm-booking-addons">${query.booking_add_ons.map(a => `<span class="adm-addon-pill">${escapeHtml(a.name || 'Add-on')} <span class="adm-addon-pill-price">+₹${Number(a.price_at_booking || 0).toLocaleString('en-IN')}</span>${a.requires_confirmation ? ' <span class="adm-addon-pill-tag">on req.</span>' : ''}</span>`).join('')}</div>` : ''}
-      ${airbnbHtml}
-
-      ${isCombo ? `<div class="adm-floor-note">🏠 Whole floor = Terracottage Ochre + Terracottage Umber</div>` : ''}
-
-      ${isCombo && isHeld ? `
-        <div class="adm-hold-banner">
-          <span class="adm-hold-dot"></span>
-          On hold · singles blocked ${escapeHtml(heldAgo)} — confirm once Airbnb has synced
-        </div>
-        <div class="adm-hold-recheck-row">
-          <button class="recheck-hold-btn adm-recheck-btn"
-            data-id="${escapeHtml(query.id)}"
-            data-venue-id="${escapeHtml(String(query.venue_id || ''))}"
-            data-preferred-date="${escapeHtml(query.preferred_date || '')}"
-            data-checkout-date="${escapeHtml(query.checkout_date || '')}">↻ Re-check availability</button>
-          <span class="adm-hold-recheck" id="hold-recheck-${escapeHtml(query.id)}">Verify against Airbnb before you confirm.</span>
-        </div>
-        ${holdStatus === 'conflict' ? `
-          <div class="adm-hold-verdict adm-hold-verdict--bad">
-            ⚠ Auto-check ${escapeHtml(checkedAgo)}: now taken on a single${conflictDates.length ? ` — ${escapeHtml(conflictDates.join(', '))}` : ''}. Release recommended — don't confirm.
-          </div>` : ''}
-        ${holdStatus === 'ripe' ? `
-          <div class="adm-hold-verdict adm-hold-verdict--good">
-            ✓ Auto-check ${escapeHtml(checkedAgo)}: clear past the buffer — ready to confirm once the guest pays.
-          </div>` : ''}` : ''}
-
-      <div class="adm-card-footer">
-        <button class="adm-edit-btn" type="button" onclick="openQueryEdit('${escapeHtml(String(query.id))}')">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          Edit
-        </button>
-        ${isCombo && !isHeld ? `
-          <button class="hold-booking-btn adm-hold-btn"
-            data-id="${escapeHtml(query.id)}"
-            data-venue-id="${escapeHtml(String(query.venue_id || ''))}"
-            data-preferred-date="${escapeHtml(query.preferred_date || '')}"
-            data-checkout-date="${escapeHtml(query.checkout_date || '')}">
-            🔒 Hold Floor
-          </button>` : ''}
-
-        <div class="adm-advance-group">
-          <span class="adm-advance-label">₹ Advance</span>
-          <input class="adm-advance-input" type="number" id="advance-${escapeHtml(query.id)}" placeholder="0" min="0" step="1">
-        </div>
-
-        ${(!isCombo || isHeld) ? `
-          <button class="confirm-booking-btn adm-confirm-btn" data-id="${escapeHtml(query.id)}" data-venue-id="${escapeHtml(String(query.venue_id || ''))}" data-venue-type="${escapeHtml(query.venues?.type || '')}" data-preferred-date="${escapeHtml(query.preferred_date || '')}" data-checkout-date="${escapeHtml(query.checkout_date || '')}" data-time-slot="${escapeHtml(query.time_slot || '')}" data-held-at="${escapeHtml(query.held_at || '')}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            Confirm Booking
-          </button>` : ''}
-
-        ${isCombo && isHeld ? `
-          <button class="release-hold-btn adm-release-btn" data-id="${escapeHtml(query.id)}">Release</button>` : ''}
-      </div>
-    </div>`
-  }).join('')
+  container.innerHTML = `<div class="adm-list adm-list--queries">${ADM_Q_THEAD}${sorted.map(admQueryRowHtml).join('')}</div>`
 }
 
 // Payment-status pill shared by query/booking card headers.
@@ -8019,165 +8365,92 @@ function renderBookings(bookings) {
   const container = document.getElementById('bookings-container')
   if (!container) return
 
-  // Apply team filter
-  const teamIdForFilter = adminTeamFilter
-    ? (appState.teams.find(t => t.city === adminTeamFilter)?.id ?? null)
-    : null
-  let filtered = teamIdForFilter !== null
-    ? (bookings || []).filter(b => b.venues?.team_id === teamIdForFilter)
-    : (bookings || [])
+  const all = bookings || []
+  const teamId = admTeamId()
+  const today = localDateStr(new Date())
+  const q = adminBookingsSearch.trim()
+  // Search beats a picked day; a picked day beats the When bucket.
+  const mode = q ? 'search' : (adminBookingsDay ? 'day' : 'bucket')
+  document.getElementById('bookings-tab')?.classList.toggle('bk-searching', mode === 'search')
 
-  // Date bucket filter — defaults to Upcoming so the tab isn't dominated by
-  // old bookings (created_at order otherwise buries the few that matter
-  // under everything that's already happened).
-  if (adminBookingsDateFilter !== 'all') {
-    filtered = filtered.filter(b => bookingBucket(b) === adminBookingsDateFilter)
+  const inTeam = all.filter(b => admInTeam(b, teamId))
+  admRenderBookingsSummary(inTeam, today)
+  admRenderDayStrip(inTeam, today)
+  admSyncBookingControls(mode)
+
+  let rows = inTeam
+  let hiddenByTeam = 0
+  if (mode === 'search') {
+    // Search ignores When/Type/Status on purpose: a guest you can't find because a pill was
+    // left on is the failure this replaces. Team still applies, with a count of what it hides.
+    hiddenByTeam = all.filter(b => !admInTeam(b, teamId) && admMatches(b, q)).length
+    rows = rows.filter(b => admMatches(b, q))
+  } else {
+    if (mode === 'day') rows = rows.filter(b => admCoversDay(b, adminBookingsDay))
+    else if (adminBookingsDateFilter !== 'all') rows = rows.filter(b => bookingBucket(b) === adminBookingsDateFilter)
+    if (adminBookingsTypeFilter !== 'all') rows = rows.filter(b => admKind(b) === adminBookingsTypeFilter)
+    if (adminBookingsStatusFilter !== 'all') rows = rows.filter(b => bookingStatusMod(b) === adminBookingsStatusFilter)
+  }
+  admRenderScope(mode, q, rows.length, hiddenByTeam)
+
+  // Postponed bookings always go last, in their own group.
+  const isPost = b => bookingStatusMod(b) === 'postponed'
+  const live = rows.filter(b => !isPost(b))
+  const post = rows.filter(isPost)
+  const parts = []
+
+  if (mode === 'search') {
+    live.sort((a, b) => admRange(b).start.localeCompare(admRange(a).start))
+    if (live.length) parts.push(admGroupHtml(admPlural(live.length, 'booking'), 'Newest event first', live.map(b => admBookingRowHtml(b, { showDate: true })).join('')))
+  } else if (mode === 'day') {
+    const d = adminBookingsDay
+    live.sort((a, b) => admOpsKey(a, d).localeCompare(admOpsKey(b, d)))
+    if (live.length) parts.push(admGroupHtml(admDayLabel(d, today), admPlural(live.length, 'booking'), live.map(b => admBookingRowHtml(b, { day: d })).join('')))
+  } else {
+    // Grouped by event day: Upcoming soonest first (a stay already in house sits under today),
+    // Past and All newest first.
+    const upcoming = adminBookingsDateFilter === 'upcoming'
+    const byDay = new Map()
+    live.forEach(b => {
+      const r = admRange(b)
+      const k = upcoming && admHasNights(b) && r.start && r.start < today ? today : r.start
+      if (!byDay.has(k)) byDay.set(k, [])
+      byDay.get(k).push(b)
+    })
+    const keys = [...byDay.keys()].sort()
+    if (!upcoming) keys.reverse()
+    keys.forEach(k => {
+      const items = byDay.get(k).sort((a, b) => admOpsKey(a, k).localeCompare(admOpsKey(b, k)))
+      parts.push(admGroupHtml(admDayLabel(k, today), admPlural(items.length, 'booking'), items.map(b => admBookingRowHtml(b, { day: upcoming ? k : null })).join('')))
+    })
   }
 
-  // Type filter — Stay/Picnic, same checkout_date signal the card badge and
-  // bookingBucket() already use.
-  if (adminBookingsTypeFilter !== 'all') {
-    const wantStay = adminBookingsTypeFilter === 'stay'
-    filtered = filtered.filter(b => !!b.checkout_date === wantStay)
+  if (post.length) {
+    // Soonest follow-up first; one with no follow-up date set goes to the end.
+    post.sort((a, b) => (admFollowUp(a) || '9999').localeCompare(admFollowUp(b) || '9999'))
+    parts.push(admGroupHtml('Postponed — waiting for a new date', admPlural(post.length, 'booking'), post.map(b => admBookingRowHtml(b, {})).join(''), ' adm-group--postponed'))
   }
 
-  // Status filter — Confirmed/Closed/Cancelled, same formula as the card badge.
-  if (adminBookingsStatusFilter !== 'all') {
-    filtered = filtered.filter(b => bookingStatusMod(b) === adminBookingsStatusFilter)
-  }
-
-  // Upcoming: soonest event first. Past/All: unchanged, most-recently-booked first.
-  if (adminBookingsDateFilter === 'upcoming') {
-    filtered = [...filtered].sort((a, b) => (a.preferred_date || '').localeCompare(b.preferred_date || ''))
-  }
-
-  if (!filtered.length) {
-    const emptyCopy = adminBookingsDateFilter === 'upcoming'
-      ? { title: 'No upcoming bookings', body: 'Nothing confirmed with a future date yet — check the Past or All view.' }
-      : adminBookingsDateFilter === 'past'
-      ? { title: 'No past bookings', body: 'Nothing here yet.' }
-      : { title: 'No confirmed bookings yet', body: 'Bookings confirmed with advance payment will appear here.' }
-    container.innerHTML = `
-      <div class="adm-empty">
-        <div class="adm-empty-icon">🗓️</div>
-        <h3>${emptyCopy.title}</h3>
-        <p>${emptyCopy.body}</p>
-      </div>`
+  if (!parts.length) {
+    const filtersOn = adminBookingsTypeFilter !== 'all' || adminBookingsStatusFilter !== 'all'
+    let title, body
+    if (mode === 'search') {
+      title = `No booking matches “${q}”`
+      body = hiddenByTeam
+        ? `${hiddenByTeam} ${hiddenByTeam === 1 ? 'match' : 'matches'} in the other team — set Team to All.`
+        : 'Searched every booking — upcoming, past, closed and cancelled. Try part of the phone number.'
+    } else if (mode === 'day') {
+      title = `Nothing on ${admDay(adminBookingsDay)}`
+      body = 'No picnic, check-in, stay night or check-out that day' + (filtersOn ? ' with the Type and Status filters set.' : '.')
+    } else {
+      title = adminBookingsDateFilter === 'upcoming' ? 'No upcoming bookings' : adminBookingsDateFilter === 'past' ? 'No past bookings' : 'No confirmed bookings yet'
+      body = filtersOn ? 'The Type or Status filter is hiding some — set both to All.' : (adminBookingsDateFilter === 'upcoming' ? 'Nothing confirmed with a future date yet.' : 'Bookings confirmed with advance payment will appear here.')
+    }
+    container.innerHTML = `<div class="adm-list adm-list--bookings">${ADM_BK_THEAD}<div class="adm-empty-row"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(body)}</span></div></div>`
     return
   }
-
-  container.innerHTML = filtered.map(booking => {
-    // Venue chip
-    let venueChip = ''
-    if (booking.venues) {
-      venueChip = `
-        <span class="adm-chip adm-chip--venue">
-          <span class="admin-venue-badge ${venueTypeBadgeClass(booking.venues.type)}">${escapeHtml(formatVenueType(booking.venues.type))}</span>
-          ${escapeHtml(booking.venues.name)}${booking.venues.area ? ` · <span class="adm-chip-area">${escapeHtml(booking.venues.area)}</span>` : ''}
-        </span>`
-    } else if (booking.venue_address) {
-      venueChip = `<span class="adm-chip adm-chip--venue">📍 ${escapeHtml(booking.venue_address)}</span>`
-    }
-
-    const channelHtml = booking.external_booking_ref
-      ? (isAirbnbRef(booking.external_booking_ref)
-          ? `<div class="adm-airbnb-ref">🔗 Airbnb ref: <code>${escapeHtml(booking.external_booking_ref)}</code></div>`
-          : `<div class="adm-airbnb-ref">📌 Channel: <code>${escapeHtml(booking.external_booking_ref)}</code></div>`)
-      : ''
-
-    const reqHtml = booking.special_requirements
-      ? `<div class="adm-requirements">"${escapeHtml(booking.special_requirements)}"</div>`
-      : ''
-
-    const ordersHtml = booking.orders?.length
-      ? `<div class="adm-orders-section">
-          <span class="adm-orders-label">Previous orders</span>
-          <div class="adm-orders-list">
-            ${booking.orders.map(o => `
-              <div class="adm-order-row">
-                <span class="adm-order-id">#${escapeHtml(o.id)}</span>
-                <span class="adm-order-items">${o.selected_items.map(i => `${escapeHtml(i.name)} ×${escapeHtml(i.quantity)}`).join(', ')}</span>
-              </div>`).join('')}
-          </div>
-        </div>`
-      : ''
-
-    const timeAgo = formatTimeAgo(new Date(booking.created_at))
-    const advanceFormatted = Number(booking.advance_amount || 0).toLocaleString('en-IN')
-    const totalFormatted = Number(booking.total_amount || 0).toLocaleString('en-IN')
-
-    // Close state. A booking_costs row existing IS the "has been closed" signal;
-    // there is no closed_at column on bookings by design (see the phase 1 migration).
-    const bCost       = bclCostsOf(booking)
-    const isCancelled = booking.booking_status === 'Cancelled'
-    const isClosed    = !isCancelled && !!bCost
-    const isPostponed = booking.booking_status === 'Postponed'
-    const statusMod   = isCancelled ? 'cancelled' : isPostponed ? 'postponed' : isClosed ? 'closed' : 'confirmed'
-    const statusLabel = isCancelled ? 'Cancelled'  : isPostponed ? 'Postponed' : isClosed ? 'Closed' : 'Confirmed'
-    const closeLabel  = isPostponed ? 'Cancel booking' : bCost ? 'Edit close' : 'Close booking'
-
-    return `
-    <div class="adm-card adm-card--booking${isCancelled ? ' adm-card--cancelled' : ''}${isPostponed ? ' adm-card--postponed' : ''}" data-id="${escapeHtml(booking.id)}">
-      <div class="adm-card-header">
-        <div class="adm-card-header-name">
-          <span class="adm-status-dot adm-status-dot--${statusMod}"></span>
-          <span class="adm-id" title="Booking ID">#${escapeHtml(booking.id)}</span>
-          <span class="adm-name">${escapeHtml(booking.full_name)}</span>
-          <span class="adm-price-badge adm-price-badge--total" title="Total booking value">₹${totalFormatted}</span>
-        </div>
-        <div class="adm-card-header-meta">
-          <span class="adm-badge adm-badge--${statusMod}">${statusLabel}</span>
-          ${paymentBadgeHtml(booking)}
-          <span class="adm-amount-badge">₹${advanceFormatted} paid</span>
-          <span class="adm-timestamp" title="${new Date(booking.created_at).toLocaleString()}">${timeAgo}</span>
-          <button type="button" class="adm-edit-btn" title="Edit booking" aria-label="Edit booking" onclick="abkStartEdit(${booking.id})" style="background:none;border:none;cursor:pointer;color:#c4607a;padding:2px 4px;display:inline-flex;align-items:center;">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-          </button>
-          ${bookingWhatsAppHref(booking) ? `
-          <a class="adm-wa-btn" href="${bookingWhatsAppHref(booking)}" target="_blank" rel="noopener noreferrer" title="Message on WhatsApp" aria-label="Message on WhatsApp">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>
-          </a>` : ''}
-          ${ppHeaderButtons(booking, isPostponed, isCancelled, isClosed)}
-          <button type="button" class="bcl-open-btn${bCost ? ' bcl-open-btn--done' : ''}" data-booking-id="${escapeHtml(booking.id)}" onclick="bclOpen(${booking.id})" title="${escapeHtml(closeLabel)}">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-            ${escapeHtml(closeLabel)}
-          </button>
-        </div>
-      </div>
-
-      <div class="adm-chips">
-        <span class="adm-chip">${abkKindLabel(booking)}</span>
-        ${venueChip}
-        ${booking.checkout_date
-          ? (() => { const n = calcNights(booking.preferred_date, booking.checkout_date); return `<span class="adm-chip">📅 ${new Date(booking.preferred_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} → ${new Date(booking.checkout_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} · ${n} night${n !== 1 ? 's' : ''}</span>` })()
-          : `<span class="adm-chip">📅 ${new Date(booking.preferred_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>`}
-        ${booking.time_slot ? (() => { const s = CAFE_SLOTS.find(sl => sl.key === booking.time_slot); const t = slotTimeLabel(booking); return `<span class="adm-chip">${s ? s.icon : '⏰'} ${s ? s.label + ' · ' + (t || s.time) : escapeHtml(booking.time_slot)}</span>` })() : ''}
-        <span class="adm-chip">👥 ${escapeHtml(booking.guest_count)} guest${booking.guest_count !== 1 ? 's' : ''}</span>
-        ${ppReschedChip(booking)}
-      </div>
-
-      <div class="adm-contact-row">
-        <a class="adm-contact-link" href="tel:${escapeHtml(booking.mobile_number)}">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.5 19.79 19.79 0 01.21 .88 2 2 0 012.18 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.91 7.09a16 16 0 006 6l1.45-1.45a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 13.92z"/></svg>
-          ${escapeHtml(booking.mobile_number)}
-        </a>
-        <a class="adm-contact-link" href="mailto:${escapeHtml(booking.email_address)}">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-          ${escapeHtml(booking.email_address)}
-        </a>
-      </div>
-
-      ${reqHtml}
-      ${occasionBoardHtml(booking)}
-      ${booking.booking_add_ons?.length ? `<div class="adm-booking-addons">${booking.booking_add_ons.map(a => `<span class="adm-addon-pill">${escapeHtml(a.name || 'Add-on')} <span class="adm-addon-pill-price">+₹${Number(a.price_at_booking || 0).toLocaleString('en-IN')}</span>${a.requires_confirmation ? ' <span class="adm-addon-pill-tag">on req.</span>' : ''}</span>`).join('')}</div>` : ''}
-      ${channelHtml}
-      ${ordersHtml}
-      ${ppStripHtml(booking)}
-      ${bclSummaryHtml(booking, bCost)}
-    </div>`
-  }).join('')
+  container.innerHTML = `<div class="adm-list adm-list--bookings">${ADM_BK_THEAD}${parts.join('')}</div>`
 }
-
 
 // ================================================================
 // CLOSE BOOKING (bcl)
@@ -9164,7 +9437,7 @@ async function releaseHold(queryId) {
 //    the admin knows BEFORE confirming, instead of finding out at Confirm time.
 async function recheckHold(queryId, venueId, preferredDate, checkoutDate, btn) {
   if (!appState.session) return showToast('Admin login required', 'error')
-  const card     = btn?.closest('.adm-card')
+  const card     = btn?.closest('.adm-item, .adm-card')
   const resultEl = card?.querySelector(`#hold-recheck-${queryId}`)
   const setResult = (cls, html) => {
     if (!resultEl) return
@@ -9899,10 +10172,14 @@ function setAdminTeamFilter(city, btn) {
 
 // Bookings-tab date bucket filter (Upcoming/Past/All). Scoped to its own
 // class so it doesn't collide with the Queries tab's status pills.
+// Choosing a bucket also drops a picked day and any search (the pill's active state is
+// re-derived in admSyncBookingControls from data-when).
 function setBookingsDateFilter(view, btn) {
   adminBookingsDateFilter = view || 'all'
-  document.querySelectorAll('.adm-date-filter-pill').forEach(p => p.classList.remove('active'))
-  if (btn) btn.classList.add('active')
+  adminBookingsDay = ''
+  adminBookingsSearch = ''
+  const s = document.getElementById('bk-search')
+  if (s) s.value = ''
   renderBookings(loadedBookings)
 }
 
@@ -13631,8 +13908,35 @@ function initAdminPage() {
   if (venueForm) venueForm.addEventListener('submit', handleVenueFormSubmit)
   const vfpClose = document.getElementById('vfp-close')
   if (vfpClose) vfpClose.addEventListener('click', closeVenueForm)
+  const shell = document.getElementById('admin-dashboard')
   document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => switchTab(btn.dataset.tab))
+    btn.addEventListener('click', () => {
+      switchTab(btn.dataset.tab)
+      shell?.classList.remove('is-nav-open')   // phone: close the menu after picking a section
+      document.getElementById('adm-menu-btn')?.setAttribute('aria-expanded', 'false')
+    })
+  })
+  // Phone: the sidebar folds into a top bar; this button opens it as a sheet.
+  const menuBtn = document.getElementById('adm-menu-btn')
+  if (menuBtn) menuBtn.addEventListener('click', () => {
+    const open = !shell?.classList.contains('is-nav-open')
+    shell?.classList.toggle('is-nav-open', open)
+    menuBtn.setAttribute('aria-expanded', String(open))
+  })
+  // Search boxes. Both re-render from the rows already loaded — no extra queries.
+  const leadsSearch = document.getElementById('leads-search')
+  if (leadsSearch) leadsSearch.addEventListener('input', () => { adminQueriesSearch = leadsSearch.value; renderQueries(loadedQueries) })
+  const bkSearch = document.getElementById('bk-search')
+  if (bkSearch) bkSearch.addEventListener('input', () => { adminBookingsSearch = bkSearch.value; renderBookings(loadedBookings) })
+  const bkDayInput = document.getElementById('bk-day-input')
+  if (bkDayInput) bkDayInput.addEventListener('change', () => pickBookingsDay(bkDayInput.value))
+  // "/" jumps to the search box of the tab on screen (ignored while typing in a field).
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return
+    const t = e.target
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
+    const box = document.querySelector('.tab-content.active .adm-search input')
+    if (box) { e.preventDefault(); box.focus(); box.select() }
   })
   const generateBtn = document.getElementById('generate-menu-link')
   if (generateBtn) {
