@@ -95,7 +95,7 @@
   color: var(--adm-text);
   text-decoration: none;
 }
-.admin-ui .adm-mark { color: var(--adm-accent); flex: none; }
+.admin-ui .adm-mark { display: block; flex: none; border-radius: 50%; object-fit: cover; }   /* the site's own logo (/logo-nav.webp) */
 .admin-ui .adm-brand-name {
   display: block;
   font-family: 'EB Garamond', Georgia, serif;
