@@ -52,6 +52,25 @@
  *     If the column now shows long decimals, fix it with cell number formatting
  *     (Format > Number), NOT by re-rounding here — the precision is the fix.
  *
+ * 2026-10-19 change (timeout fix):
+ *   syncBookings was being killed at Apps Script's 6-minute cap several times a
+ *   day ("Exceeded maximum execution time", 25 failures 2026-09-21 -> 10-19).
+ *   Cause: every run rewrote EVERY cell of EVERY booking in the 90-day window
+ *   with one setValue() call per cell (~114 bookings x ~40 cells = ~4,500
+ *   sheet writes), each forcing a recalc of a 2.3 MB formula-heavy workbook.
+ *   Run time sat just under 6 min and tipped over whenever Sheets was slow.
+ *   A killed run also skipped the newest bookings (order=id.asc), the deletes,
+ *   and the Expenses push.
+ *   Fix:
+ *     - prep() reads each tab ONCE into memory; writeRow() compares and only
+ *       calls setValue() for cells whose value actually changed. A quiet run
+ *       now makes ~0 sheet writes.
+ *     - Add-on Y/blank cells go through the same diff.
+ *     - A script lock stops a manual run overlapping the trigger.
+ *     - A 4.5-min budget: if ever hit, the pass stops cleanly, deletes and the
+ *       Expenses push still run, and a clear "partial" error is thrown so the
+ *       failure email says what happened instead of a bare timeout.
+ *
  * SETUP (see SETUP_google_sheet_sync.md):
  *   1. Extensions > Apps Script, paste this file, Save.
  *   2. Project Settings > Script properties: SUPABASE_SERVICE_KEY = <service_role key>.
@@ -99,7 +118,18 @@ function getCutoffDate() {
   return d.toISOString().slice(0, 10);
 }
 
+const RUN_BUDGET_MS = 4.5 * 60 * 1000;   // Apps Script kills at 6 min; leave room for deletes + expenses
+
+// Trigger entry point. The lock stops a manual run and the 30-min trigger from
+// writing the same rows at once. Apps Script releases it if the run is killed.
 function syncBookings() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) { Logger.log('syncBookings: previous run still active, skipping.'); return; }
+  try { syncBookings_(); } finally { lock.releaseLock(); }
+}
+
+function syncBookings_() {
+  const t0 = Date.now();
   const key = PropertiesService.getScriptProperties().getProperty('SUPABASE_SERVICE_KEY');
   if (!key) throw new Error('Missing SUPABASE_SERVICE_KEY in Script properties.');
   const H = { apikey: key, Authorization: 'Bearer ' + key };
@@ -138,8 +168,11 @@ function syncBookings() {
   const del = { picnic: new Set(), airbnb: new Set() };
 
   let added = 0, updated = 0, moved = 0, removed = 0, skipped = 0, closed = 0;
+  let processed = 0, partial = false;
 
   rows.forEach(b => {
+    if (partial || Date.now() - t0 > RUN_BUDGET_MS) { partial = true; return; }
+    processed++;
     const v = venues[b.venue_id];
     const pRow = picnic.idIndex[b.id];   // existing picnic-tab row (or undefined)
     const aRow = airbnb.idIndex[b.id];   // existing airbnb-tab row (or undefined)
@@ -194,7 +227,7 @@ function syncBookings() {
       const r = target.nextRow++;
       writeRow(target, r, values);
       if (!isStay) applyPicnicAddons(target, r, ad.ids);
-      target.sheet.getRange(r, target.col[BKID_HEADER]).setValue(b.id);
+      setVal(target, r, BKID_HEADER, b.id);
       target.idIndex[b.id] = r;
       added++;
     }
@@ -207,7 +240,8 @@ function syncBookings() {
   Logger.log(
     `Sync ${LOCATION} (from ${cutoff}): +${added} new, ${updated} updated, ` +
     `${moved} moved-tab, ${removed} removed, ${skipped} other-region, ` +
-    `${closed} with costs, ${rows.length} candidates.`);
+    `${closed} with costs, ${rows.length} candidates. ` +
+    `Sheet writes: ${picnic.writes + airbnb.writes} cells, ${Math.round((Date.now() - t0) / 1000)}s.`);
 
   // Mirror the Expenses tab into Supabase for the hosted dashboard. DELIBERATELY
   // LAST and DELIBERATELY WRAPPED: the booking sync above is load-bearing and runs
@@ -219,6 +253,13 @@ function syncBookings() {
     pushExpenses(H);
   } catch (err) {
     Logger.log('Expenses push FAILED (booking sync above was unaffected): ' + err);
+  }
+
+  // Throw AFTER deletes and the expenses push so a slow run still does all the
+  // safe work, but the failure email names the real problem.
+  if (partial) {
+    throw new Error(`syncBookings PARTIAL: hit the ${RUN_BUDGET_MS / 1000}s budget after ` +
+      `${processed} of ${rows.length} bookings. Remaining rows sync on the next run.`);
   }
 }
 
@@ -440,11 +481,10 @@ function buildRowValues(b, v, isStay, ad, cost) {
 // Clear all add-on columns on a picnic row, then stamp 'Y' on the selected ones.
 // The clear step is what makes a REMOVED add-on disappear on an edit.
 function applyPicnicAddons(t, r, addonIds) {
-  ADDON_COLS_UNIQUE.forEach(h => { if (t.col[h]) t.sheet.getRange(r, t.col[h]).setValue(''); });
-  addonIds.forEach(id => {
-    const c = ADDON_COL[id];
-    if (c && t.col[c]) t.sheet.getRange(r, t.col[c]).setValue('Y');
-  });
+  const want = {};
+  ADDON_COLS_UNIQUE.forEach(h => { want[h] = ''; });
+  addonIds.forEach(id => { const c = ADDON_COL[id]; if (c) want[c] = 'Y'; });
+  writeRow(t, r, want);   // diffed: only cells that changed are written
 }
 
 // Delete the given row numbers from a sheet, bottom-up so indices don't shift.
@@ -548,6 +588,11 @@ function prep(sheet) {
   }
   const nameCol = col['Customer Name'] || col['Guest Name'];
   const last = Math.max(sheet.getLastRow(), 1);
+  // One bulk read of the whole tab. writeRow() diffs against this so unchanged
+  // cells are never rewritten — per-cell setValue() on every cell is what used to
+  // push each run past the 6-minute limit.
+  const data = sheet.getRange(1, 1, last, sheet.getLastColumn()).getValues();
+  const tz = sheet.getParent().getSpreadsheetTimeZone();
   const idIndex = {}; let nextRow = 2;
   if (last >= 2) {
     const ids   = sheet.getRange(2, col[BKID_HEADER], last - 1, 1).getValues();
@@ -557,10 +602,35 @@ function prep(sheet) {
       if (names[i][0] !== '') nextRow = i + 3;
     }
   }
-  return { sheet, col, idIndex, nextRow };
+  return { sheet, col, idIndex, nextRow, data, tz, writes: 0 };
 }
-function writeRow(t, r, obj) { Object.keys(obj).forEach(k => { if (t.col[k]) t.sheet.getRange(r, t.col[k]).setValue(obj[k]); }); }
-function setVal(t, r, header, val) { if (t.col[header]) t.sheet.getRange(r, t.col[header]).setValue(val); }
+// Writes only the cells whose value differs from what prep() read. Keys with no
+// matching column are still skipped (see buildRowValues).
+function writeRow(t, r, obj) {
+  Object.keys(obj).forEach(k => {
+    const c = t.col[k];
+    if (!c) return;
+    const row = t.data[r - 1];
+    const cur = row ? row[c - 1] : '';
+    if (cellKey(cur, t.tz) === cellKey(obj[k], t.tz)) return;
+    t.sheet.getRange(r, c).setValue(obj[k]);
+    if (!t.data[r - 1]) t.data[r - 1] = [];
+    t.data[r - 1][c - 1] = obj[k];
+    t.writes++;
+  });
+}
+function setVal(t, r, header, val) { const o = {}; o[header] = val; writeRow(t, r, o); }
+// Normalise a cell for comparison. Sheets hands back Date objects for cells it
+// parsed as dates, while the sync writes 'YYYY-MM-DD' strings; 8900 and '8900' are
+// the same cell. Anything this misjudges as different just costs one extra
+// write, never a skipped one.
+function cellKey(v, tz) {
+  if (v === null || v === undefined) return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    return isNaN(v.getTime()) ? '' : Utilities.formatDate(v, tz, 'yyyy-MM-dd');
+  }
+  return String(v);
+}
 // Only two payment states by design:
 //   "Paid"         — the advance already covers the whole total (fully settled).
 //   "Advance Paid" — a deposit is in, balance still due at the event (everything else).
