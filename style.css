@@ -11434,3 +11434,6 @@ body.vd-scroll-lock { overflow: hidden; }
 .bf-food-upsell-price { flex-shrink: 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
 /* Phone: summary card sits between "Your details" and the pay buttons (bfPlaceSummary) */
 .vd-bv-summary--inline { margin: 8px 0 16px; }
+/* Close booking: staff-logged extra time row (bclCheckExtra) */
+.bcl-extra { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; }
+.bcl-extra .bcl-hint { margin: 0; flex: 1 1 220px; }

@@ -84,7 +84,8 @@ const STEP_LABEL = {
   guests_arrived:   'Guests arrived',
   guests_left:      'Guests left',
   checked_in:       'Guest checked in',
-  checked_out:      'Guest checked out'
+  checked_out:      'Guest checked out',
+  extra_time:       'Extra time'
 }
 
 const ACTION_LABEL = {
@@ -99,7 +100,7 @@ const ACTION_LABEL = {
 // Errors that will never succeed on retry — drop these from the queue instead
 // of spinning forever. Anything else (network, 5xx) stays queued.
 const TERMINAL_ERRORS = new Set(['unknown_step', 'not_today', 'bad_amount', 'out_of_order', 'invalid_token', 'wrong_kind', 'unknown_item',
-                                 'bad_rating', 'too_long'])
+                                 'bad_rating', 'too_long', 'bad_hours'])
 
 const ERROR_TEXT = {
   invalid_token: 'This link is no longer valid.',
@@ -110,7 +111,8 @@ const ERROR_TEXT = {
   wrong_kind:    'That step does not apply to this booking.',
   unknown_item:  'That checklist item changed — reloading.',
   bad_rating:    'Review not saved: rating missing.',
-  too_long:      'Review not saved: text too long.'
+  too_long:      'Review not saved: text too long.',
+  bad_hours:     'Extra time must be 0–4 hours.'
 }
 
 /* -------------------------------------------------------------------- state */
@@ -256,7 +258,14 @@ function mergedLog (ev) {
   const rows = (ev.log || []).map(r => ({ ...r, pending: false }))
   const have = new Set(rows.map(r => r.step))
   for (const q of queue) {
-    if (q.step && q.booking_id === ev.id && !have.has(q.step)) {   // tick jobs carry no step
+    if (!q.step || q.booking_id !== ev.id) continue                  // tick jobs carry no step
+    if (q.step === 'extra_time') {
+      // Set-state step: the latest queued hours win over the server row.
+      const row = { step: q.step, at: q.at, by: null, note: q.note, amount: q.amount, pending: true }
+      const i = rows.findIndex(r => r.step === 'extra_time')
+      if (i >= 0) rows[i] = row; else rows.push(row)
+      have.add(q.step)
+    } else if (!have.has(q.step)) {
       rows.push({ step: q.step, at: q.at, by: null, note: q.note, amount: q.amount, pending: true })
       have.add(q.step)
     }
@@ -469,11 +478,12 @@ function cardHtml (ev) {
 
   const balance = Number(ev.balance_due || 0)
 
-  const timeline = log.map(r => `
+  const timeline = log.filter(r => !(r.step === 'extra_time' && !(Number(r.amount) > 0))).map(r => `
       <li data-pending="${r.pending ? '1' : '0'}">
         <span class="stf-tick">${r.pending ? '○' : '✓'}</span>
         <span class="stf-step-name">${esc(STEP_LABEL[r.step] || r.step)}${
-          r.step === 'payment_received' && Number(r.amount) > 0 ? ' · ' + esc(money(r.amount)) : ''
+          r.step === 'payment_received' && Number(r.amount) > 0 ? ' · ' + esc(money(r.amount))
+          : r.step === 'extra_time' ? ' · ' + esc(hoursText(r.amount)) : ''
         }</span>
         <span class="stf-step-time">${r.pending ? 'syncing…' : esc(clockOf(r.at))}</span>
       </li>`).join('')
@@ -517,8 +527,37 @@ function cardHtml (ev) {
     ${log.length ? `<ul class="stf-timeline">${timeline}</ul>` : ''}
     ${action}
     <div class="stf-chips">${chips}</div>
+    ${extraTimeHtml(ev, log, done)}
     ${reviewRowHtml(ev, done)}
   </article>`
+}
+
+/* Extra time (2026-10-29). Staff REPORT hours here; nothing about money is
+   written — an admin applies it to the bill from Close Booking
+   (admin_apply_staff_extra_time). Picnic cards only, offered once the team has
+   reached the venue (the server enforces both). Hours are set-state, so a
+   replayed queue job is harmless. */
+function hoursText (h) {
+  const n = Number(h || 0)
+  return `${n} hr${n === 1 ? '' : 's'}`
+}
+function extraTimeHtml (ev, log, done) {
+  if (!done.has('reached')) return ''
+  const row = log.find(r => r.step === 'extra_time')
+  const h = row ? Number(row.amount || 0) : 0
+  const sub = row && row.pending ? 'syncing…' : h > 0 ? 'Admin adds it to the bill' : 'Guests stayed longer?'
+  return `
+    <div class="stf-extra" data-on="${h > 0 ? '1' : '0'}">
+      <div class="stf-extra-label">
+        <span class="stf-extra-title">Extra time</span>
+        <span class="stf-extra-sub">${esc(sub)}</span>
+      </div>
+      <div class="stf-extra-ctrl">
+        <button class="stf-extra-btn" type="button" data-act="extra" data-id="${ev.id}" data-h="${h - 1}" ${h <= 0 ? 'disabled' : ''} aria-label="One hour less">−</button>
+        <span class="stf-extra-val">${esc(hoursText(h))}</span>
+        <button class="stf-extra-btn" type="button" data-act="extra" data-id="${ev.id}" data-h="${h + 1}" ${h >= 4 ? 'disabled' : ''} aria-label="One hour more">+</button>
+      </div>
+    </div>`
 }
 
 /* Guest review entry point. Offered once setup is done — guests are usually
@@ -939,6 +978,12 @@ function wireCards () {
   el.main.querySelectorAll('[data-act="tick"]').forEach(box => {
     box.addEventListener('change', () => enqueueTick(Number(box.dataset.id), box.dataset.ref, box.checked))
   })
+  el.main.querySelectorAll('[data-act="extra"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const h = Number(btn.dataset.h)
+      if (Number.isInteger(h) && h >= 0 && h <= 4) enqueueExtra(Number(btn.dataset.id), h)
+    })
+  })
 }
 
 /* ------------------------------------------------------------- payment sheet */
@@ -1099,6 +1144,16 @@ function enqueue (bookingId, step, note, amount) {
   })
   saveQueue()
   render()            // optimistic: the tap shows as done immediately
+  flush()
+}
+
+// Extra time is set-state like a tick: drop older queued values for this
+// booking (except an in-flight head job) so the newest hours always win.
+function enqueueExtra (bookingId, hours) {
+  queue = queue.filter((q, i) => !(q.step === 'extra_time' && q.booking_id === bookingId && !(flushing && i === 0)))
+  queue.push({ booking_id: bookingId, step: 'extra_time', note: null, amount: hours, at: new Date().toISOString(), tries: 0 })
+  saveQueue()
+  render()
   flush()
 }
 

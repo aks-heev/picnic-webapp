@@ -7519,7 +7519,7 @@ async function loadBookings() {
 
     // Batch add-ons fetch
     const { data: allAddons } = bookingIds.length
-      ? await supabase.from('booking_add_ons').select('booking_id, name, price_at_booking, requires_confirmation').in('booking_id', bookingIds)
+      ? await supabase.from('booking_add_ons').select('booking_id, addon_id, name, price_at_booking, requires_confirmation').in('booking_id', bookingIds)
       : { data: [] }
     const addonsByBooking = (allAddons || []).reduce((acc, a) => { ;(acc[a.booking_id] ||= []).push(a); return acc }, {})
 
@@ -9016,6 +9016,13 @@ function bclOpen(id) {
   // Never prefill more than is actually outstanding: once the money is on record
   // the balance field goes empty again by itself.
   const staffPrefill = staffLogged > 0 && owedNow > 0 ? Math.min(staffLogged, owedNow) : 0
+  bcl.staffLogged = staffLogged
+  bcl.prefill     = staffPrefill
+
+  // Extra time staff logged on /staff (hours, never rupees). Applying it to the
+  // bill is a separate, deliberate admin click — see bclApplyExtra.
+  const extraRow   = (booking.booking_event_log || []).find(r => r && r.step === 'extra_time')
+  const extraHours = extraRow ? Number(extraRow.amount || 0) : 0
 
   // The event date drives a warning, not a gate: cancelling is something you do
   // BEFORE the date, so locking the button until the date passes would put the
@@ -9057,6 +9064,11 @@ function bclOpen(id) {
           <span>Net <b id="bcl-live-net">₹0</b></span>
           <span>Margin <b id="bcl-live-margin">—</b></span>
         </div>
+
+        ${extraHours > 0 ? `<div class="bcl-extra" id="bcl-extra">
+          <p class="bcl-hint bcl-hint--staff" id="bcl-extra-text">${escapeHtml((extraRow && extraRow.by_name) || 'Staff')} logged extra time · ${extraHours} hr${extraHours === 1 ? '' : 's'} — checking the bill…</p>
+          <button type="button" class="bcl-fill" id="bcl-extra-btn" hidden onclick="bclApplyExtra()">Add to booking</button>
+        </div>` : ''}
 
         <label class="bcl-field bcl-field--full">
           <span>Booking total (₹)</span>
@@ -9129,8 +9141,87 @@ function bclOpen(id) {
   overlay.addEventListener('click', e => { if (e.target === overlay) bclCloseModal() })
   document.body.appendChild(overlay)
   bclRecalc()
+  if (extraHours > 0) bclCheckExtra(booking, extraHours, (extraRow && extraRow.by_name) || 'Staff')
 }
 window.bclOpen = bclOpen
+
+// ── Staff-logged extra time (2026-10-29) ───────────────────────────────────
+// Compares the hours staff logged with the Extra Hour add-on rows already on
+// the booking. The button calls admin_apply_staff_extra_time, which adds only
+// the difference at the catalogue price and raises total_amount server-side —
+// so the total field moves with it and no "price changed" note is needed.
+async function bclCheckExtra(booking, hours, by) {
+  const txt = document.getElementById('bcl-extra-text')
+  const btn = document.getElementById('bcl-extra-btn')
+  if (!txt || !btn) return
+  const hrs = n => `${n} hr${n === 1 ? '' : 's'}`
+  const { data, error } = await supabase.from('add_ons').select('id, name, price').eq('category', 'extension').eq('is_active', true)
+  if (bcl.id !== booking.id) return
+  if (error || !data || data.length !== 1) {
+    txt.textContent = `${by} logged extra time · ${hrs(hours)}. Couldn’t find the Extra Hour add-on — add it by hand.`
+    return
+  }
+  const addon = data[0]
+  const have  = (booking.booking_add_ons || []).filter(a => Number(a.addon_id) === Number(addon.id)).length
+  const add   = Math.max(hours - have, 0)
+  bcl.extra   = { addon, have, hours, by }
+  if (add > 0) {
+    const amt = add * Number(addon.price)
+    txt.textContent = `${by} logged extra time · ${hrs(hours)}${have ? ` (${hrs(have)} already on the bill)` : ''}. ${addon.name} × ${add} = +${bclMoney(amt)}.`
+    btn.textContent = `Add ${bclMoney(amt)} to the booking`
+    btn.hidden = false
+  } else if (have > hours) {
+    txt.textContent = `${by} now says ${hrs(hours)}, but ${hrs(have)} of ${addon.name} are on the booking. Remove the extra one in Edit booking if staff are right.`
+  } else {
+    txt.textContent = `${by} logged extra time · ${hrs(hours)} — already on the booking.`
+  }
+}
+
+async function bclApplyExtra() {
+  if (!bcl.id || bcl.applyingExtra) return
+  const btn = document.getElementById('bcl-extra-btn')
+  const txt = document.getElementById('bcl-extra-text')
+  bcl.applyingExtra = true
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding…' }
+  try {
+    const { data, error } = await supabase.rpc('admin_apply_staff_extra_time', { p_booking_id: bcl.id })
+    if (error) throw error
+    const added = Number(data.amount_added || 0)
+    const newTotal = Number(data.total_amount)
+    // Keep any manual change the admin already typed into the total field.
+    const input = document.getElementById('bcl-total')
+    const prev  = bclNum('bcl-total')
+    const typedDelta = prev == null || bcl.origTotal == null ? 0 : prev - bcl.origTotal
+    bcl.origTotal = newTotal
+    if (input) input.value = String(newTotal + typedDelta)
+    // Re-prefill the balance from what staff collected, if the admin hasn't touched it.
+    const bal = document.getElementById('bcl-balance')
+    if (bal && bcl.staffLogged > 0 && (bal.value === '' || Number(bal.value) === Number(bcl.prefill))) {
+      const owed = Math.round((newTotal - bcl.received) * 100) / 100
+      bcl.prefill = owed > 0 ? Math.min(bcl.staffLogged, owed) : 0
+      bal.value = bcl.prefill > 0 ? String(bcl.prefill) : ''
+    }
+    const b = (loadedBookings || []).find(x => String(x.id) === String(bcl.id))
+    if (b) {
+      b.total_amount = newTotal
+      const rows = Array.from({ length: Number(data.hours_added || 0) }, () => ({ booking_id: b.id, addon_id: bcl.extra?.addon?.id, name: data.addon_name, price_at_booking: data.unit_price }))
+      b.booking_add_ons = (b.booking_add_ons || []).concat(rows)
+    }
+    if (txt) txt.textContent = added > 0
+      ? `Added ${data.addon_name} × ${data.hours_added} (+${bclMoney(added)}). Total is now ${bclMoney(newTotal)}.`
+      : `Already on the booking — nothing added.`
+    if (btn) btn.hidden = true
+    bclRecalc()
+    loadBookings()
+  } catch (err) {
+    console.error('admin_apply_staff_extra_time failed:', err)
+    showToast(err.message || 'Could not add the extra time', 'error')
+    if (btn) { btn.disabled = false; btn.textContent = 'Add to booking' }
+  } finally {
+    bcl.applyingExtra = false
+  }
+}
+window.bclApplyExtra = bclApplyExtra
 
 function bclCloseModal() {
   document.getElementById('bcl-overlay')?.remove()
@@ -9746,6 +9837,7 @@ const STT_STEP_LABEL = {
   wrapped:          'Wrap-up done',
   guests_arrived:   'Guests arrived',
   guests_left:      'Guests left',
+  extra_time:       'Extra time',
 }
 
 let stt = { loading: false, busyBooking: null }
@@ -9868,7 +9960,9 @@ function sttRenderToday(rows) {
             <span class="stt-tick">✓</span>
             <span>${escapeHtml(STT_STEP_LABEL[r.step] || r.step)}${
               r.step === 'payment_received' && Number(r.amount) > 0
-                ? ' · ' + escapeHtml(sttMoney(r.amount)) : ''
+                ? ' · ' + escapeHtml(sttMoney(r.amount))
+                : r.step === 'extra_time'
+                  ? ` · ${Number(r.amount || 0)} hr${Number(r.amount) === 1 ? '' : 's'} (apply it from Close booking)` : ''
             }</span>
             <span class="stt-when">${escapeHtml(sttClock(r.at))}${
               r.by_name ? ' · ' + escapeHtml(r.by_name) : ''
