@@ -11432,3 +11432,5 @@ body.vd-scroll-lock { overflow: hidden; }
 .bf-food-upsell-title { font-size: 15px; font-weight: 600; }
 .bf-food-upsell-sub { font-size: 13px; color: var(--boho-text-medium); }
 .bf-food-upsell-price { flex-shrink: 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
+/* Phone: summary card sits between "Your details" and the pay buttons (bfPlaceSummary) */
+.vd-bv-summary--inline { margin: 8px 0 16px; }

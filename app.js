@@ -5358,6 +5358,7 @@ async function showBookingForm(venue) {
   }
 
   syncBoardGate()
+  bfPlaceSummary()
 
   // Packages: the locked add-ons are pre-checked — recompute so the total and
   // price breakdown include them on first render.
@@ -5506,6 +5507,26 @@ window.bfSetFood = function(on) {
   const vch = document.getElementById('bv-pkg-voucher'); if (vch) vch.innerHTML = pkgVoucherNoteHtml(venue, key)
   updateBookingSummaryPrice()
 }
+
+// Phone (2026-10-29): guest details first, then the charges, then the pay
+// buttons — the summary card moves inside the form, just above .bf-ctas.
+// Desktop keeps it as the right-hand grid column. Same element either way, so
+// every #bv-* / #bf-advance-* id the price code updates stays unique.
+const BF_PHONE_MQ = window.matchMedia('(max-width: 768px)')
+function bfPlaceSummary() {
+  const summary = document.querySelector('#vd-booking-view .vd-bv-summary')
+  const layout  = document.querySelector('#vd-booking-view .vd-bv-layout')
+  const ctas    = document.querySelector('#vd-booking-view .bf-ctas')
+  if (!summary || !layout || !ctas) return
+  if (BF_PHONE_MQ.matches) {
+    if (summary.nextElementSibling !== ctas) ctas.before(summary)
+    summary.classList.add('vd-bv-summary--inline')
+  } else if (summary.parentElement !== layout) {
+    layout.prepend(summary)
+    summary.classList.remove('vd-bv-summary--inline')
+  }
+}
+BF_PHONE_MQ.addEventListener?.('change', bfPlaceSummary)
 
 // What the guest typed on the booking form — restored by showBookingForm's
 // changeMode 'form' path when they come back to it.
