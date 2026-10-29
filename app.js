@@ -1021,6 +1021,7 @@ async function showVenuePage(venueId, pushState = true) {
   appState.selectedPackage  = null
   appState.withFood         = false
   appState.pkgStepOnlyKey   = null
+  if (appState.guestPkgVenue !== venueId) { appState.guestPkgKey = null; appState.guestPkgVenue = null }
 
   const needsCalendar = true
   if (packageFlowActive(venue) && !packagesLoaded) await loadPackages()
@@ -1422,6 +1423,14 @@ window.choosePkgFromDetails = function(key) {
   }
   const pending = { occasion: appState.bookingOccasion || null, tierKey: key, venueId: venue.id, ...(foodDecided ? { withFood, foodChosen: true } : {}) }
   appState.pendingPackage = pending
+  appState.guestPkgKey = key
+  appState.guestPkgVenue = venue.id
+  if (appState.bookingStep === 'guests') {
+    refreshGuestPkgPicker(venue)
+    if (vdSheetEligible()) { openVdSheet(); return }
+    showToast(`${PACKAGE_TIERS[key].name} selected`, 'success')
+    return
+  }
   try { sessionStorage.setItem('ps_pending_pkg', JSON.stringify(pending)) } catch (err) { /* private mode */ }
   if (vdSheetEligible()) { openVdSheet(); return }
   const widget = document.getElementById('avail-calendar-widget')
@@ -1446,16 +1455,8 @@ window.openVdSheet = function() {
     document.getElementById('avail-calendar-widget')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     return
   }
-  // Package picked on the homepage / brochure, food not decided yet: show its
-  // package sheet first, exactly like tapping a package card here. Its Choose
-  // button records the food choice and comes back to this date sheet.
-  const pend = appState.pendingPackage
-  const curV = appState.lastViewedVenue || appState.currentVenue
-  if (pend && curV && pend.venueId === curV.id && PACKAGE_TIERS[pend.tierKey] && !pend.foodChosen
-      && packageFoodMode(curV.id, pend.tierKey) === 'optional') {
-    openPkgDetails(pend.tierKey)
-    return
-  }
+  // Dates first (2026-10-29): food is no longer asked before the calendar —
+  // it's offered on the booking form as an add-on ("Add food with your package").
   wrap.classList.remove('is-sheet-off')
   wrap.classList.add('is-sheet-open')
   const bd = wrap.querySelector('.vd-sheet-backdrop')
@@ -4534,6 +4535,7 @@ function showGuestSelector(venue) {
         </div>
       </div>
       ${occHtml}
+      ${guestPkgPickerHtml(venue)}
       <div class="vd-inclusion" id="vd-inclusion-line">${inclusionBannerHtml(venue, appState.adults)}</div>
     </div>
   `
@@ -4544,6 +4546,100 @@ function showGuestSelector(venue) {
   if (mobileBtn)  { mobileBtn.disabled  = false; mobileBtn.textContent  = 'Book Now'; mobileBtn.style.display  = '' }
 
   updateGuestPrice(venue)
+}
+
+// ── Guest step: package picker (2026-10-29) ─────────────────────────────────
+// Date → guests + package on one step → booking form (food offered there as an
+// add-on). Prices come from packageTierPriceAt — the same lookup the form and
+// compute_booking_total use — food off; food-only packages price with food by
+// definition. The old tier step (showPackageStep) is now only reached from the
+// intent screen's "Change package" and when no package can be resolved here.
+function guestPkgKeys(venue) {
+  let keys = visiblePackagesFor(appState.bookingOccasion || null).filter(k => packageOfferedAt(venue.id, k))
+  if (!keys.length) keys = PACKAGE_TIER_ORDER.filter(k => !PACKAGE_TIERS[k]?.occasion && packageOfferedAt(venue.id, k))
+  const pend = appState.pendingPackage
+  if (pend && pend.venueId === venue.id && PACKAGE_TIERS[pend.tierKey] && packageOfferedAt(venue.id, pend.tierKey) && !keys.includes(pend.tierKey)) {
+    keys = [pend.tierKey, ...keys]
+  }
+  if (appState.guestPkgVenue === venue.id && appState.guestPkgKey && PACKAGE_TIERS[appState.guestPkgKey]
+      && packageOfferedAt(venue.id, appState.guestPkgKey) && !keys.includes(appState.guestPkgKey)) {
+    keys = [appState.guestPkgKey, ...keys]
+  }
+  return keys
+}
+// Explicit pick → package chosen before the date → suggestion for the occasion
+// → "Most picked" → first. Only an explicit pick is stored, so the suggestion
+// follows the occasion dropdown until the guest taps a row.
+function guestPkgSelected(venue, keys) {
+  const pend = appState.pendingPackage
+  const cands = [
+    appState.guestPkgVenue === venue.id ? appState.guestPkgKey : null,
+    pend && pend.venueId === venue.id ? pend.tierKey : null,
+    defaultTierForOccasion(appState.bookingOccasion),
+    keys.find(k => PACKAGE_TIERS[k]?.featured),
+    keys[0],
+  ]
+  return cands.find(c => c && keys.includes(c)) || null
+}
+function guestPkgPickerHtml(venue) {
+  if (!packageFlowActive(venue)) return ''
+  const keys = guestPkgKeys(venue)
+  if (!keys.length) return ''
+  const sel   = guestPkgSelected(venue, keys)
+  const party = appState.adults + appState.children
+  const date  = appState.selectedDate || appState.checkinDate || null
+  const rows = keys.map(k => {
+    const t       = PACKAGE_TIERS[k]
+    const row     = venuePackageRow(venue.id, k)
+    const price   = packageTierPriceAt(venue, t, null, appState.adults, { withFood: false, date })
+    const overCap = row?.max_guests != null && party > row.max_guests
+    const off     = overCap || price == null
+    const sub = overCap ? `Up to ${row.max_guests} guests`
+      : price == null ? 'Custom quote — message us on WhatsApp'
+      : packageFoodMode(venue.id, k) === 'only' ? [t.tagline, 'food included'].filter(Boolean).join(' · ')
+      : (t.tagline || '')
+    const on = k === sel
+    return `
+          <button type="button" class="vd-gpkg-row${on ? ' is-on' : ''}" role="radio" aria-checked="${on}" ${off ? 'disabled' : ''} onclick="pickGuestPkg('${escapeHtml(k)}')">
+            <span class="vd-gpkg-dot" aria-hidden="true"></span>
+            <span class="vd-gpkg-main">
+              <span class="vd-gpkg-name">${escapeHtml(t.name)}</span>
+              ${sub ? `<span class="vd-gpkg-sub">${escapeHtml(sub)}</span>` : ''}
+            </span>
+            <span class="vd-gpkg-price">${price != null ? `₹${Number(price).toLocaleString('en-IN')}` : '—'}</span>
+          </button>`
+  }).join('')
+  const forLine = `For ${appState.adults} adult${appState.adults !== 1 ? 's' : ''}${appState.children ? ' · children free' : ''}`
+  return `
+      <div class="vd-gpkg" id="vd-gpkg">
+        <div class="vd-gpkg-head">
+          <span class="vd-guest-type">Package</span>
+          <span class="vd-guest-sublabel">${forLine}</span>
+        </div>
+        <div class="vd-gpkg-list" role="radiogroup" aria-label="Choose a package">${rows}
+        </div>
+        ${sel ? `<button type="button" class="vd-gpkg-more" onclick="openPkgDetails('${escapeHtml(sel)}', { afterGuests: true })">What’s in ${escapeHtml(PACKAGE_TIERS[sel].name)}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>` : ''}
+      </div>`
+}
+function refreshGuestPkgPicker(venue) {
+  const el = document.getElementById('vd-gpkg')
+  if (!el || !venue) return
+  const tmp = document.createElement('div')
+  tmp.innerHTML = guestPkgPickerHtml(venue)
+  const fresh = tmp.querySelector('#vd-gpkg')
+  if (fresh) el.replaceWith(fresh)
+  else el.remove()
+}
+window.pickGuestPkg = function(key) {
+  const venue = appState.currentVenue
+  if (!venue || !PACKAGE_TIERS[key]) return
+  appState.guestPkgKey   = key
+  appState.guestPkgVenue = venue.id
+  refreshGuestPkgPicker(venue)
+  document.querySelector('.vd-gpkg-row.is-on')?.focus()
+  track('package_tier_picked_guest_step', { venue_id: venue.id, venue_name: venue.name, tier: key, guests: appState.adults + appState.children })
 }
 
 // Restore the availability calendar (undo showGuestSelector)
@@ -4634,6 +4730,7 @@ function updateGuestCount(type, delta) {
 
   updateGuestPrice(venue)
   if (type === 'adults') vdRefreshPkgPrices(venue)
+  if (appState.bookingStep === 'guests') refreshGuestPkgPicker(venue)
 }
 
 // ----------------------------------------------------------------
@@ -4643,6 +4740,7 @@ function updateGuestCount(type, delta) {
 // ── Packages: occasion setter (called from the guest-step select) ──────────
 function setBookingOccasion(value) {
   appState.bookingOccasion = value || ''
+  if (appState.bookingStep === 'guests') refreshGuestPkgPicker(appState.currentVenue)
 }
 
 // Price a tier at a venue = the STORED venue_packages price (flat through the
@@ -4996,7 +5094,7 @@ async function showBookingForm(venue) {
   const pkgPrice = (pkg && pkgTier) ? packageTierPriceAt(venue, pkgTier, addOns, appState.adults, bookingFoodOpts(venue, pkgTier.key)) : null
   if (pkg && pkgTier && pkgPrice != null) {
     baseTotal = pkgPrice
-    priceRows += `<div class="vd-bv-price-row vd-bv-price-row--package"><span>${escapeHtml(pkgTier.name)} package${pkgFoodSuffix(venue, pkgTier.key)}</span><span>₹${baseTotal.toLocaleString('en-IN')}</span></div>${pkgVoucherNoteHtml(venue, pkgTier.key)}`
+    priceRows += `<div class="vd-bv-price-row vd-bv-price-row--package"><span id="bv-pkg-row-label">${escapeHtml(pkgTier.name)} package${pkgFoodSuffix(venue, pkgTier.key)}</span><span id="bv-pkg-row-amount">₹${baseTotal.toLocaleString('en-IN')}</span></div><div id="bv-pkg-voucher">${pkgVoucherNoteHtml(venue, pkgTier.key)}</div>`
   } else {
     const baseLabel = hasStay
       ? `Stay · ${stayNights} night${stayNights !== 1 ? 's' : ''} × ₹${picnicPrice.toLocaleString('en-IN')}`
@@ -5019,12 +5117,13 @@ async function showBookingForm(venue) {
       <div class="bf-pkg-card">
         <div class="bf-pkg-card-main">
           <p class="bf-pkg-card-label">Your package</p>
-          <p class="bf-pkg-card-name">${escapeHtml(pkgTier.name)}${effectiveWithFood(venue.id, pkgTier.key, appState.withFood) ? ' <span>· with food &amp; drinks</span>' : ''}</p>
-          ${(() => { const n = pkgFoodItemsCount(venue.id, pkgTier.key); return effectiveWithFood(venue.id, pkgTier.key, appState.withFood) && n ? `<p class="bf-pkg-card-sub">Includes ${pkgFoodItemsText(n)} from the café menu, any mix</p>` : '' })()}
+          <p class="bf-pkg-card-name">${escapeHtml(pkgTier.name)} <span id="bf-pkg-food-suffix"${effectiveWithFood(venue.id, pkgTier.key, appState.withFood) ? '' : ' hidden'}>· with food &amp; drinks</span></p>
+          <div id="bf-pkg-food-sub">${bfPkgFoodSubHtml(venue, pkgTier.key)}</div>
         </div>
         <button type="button" class="bf-link" onclick="changePackage()">Change package</button>
       </div>
-      ${effectiveWithFood(venue.id, pkgTier.key, appState.withFood) ? '' : venueMenuNoteHtml(venue, 'Food isn’t included.')}
+      ${bfFoodUpsellHtml(venue, pkgTier.key)}
+      <div id="bf-pkg-menu-note">${effectiveWithFood(venue.id, pkgTier.key, appState.withFood) ? '' : venueMenuNoteHtml(venue, 'Food isn’t included.')}</div>
       ${inclNames.length ? `<details class="bf-pkg-incl">
         <summary>What’s included · ${inclNames.length} items</summary>
         <p>${inclNames.map(escapeHtml).join(', ')}.</p>
@@ -5363,17 +5462,81 @@ function showVenueBodyStep() {
   }
 }
 
-// "Change package" from the booking form — lighter than "Change date & time"
-// (goBackToVenueDetail), which rebuilds the whole venue page from scratch and
-// wipes date/guests/package. This just reveals the venue body and re-opens
-// the tier step; date, slot, guest count, and occasion are all untouched in
-// appState, so the tier cards re-render with the same context.
+// ── Booking form: "Add food with your package" (2026-10-29) ─────────────────
+// Food-optional packages only. The +₹ is the difference between the two stored
+// price rows for this party/date (same packageTierPriceAt lookup the total and
+// compute_booking_total use) — never derived. Hidden when either row is missing.
+function bfPkgFoodSubHtml(venue, key) {
+  if (!effectiveWithFood(venue.id, key, appState.withFood)) return ''
+  const n = pkgFoodItemsCount(venue.id, key)
+  return n ? `<p class="bf-pkg-card-sub">Includes ${pkgFoodItemsText(n)} from the café menu, any mix</p>` : ''
+}
+function bfFoodUpsellHtml(venue, key) {
+  if (packageFoodMode(venue.id, key) !== 'optional') return ''
+  const tier  = PACKAGE_TIERS[key]
+  const date  = appState.selectedDate || appState.checkinDate || null
+  const plain = packageTierPriceAt(venue, tier, null, appState.adults, { withFood: false, date })
+  const food  = packageTierPriceAt(venue, tier, null, appState.adults, { withFood: true, date })
+  if (plain == null || food == null || food <= plain) return ''
+  const n = pkgFoodItemsCount(venue.id, key)
+  return `
+      <label class="bf-food-upsell">
+        <input type="checkbox" id="bf-food-toggle" ${appState.withFood ? 'checked' : ''} onchange="bfSetFood(this.checked)">
+        <span class="bf-food-upsell-body">
+          <span class="bf-food-upsell-title">Add food with your package</span>
+          <span class="bf-food-upsell-sub">${n ? `${pkgFoodItemsText(n)} from the café menu, any mix` : 'Food &amp; drinks from the café menu'}</span>
+        </span>
+        <span class="bf-food-upsell-price">+₹${(food - plain).toLocaleString('en-IN')}</span>
+      </label>`
+}
+window.bfSetFood = function(on) {
+  const venue = appState.currentVenue
+  const key   = appState.selectedPackage?.tierKey
+  if (!venue || !key || !PACKAGE_TIERS[key]) return
+  appState.withFood = !!on
+  track('package_food_toggled', { venue_id: venue.id, venue_name: venue.name, with_food: !!on, guests: appState.adults + appState.children, where: 'booking_form' })
+  const withF = effectiveWithFood(venue.id, key, appState.withFood)
+  const sfx = document.getElementById('bf-pkg-food-suffix'); if (sfx) sfx.hidden = !withF
+  const sub = document.getElementById('bf-pkg-food-sub'); if (sub) sub.innerHTML = bfPkgFoodSubHtml(venue, key)
+  const note = document.getElementById('bf-pkg-menu-note'); if (note) note.innerHTML = withF ? '' : venueMenuNoteHtml(venue, 'Food isn’t included.')
+  const tier = PACKAGE_TIERS[key]
+  const p = packageTierPriceAt(venue, tier, [], appState.adults, bookingFoodOpts(venue, key))
+  const lbl = document.getElementById('bv-pkg-row-label'); if (lbl) lbl.innerHTML = `${escapeHtml(tier.name)} package${pkgFoodSuffix(venue, key)}`
+  const amt = document.getElementById('bv-pkg-row-amount'); if (amt && p != null) amt.textContent = `₹${p.toLocaleString('en-IN')}`
+  const vch = document.getElementById('bv-pkg-voucher'); if (vch) vch.innerHTML = pkgVoucherNoteHtml(venue, key)
+  updateBookingSummaryPrice()
+}
+
+// What the guest typed on the booking form — restored by showBookingForm's
+// changeMode 'form' path when they come back to it.
+function bfSnapshotForm() {
+  const saved = {}
+  const form = document.getElementById('inline-booking-form')
+  ;['full-name','email-address','mobile-number','special-requirements','occasion','occasion-other','board-message']
+    .forEach(f => { const el = document.querySelector(`[name="${f}"]`); if (el) saved[f] = el.value })
+  if (form && form['board-type']) saved['board-type'] = form['board-type'].value
+  saved.addons = [...document.querySelectorAll('.bv-addon-check:checked:not(.pkg-locked-check)')].map(cb => cb.dataset.addonId)
+  return saved
+}
+
+// "Change package" from the booking form → back to the guest step, where the
+// package is picked (2026-10-29). Date, slot, guests and occasion are untouched
+// in appState; what they typed on the form is kept.
 window.changePackage = function() {
   const venue = appState.currentVenue
   if (!venue) return
   appState.pkgStepOnlyKey = null
+  appState.changeMode     = 'form'
+  appState.changeModeData = bfSnapshotForm()
+  if (appState.selectedPackage?.tierKey) { appState.guestPkgKey = appState.selectedPackage.tierKey; appState.guestPkgVenue = venue.id }
   showVenueBodyStep()
-  showPackageStep(venue)
+  showGuestSelector(venue)
+  if (vdSheetEligible()) { openVdSheet(); return }
+  const w = document.getElementById('avail-calendar-widget')
+  if (w) {
+    const navH = document.querySelector('.navbar')?.offsetHeight || 0
+    window.scrollTo({ top: w.getBoundingClientRect().top + window.scrollY - navH - 16, behavior: 'smooth' })
+  }
 }
 
 // Board-paid tiers: show the board field only while the White Board Message
@@ -12809,13 +12972,9 @@ function goBackToVenueDetail(mode) {
     appState.changeModeData = { ...appState.pendingLead }
   } else if (mode === 'form') {
     appState.changeMode = 'form'
-    const saved = {}
-    const form = document.getElementById('inline-booking-form')
-    ;['full-name','email-address','mobile-number','special-requirements','occasion','occasion-other','board-message']
-      .forEach(f => { const el = document.querySelector(`[name="${f}"]`); if (el) saved[f] = el.value })
-    if (form && form['board-type']) saved['board-type'] = form['board-type'].value
-    saved.addons = [...document.querySelectorAll('.bv-addon-check:checked:not(.pkg-locked-check)')].map(cb => cb.dataset.addonId)
-    appState.changeModeData = saved
+    appState.changeModeData = bfSnapshotForm()
+    // Keep the package picked on the guest step through the venue-page rebuild.
+    if (appState.selectedPackage?.tierKey) { appState.guestPkgKey = appState.selectedPackage.tierKey; appState.guestPkgVenue = venue.id }
   }
 
   appState.pendingLead   = null
@@ -14401,39 +14560,25 @@ document.addEventListener('DOMContentLoaded', () => {
             captureLeadOnIntent()
           }
         } else if (packageFlowActive(venue)) {
-          const pending = appState.pendingPackage
-          if (pending?.tierKey && pending.venueId === venue.id && PACKAGE_TIERS[pending.tierKey]) {
-            // Packages-first entry: tier already chosen on /packages. Consume
-            // it via the SAME selectPackageTier() path the venue-first tier
-            // step uses (one code path — docs/PHASE2_PACKAGES_FIRST_PLAN.md),
-            // skipping the tier step. Occasion was pre-filled at venue entry
-            // and stays user-editable; "Change package" on the intent screen
-            // remains the escape hatch.
-            const foodOptional = packageFoodMode(venue.id, pending.tierKey) === 'optional'
-            if (foodOptional && pending.foodChosen) appState.withFood = !!pending.withFood
-            const priced = packageTierPriceAt(venue, PACKAGE_TIERS[pending.tierKey], null, appState.adults, bookingFoodOpts(venue, pending.tierKey)) != null
-            if (foodOptional && !pending.foodChosen && priced) {
-              // Food not decided yet (homepage / brochure entry, e.g. desktop
-              // where the calendar is inline): the same package sheet the
-              // venue-first path uses, priced for this party. Pending is
-              // cleared only when they choose, so closing it loses nothing.
-              openPkgDetails(pending.tierKey, { afterGuests: true })
-              return
-            }
+          // Package is chosen on the guest step itself (2026-10-29) — no tier
+          // step, no food question here; food is offered on the booking form.
+          const keys = guestPkgKeys(venue)
+          const key  = keys.length ? guestPkgSelected(venue, keys) : null
+          if (!key) {
+            showPackageStep(venue) // nothing resolvable here → old tier step (routes to the form if none offered)
+          } else {
+            const pending = appState.pendingPackage
+            if (pending && pending.venueId === venue.id && pending.tierKey === key && pending.foodChosen
+                && packageFoodMode(venue.id, key) === 'optional') appState.withFood = !!pending.withFood
+            // A carried-over food choice with no price row for this party would
+            // block the package — drop it; the form offers food again if priced.
+            if (appState.withFood && packageTierPriceAt(venue, PACKAGE_TIERS[key], null, appState.adults, bookingFoodOpts(venue, key)) == null) appState.withFood = false
             appState.pendingPackage = null
             try { sessionStorage.removeItem('ps_pending_pkg') } catch (err) { /* ignore */ }
-            if (foodOptional && (!pending.foodChosen || !priced)) {
-              // Food not chosen yet (brochure entry), or no price for this
-              // party with that choice (custom quote): show just this package
-              // with the food toggle instead of skipping the step.
-              appState.pkgStepOnlyKey = pending.tierKey
-              showPackageStep(venue)
-            } else {
-              selectPackageTier(pending.tierKey)
-            }
-          } else {
-            // Packages flow: insert the tier step between guests and the form.
-            showPackageStep(venue)
+            appState.pkgStepOnlyKey = null
+            appState.guestPkgKey    = key
+            appState.guestPkgVenue  = venue.id
+            selectPackageTier(key)
           }
         } else {
           showBookingForm(venue)

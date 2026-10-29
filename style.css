@@ -11405,3 +11405,30 @@ body.vd-scroll-lock { overflow: hidden; }
 .vd-card-pkg { margin: 0 0 14px; padding: 9px 12px; background: #fdf6f8; border: 1px solid rgba(196, 96, 122, 0.35); border-radius: 12px; font-family: var(--font-sans); font-size: 14px; color: var(--boho-text-medium); }
 .vd-card-pkg strong { color: var(--boho-accent-rose); font-weight: 600; }
 @media (max-width: 768px) { .vd-card-pkg { display: none; } }
+
+
+/* ── Guest step package picker + booking-form food upsell (2026-10-29) ── */
+.vd-gpkg { padding: 14px 0 4px; border-top: 1px solid rgba(196,96,122,0.08); }
+.vd-gpkg-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.vd-gpkg-list { display: flex; flex-direction: column; gap: 8px; }
+.vd-gpkg-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 12px 14px; text-align: left; background: var(--boho-white, #fff); border: 1px solid var(--boho-border); border-radius: 14px; cursor: pointer; font-family: var(--font-sans); color: var(--boho-text-dark); transition: border-color 0.15s ease, background 0.15s ease; }
+.vd-gpkg-row:hover:not(:disabled) { border-color: rgba(196,96,122,0.45); }
+.vd-gpkg-row:focus-visible { outline: 2px solid var(--boho-accent-pink); outline-offset: 2px; }
+.vd-gpkg-row.is-on { border-color: var(--boho-accent-pink); background: var(--boho-light-pink); }
+.vd-gpkg-row:disabled { cursor: not-allowed; opacity: 0.55; }
+.vd-gpkg-dot { flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--boho-border); background: #fff; }
+.vd-gpkg-row.is-on .vd-gpkg-dot { border-color: var(--boho-accent-pink); box-shadow: inset 0 0 0 3px #fff; background: var(--boho-accent-pink); }
+.vd-gpkg-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.vd-gpkg-name { font-size: 15px; font-weight: 600; }
+.vd-gpkg-sub { font-size: 12px; line-height: 1.35; color: var(--boho-text-medium); }
+.vd-gpkg-price { flex-shrink: 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.vd-gpkg-more { display: inline-flex; align-items: center; gap: 4px; min-height: 40px; margin-top: 4px; padding: 0; border: 0; background: none; cursor: pointer; font-family: var(--font-sans); font-size: 13px; font-weight: 600; color: var(--boho-accent-rose, var(--boho-accent-pink)); }
+.vd-gpkg-more:focus-visible { outline: 2px solid var(--boho-accent-pink); outline-offset: 2px; }
+
+.bf-food-upsell { display: flex; align-items: center; gap: 12px; margin-top: 10px; padding: 14px 16px; background: #fff; border: 1px dashed var(--boho-accent-pink); border-radius: 16px; cursor: pointer; font-family: var(--font-sans); color: var(--boho-text-dark); }
+.bf-food-upsell:has(input:checked) { border-style: solid; background: var(--boho-light-pink); }
+.bf-food-upsell input { flex-shrink: 0; width: 20px; height: 20px; margin: 0; accent-color: var(--boho-accent-pink); }
+.bf-food-upsell-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.bf-food-upsell-title { font-size: 15px; font-weight: 600; }
+.bf-food-upsell-sub { font-size: 13px; color: var(--boho-text-medium); }
+.bf-food-upsell-price { flex-shrink: 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
