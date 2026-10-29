@@ -278,3 +278,10 @@ main { max-width: 760px; margin: 0 auto; padding: 0 16px; }
   .pk-player-book { min-height: 48px; }
   .pk-player-ig { justify-self: auto; align-self: center; margin-top: 8px; min-height: 44px; }
 }
+
+/* Homepage hero search (2026-10-29): the package matching the searched
+   occasion, and packages that can't host the searched party size. */
+.pk-card--suggested { border: 2px solid var(--pk-ochre); }
+.pk-badge--fit { background: var(--pk-ochre); margin-right: 6px; }
+.pk-card--too-small .pk-gallery { opacity: 0.6; }
+.pk-cap-note { margin: 8px 0 0; padding: 8px 12px; border-radius: 10px; background: var(--pk-pill); color: var(--pk-ink, #2b1d14); font-size: 13px; line-height: 1.4; }

@@ -11,8 +11,8 @@
                style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com;
                font-src https://fonts.gstatic.com;
                img-src 'self' data: https:;">
-    <title>Luxury Boho Picnic Setups in Jaipur &amp; Gurugram | The Picnic Stories</title>
-    <meta name="description" content="Book boho-chic luxury picnic experiences in Jaipur &amp; Gurugram — curated decor, ambient lighting and gourmet food for dates, proposals, birthdays and special occasions.">
+    <title>Picnic Setups in Gurugram &amp; Jaipur | The Picnic Stories</title>
+    <meta name="description" content="Private picnic setups in Gurugram, Delhi &amp; Jaipur for proposals, birthdays and date nights — set up before you arrive. From ₹5,900.">
     <meta name="robots" content="index, follow, max-image-preview:large">
     <meta name="theme-color" content="#7a6a55">
     <link rel="canonical" href="https://www.picnicstories.com/">
@@ -42,7 +42,7 @@
     <style id="hero-mobile-pos-style">@media (max-width: 768px) { .hero-bg-img { object-position: 57% 60% !important; } }</style>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Be+Vietnam+Pro:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Be+Vietnam+Pro:wght@300;400;500;600&family=Instrument+Serif:ital@0;1&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <script type="application/ld+json">
     {
@@ -131,128 +131,155 @@
                 </span>
             </a>
             <div class="nav-links">
+                <!-- Homepage section links (redesign 2026-10-29); hidden below 820px. -->
+                <a class="nav-home-link" href="/#occasions">Occasions</a>
+                <a class="nav-home-link" href="/#packages-section">Packages</a>
+                <a class="nav-home-link" href="/#venues-section">Venues</a>
+                <a class="nav-home-link" href="/#stays">Stays</a>
+                <a class="nav-home-link" href="/#faq">FAQ</a>
                 <button class="nav-mybookings-btn" onclick="showMyBookingsPage()">My Booking</button>
             </div>
         </div>
     </nav>
 
     <!-- Home Page -->
-    <div id="home-page" class="page active">
-        <!-- Hero Section — Split Screen -->
-        <section class="hero">
-            <!-- Full-bleed background image -->
-            <!-- Real hero images inline (was an Unsplash placeholder that loadHeroImage()
-                 swapped out after app.js + a DB round-trip, so every visit downloaded both).
-                 site_settings still wins: loadHeroImage() updates <source>/<img> if admin changes them. -->
+    <div id="home-page" class="page active hp">
+        <!-- Homepage redesign (2026-10-29) — mirrors the "Picnic Stories Homepage
+             Redesign" design canvas (desktop + phone artboards). Styles: the hp- block
+             at the end of style.css. Dynamic sections keep their original ids and are
+             still filled by app.js: #packages-home-grid (renderHomePackagesSection),
+             #venues-grid (renderVenueGallery; prerender-venues.mjs injects crawlable
+             cards between its two markers — keep both markers byte-identical),
+             #addons-strip (renderAddonsStrip), #testimonials-container (loadTestimonials),
+             #footer-teams (renderFooterTeams), #hero-bg-img (loadHeroImage). -->
+
+        <!-- ============ HERO ============ -->
+        <section class="hp-hero">
             <picture>
                 <source media="(max-width: 768px)" srcset="https://evmftrogyzoudiccqkya.supabase.co/storage/v1/object/public/site-images/hero/mobile.webp?v=1784913621027">
                 <img
                     id="hero-bg-img"
                     src="https://evmftrogyzoudiccqkya.supabase.co/storage/v1/object/public/site-images/hero/main.webp?v=1784913621027"
-                    alt=""
-                    class="hero-bg-img"
-                    aria-hidden="true"
+                    alt="A couple at a candlelit Picnic Stories setup with a fringed umbrella and string lights"
+                    class="hero-bg-img hp-hero-img"
+                    width="1486" height="1059"
                     fetchpriority="high"
                     decoding="async"
                 />
             </picture>
-            <!-- Gradient overlay: cream on left fades to transparent on right -->
-            <div class="hero-overlay" aria-hidden="true"></div>
+            <div class="hp-hero-scrim" aria-hidden="true"></div>
+            <div class="hp-wrap hp-hero-inner">
+                <div class="hp-hero-copy">
+                    <h1 class="hp-hero-h1">Private picnic setups in Gurugram, Delhi &amp; Jaipur · from ₹5,900</h1>
+                    <p class="hp-hero-title">Pick the occasion.<br><em>We build the evening.</em></p>
+                    <p class="hp-hero-sub">Tent, cushions, flowers, candles and a message board — set up at a partner café or your own spot before you arrive, cleared away after you leave.</p>
+                </div>
 
-            <div class="container hero-container">
-                <div class="hero-text">
-                    <p class="hero-eyebrow">Jaipur &middot; Gurugram</p>
-                    <h1 class="hero-title">Every moment<br>deserves a<br><em>beautiful setting</em></h1>
-                    <p class="hero-description">Boho-chic picnic arrangements with curated decor, ambient lighting, and gourmet food &mdash; across Jaipur and Gurugram's most stunning locations.</p>
-                    <div class="hero-actions">
-                        <button class="btn btn--primary btn--lg" onclick="document.getElementById('venues-section').scrollIntoView({behavior:'smooth'})">Book Now</button>
-                        <!-- Hidden until venues load AND >=1 venue has packages enabled — revealed by loadVenues(). Contact Us removed: the floating WhatsApp button covers it. -->
-                        <a class="btn btn--ghost btn--lg" href="/brochure" id="hero-packages-cta" style="display:none">View Packages</a>
+                <!-- Hero search (2026-10-29): a plain GET to /brochure so it works without JS.
+                     Field names/values are the contract in params.js — occasion values MUST match
+                     OCCASIONS exactly. setupHeroSearch() in app.js only tidies the URL + logs it. -->
+                <form class="hero-search" id="hero-search" method="get" action="/brochure" aria-label="Find a picnic package">
+                    <label class="hero-search-field hero-search-field--occasion">
+                        <span class="hero-search-label">Occasion</span>
+                        <select name="occasion" required>
+                            <option value="" disabled selected>Choose one</option>
+                                <option value="Birthday">Birthday</option>
+                                <option value="Anniversary">Anniversary</option>
+                                <option value="Proposal">Proposal</option>
+                                <option value="Date Night">Date Night</option>
+                                <option value="Bridal Shower">Bridal Shower</option>
+                                <option value="Baby Shower">Baby Shower</option>
+                                <option value="Graduation">Graduation</option>
+                                <option value="Just Because">Just Because</option>
+                        </select>
+                    </label>
+                    <label class="hero-search-field hero-search-field--city">
+                        <span class="hero-search-label">City</span>
+                        <select name="city">
+                            <option value="">All cities</option>
+                            <option value="Gurugram">Gurugram</option>
+                            <option value="Delhi">Delhi</option>
+                            <option value="Jaipur">Jaipur</option>
+                        </select>
+                    </label>
+                    <label class="hero-search-field hero-search-field--date">
+                        <span class="hero-search-label">Date <span class="hero-search-optional">(optional)</span></span>
+                        <input type="date" name="date">
+                    </label>
+                    <label class="hero-search-field hero-search-field--guests">
+                        <span class="hero-search-label">Guests</span>
+                        <select name="guests">
+                                <option value="1">1</option>
+                                <option value="2" selected>2</option>
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                                <option value="5">5</option>
+                                <option value="6">6</option>
+                                <option value="7">7</option>
+                                <option value="8">8</option>
+                                <option value="9">9</option>
+                                <option value="10">10</option>
+                            <option value="15">11–15</option>
+                            <option value="20">16–20</option>
+                            <option value="30">21–30</option>
+                        </select>
+                    </label>
+                    <button type="submit" class="hero-search-submit">See packages &amp; prices <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+                </form>
+
+                <ul class="hp-hero-trust">
+                    <li class="hp-hero-trust-3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Setup ready before you arrive</li>
+                    <li><a href="https://wa.me/919773703982?text=Hi!%20I%27d%20like%20to%20plan%20a%20picnic%20with%20The%20Picnic%20Stories." target="_blank" rel="noopener noreferrer">Rather talk? Plan it on WhatsApp</a></li>
+                    <!-- Hidden until venues load AND >=1 venue has packages enabled — revealed by revealPackagesEntryPoints(). -->
+                    <li id="hero-packages-cta" style="display:none"><a href="/brochure">Or browse all packages</a></li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- ============ OCCASIONS ============ -->
+        <section class="hp-section" id="occasions">
+            <div class="hp-wrap">
+                <div class="hp-head">
+                    <div>
+                        <p class="hp-eyebrow">Start here</p>
+                        <h2 class="hp-h2">What are you celebrating?</h2>
                     </div>
-                    <div class="hero-stats">
-                        <div class="hero-stat">
-                            <span class="hero-stat-num">200+</span>
-                            <span class="hero-stat-label">Happy couples</span>
-                        </div>
-                        <div class="hero-stat-divider"></div>
-                        <div class="hero-stat">
-                            <span class="hero-stat-num">12</span>
-                            <span class="hero-stat-label">Curated venues</span>
-                        </div>
-                        <div class="hero-stat-divider"></div>
-                        <div class="hero-stat">
-                            <span class="hero-stat-num">4.9</span>
-                            <span class="hero-stat-label">Avg. rating</span>
-                        </div>
-                    </div>
+                    <p class="hp-lede">Each occasion opens the packages that fit it, priced at every venue that offers them.</p>
+                </div>
+                <div class="hp-occ-grid hp-swipe">
+                    <a class="hp-occ hp-occ--lead" href="/brochure?occasion=Proposal">
+                        <img src="https://evmftrogyzoudiccqkya.supabase.co/storage/v1/object/public/package-images/opt/sm/pkg-3-1783091302851-4-Tier_3.webp" alt="A proposal setup with cold pyros, candles and a cake" loading="lazy" decoding="async" width="800" height="1000">
+                        <span class="hp-occ-text"><span class="hp-occ-kicker">Most booked with The Story</span><span class="hp-occ-name">Proposal</span></span>
+                    </a>
+                    <a class="hp-occ" href="/brochure?occasion=Birthday">
+                        <img src="https://evmftrogyzoudiccqkya.supabase.co/storage/v1/object/public/package-images/opt/sm/pkg-2-1783091169778-3-tier2.webp" alt="A birthday table with a cake, roses and printed photos" loading="lazy" decoding="async" width="800" height="1000">
+                        <span class="hp-occ-text"><span class="hp-occ-name">Birthday</span></span>
+                    </a>
+                    <a class="hp-occ" href="/brochure?occasion=Anniversary">
+                        <img src="https://evmftrogyzoudiccqkya.supabase.co/storage/v1/object/public/package-images/opt/sm/pkg-3-1783091302851-3-Tier_3.1.webp" alt="A couple at an anniversary setup with fireworks behind" loading="lazy" decoding="async" width="800" height="1000">
+                        <span class="hp-occ-text"><span class="hp-occ-name">Anniversary</span></span>
+                    </a>
+                    <a class="hp-occ" href="/brochure?occasion=Date%20Night">
+                        <img src="https://evmftrogyzoudiccqkya.supabase.co/storage/v1/object/public/venue-images/opt/sm/venue-1783144077034-0-Delhi__Gurugram__Date_night.webp" alt="A couple inside a candlelit macramé tent" loading="lazy" decoding="async" width="800" height="1000">
+                        <span class="hp-occ-text"><span class="hp-occ-name">Date Night</span></span>
+                    </a>
+                    <a class="hp-occ" href="/brochure?occasion=Bridal%20Shower">
+                        <img src="https://evmftrogyzoudiccqkya.supabase.co/storage/v1/object/public/venue-images/opt/sm/venue-1783331335328-0-Family_Gathering_5.webp" alt="Friends at a long picnic table in front of Amer fort walls" loading="lazy" decoding="async" width="800" height="1000">
+                        <span class="hp-occ-text"><span class="hp-occ-name">Bridal &amp; baby showers</span></span>
+                    </a>
                 </div>
             </div>
         </section>
 
-        <!-- Services Section — Editorial Asymmetric Grid -->
-        <section class="services">
-            <div class="container">
-                <div class="services-intro">
-                    <p class="section-label">What we offer</p>
-                    <h2 class="section-heading">Experiences crafted<br>for every occasion</h2>
-                </div>
-                <div class="services-grid">
-                    <!-- Primary cards — top row -->
-                    <div class="service-card service-card--featured">
-                        <div class="service-icon-wrap" aria-hidden="true">
-                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                        </div>
-                        <h3>Romantic Picnics</h3>
-                        <p>Perfect for dates, proposals, and anniversaries — every detail thoughtfully arranged for the couple who deserves an unforgettable experience.</p>
-                        <button class="service-link" onclick="goToVenueSection('outdoor')">
-                            Plan your date
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-                        </button>
+        <!-- ============ PACKAGES (live: renderHomePackagesSection) ============ -->
+        <section class="hp-section packages-home-section" id="packages-section">
+            <div class="hp-wrap">
+                <div class="hp-head">
+                    <div>
+                        <p class="hp-eyebrow">Four packages</p>
+                        <h2 class="hp-h2">Each one includes <em>the one before it.</em></h2>
                     </div>
-                    <div class="service-card service-card--featured service-card--featured-stays">
-                        <div class="service-icon-wrap" aria-hidden="true">
-                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-                        </div>
-                        <h3>Overnight Stays</h3>
-                        <p>Pair your picnic with a handpicked stay — intimate partner retreats and BnBs where the celebration doesn't have to end at sundown.</p>
-                        <button class="service-link service-link--sage" onclick="goToVenueSection('indoor')">
-                            Explore stays
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-                        </button>
-                    </div>
-                    <!-- Secondary cards — bottom row -->
-                    <div class="service-card">
-                        <div class="service-icon-wrap" aria-hidden="true">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
-                        </div>
-                        <h3>Corporate Events</h3>
-                        <p>Team outings, client entertainment, and offsite meetings — elevated with premium outdoor setup and gourmet catering.</p>
-                    </div>
-                    <div class="service-card">
-                        <div class="service-icon-wrap" aria-hidden="true">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
-                        </div>
-                        <h3>Special Occasions</h3>
-                        <p>Birthdays, baby showers, and milestones — crafted into unforgettable outdoor celebrations with curated decor.</p>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Our Packages Section (Phase 2B) -->
-        <!-- Visible from first paint with matched-height skeleton cards so the
-             section reserves its final height BEFORE the async data load — this
-             prevents the layout shift that spiked homepage CLS to 1.38 (Jul 3
-             regression). renderHomePackagesSection() (app.js, called from
-             revealPackagesEntryPoints) swaps the skeletons for real cards of the
-             same height; it only hides the whole section if NO venue has
-             packages_enabled (never the case in production). -->
-        <section class="packages-home-section" id="packages-section">
-            <div class="container">
-                <div class="phs-header">
-                    <span class="phs-eyebrow">Curated for you</span>
-                    <h2 class="phs-title">Our Packages</h2>
-                    <p class="phs-sub">Pick a package first, then choose where to have it — pricing shown for 2 adults.</p>
+                    <p class="hp-lede">Starting prices for 2 guests. The venue you pick sets the final price — you see it before you pay.</p>
                 </div>
                 <div id="packages-home-grid" class="pkg-cards pkg-cards--page">
                     <!-- Skeleton placeholders (reserve height; replaced by renderHomePackagesSection()). -->
@@ -300,19 +327,37 @@
                         <span class="btn btn--venue-secondary pkg-card-cta">&nbsp;</span>
                     </div>
                 </div>
+                <p class="hp-swipe-hint" aria-hidden="true">Swipe for all four packages &rarr;</p>
+                <p class="hp-note">Not sure which? <a href="/brochure">Compare all four side by side</a></p>
             </div>
         </section>
 
-        <!-- Venues Section -->
-        <section class="venues-section" id="venues-section">
-            <div class="container">
-                <div class="venues-section-header">
-                    <div class="venues-section-text">
-                        <h2 class="venues-section-title">Choose Your Venue</h2>
-                        <p class="venues-section-subtitle">Curated spaces across Jaipur and Gurugram — from intimate gardens to rooftop terraces</p>
+        <!-- ============ HOW IT WORKS ============ -->
+        <section class="hp-dark">
+            <div class="hp-wrap">
+                <div class="hp-head">
+                    <h2 class="hp-h2">Booked in four steps. <em>No calls needed.</em></h2>
+                    <p class="hp-lede">The price you see after step 2 is the price you pay. Nothing is added at the venue unless you order extra food.</p>
+                </div>
+                <ol class="hp-steps">
+                    <li class="hp-step"><span class="hp-step-num">1</span><h3>Pick a package</h3><p>Start from the occasion, or go straight to the four packages.</p></li>
+                    <li class="hp-step"><span class="hp-step-num">2</span><h3>Pick a venue &amp; slot</h3><p>Every venue shows its price for that package and its open time slots.</p></li>
+                    <li class="hp-step"><span class="hp-step-num">3</span><h3>Pay 30% to hold it</h3><p>The slot is yours once the advance lands. The rest is settled on the day.</p></li>
+                    <li class="hp-step"><span class="hp-step-num">4</span><h3>Walk in to it</h3><p>Our team sets up before your slot and clears up after. You bring the people.</p></li>
+                </ol>
+            </div>
+        </section>
+
+        <!-- ============ VENUES (live: renderVenueGallery) ============ -->
+        <section class="hp-section venues-section" id="venues-section">
+            <div class="hp-wrap">
+                <div class="hp-head">
+                    <div>
+                        <p class="hp-eyebrow">Where</p>
+                        <h2 class="hp-h2">Partner cafés, farms &amp; forts.</h2>
                     </div>
                     <div class="city-filter" role="group" aria-label="Filter by city">
-                        <button class="city-pill active" data-city="all" onclick="filterVenuesByCity('all', this)">All</button>
+                        <button class="city-pill active" data-city="all" onclick="filterVenuesByCity('all', this)">All cities</button>
                     </div>
                 </div>
                 <div id="venues-grid" class="venues-grid">
@@ -368,115 +413,155 @@
             </div>
         </section>
 
-        <!-- Add-ons Mood Strip -->
-        <section class="addons-strip-section">
-            <div class="container">
-                <div class="addons-strip-header">
-                    <p class="section-label">Make it yours</p>
-                    <h2 class="section-heading addons-strip-title">The details that make the memory</h2>
+        <!-- ============ ADD-ONS (live: renderAddonsStrip) ============ -->
+        <section class="hp-section hp-tint">
+            <div class="hp-wrap">
+                <div class="hp-head">
+                    <div>
+                        <p class="hp-eyebrow">Add-ons</p>
+                        <h2 class="hp-h2">Add to any package at checkout.</h2>
+                    </div>
+                    <a class="hp-link" href="/brochure#addons">All add-ons &amp; prices</a>
                 </div>
-                <div id="addons-strip" class="addons-strip-scroll">
-                    <!-- Populated by JS -->
-                </div>
-            </div>
-        </section>
-
-        <!-- Testimonials Section -->
-        <section class="testimonials">
-            <div class="container">
-                <h2 class="section-title">What Our Customers Say</h2>
-                <div id="testimonials-container" class="testimonials-grid">
-                    <!-- Testimonials will be loaded by JavaScript -->
+                <div id="addons-strip" class="hp-addons">
+                    <!-- Populated by renderAddonsStrip() — six add-ons with live prices. -->
                 </div>
             </div>
         </section>
 
-        <!-- From the Blog (BLOG_SEO_PLAN_2026-07-11.md, Track B2) — static links so
-             the prerendered blog posts are never orphan pages. Post list is
-             hand-maintained: update when content/blog/ changes. Styles are inline
-             (bhs- prefix) to keep this section self-contained; migrate to
-             style.css if it grows. Sits inside #home-page, so the slim-shell
-             prerender correctly drops it on venue/packages pages. -->
-        <section class="blog-home-section" id="blog-section">
-            <style>
-                .blog-home-section{padding:64px 0;background:#faf5f0;border-top:1px solid #e8e0d8}
-                .bhs-header{text-align:center;margin-bottom:36px}
-                .bhs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;max-width:1140px;margin:0 auto}
-                .bhs-card{display:block;background:#fff;border:1px solid #ede6de;border-radius:14px;padding:22px 24px;text-decoration:none;color:inherit;transition:transform .22s,box-shadow .22s}
-                .bhs-card:hover{transform:translateY(-4px);box-shadow:0 12px 36px rgba(168,77,102,.13)}
-                .bhs-card h3{font-family:'EB Garamond',Georgia,serif;font-weight:500;font-size:1.15rem;line-height:1.35;margin:0 0 8px;color:#2d2420}
-                .bhs-card p{font-size:.85rem;color:#6b5d57;line-height:1.55;margin:0 0 12px}
-                .bhs-card span{font-size:.78rem;font-weight:700;color:#a84d66;letter-spacing:.03em}
-                .bhs-all{display:inline-block;margin-top:28px;font-size:.85rem;font-weight:700;color:#a84d66;text-decoration:none}
-                .bhs-all:hover{text-decoration:underline}
-            </style>
-            <div class="container">
-                <div class="bhs-header">
-                    <p class="section-label">From the blog</p>
-                    <h2 class="section-heading">Ideas for your next celebration</h2>
+        <!-- ============ FOOD + STAYS ============ -->
+        <section class="hp-section">
+            <div class="hp-wrap hp-split">
+                <div class="hp-food">
+                    <p class="hp-eyebrow">Food</p>
+                    <h2 class="hp-h3">Ordered from the café&#39;s kitchen, served at your setup.</h2>
+                    <p class="hp-muted">Packages cover the setup. Food is billed separately at the venue, from its own menu — or add a food bundle when you book.</p>
+                    <ul class="hp-food-list">
+                            <li>Paneer tikka</li>
+                            <li>Chicken malai tikka</li>
+                            <li>Loaded nachos</li>
+                            <li>Butter chicken &amp; naan</li>
+                            <li>Virgin mojito</li>
+                            <li>Cold coffee</li>
+                    </ul>
                 </div>
-                <div class="bhs-grid">
-                    <a class="bhs-card" href="/blog/birthday-picnic-ideas-gurugram">
-                        <h3>Private birthday picnics in Gurugram</h3>
-                        <p>Venues, add-ons, and how to plan a birthday they'll actually remember.</p>
-                        <span>Read the guide &rarr;</span>
-                    </a>
-                    <a class="bhs-card" href="/blog/romantic-picnic-date-gurugram">
-                        <h3>The candlelight picnic date</h3>
-                        <p>Gurugram's better answer to "dinner?" — setups, timing, and three date blueprints.</p>
-                        <span>Read the guide &rarr;</span>
-                    </a>
-                    <a class="bhs-card" href="/blog/picnic-proposal-ideas-gurugram-delhi-ncr">
-                        <h3>Planning a picnic proposal</h3>
-                        <p>The cover story, the scene, the hidden photographer — a run-sheet that works.</p>
-                        <span>Read the guide &rarr;</span>
-                    </a>
-                    <a class="bhs-card" href="/blog/anniversary-celebration-ideas-delhi-ncr">
-                        <h3>Anniversary ideas beyond dinner</h3>
-                        <p>Private setups across Delhi NCR — re-creations, screenings, and golden-hour sessions.</p>
-                        <span>Read the guide &rarr;</span>
-                    </a>
+                <div class="hp-stays" id="stays">
+                    <img src="https://evmftrogyzoudiccqkya.supabase.co/storage/v1/object/public/venue-images/opt/sm/venue-1782979775973-0-DSC03077.webp" alt="A warm-lit bedroom at TerraCottage Ochre" loading="lazy" decoding="async" width="800" height="533">
+                    <div class="hp-stays-copy">
+                        <p class="hp-eyebrow hp-eyebrow--light">TerraCottage stays · DLF Phase 2</p>
+                        <h2 class="hp-h3">Make it a night.</h2>
+                        <p>Our own homes in Gurugram — <a href="/venues/terracottage-ochre">Ochre</a>, <a href="/venues/terracottage-umber">Umber</a>, <a href="/venues/terracottage-boho">Boho</a> and the whole-floor <a href="/venues/terracottage-sienna">Sienna</a>. Book the stay with a setup waiting inside. From ₹2,500 a night.</p>
+                        <a class="hp-btn hp-btn--light" href="https://wa.me/919773703982?text=Hi!%20I%27d%20like%20to%20ask%20about%20a%20TerraCottage%20stay." target="_blank" rel="noopener noreferrer">Ask about dates on WhatsApp</a>
+                    </div>
                 </div>
-                <div style="text-align:center"><a class="bhs-all" href="/blog">All guides &rarr;</a></div>
             </div>
         </section>
 
-        <!-- Contact / Footer Section -->
-        <footer class="contact-info">
-            <div class="container">
-                <img src="/logo-footer.webp" alt="The Picnic Stories logo" class="footer-logo" width="150" height="150">
-                <h3>Ready for Your Perfect Picnic?</h3>
-                <p>Browse our venues and book a picnic your people will remember.</p>
-                <button class="btn btn--primary btn--lg" onclick="handleNavigation('home')">Get Started</button>
+        <!-- ============ REVIEWS (live: loadTestimonials) ============ -->
+        <section class="hp-dark testimonials">
+            <div class="hp-wrap">
+                <div class="hp-head">
+                    <h2 class="hp-h2">Written on the night, <em>on our staff&#39;s phone.</em></h2>
+                    <p class="hp-lede">Every guest is asked for a review before we pack up. These come from real bookings.</p>
+                </div>
+                <!-- Snapshot from the bookings table, 2026-10-29 (confirmed, team/test/duplicate
+                     rows excluded). Static text — update by hand; there is no public count RPC. -->
+                <p class="hp-count"><strong>62 picnics</strong> set up across Gurugram, Delhi and Jaipur since June 2026, plus 67 stays hosted.</p>
+                <div id="testimonials-container" class="hp-reviews hp-swipe">
+                    <!-- Filled by loadTestimonials() -->
+                </div>
+            </div>
+        </section>
 
-                <!-- Team contact details — rendered by renderFooterTeams() -->
-                <div id="footer-teams" class="footer-teams"></div>
+        <!-- ============ FAQ ============ -->
+        <section class="hp-section" id="faq">
+            <div class="hp-wrap hp-faq">
+                <div class="hp-faq-intro">
+                    <p class="hp-eyebrow">Before you book</p>
+                    <h2 class="hp-h2">What people ask us on WhatsApp.</h2>
+                    <p class="hp-muted">Anything else, message us — a person replies.</p>
+                </div>
+                <div class="hp-faq-list">
+                    <details class="hp-faq-item" open>
+                        <summary>What exactly is included?<span class="hp-faq-plus" aria-hidden="true">+</span></summary>
+                        <p>The setup, the decor items listed on the package, our team&#39;s setup and clear-up, and the venue slot. Each package lists everything; higher packages include everything in the ones below them.</p>
+                    </details>
+                    <details class="hp-faq-item">
+                        <summary>Is food included?<span class="hp-faq-plus" aria-hidden="true">+</span></summary>
+                        <p>Not by default. You order from the café&#39;s menu and pay the café. Some packages come with a food option, and some venues include a food voucher — it shows on the venue page.</p>
+                    </details>
+                    <details class="hp-faq-item">
+                        <summary>Can I pay on arrival?<span class="hp-faq-plus" aria-hidden="true">+</span></summary>
+                        <p>A 30% advance holds your slot — we buy flowers and block the venue against it. The remaining amount is paid on the day.</p>
+                    </details>
+                    <details class="hp-faq-item">
+                        <summary>Can I change the setup?<span class="hp-faq-plus" aria-hidden="true">+</span></summary>
+                        <p>Yes — colours, the message on the board, add-ons. Tell us in the booking notes or on WhatsApp after you book.</p>
+                    </details>
+                    <details class="hp-faq-item">
+                        <summary>What if I need to cancel or move the date?<span class="hp-faq-plus" aria-hidden="true">+</span></summary>
+                        <p>Postponing keeps your advance as credit, and that credit does not expire. A cancellation forfeits the advance. <a href="/cancellation.html">Full policy</a></p>
+                    </details>
+                    <details class="hp-faq-item">
+                        <summary>What if it rains?<span class="hp-faq-plus" aria-hidden="true">+</span></summary>
+                        <p>We shift your setup indoors or under shade at the same venue — same slot, same price.</p>
+                    </details>
+                </div>
+            </div>
+        </section>
 
-                <div class="footer-meta">
-                    <span>Serving <strong>Jaipur</strong> &amp; <strong>Gurugram</strong></span>
-                    <span class="footer-meta__sep" aria-hidden="true">&middot;</span>
+        <!-- ============ GUIDES (hand-maintained: update when content/blog/ changes) ============ -->
+        <section class="hp-section hp-guides-section" id="blog-section">
+            <div class="hp-wrap">
+                <div class="hp-head hp-head--rule">
+                    <h2 class="hp-h3">Planning guides</h2>
+                    <a class="hp-link" href="/blog">All guides</a>
+                </div>
+                <div class="hp-guides">
+                    <a class="hp-guide" href="/blog/picnic-proposal-ideas-gurugram-delhi-ncr"><span class="hp-guide-tag">Proposal</span><strong>Planning a picnic proposal</strong><span>The cover story, the scene, the hidden photographer — a run-sheet that works.</span></a>
+                    <a class="hp-guide" href="/blog/birthday-picnic-ideas-gurugram"><span class="hp-guide-tag">Birthday</span><strong>Private birthday picnics in Gurugram</strong><span>Venues, add-ons, and how to plan a birthday they&#39;ll actually remember.</span></a>
+                    <a class="hp-guide" href="/blog/romantic-picnic-date-gurugram"><span class="hp-guide-tag">Date night</span><strong>The candlelight picnic date</strong><span>Gurugram&#39;s better answer to &quot;dinner?&quot; — setups, timing, and three date blueprints.</span></a>
+                    <a class="hp-guide" href="/blog/anniversary-celebration-ideas-delhi-ncr"><span class="hp-guide-tag">Anniversary</span><strong>Anniversary ideas beyond dinner</strong><span>Private setups across Delhi NCR — re-creations, screenings, and golden-hour sessions.</span></a>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ FINAL CTA ============ -->
+        <section class="hp-cta">
+            <div class="hp-wrap hp-cta-inner">
+                <h2 class="hp-h2">Got a date in mind? Check what&#39;s open.</h2>
+                <div class="hp-cta-btns">
+                    <a class="hp-btn hp-btn--light" href="#hero-search" onclick="event.preventDefault(); window.scrollTo({top: 0, behavior: 'smooth'}); document.querySelector('#hero-search select')?.focus({preventScroll: true})">Find a package</a>
+                    <a class="hp-btn hp-btn--outline" href="https://wa.me/919773703982?text=Hi!%20I%27d%20like%20to%20book%20a%20picnic%20with%20The%20Picnic%20Stories." target="_blank" rel="noopener noreferrer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8.5 8.5 0 0 1-12.6 7.4L3 21l1.6-5.2A8.5 8.5 0 1 1 21 12z"/></svg>WhatsApp us</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ FOOTER ============ -->
+        <footer class="hp-footer contact-info">
+            <div class="hp-wrap hp-footer-inner">
+                <div class="hp-footer-brand">
+                    <img src="/logo-footer.webp" alt="The Picnic Stories logo" class="footer-logo" width="72" height="72" loading="lazy">
+                    <p class="hp-footer-name">The Picnic Stories</p>
+                    <p>Private picnic setups and stays in Gurugram, Delhi and Jaipur.</p>
                     <a href="mailto:team@picnicstories.com" class="footer-link">team@picnicstories.com</a>
                 </div>
-                <nav class="footer-legal" aria-label="Legal">
-                    <a href="/picnic-venues-gurugram">Gurugram Venues</a>
-                    <span class="footer-meta__sep" aria-hidden="true">&middot;</span>
-                    <a href="/picnic-venues-jaipur">Jaipur Venues</a>
-                    <span class="footer-meta__sep" aria-hidden="true">&middot;</span>
-                    <a href="/blog">Blog</a>
-                    <span class="footer-meta__sep" aria-hidden="true">&middot;</span>
-                    <a href="/privacy.html">Privacy Policy</a>
-                    <span class="footer-meta__sep" aria-hidden="true">&middot;</span>
-                    <a href="/terms.html">Terms &amp; Conditions</a>
-                    <span class="footer-meta__sep" aria-hidden="true">&middot;</span>
-                    <a href="/cancellation.html">Cancellation Policy</a>
-                    <span class="footer-meta__sep" aria-hidden="true">&middot;</span>
+                <!-- Team contact details — rendered by renderFooterTeams() -->
+                <div id="footer-teams" class="footer-teams"></div>
+                <nav class="hp-footer-nav" aria-label="Footer">
+                    <a href="/brochure">Packages</a>
+                    <a href="/picnic-venues-gurugram">Gurugram venues</a>
+                    <a href="/picnic-venues-jaipur">Jaipur venues</a>
+                    <a href="/blog">Guides</a>
+                    <a href="/cancellation.html">Cancellation policy</a>
+                    <a href="/privacy.html">Privacy policy</a>
+                    <a href="/terms.html">Terms &amp; conditions</a>
                     <a href="/disclaimer.html">Disclaimer</a>
                 </nav>
-                <p class="footer-copy">&copy; 2026 The Picnic Stories. All rights reserved.</p>
             </div>
+            <p class="hp-wrap hp-footer-copy">&copy; 2026 The Picnic Stories. All rights reserved.</p>
         </footer>
     </div>
-
     <!-- Menu Preview Page -->
     <div id="menu-preview-page" class="page">
         <div class="container">

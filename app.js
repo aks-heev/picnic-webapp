@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { track, identifyUser } from './analytics.js'
 import { injectSpeedInsights } from '@vercel/speed-insights'
 import { SHARED_SETUP_LABELS } from './setup-labels.js'
+import { OCCASIONS, defaultTierForOccasion, readSearchParams, appendSearchParams, istToday, saveSearch, loadSearch, currentSearch } from './params.js'
 
 // --- perf helpers (2026-07-04): gate auto-advancing carousels so they don't
 // burn the main thread / battery when nobody is looking. Function declarations
@@ -702,42 +703,28 @@ async function renderAddonsStrip() {
   const strip = document.getElementById('addons-strip')
   if (!strip) return
 
+  // Homepage add-ons grid (redesign 2026-10-29): six add-ons that have a photo,
+  // with their live price. category 'setup' rows are stay-only celebration
+  // setups named like packages ("The Prelude ₹4,300") — never shown here, same
+  // rule as /brochure's add-ons menu. The full priced list lives on /brochure.
   try {
     const { data, error } = await supabase
       .from('add_ons')
-      .select('id, name, description, category, image_url, is_active')
+      .select('id, name, price, category, image_url, is_active')
       .eq('is_active', true)
+      .neq('category', 'setup')
       .order('sort_order', { ascending: true })
 
     if (error) throw error
 
-    const addons = data || []
-    if (!addons.length) return
+    const addons = (data || []).filter(a => a.image_url).slice(0, 6)
+    if (!addons.length) { strip.closest('section')?.setAttribute('hidden', ''); return }
 
-    const cardHtml = (a) => `
-      <div class="addon-strip-card">
-        <div class="addon-strip-visual">
-          ${a.image_url
-            ? `<img src="${escapeHtml(a.image_url)}" alt="${escapeHtml(a.name)}" class="addon-strip-img" loading="lazy">`
-            : `<span class="addon-strip-emoji">${ADDON_CAT_EMOJI[a.category] || '✨'}</span>`}
-        </div>
-        <div class="addon-strip-info">
-          <span class="addon-strip-name">${escapeHtml(a.name)}</span>
-          ${a.description ? `<span class="addon-strip-desc">${escapeHtml(a.description)}</span>` : ''}
-        </div>
-      </div>`
-
-    // Duplicate cards so the seamless -50% marquee loop works
-    const row1 = addons.map(cardHtml).join('')
-    const row2 = [...addons].reverse().map(cardHtml).join('')
-
-    strip.innerHTML = `
-      <div class="addons-marquee-row">
-        <div class="addons-marquee-track">${row1}${row1}</div>
-      </div>
-      <div class="addons-marquee-row addons-marquee-row--reverse">
-        <div class="addons-marquee-track addons-marquee-track--rtl">${row2}${row2}</div>
-      </div>`
+    strip.innerHTML = addons.map(a => `
+      <figure class="hp-addon">
+        <img src="${escapeHtml(a.image_url)}" alt="" loading="lazy" decoding="async" width="800" height="800">
+        <figcaption><strong>${escapeHtml(a.name)}</strong>${Number(a.price) > 0 ? `<span>${formatPrice(Number(a.price))}</span>` : ''}</figcaption>
+      </figure>`).join('')
   } catch (err) {
     console.error('Failed to load add-ons strip:', err)
   }
@@ -771,7 +758,7 @@ function venueCardHtml(venue, opts = {}) {
   const showPkgBadge = packageFlowActive(venue)
 
   return `
-    <a class="venue-card" href="/venues/${escapeHtml(venue.slug || '')}"
+    <a class="venue-card${opts.extraClass ? ' ' + opts.extraClass : ''}" href="/venues/${escapeHtml(venue.slug || '')}"
        data-venue-id="${venue.id}" data-venue-name="${escapeHtml(venue.name)}"
        aria-label="View ${escapeHtml(venue.name)}">
       <div class="venue-card-image">
@@ -789,6 +776,7 @@ function venueCardHtml(venue, opts = {}) {
             ${venue.requires_confirmation ? '<span class="venue-card-on-request">On Request</span>' : ''}
           </div>
         </div>
+        ${opts.noteText ? `<p class="venue-card-fit-note">${escapeHtml(opts.noteText)}</p>` : ''}
       </div>
     </a>
   `
@@ -1018,6 +1006,11 @@ async function showVenuePage(venueId, pushState = true) {
     try { sessionStorage.removeItem('ps_pending_pkg') } catch (err) { /* ignore */ }
   }
   appState.bookingOccasion  = appState.pendingPackage?.occasion || ''
+  // Party size from the homepage hero search (/ → /brochure → /packages →
+  // pendingPackage). Capped at the venue's own capacity; the guest step's
+  // package cap check (venue_packages.max_guests) still applies after this.
+  const pendGuests = (appState.pendingPackage?.venueId === venueId ? Number(appState.pendingPackage.guests) || 0 : 0) || Number(loadSearch().guests) || 0
+  if (pendGuests > 0) appState.adults = venue.capacity_max ? Math.min(pendGuests, venue.capacity_max) : pendGuests
   appState.selectedPackage  = null
   appState.withFood         = false
   appState.pkgStepOnlyKey   = null
@@ -1042,8 +1035,30 @@ async function showVenuePage(venueId, pushState = true) {
 
   if (needsCalendar && bookedData) {
     renderAvailabilityCalendar('avail-calendar-widget', bookedData)
+    applyPendingSearchDate(venue, bookedData)
   }
 
+}
+
+// Homepage hero search (2026-10-29). The form is a plain GET to /brochure, so
+// it works even if this script never loads; this only drops empty optional
+// fields from the URL and logs the search. Field rules live in params.js.
+function setupHeroSearch() {
+  const form = document.getElementById('hero-search')
+  if (!form || form.dataset.bound) return
+  form.dataset.bound = '1'
+  const dateEl = form.querySelector('[name="date"]')
+  if (dateEl) dateEl.min = istToday()
+  form.addEventListener('submit', () => {
+    const p = readSearchParams(new URLSearchParams(new FormData(form)))
+    saveSearch(p)
+    track('home_hero_search', { occasion: p.occasion || null, city: p.city || null, has_date: !!p.date, guests: p.guests })
+    // Disabled controls are not submitted — keeps /brochure?occasion=Birthday
+    // clean instead of /brochure?occasion=Birthday&city=&date=.
+    form.querySelectorAll('select, input').forEach(el => { if (!el.value) el.disabled = true })
+    // Re-enable after navigation starts, so a Back-button return shows a usable form.
+    setTimeout(() => form.querySelectorAll('select, input').forEach(el => { el.disabled = false }), 0)
+  })
 }
 
 // Go back to home — restore URL and scroll to the right venue section
@@ -2450,8 +2465,8 @@ const REEL_THEMES = [
   { value: 'custom', label: 'Custom' },
 ]
 // Site occasions + Bachelorette (the brochure's "Get inspired" uses it). Must
-// match the reels_occasion_check constraint. A function, not a const array:
-// OCCASIONS is declared further down this module (TDZ at load time).
+// match the reels_occasion_check constraint. (A function from when OCCASIONS
+// was declared further down this module; it is an import now, so no TDZ.)
 const reelOccasions = () => [...OCCASIONS, 'Bachelorette']
 
 function parseInstagramLink(raw) {
@@ -3149,11 +3164,8 @@ function venueSetupLabels(venue) {
   return [...SHARED_SETUP_LABELS, ...(meta.includes || [])]
 }
 
-// Canonical occasion list — single source for the /packages page chips, the
-// venue guest-step select, and the admin edit modal (and later for
-// packages.occasion values — Phase 2.5). Do NOT fork copies of this list:
-// occasion matching is string-equality across all three surfaces.
-const OCCASIONS = ['Birthday', 'Anniversary', 'Proposal', 'Date Night', 'Movie Night', 'Bridal Shower', 'Baby Shower', 'Graduation', 'Just Because']
+// OCCASIONS (canonical occasion list) now lives in params.js and is imported
+// at the top of this module, so /brochure shares the exact same list.
 
 // Purely decorative — one emoji per occasion chip (/packages page). Missing
 // keys just render no emoji, never a crash.
@@ -3357,15 +3369,8 @@ function packageServiceableAt(tier, catalog) {
 // Occasion -> default tier. This is the AOV lever; the customer can still switch.
 // Date Night / Movie Night had their own occasion packages until 2026-10-11
 // (deactivated: 0 bookings ever) — they now default into the universal ladder.
-const OCCASION_DEFAULT_TIER = {
-  'Proposal': 'story', 'Anniversary': 'story',
-  'Birthday': 'moment', 'Bridal Shower': 'moment', 'Baby Shower': 'moment',
-  'Date Night': 'setting', 'Movie Night': 'setting',
-  'Just Because': 'setting',
-}
-function defaultTierForOccasion(occasion) {
-  return OCCASION_DEFAULT_TIER[occasion] || 'setting'
-}
+// OCCASION_DEFAULT_TIER / defaultTierForOccasion moved to params.js
+// (2026-10-29) — shared with /brochure's "Best for <occasion>" badge.
 
 // ── Packages-first entry: the /packages page (Phase 2) ─────────────────────
 // docs/PHASE2_PACKAGES_FIRST_PLAN.md. Occasion → tier → venue, then hands off
@@ -3443,11 +3448,21 @@ async function showPackagesPage(push = true, opts = {}) {
     // the same venue step (bare /packages redirects to /brochure).
     const qs = new URLSearchParams()
     if (opts.tierKey) qs.set('tier', opts.tierKey)
-    if (opts.occasion) qs.set('occasion', opts.occasion)
+    appendSearchParams(qs, { occasion: opts.occasion, city: opts.city, date: opts.date, guests: opts.guests })
     const q = qs.toString()
     history.pushState({ page: 'packages' }, document.title, '/packages' + (q ? '?' + q : ''))
   }
-  pkgPageState = { occasion: opts.occasion || '', tierKey: opts.tierKey || null, city: '' }
+  // Entries that don't pass the search fields (homepage package cards, "Explore
+  // <package>") still inherit the guest's last hero search for this tab.
+  const sess = loadSearch()
+  opts = { ...opts, occasion: opts.occasion || sess.occasion, city: opts.city || sess.city, date: opts.date || sess.date, guests: opts.guests || sess.guests }
+  pkgPageState = {
+    occasion: opts.occasion || '', tierKey: opts.tierKey || null,
+    // city: preselects the venue-step city pill (renderPkgVenuePicker falls back
+    // to "All cities" when no serviceable venue is in it). date / guests ride
+    // along to the venue page via pendingPackage (pkgPageSelectVenue).
+    city: opts.city || '', date: opts.date || '', guests: opts.guests || null,
+  }
   const el = document.getElementById('packages-content')
   if (!el) return
   el.innerHTML = '<div class="pkgp-loading">Loading packages…</div>'
@@ -3756,9 +3771,21 @@ function renderPkgVenuePicker(venues) {
   // whose venues can't serve this tier never appears as a dead filter. An
   // invalid remembered city (e.g. tier changed underneath it) falls back to
   // all — never an empty grid.
+  // Party size from the hero search: venues that can't host it are kept (the
+  // guest may lower the count) but dimmed with the reason and listed last —
+  // never hidden, so a big-group search can't produce an empty grid.
+  const party = pkgPageState.guests || 0
+  const partyCap = (v) => {
+    if (v.type === 'partner_bnb') return v.capacity_max || null
+    const row = venuePackageRow(v.id, tier.key)
+    const caps = [row?.max_guests, v.capacity_max].filter(n => n != null && n > 0)
+    return caps.length ? Math.min(...caps) : null
+  }
+  const fitsParty = (v) => { const c = partyCap(v); return !party || c == null || party <= c }
   const cities = [...new Set(serviceable.map(v => v.city).filter(Boolean))].sort()
   const activeCity = cities.includes(pkgPageState.city) ? pkgPageState.city : ''
-  const shown = activeCity ? serviceable.filter(v => v.city === activeCity) : serviceable
+  const inCity = activeCity ? serviceable.filter(v => v.city === activeCity) : serviceable
+  const shown = [...inCity.filter(fitsParty), ...inCity.filter(v => !fitsParty(v))]
   const cityPills = cities.length > 1 ? `
       <div class="pkgp-city-filter" role="group" aria-label="Filter venues by city">
         <button type="button" class="city-pill${!activeCity ? ' active' : ''}" onclick="pkgPageSelectCity('')">All cities</button>
@@ -3767,10 +3794,14 @@ function renderPkgVenuePicker(venues) {
   // Same cards as the homepage grid (venueCardHtml) — only the price line
   // differs: it shows THIS tier's firm price at the venue.
   const cards = shown.map(v => {
+    const tooSmall = !fitsParty(v)
+    const fitOpts = tooSmall
+      ? { extraClass: 'venue-card--too-small', noteText: `Hosts up to ${partyCap(v)} guests for this package — you searched for ${party}` }
+      : {}
     if (v.type === 'partner_bnb') {
       const cp = pkgCottagePriceAt(v, tier)
       const cg = v.capacity_max ? Math.min(PKG_PAGE_BASE_ADULTS, v.capacity_max) : PKG_PAGE_BASE_ADULTS
-      return venueCardHtml(v, { priceHtml: `₹${cp.toLocaleString('en-IN')} <span class="venue-card-price-sub">1 night + picnic · ${cg} guest${cg !== 1 ? 's' : ''}</span>` })
+      return venueCardHtml(v, { ...fitOpts, priceHtml: `₹${cp.toLocaleString('en-IN')} <span class="venue-card-price-sub">1 night + picnic · ${cg} guest${cg !== 1 ? 's' : ''}</span>` })
     }
     const row = venuePackageRow(v.id, tier.key)
     const price = packageTierPriceAt(v, tier, venueCatalog(v.id), PKG_PAGE_BASE_ADULTS)
@@ -3778,7 +3809,7 @@ function renderPkgVenuePicker(venues) {
     // venue must not read "for up to 6 guests".
     const incl = v.capacity_max ? Math.min(row.included_guests, v.capacity_max) : row.included_guests
     const priceHtml = `₹${price.toLocaleString('en-IN')} <span class="venue-card-price-sub">for up to ${incl} guest${incl !== 1 ? 's' : ''}</span>`
-    return venueCardHtml(v, { priceHtml })
+    return venueCardHtml(v, { ...fitOpts, priceHtml })
   }).join('')
   return `
     <div class="pkgp-venues" id="pkgp-venues">
@@ -3939,14 +3970,48 @@ async function renderHomePackagesSection() {
   }).join('')
 
   section.style.display = ''
+  setupHomePkgAutoSwipe(grid)
+}
+
+// Phone homepage (redesign 2026-10-30): the package row is one card per screen
+// width and advances by itself every few seconds, looping back to the first.
+// Never fights the guest: any touch, drag, wheel or keyboard focus pauses it for
+// 8s; it only runs while the row is on screen, the tab is visible, the layout is
+// the phone one (row actually scrolls) and reduced motion is not requested.
+// Advancing hydrates no extra images: each card's own photo carousel is separate.
+let homePkgSwipe = null
+function setupHomePkgAutoSwipe(grid) {
+  if (!grid || homePkgSwipe) return
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)')
+  const phone = window.matchMedia('(max-width: 768px)')
+  const INTERVAL = 4500, IDLE = 8000
+  let onScreen = false, pausedUntil = 0
+  const pause = () => { pausedUntil = Date.now() + IDLE }
+  ;['touchstart', 'pointerdown', 'wheel', 'focusin'].forEach(ev => grid.addEventListener(ev, pause, { passive: true }))
+  const io = 'IntersectionObserver' in window
+    ? new IntersectionObserver(([e]) => { onScreen = e.isIntersecting }, { threshold: 0.6 })
+    : null
+  if (io) io.observe(grid); else onScreen = true
+  const tick = () => {
+    if (!phone.matches || reduce.matches || document.hidden || !onScreen || Date.now() < pausedUntil) return
+    const cards = [...grid.querySelectorAll('.pkg-card:not(.pkg-card--skeleton)')]
+    if (cards.length < 2 || grid.scrollWidth <= grid.clientWidth + 4) return
+    const step = cards[1].offsetLeft - cards[0].offsetLeft
+    const atEnd = grid.scrollLeft + grid.clientWidth >= grid.scrollWidth - 4
+    grid.scrollTo({ left: atEnd ? 0 : grid.scrollLeft + step, behavior: 'smooth' })
+  }
+  homePkgSwipe = setInterval(tick, INTERVAL)
 }
 
 function pkgPageSelectVenue(venueId) {
   if (!pkgPageState.tierKey) return
-  const pending = { occasion: pkgPageState.occasion || null, tierKey: pkgPageState.tierKey, venueId }
+  const pending = {
+    occasion: pkgPageState.occasion || null, tierKey: pkgPageState.tierKey, venueId,
+    date: pkgPageState.date || null, guests: pkgPageState.guests || null, // applied by applyPendingSearch()
+  }
   appState.pendingPackage = pending
   try { sessionStorage.setItem('ps_pending_pkg', JSON.stringify(pending)) } catch (err) { /* private mode */ }
-  track('packages_venue_selected', { venue_id: venueId, tier: pending.tierKey, occasion: pending.occasion })
+  track('packages_venue_selected', { venue_id: venueId, tier: pending.tierKey, occasion: pending.occasion, has_date: !!pending.date, guests: pending.guests })
   showVenuePage(venueId)
 }
 
@@ -4254,7 +4319,37 @@ function renderAvailabilityCalendar(containerId, bookedData) {
   }
 
   container._calDraw = draw
+  // Jump to a month (used to show a date carried in from the hero search).
+  container._calGoTo = (y, m) => {
+    if (y < now.getFullYear() || (y === now.getFullYear() && m < now.getMonth())) return
+    year = y; month = m; draw()
+  }
   draw()
+}
+
+// Homepage hero search → venue page (plan P4, 2026-10-29). Pre-selects the
+// date the guest searched for on a café calendar — which also opens the slot
+// picker — or says plainly that the date is full and leaves the calendar open.
+// Stays (non-café calendars) are left alone: their check-in/check-out range is
+// a different picker and a single date can't fill it.
+function applyPendingSearchDate(venue, bookedData) {
+  if (bookedData.venueType !== 'cafe') return
+  const p = appState.pendingPackage
+  const date = String((p && p.venueId === venue.id && p.date) || loadSearch().date || '')
+  if (!date) return
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < istToday()) return
+  const [y, m] = date.split('-').map(Number)
+  document.getElementById('avail-calendar-widget')?._calGoTo?.(y, m - 1)
+  const maxSetups  = bookedData.maxConcurrentSetups || 1
+  const slotCounts = bookedData.slotMap?.get(date)
+  const full = slotCounts ? CAFE_SLOTS.every(s => (slotCounts.get(s.key) || 0) >= maxSetups) : false
+  track('search_date_applied', { venue_id: venue.id, date, full })
+  if (full) {
+    const label = new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+    showToast(`${label} is fully booked at ${venue.name} — pick another date`, 'error')
+    return
+  }
+  selectCalendarDate(date)
 }
 
 // BnB: hover to preview range before second click
@@ -14525,6 +14620,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initMenuSelectionPage()
   setupPkgCarouselDelegation() // once for all .pkg-card-media instances, across all 3 render sites
   setupVenueCarouselDelegation() // once for all .venue-card-media instances (home gallery, /packages venue picker, venue-first tier step)
+  setupHeroSearch()
 
   // URL routing — path-based /venues/<slug> plus legacy query params
   const urlParams = new URLSearchParams(window.location.search)
@@ -14559,11 +14655,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // /packages entry — ?tier= and ?occasion= deep links (homepage cards, ads).
     // Unknown values are ignored gracefully. PACKAGE_TIERS may still be the
     // hardcoded fallback at this instant; showPackagesPage awaits the DB load.
+    // city / date / guests come from the homepage hero search via /brochure
+    // (params.js validates; anything invalid arrives as '' / null).
     const qsTier = urlParams.get('tier')
-    const qsOcc  = urlParams.get('occasion')
+    const qsSearch = currentSearch(urlParams)
     showPackagesPage(false, {
       tierKey:  qsTier || null, // validated after the DB load, inside showPackagesPage
-      occasion: OCCASIONS.includes(qsOcc) ? qsOcc : '',
+      occasion: qsSearch.occasion,
+      city:     qsSearch.city,
+      date:     qsSearch.date,
+      guests:   qsSearch.guests,
       scrollToVenues: urlParams.get('step') === 'venue',
     })
   } else if (venueId) {

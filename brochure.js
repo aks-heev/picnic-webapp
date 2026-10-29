@@ -19,6 +19,14 @@
 import { createClient } from '@supabase/supabase-js'
 import { track } from './analytics.js'
 import { SHARED_SETUP_LABELS } from './setup-labels.js'
+import { currentSearch, appendSearchParams, defaultTierForOccasion } from './params.js'
+
+// Homepage hero search fields (occasion / city / date / guests), validated by
+// params.js — anything invalid is '' / null. This page uses occasion (badge on
+// the matching package) and guests (flags packages that can't host the party)
+// and forwards all four to /packages, where city/date/guests are applied.
+// URL first, then this tab's last hero search (params.js currentSearch).
+const SEARCH = currentSearch()
 
 const WA = {
   Gurugram: '919773703982',
@@ -50,6 +58,7 @@ function waLink(city, pkgName) {
 function siteLink(pkgKey) {
   const p = new URLSearchParams()
   if (pkgKey) p.set('tier', pkgKey)
+  appendSearchParams(p, SEARCH)
   p.set('utm_source', 'brochure')
   p.set('utm_medium', 'link')
   return `/packages?${p}`
@@ -86,7 +95,7 @@ async function fillLivePrices() {
   const supabase = createClient(url, key)
   const [pkgRes, vpRes, addRes, gridRes, reelRes] = await Promise.all([
     supabase.from('packages').select('id, key, is_active, inclusions, package_add_ons(addon_id, sort_order)').eq('is_active', true),
-    supabase.from('venue_packages').select('package_id, price').eq('is_active', true),
+    supabase.from('venue_packages').select('package_id, price, max_guests').eq('is_active', true),
     // category 'setup' = stay-only celebration setups (named like packages,
     // e.g. "The Prelude ₹4,300") — not layerable add-ons, so never on this menu.
     supabase.from('add_ons').select('id, name, price, category').eq('is_active', true).neq('category', 'setup')
@@ -134,6 +143,7 @@ async function fillLivePrices() {
       }
       shown.push({ key: card.dataset.pkg, min })
     })
+    markGuestCaps(vpRes.data || [], idByKey)
     // Meta Pixel ViewContent — same shape as showPackagesPage in app.js, so
     // Events Manager numbers stay comparable across the two pages.
     if (typeof window.fbq === 'function' && shown.length) {
@@ -154,6 +164,48 @@ async function fillLivePrices() {
       .map(a => `<li><span>${esc(ADDON_LABEL[a.name] || a.name)}</span><b>${inr(a.price)}</b></li>`)
       .join('')
   }
+}
+
+// ── Hero search: occasion badge + party-size caps ──
+// Occasion → the package it opens on everywhere else (params.js), badged
+// "Best for <occasion>" and scrolled into view. All four packages stay visible.
+function applySearchOccasion() {
+  if (SEARCH.occasion || SEARCH.guests || SEARCH.date) {
+    track('brochure_search_landed', { occasion: SEARCH.occasion || null, city: SEARCH.city || null, has_date: !!SEARCH.date, guests: SEARCH.guests })
+  }
+  if (!SEARCH.occasion) return
+  const card = document.querySelector(`[data-pkg="${defaultTierForOccasion(SEARCH.occasion)}"]`)
+  if (!card) return
+  card.classList.add('pk-card--suggested')
+  const head = card.querySelector('.pk-card-head > div')
+  if (head) {
+    const badge = document.createElement('p')
+    badge.className = 'pk-badge pk-badge--fit'
+    badge.textContent = `Best for ${SEARCH.occasion}`
+    head.prepend(badge)
+  }
+  requestAnimationFrame(() => card.scrollIntoView({ block: 'start' }))
+}
+
+// A package "can't host" the party only when EVERY venue offering it caps it
+// below the searched size (venue_packages.max_guests; null = no package cap).
+// The card stays; it just says so, so nobody books a 4-guest setup for 7.
+function markGuestCaps(vpRows, idByKey) {
+  if (!SEARCH.guests) return
+  const capById = new Map()
+  for (const r of vpRows) {
+    const cap = r.max_guests == null ? Infinity : Number(r.max_guests)
+    capById.set(r.package_id, Math.max(capById.get(r.package_id) ?? 0, cap))
+  }
+  document.querySelectorAll('[data-pkg]').forEach(card => {
+    const cap = capById.get(idByKey.get(card.dataset.pkg))
+    if (cap == null || cap === Infinity || SEARCH.guests <= cap) return
+    card.classList.add('pk-card--too-small')
+    const note = document.createElement('p')
+    note.className = 'pk-cap-note'
+    note.textContent = `Hosts up to ${cap} guests — you searched for ${SEARCH.guests}.`
+    card.querySelector('.pk-tagline')?.after(note)
+  })
 }
 
 // ── Reels (public.reels, managed in admin › Packages › Brochure reels) ──
@@ -469,6 +521,7 @@ function fillInclusions(pkgs, addOns) {
 }
 
 renderCtas()
+applySearchOccasion()
 fillSettingInclusions()
 trackInspiredLinks()
 track('brochure_viewed', { referrer: document.referrer || null })
