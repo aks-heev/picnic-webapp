@@ -1149,12 +1149,22 @@ function vdPkgPrice(venue, key, adults, withFood) {
 }
 
 // ── Venue page: "Packages here" + package details dialog (redesign P2) ──────
-function vdPkgPairGuests(venue) {
-  return Math.min(2, venue.capacity_max || 2)
+// Guest count the venue page prices packages at: the Adults stepper
+// (appState.adults, default 2), clamped to the venue's capacity.
+function vdPkgGuests(venue) {
+  const a = Math.max(1, Number(appState.adults) || 2)
+  return venue.capacity_max ? Math.min(a, venue.capacity_max) : a
 }
 function vdPkgFoodLine(venue, key) {
-  if (packageFoodMode(venue.id, key) === 'none') return ''
-  const g = vdPkgPairGuests(venue)
+  const mode = packageFoodMode(venue.id, key)
+  if (mode === 'none') return ''
+  const g = vdPkgGuests(venue)
+  if (mode === 'only') {
+    // Price shown above already includes food — say so instead of repeating it.
+    const fo = packageFoodRow(venue.id, key, g, null)
+    const no = fo && Number(fo.food_items || 0)
+    return `Includes food${no ? ` · ${no} item${no !== 1 ? 's' : ''}` : ''}`
+  }
   const fp = vdPkgPrice(venue, key, g, true)
   if (fp == null) return ''
   const fr = packageFoodRow(venue.id, key, g, null)
@@ -1171,7 +1181,7 @@ function vdChosenPkgKey(venue) {
 function venuePackagesSectionHtml(venue) {
   const keys = venuePkgKeys(venue)
   if (!keys.length) return ''
-  const g = vdPkgPairGuests(venue)
+  const g = vdPkgGuests(venue)
   const chosenKey = vdChosenPkgKey(venue)
   const cards = keys.map(k => {
     const t = PACKAGE_TIERS[k]
@@ -1210,6 +1220,22 @@ function venuePackagesSectionHtml(venue) {
             </div>
             <hr class="vd-divider">`
 }
+// Re-price the "Packages here" cards + mobile bar after the Adults stepper moves.
+function vdRefreshPkgPrices(venue) {
+  const sec = document.querySelector('.vd-pkgs')
+  if (sec) {
+    const tmp = document.createElement('div')
+    tmp.innerHTML = venuePackagesSectionHtml(venue)
+    const fresh = tmp.querySelector('.vd-pkgs')
+    if (fresh) sec.replaceWith(fresh)
+  }
+  const key = venue.type === 'cafe' ? vdChosenPkgKey(venue) : null
+  const amt = key && document.querySelector('.vd-mobile-book-amount')
+  if (amt) {
+    const p = vdPkgPrice(venue, key, vdPkgGuests(venue), false)
+    amt.textContent = `${PACKAGE_TIERS[key].name}${p != null ? ` · ₹${Number(p).toLocaleString('en-IN')}` : ''}`
+  }
+}
 
 // What a package adds: standalone → its own list; first rung → venue setup;
 // later rungs → add-ons new over the previous rung (same rule as the package step).
@@ -1246,7 +1272,7 @@ function pkgDetailsInnerHtml(venue, key) {
   const i = keys.indexOf(key)
   const prevK = i > 0 ? keys[i - 1] : null
   const nextK = i < keys.length - 1 ? keys[i + 1] : null
-  const g = pkgDetailAfterGuests ? appState.adults : vdPkgPairGuests(venue)
+  const g = pkgDetailAfterGuests ? appState.adults : vdPkgGuests(venue)
   const price = vdPkgPrice(venue, key, g, false)
   const row = venuePackageRow(venue.id, key)
   let cap = row?.max_guests || row?.included_guests || null
@@ -1612,7 +1638,7 @@ function renderVenueDetail(venue, addOns = []) {
   const sheetMode = venue.type === 'cafe'
   const vdFrom = venueCheapestPackage(venue)
   const vdBarChosen = sheetMode ? vdChosenPkgKey(venue) : null
-  const vdBarChosenPrice = vdBarChosen ? vdPkgPrice(venue, vdBarChosen, vdPkgPairGuests(venue), false) : null
+  const vdBarChosenPrice = vdBarChosen ? vdPkgPrice(venue, vdBarChosen, vdPkgGuests(venue), false) : null
   container.innerHTML = `
     <div class="vd-wrap${sheetMode ? ' vd-wrap--sheet-mode' : ''}">
       ${sheetMode ? '<div class="vd-sheet-backdrop" hidden onclick="closeVdSheet()"></div>' : ''}
@@ -4607,6 +4633,7 @@ function updateGuestCount(type, delta) {
   }
 
   updateGuestPrice(venue)
+  if (type === 'adults') vdRefreshPkgPrices(venue)
 }
 
 // ----------------------------------------------------------------
