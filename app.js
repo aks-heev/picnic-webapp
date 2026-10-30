@@ -2151,6 +2151,10 @@ let PACKAGE_TIER_ORDER = ['setting', 'moment', 'story']
 // White Board Message add-on is ticked, and only the white arch board is
 // offered. Setting/Moment/Story include that add-on via package_add_ons.
 const BOARD_PAID_TIERS = ['the_prelude']
+// Tiers that bundle the board but only offer the white (sun)board — no
+// chalkboard, no "No board" (2026-10-30, The Note = Prelude + Cake + Board).
+// Field shows by default with the white board pre-picked.
+const BOARD_WHITE_ONLY_TIERS = ['the_note']
 const WHITE_BOARD_ADDON_ID = 37
 let packagesLoaded = false // set once loadPackages() has real DB rows
 
@@ -5296,6 +5300,8 @@ async function showBookingForm(venue) {
     </div>` : ''
 
   const boardGated = !!(pkg && BOARD_PAID_TIERS.includes(pkg.tierKey))
+  // White board only: gated tiers (once unlocked) and white-only bundles.
+  const boardWhiteOnly = boardGated || !!(pkg && BOARD_WHITE_ONLY_TIERS.includes(pkg.tierKey))
   // Stay-only venues: Occasion + Board only matter for a Celebration Stay, so
   // they stay hidden until a setup add-on is ticked (see syncBoardGate).
   const stayGated  = stayOnlyActive(venue)
@@ -5376,10 +5382,10 @@ async function showBookingForm(venue) {
               <div class="vd-bf-field" id="board-field"${boardGated ? ' data-gated="1"' : ''}${stayGated ? ' data-stay-gated="1"' : ''}${(boardGated || stayGated) ? ' style="display:none;"' : ''}>
                 <span class="vd-bf-label" id="bf-board-label">Celebration board ${boardGated ? '' : pkg ? '<span class="bf-hint bf-hint--ok">included · optional</span>' : '<span class="bf-hint">optional</span>'}</span>
                 <div class="bf-board-opts" role="radiogroup" aria-labelledby="bf-board-label">
-                  ${(boardGated ? [['white', 'White arch board']] : [['white', 'White arch board'], ['black', 'Black chalkboard'], ['', 'No board']]).map(([v, l], i) => `
-                  <label class="bf-board-opt"><input type="radio" name="board-type" value="${v}"${(boardGated ? i === 0 : v === '') ? ' checked' : ''} onchange="document.getElementById('board-message-wrap').style.display = this.value ? '' : 'none'"><span>${l}</span></label>`).join('')}
+                  ${(boardWhiteOnly ? [['white', 'White arch board']] : [['white', 'White arch board'], ['black', 'Black chalkboard'], ['', 'No board']]).map(([v, l], i) => `
+                  <label class="bf-board-opt"><input type="radio" name="board-type" value="${v}"${(boardWhiteOnly ? i === 0 : v === '') ? ' checked' : ''} onchange="document.getElementById('board-message-wrap').style.display = this.value ? '' : 'none'"><span>${l}</span></label>`).join('')}
                 </div>
-                <div id="board-message-wrap" style="${boardGated ? '' : 'display:none; '}margin-top:8px;">
+                <div id="board-message-wrap" style="${boardWhiteOnly ? '' : 'display:none; '}margin-top:8px;">
                   <label class="vd-bf-label" for="bf-board-msg">What should it say?</label>
                   <input class="vd-bf-input" id="bf-board-msg" type="text" name="board-message" maxlength="100"
                          placeholder="Short one-liner only — e.g. Happy Birthday Aanya!">
