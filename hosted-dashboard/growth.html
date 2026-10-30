@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>The Picnic Stories — Growth</title>
+<!--
+  Growth dashboard. Plan: docs/GROWTH_DASHBOARD_PLAN.md (2026-10-30).
+  Reads Supabase only, as the single admin email (RLS on every table):
+    web_window / web_daily / web_event_daily / web_sync_runs  ← sync-posthog (daily 06:10 IST)
+    gsc_daily / gsc_page_window / gsc_query_window            ← sync-gsc (daily 09:10 IST)
+    booking_revenue_split + bookings.booking_source, ad_insights, ad_sync_runs
+  🔴 Unique visitors never add across days: window totals come from web_window only.
+     web_daily is for the sparklines and nothing else.
+  Theme tokens copied from meta-dashboard.html so the dashboards read as one set.
+-->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #191817; --surface: #211F1E; --surface-2: #262322; --border: #322E2C; --border-soft: #2A2725;
+    --cream: #EFE9E1; --body: #B9B1A8; --muted: #8A827A; --faint: #6A625B;
+    --gold: #D9A441; --gold-soft: rgba(217,164,65,.16);
+    --green: #7CC094; --green-bg: rgba(124,192,148,.13);
+    --amber: #D4A24C; --amber-bg: rgba(212,162,76,.13);
+    --red: #D2776A; --red-bg: rgba(210,119,106,.13);
+    --teal: #6FC2B6;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--body); font: 14px/1.6 var(--sans); -webkit-font-smoothing: antialiased; padding: 30px 0 60px; font-variant-numeric: tabular-nums; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 22px; }
+  @media (max-width: 560px) { .wrap { padding: 0 14px; } body { padding-top: 18px; } }
+  a { color: var(--gold); }
+
+  .topnav { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 22px;
+    font: 500 10.5px/1 var(--mono); letter-spacing: 1.1px; text-transform: uppercase; }
+  .topnav a, .topnav button { color: var(--faint); text-decoration: none; background: none; border: 0; cursor: pointer; font: inherit; letter-spacing: inherit; text-transform: inherit; padding: 10px 0; }
+  .topnav a:hover, .topnav button:hover { color: var(--gold); }
+  .topnav .right { display: flex; gap: 16px; align-items: center; color: var(--faint); }
+
+  .signin-wrap { min-height: 70vh; display: flex; align-items: center; justify-content: center; }
+  .signin-card { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; padding: 30px 28px 24px; width: 100%; max-width: 360px; }
+  .signin-card h1 { font-size: 26px; margin: 4px 0 4px; }
+  .signin-sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+  .signin-card label { display: block; font: 500 10px/1 var(--mono); letter-spacing: 1.2px; text-transform: uppercase; color: var(--faint); margin: 0 0 7px; }
+  .signin-card input { width: 100%; padding: 10px 12px; font: 14px var(--sans); color: var(--cream); background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 14px; }
+  .signin-card input:focus { outline: 1px solid var(--gold); border-color: var(--gold); }
+  .signin-card button { width: 100%; padding: 12px 14px; font: 600 11px/1 var(--mono); letter-spacing: 1.2px; text-transform: uppercase; color: var(--gold); background: var(--gold-soft); border: 1px solid rgba(217,164,65,.35); border-radius: 999px; cursor: pointer; margin-top: 4px; }
+  .signin-card button:disabled { opacity: .5; cursor: default; }
+  .signin-msg { min-height: 18px; margin-top: 12px; font-size: 12.5px; color: var(--red); text-align: center; }
+
+  .eyebrow { font: 600 10.5px/1 var(--mono); letter-spacing: 1.6px; text-transform: uppercase; color: var(--faint); margin-bottom: 11px; }
+  h1 { font: 600 34px/1.1 var(--serif); color: var(--cream); letter-spacing: -.4px; }
+  h2 { font: 600 19px/1.25 var(--serif); color: var(--cream); }
+  .mast { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 16px; }
+  .mast-sub { font-size: 13.5px; color: var(--muted); margin-top: 9px; max-width: 520px; }
+  .seg { display: inline-flex; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 4px; }
+  .seg button { min-height: 40px; min-width: 52px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font: 600 11px/1 var(--mono); letter-spacing: 1px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--gold-soft); color: var(--gold); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 5px 11px; font-size: 12px; color: var(--body); }
+  .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+  .chip.warn .dot { background: var(--amber); } .chip.bad .dot { background: var(--red); }
+  .chip.bad { color: #F0C2BA; }
+
+  .attention { background: var(--amber-bg); border: 1px solid rgba(212,162,76,.35); border-radius: 12px; padding: 14px 18px; margin-bottom: 18px; }
+  .attention h2 { font-size: 15px; color: #F2D29A; margin-bottom: 6px; }
+  .attention ul { padding-left: 18px; display: flex; flex-direction: column; gap: 5px; color: #E9DCC8; }
+  .attention b { color: var(--cream); }
+  .attention.bad { background: var(--red-bg); border-color: rgba(210,119,106,.4); }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 18px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .kpi .k { font: 600 10px/1.3 var(--mono); letter-spacing: 1.2px; text-transform: uppercase; color: var(--faint); }
+  .kpi .v { font: 600 28px/1.15 var(--serif); color: var(--cream); }
+  .kpi .s { font-size: 12.5px; color: var(--muted); }
+  .kpi svg { margin-top: 6px; width: 100%; height: 30px; display: block; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 14px; min-width: 0; }
+  .card-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 12px; margin-bottom: 12px; }
+  .card-head .note { font-size: 12px; color: var(--muted); }
+  .foot { font-size: 12.5px; color: var(--muted); margin-top: 10px; line-height: 1.55; }
+  .err { color: var(--red); font-size: 13px; }
+  .empty { color: var(--muted); font-size: 13px; }
+
+  .path { display: flex; flex-direction: column; gap: 8px; }
+  .path .row { display: grid; grid-template-columns: minmax(130px, 210px) minmax(0, 1fr) 64px; gap: 12px; align-items: center; font-size: 13.5px; }
+  .path .lbl { color: var(--cream); }
+  .bar { height: 12px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .bar > span { display: block; height: 100%; border-radius: 4px; background: var(--gold); }
+  .bar > span.leak { background: var(--red); }
+  .path .n { text-align: right; font-weight: 600; color: var(--cream); }
+  @media (max-width: 560px) { .path .row { grid-template-columns: minmax(0, 1fr) 56px; } .path .bar { grid-column: 1 / -1; grid-row: 2; } }
+
+  .tbl-box { overflow-x: auto; }
+  table { width: 100%; min-width: 600px; border-collapse: collapse; font-size: 13.5px; }
+  th, td { padding: 10px 8px; border-bottom: 1px solid var(--border-soft); text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { font: 600 10px/1.3 var(--mono); letter-spacing: 1.1px; text-transform: uppercase; color: var(--faint); border-bottom-color: var(--border); }
+  tbody th { font-weight: 500; color: var(--cream); }
+  td.dim { color: var(--faint); }
+
+  .split { display: flex; flex-wrap: wrap; gap: 14px; }
+  .split > .card { flex: 1 1 320px; margin-bottom: 0; }
+  .split > .card.wide { flex: 999 1 480px; }
+  .split + .card, .split { margin-bottom: 14px; }
+  .plist { display: flex; flex-direction: column; gap: 9px; }
+  .plist .item { display: grid; grid-template-columns: minmax(0, 1fr) 56px; gap: 10px; align-items: center; font-size: 13.5px; }
+  .plist .p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--cream); }
+  .plist .bar { height: 5px; margin-top: 5px; }
+  .plist .bar > span { background: var(--teal); }
+  .plist .n { text-align: right; font-weight: 600; color: var(--cream); }
+  .stack { display: flex; height: 14px; border-radius: 4px; overflow: hidden; margin-bottom: 12px; }
+  .legend { list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
+  .legend li { display: flex; justify-content: space-between; gap: 10px; }
+  .legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 8px; }
+  .gsc-nums { display: flex; flex-wrap: wrap; gap: 26px; margin-bottom: 12px; }
+  .gsc-nums .v { font: 600 24px/1.2 var(--serif); color: var(--cream); }
+  .gsc-nums .k { font-size: 12px; color: var(--muted); }
+  footer.defs { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 6px; font-size: 12px; color: var(--faint); line-height: 1.65; }
+  code { font: 12px var(--mono); color: var(--body); }
+  .state { text-align: center; padding: 60px 20px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="root" class="wrap"><div class="state">Loading…</div></div>
+
+<template id="dash-tpl">
+  <nav class="topnav">
+    <a href="/">← Dashboards</a>
+    <div class="right"><span id="who"></span><button type="button" id="signout">Sign out</button></div>
+  </nav>
+  <header class="mast">
+    <div>
+      <div class="eyebrow">The Picnic Stories</div>
+      <h1>Growth</h1>
+      <p class="mast-sub" id="mast-sub">Where demand comes from, where it leaks, and what it turns into.</p>
+    </div>
+    <div class="seg" role="group" aria-label="Date range">
+      <button type="button" data-days="7">7D</button>
+      <button type="button" data-days="30" aria-pressed="true">30D</button>
+      <button type="button" data-days="90">90D</button>
+    </div>
+  </header>
+  <div class="chips" id="chips"></div>
+  <section id="attention" hidden></section>
+  <section class="kpis" id="kpis" aria-label="Headline numbers"></section>
+
+  <section class="card" aria-labelledby="h-path">
+    <div class="card-head"><h2 id="h-path">Demand path</h2><span class="note">people who did each step at least once · bar = share of visitors</span></div>
+    <div id="path"></div>
+    <p class="foot">Red marks the biggest drop. WhatsApp and Book online are separate exits from the brochure, not steps in a row.</p>
+  </section>
+
+  <section class="card" aria-labelledby="h-chan">
+    <div class="card-head"><h2 id="h-chan">Channels</h2><span class="note">visitors from PostHog · bookings as tagged by the team at entry</span></div>
+    <div id="channels"></div>
+    <p class="foot">Two measurements side by side, not joined: a visitor can't be matched to a booking once they move to WhatsApp, so never divide one column by the other. Visitors with no referrer include many Instagram in-app visits, so Instagram's real share is higher than shown.</p>
+  </section>
+
+  <div class="split">
+    <section class="card wide" aria-labelledby="h-pages"><div class="card-head"><h2 id="h-pages">Top pages</h2><span class="note">visitors</span></div><div id="pages"></div></section>
+    <section class="card" aria-labelledby="h-dev"><div class="card-head"><h2 id="h-dev">Devices</h2></div><div id="devices"></div></section>
+  </div>
+
+  <section class="card" aria-labelledby="h-gsc">
+    <div class="card-head"><h2 id="h-gsc">Google search</h2><span class="note" id="gsc-note"></span></div>
+    <div id="gsc"></div>
+  </section>
+
+  <footer class="defs">
+    Visitors, pages, devices and the demand path: PostHog, production hostnames only, IST days ending yesterday, synced daily.
+    Bookings and revenue: <code>booking_revenue_split</code>, confirmed only, standing exclusions applied there; channel = <code>bookings.booking_source</code>.
+    Spend: <code>ad_insights</code>. Search: Search Console, which runs about 3 days behind, so its window ends earlier.
+    Vercel Web Analytics is not used: it does not count the brochure page.
+  </footer>
+</template>
+
+<script>
+const SUPABASE_URL  = "https://evmftrogyzoudiccqkya.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2bWZ0cm9neXpvdWRpY2Nxa3lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTM5OTUsImV4cCI6MjA5NTI4OTk5NX0.ka2tLAY7xpe08X8TlNVgft4V__Qv7Ol27rd0daOtI4I";
+const ALLOWED = ["aksh.eeev@gmail.com"];
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { persistSession: true, autoRefreshToken: true } });
+
+/* Same classification as scripts/gsc-dashboard.py — keep them in step. */
+const BRAND = /picnic ?stor|^the picnic|piknik|picknic|thepicnic/i;
+const VENUE = /beige|countryside|country ?side|castle valley|castle farms|om niwas|once upon|sunroom|leopard trail|terracottage|terra ?cottage|bagh|cottage entry|aravali|house of amer/i;
+const GSC_DAYS = { 7: 7, 30: 28, 90: 90 };
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = n => (n == null || isNaN(n)) ? "—" : Math.round(n).toLocaleString("en-IN");
+const inr = n => (n == null || isNaN(n)) ? "—" : "₹" + Math.round(n).toLocaleString("en-IN");
+const istToday = () => new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
+function addDays(d, n) { const x = new Date(d + "T00:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); }
+const dShort = d => new Date(d + "T00:00:00Z").toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
+function ago(ts) { const h = (Date.now() - new Date(ts).getTime()) / 3600e3; return h < 1 ? "just now" : h < 24 ? Math.round(h) + " h ago" : Math.round(h / 24) + " d ago"; }
+
+let D = null;          // everything loaded once
+let days = 30;         // selected range
+let errors = {};       // per-source load errors
+
+async function q(promise) { const { data, error } = await promise; if (error) throw new Error(error.message); return data; }
+
+async function loadAll() {
+  const today = istToday();
+  const since90 = addDays(today, -91);
+  const jobs = {
+    winEnd: q(sb.from("web_window").select("window_end").order("window_end", { ascending: false }).limit(1)),
+    daily: q(sb.from("web_daily").select("date,visitors").gte("date", since90).order("date")),
+    wa: q(sb.from("web_event_daily").select("date,people").eq("event", "brochure_whatsapp_click").gte("date", since90).order("date")),
+    runs: q(sb.from("web_sync_runs").select("source,started_at,ok,error,window_end").order("started_at", { ascending: false }).limit(40)),
+    adRuns: q(sb.from("ad_sync_runs").select("run_at,ok,window_end").order("run_at", { ascending: false }).limit(5)),
+    split: q(sb.from("booking_revenue_split").select("id,booked_on,confirmed,booking_kind,picnic_revenue,stay_revenue,excluded_reason").gte("booked_on", since90).eq("confirmed", true).is("excluded_reason", null)),
+    spend: q(sb.from("ad_insights").select("date,spend_inr").gte("date", since90)),
+    gscDaily: q(sb.from("gsc_daily").select("date,clicks,impressions").gte("date", addDays(today, -100)).order("date")),
+    gscEnd: q(sb.from("gsc_page_window").select("window_end").order("window_end", { ascending: false }).limit(1)),
+  };
+  const keys = Object.keys(jobs);
+  const settled = await Promise.allSettled(Object.values(jobs));
+  const out = {};
+  settled.forEach((r, i) => { if (r.status === "fulfilled") out[keys[i]] = r.value; else errors[keys[i]] = r.reason; });
+
+  // Second wave: rows that depend on the latest window ends / booking ids.
+  const winEnd = out.winEnd && out.winEnd[0] ? out.winEnd[0].window_end : null;
+  const gscEnd = out.gscEnd && out.gscEnd[0] ? out.gscEnd[0].window_end : null;
+  const ids = (out.split || []).map(r => r.id);
+  const wave = {
+    win: winEnd ? q(sb.from("web_window").select("window_days,kind,key,people,count").eq("window_end", winEnd)) : Promise.resolve([]),
+    gscPages: gscEnd ? q(sb.from("gsc_page_window").select("window_days,page,clicks").eq("window_end", gscEnd).order("clicks", { ascending: false })) : Promise.resolve([]),
+    gscQueries: gscEnd ? q(sb.from("gsc_query_window").select("window_days,query,clicks").eq("window_end", gscEnd)) : Promise.resolve([]),
+    sources: ids.length ? q(sb.from("bookings").select("id,booking_source").in("id", ids)) : Promise.resolve([]),
+  };
+  const wk = Object.keys(wave);
+  const ws = await Promise.allSettled(Object.values(wave));
+  ws.forEach((r, i) => { if (r.status === "fulfilled") out[wk[i]] = r.value; else errors[wk[i]] = r.reason; });
+  out.winEnd = winEnd || addDays(today, -1);
+  out.hasWeb = !!winEnd;
+  out.gscEnd = gscEnd;
+  return out;
+}
+
+/* ---------- derived per range ---------- */
+function view() {
+  const end = D.winEnd, start = addDays(end, -(days - 1));
+  const w = (D.win || []).filter(r => r.window_days === days);
+  const pick = (kind, key) => w.find(r => r.kind === kind && r.key === key);
+  const ev = key => (pick("event", key) || {}).people || 0;
+  const src = Object.fromEntries((D.sources || []).map(r => [r.id, r.booking_source]));
+  const bookings = (D.split || []).filter(r => r.booked_on >= start && r.booked_on <= end).map(r => ({ ...r, source: src[r.id] || "unknown" }));
+  const spend = (D.spend || []).filter(r => r.date >= start && r.date <= end).reduce((s, r) => s + Number(r.spend_inr || 0), 0);
+  return { end, start, w, pick, ev, bookings, spend };
+}
+
+/* ---------- render ---------- */
+function sparkline(points, color) {
+  if (!points.length) return "";
+  const max = Math.max(1, ...points), W = 200, H = 30, step = points.length > 1 ? W / (points.length - 1) : W;
+  const d = points.map((v, i) => (i ? "L" : "M") + (i * step).toFixed(1) + " " + (H - 2 - (v / max) * (H - 4)).toFixed(1)).join(" ");
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><path d="${d}" fill="none" stroke="${color}" stroke-width="1.6" vector-effect="non-scaling-stroke"/></svg>`;
+}
+
+/* One chip per source. Red: never synced, or the latest run failed, or the last good run
+   is >72 h old. Amber: last good run 36–72 h old. A stale number never shows without this. */
+function renderChips() {
+  const chip = (label, runs, tsKey) => {
+    const last = runs[0], lastOk = runs.find(r => r.ok);
+    let cls = "", text;
+    if (!last) { cls = "bad"; text = "never synced"; }
+    else if (!last.ok) { cls = "bad"; text = "last run failed " + ago(last[tsKey]); }
+    else {
+      const h = (Date.now() - new Date(lastOk[tsKey]).getTime()) / 3600e3;
+      cls = h > 72 ? "bad" : h > 36 ? "warn" : "";
+      text = "synced " + ago(lastOk[tsKey]);
+    }
+    return `<span class="chip ${cls}"><span class="dot" aria-hidden="true"></span>${esc(label + " · " + text)}</span>`;
+  };
+  const runs = src => (D.runs || []).filter(r => r.source === src);
+  document.getElementById("chips").innerHTML = [
+    chip("PostHog", runs("posthog"), "started_at"),
+    `<span class="chip"><span class="dot" aria-hidden="true"></span>Bookings · live</span>`,
+    chip("Meta spend", D.adRuns || [], "run_at"),
+    chip("Search Console", runs("gsc"), "started_at"),
+  ].join("");
+}
+
+function renderAttention(v) {
+  const items = [], bad = [];
+  const ph = (D.runs || []).find(r => r.source === "posthog");
+  const g = (D.runs || []).find(r => r.source === "gsc");
+  if (!D.hasWeb) bad.push("<b>No PostHog data yet.</b> The first sync hasn't run, so visitor numbers below are empty. Check the <code>POSTHOG_API_KEY</code> secret.");
+  else if (ph && !ph.ok) bad.push("<b>The last PostHog sync failed.</b> Numbers below are from the previous good run.");
+  if (g && !g.ok) bad.push("<b>The last Search Console sync failed.</b>");
+  if (D.hasWeb) {
+    const book = v.ev("brochure_book_online_click"), dates = v.ev("check_dates_opened"), sub = v.ev("booking_intent_submitted");
+    if (book >= 20 && dates / book < 0.3) items.push(`<b>Book online leaks.</b> ${fmt(book)} people tapped Book online; ${fmt(dates)} opened the date picker; ${fmt(sub)} submitted. Counts per step, not an ordered funnel.`);
+    const wa = v.ev("brochure_whatsapp_click") + v.ev("intent_whatsapp_clicked");
+    const team = v.bookings.filter(b => b.source !== "website").length;
+    if (wa > 0 && v.bookings.length) items.push(`<b>The site starts conversations; the team closes them.</b> ${fmt(wa)} WhatsApp taps; ${fmt(team)} of ${fmt(v.bookings.length)} confirmed bookings came in through the team, not the website form.`);
+  }
+  const el = document.getElementById("attention");
+  if (!items.length && !bad.length) { el.hidden = true; return; }
+  el.hidden = false;
+  el.className = "attention" + (bad.length ? " bad" : "");
+  el.innerHTML = `<h2>Needs a look</h2><ul>${bad.concat(items).map(x => `<li>${x}</li>`).join("")}</ul>`;
+}
+
+function renderKpis(v) {
+  const visitors = (v.pick("overview", "visitors") || {}).people;
+  const wa = v.ev("brochure_whatsapp_click");
+  const picnic = v.bookings.filter(b => b.booking_kind === "picnic" || b.booking_kind === "picnic_stay").length;
+  const stay = v.bookings.length - picnic;
+  const pRev = v.bookings.reduce((s, b) => s + Number(b.picnic_revenue || 0), 0);
+  const sRev = v.bookings.reduce((s, b) => s + Number(b.stay_revenue || 0), 0);
+  const inRange = arr => (arr || []).filter(r => r.date >= v.start && r.date <= v.end);
+  const visSeries = inRange(D.daily).map(r => r.visitors), waSeries = inRange(D.wa).map(r => r.people);
+  const card = (k, val, sub, spark) => `<div class="kpi"><div class="k">${k}</div><div class="v">${val}</div><div class="s">${sub}</div>${spark || ""}</div>`;
+  document.getElementById("kpis").innerHTML = [
+    card("Visitors", D.hasWeb ? fmt(visitors) : "—", "unique people, PostHog", sparkline(visSeries, "#D9A441")),
+    card("WhatsApp taps", D.hasWeb ? fmt(wa) : "—", "people, from the brochure", sparkline(waSeries, "#7CC094")),
+    card("Confirmed bookings", fmt(v.bookings.length), `${fmt(picnic)} picnic · ${fmt(stay)} stay`),
+    card("Picnic revenue", inr(pRev), "+ " + inr(sRev) + " stay"),
+    card("Meta ad spend", inr(v.spend), "picnic only, both cities"),
+  ].join("");
+}
+
+function renderPath(v) {
+  const el = document.getElementById("path");
+  if (!D.hasWeb) { el.innerHTML = `<p class="empty">Waiting for the first PostHog sync.</p>`; return; }
+  const total = (v.pick("overview", "visitors") || {}).people || 0;
+  const steps = [
+    ["Visitors", total],
+    ["Saw the brochure", (v.pick("page", "/brochure") || {}).people || 0],
+    ["Tapped WhatsApp", v.ev("brochure_whatsapp_click")],
+    ["Tapped Book online", v.ev("brochure_book_online_click")],
+    ["Opened date picker", v.ev("check_dates_opened")],
+    ["Submitted booking", v.ev("booking_intent_submitted")],
+    ["Paid online", v.ev("payment_succeeded")],
+  ];
+  // Biggest relative drop between consecutive booking-form steps (Book online onward).
+  let leakAt = -1, worst = 1;
+  for (let i = 4; i < steps.length; i++) { const prev = steps[i - 1][1]; if (prev >= 5) { const r = steps[i][1] / prev; if (r < worst) { worst = r; leakAt = i; } } }
+  el.innerHTML = `<div class="path">${steps.map(([l, n], i) => `
+    <div class="row"><span class="lbl">${l}</span>
+      <span class="bar" aria-hidden="true"><span class="${i === leakAt ? "leak" : ""}" style="width:${total ? Math.max(0.6, n / total * 100).toFixed(1) : 0}%"></span></span>
+      <span class="n">${fmt(n)}</span></div>`).join("")}</div>`;
+}
+
+function visitorChannel(key) {
+  const k = String(key).toLowerCase();
+  if (k === "ig" || k.includes("instagram")) return "Instagram";
+  if (k.includes("facebook") || k === "fb") return "Facebook";
+  if (k.includes("wl.co") || k.includes("whatsapp") || k.includes("wa.me")) return "WhatsApp";
+  if (k.includes("google") || k.includes("bing") || k.includes("yahoo") || k.includes("duckduckgo")) return "Search engines";
+  if (k.includes("chatgpt") || k.includes("perplexity") || k.includes("gemini")) return "AI assistants";
+  if (k === "$direct" || k.includes("picnicstories.com")) return "Direct & referral";
+  if (k === "brochure") return "Brochure link";
+  return "Other";
+}
+function bookingChannel(s) {
+  if (s === "instagram_ad" || s === "instagram_organic") return "Instagram";
+  if (s === "whatsapp") return "WhatsApp";
+  if (s === "airbnb") return "Airbnb";
+  if (s === "website") return "Website form";
+  if (s === "direct" || s === "referral") return "Direct & referral";
+  return "Other";
+}
+
+function renderChannels(v) {
+  const rows = {};
+  const row = name => rows[name] || (rows[name] = { name, visitors: null, bookings: 0, ad: 0, organic: 0, revenue: 0, spend: null });
+  if (D.hasWeb) for (const r of v.w.filter(r => r.kind === "source")) { const x = row(visitorChannel(r.key)); x.visitors = (x.visitors || 0) + r.people; }
+  for (const b of v.bookings) {
+    const x = row(bookingChannel(b.source));
+    x.bookings++; x.revenue += Number(b.picnic_revenue || 0) + Number(b.stay_revenue || 0);
+    if (b.source === "instagram_ad") x.ad++; if (b.source === "instagram_organic") x.organic++;
+  }
+  row("Instagram").spend = v.spend;
+  const order = ["Instagram", "WhatsApp", "Facebook", "Search engines", "AI assistants", "Brochure link", "Airbnb", "Website form", "Direct & referral", "Other"];
+  const list = Object.values(rows).sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name)).filter(r => r.visitors || r.bookings || r.spend);
+  const bk = r => r.name === "Instagram" && r.bookings ? `${fmt(r.bookings)} <span class="dim">(${r.ad} ad · ${r.organic} organic)</span>` : (r.bookings ? fmt(r.bookings) : `<span class="dim">—</span>`);
+  document.getElementById("channels").innerHTML = `<div class="tbl-box"><table>
+    <thead><tr><th scope="col">Channel</th><th scope="col">Visitors</th><th scope="col">Bookings</th><th scope="col">Revenue</th><th scope="col">Spend</th></tr></thead>
+    <tbody>${list.map(r => `<tr><th scope="row">${esc(r.name)}</th>
+      <td${r.visitors == null ? ' class="dim"' : ""}>${r.visitors == null ? "—" : fmt(r.visitors)}</td>
+      <td>${bk(r)}</td><td${r.revenue ? "" : ' class="dim"'}>${r.revenue ? inr(r.revenue) : "—"}</td>
+      <td${r.spend == null ? ' class="dim"' : ""}>${r.spend == null ? "—" : inr(r.spend)}</td></tr>`).join("")}</tbody></table></div>`;
+}
+
+function renderPages(v) {
+  const el = document.getElementById("pages");
+  if (!D.hasWeb) { el.innerHTML = `<p class="empty">Waiting for the first PostHog sync.</p>`; return; }
+  const pages = v.w.filter(r => r.kind === "page").sort((a, b) => b.people - a.people).slice(0, 8);
+  const max = pages.length ? pages[0].people : 1;
+  el.innerHTML = `<div class="plist">${pages.map(p => `<div class="item"><div style="min-width:0"><div class="p">${esc(p.key)}</div>
+    <div class="bar" aria-hidden="true"><span style="width:${(p.people / max * 100).toFixed(1)}%"></span></div></div><span class="n">${fmt(p.people)}</span></div>`).join("")}</div>`;
+}
+
+function renderDevices(v) {
+  const el = document.getElementById("devices");
+  if (!D.hasWeb) { el.innerHTML = `<p class="empty">Waiting for the first PostHog sync.</p>`; return; }
+  let ios = 0, android = 0, other = 0;
+  for (const r of v.w.filter(r => r.kind === "device")) {
+    if (r.key === "Mobile · iOS") ios += r.people; else if (r.key === "Mobile · Android") android += r.people; else other += r.people;
+  }
+  const t = ios + android + other || 1, pct = n => Math.round(n / t * 100) + "%";
+  el.innerHTML = `<div class="stack" aria-hidden="true"><span style="flex:${ios} 1 0;background:#D9A441"></span><span style="flex:${android} 1 0;background:#6FC2B6"></span><span style="flex:${other} 1 0;background:#6A625B"></span></div>
+    <ul class="legend"><li><span><span class="sw" style="background:#D9A441"></span>iPhone</span><b>${pct(ios)}</b></li>
+    <li><span><span class="sw" style="background:#6FC2B6"></span>Android phone</span><b>${pct(android)}</b></li>
+    <li><span><span class="sw" style="background:#6A625B"></span>Desktop and tablet</span><b>${pct(other)}</b></li></ul>
+    <p class="foot">Check every change on an iPhone first.</p>`;
+}
+
+function renderGsc() {
+  const el = document.getElementById("gsc"), note = document.getElementById("gsc-note");
+  if (!D.gscEnd) { el.innerHTML = `<p class="empty">Waiting for the first Search Console sync.</p>`; note.textContent = ""; return; }
+  const gd = GSC_DAYS[days], end = D.gscEnd, start = addDays(end, -(gd - 1));
+  note.textContent = `Search Console · ${dShort(start)} – ${dShort(end)} (${gd} days)`;
+  const rows = (D.gscDaily || []).filter(r => r.date >= start && r.date <= end);
+  const clicks = rows.reduce((s, r) => s + r.clicks, 0), impr = rows.reduce((s, r) => s + r.impressions, 0);
+  const qs = (D.gscQueries || []).filter(r => r.window_days === gd);
+  const qClicks = qs.reduce((s, r) => s + r.clicks, 0);
+  const nonBrand = qs.filter(r => !BRAND.test(r.query) && !VENUE.test(r.query)).reduce((s, r) => s + r.clicks, 0);
+  const coverage = clicks ? Math.round(qClicks / clicks * 100) : 0;
+  const pages = (D.gscPages || []).filter(r => r.window_days === gd).slice(0, 4);
+  const label = p => { try { const u = new URL(p); return u.pathname === "/" ? "Homepage" : u.pathname; } catch { return p; } };
+  el.innerHTML = `<div class="gsc-nums">
+      <div><div class="k">Clicks</div><div class="v">${fmt(clicks)}</div></div>
+      <div><div class="k">Impressions</div><div class="v">${fmt(impr)}</div></div>
+      <div><div class="k">Non-brand, non-venue clicks</div><div class="v">${fmt(nonBrand)}</div></div>
+    </div>
+    <div class="plist">${pages.map(p => `<div class="item"><div class="p">${esc(label(p.page))}</div><span class="n">${fmt(p.clicks)}</span></div>`).join("")}</div>
+    <p class="foot">The query table covers ${coverage}% of clicks (Google hides rare searches), so the non-brand figure is a floor. The full SEO report stays the place for search detail.</p>`;
+}
+
+function renderAll() {
+  const v = view();
+  document.getElementById("mast-sub").textContent =
+    `Where demand comes from, where it leaks, and what it turns into. ${dShort(v.start)} – ${dShort(v.end)}, IST, production site only.`;
+  const safe = (name, fn) => { try { fn(); } catch (e) { const el = document.getElementById(name); if (el) el.innerHTML = `<p class="err">Failed to render: ${esc(e.message || e)}</p>`; console.error(name, e); } };
+  safe("chips", renderChips);
+  safe("attention", () => renderAttention(v));
+  safe("kpis", () => renderKpis(v));
+  safe("path", () => renderPath(v));
+  safe("channels", () => renderChannels(v));
+  safe("pages", () => renderPages(v));
+  safe("devices", () => renderDevices(v));
+  safe("gsc", renderGsc);
+  for (const [k, e] of Object.entries(errors)) console.warn("load failed:", k, e && e.message);
+}
+
+async function runDashboard(session) {
+  const root = document.getElementById("root");
+  root.innerHTML = "";
+  root.appendChild(document.getElementById("dash-tpl").content.cloneNode(true));
+  document.getElementById("who").textContent = session.user.email;
+  document.getElementById("signout").addEventListener("click", async () => { await sb.auth.signOut(); location.reload(); });
+  document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
+    days = Number(b.dataset.days);
+    document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    if (D) renderAll();
+  }));
+  D = await loadAll();
+  renderAll();
+}
+
+/* ---- auth gate (same single-admin model as index.html / meta-dashboard.html) ---- */
+function signInScreen(message) {
+  document.getElementById("root").innerHTML = `
+    <div class="signin-wrap"><div class="signin-card">
+      <div class="eyebrow">The Picnic Stories</div>
+      <h1>Growth</h1>
+      <div class="signin-sub">Sign in to continue</div>
+      <form id="signin-form" autocomplete="on">
+        <label for="si-email">Email</label>
+        <input id="si-email" type="email" autocomplete="username" required>
+        <label for="si-pass">Password</label>
+        <input id="si-pass" type="password" autocomplete="current-password" required>
+        <button type="submit" id="si-go">Sign in</button>
+      </form>
+      <div id="si-msg" class="signin-msg">${message ? esc(message) : ""}</div>
+    </div></div>`;
+  document.getElementById("signin-form").addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const btn = document.getElementById("si-go"), msg = document.getElementById("si-msg");
+    btn.disabled = true; btn.textContent = "Signing in…"; msg.textContent = "";
+    const { error } = await sb.auth.signInWithPassword({
+      email: document.getElementById("si-email").value.trim(),
+      password: document.getElementById("si-pass").value,
+    });
+    if (error) { btn.disabled = false; btn.textContent = "Sign in"; msg.textContent = error.message || "Sign-in failed."; return; }
+    boot();
+  });
+}
+
+async function boot() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { signInScreen(""); return; }
+  const email = ((session.user && session.user.email) || "").trim().toLowerCase();
+  if (!ALLOWED.includes(email)) {
+    await sb.auth.signOut();
+    signInScreen("That account does not have access to this dashboard.");
+    return;
+  }
+  runDashboard(session);
+}
+
+sb.auth.onAuthStateChange(event => { if (event === "SIGNED_OUT") signInScreen(""); });
+boot();
+</script>
+</body>
+</html>

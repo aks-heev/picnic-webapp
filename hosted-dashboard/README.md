@@ -30,6 +30,7 @@ read fails, the calendar still shows bookings and says what is missing.
 | `/revenue-dashboard` | `revenue-dashboard.html` | revenue, P&L, occupancy, bookings table |
 | `/meta-dashboard` | `meta-dashboard.html` | Meta ads |
 | `/calendar` | `calendar.html` | bookings calendar (below) |
+| `/growth` | `growth.html` | PostHog visitors + demand path, bookings/revenue/spend by channel, Search Console (docs/GROWTH_DASHBOARD_PLAN.md). Reads `web_*` / `gsc_*` tables filled by `sync-posthog` / `sync-gsc` |
 
 ## Calendar (`calendar.html`, 2026-09-28)
 
