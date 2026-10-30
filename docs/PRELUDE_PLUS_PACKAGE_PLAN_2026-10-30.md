@@ -1,6 +1,6 @@
 # The Note package (Prelude + Cake + Board) — plan (2026-10-30)
 
-Status (2026-10-30): Phase A SHIPPED-verified (package in DB, INACTIVE; 17 pricing assertions passed). Phase B built — app.js board change + brochure card written, parse-checked, NOT yet pushed or eyeballed. Phase C (activate) pending push. D2 approved; D3 = reuse Prelude photos for now; D4 = Cake + White sunboard.
+Status (2026-10-30 21:00 IST): LIVE. Pushed as 70c47ef; the_note activated. Verified: brochure card + live prices, venue-step prices at all 4 venues, submit_booking_intent rolled-back test (7,400 / advance 2,220 / board saved / Cake+Board ₹0), 0 residue. NOT eyeballed: booking-form board field (Todoist, Aksheev). Read-out due 2026-12-26 (§6).
 Name (decided 2026-10-30): **The Note** — key `the_note`. Tagline: "The Prelude setup, with a cake and your message on a board."
 
 ## 0. Goal & definition of done
