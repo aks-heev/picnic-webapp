@@ -1,206 +1,240 @@
-// brochure.js — unlisted /brochure page (the web version of the packages PDF).
+// brochure.js — the city brochures (2026-11-03):
+//   /brochure         city chooser (fills each city's live "from" price)
+//   /brochure/ncr     Gurugram & Delhi NCR   } same template; <html data-city> says which.
+//   /brochure/jaipur  Jaipur                 } Built by scripts/prerender-venues.mjs.
+// Plan: docs/PLAN_city_brochures_redesign_2026-11-03.md.
 //
 // Copy and photos are static in brochure.html (photos ship from /public, so no
-// Supabase Storage egress). Prices and inclusions are filled LIVE so this page
-// can never quote something the booking flow doesn't charge or /packages
-// doesn't say:
-//   - package "from" price = lowest no-food price in package_price_grid (the
-//     view over package_prices — the same rows compute_booking_total prices
-//     from), plus "with food from" the lowest with-food price (2026-10-23, G4).
-//     Falls back to the lowest venue_packages.price if the view is unavailable.
-//   - add-ons menu = active add_ons rows
-//   - inclusions = the same rules as app.js's /packages cards:
-//       standalone package (non-empty packages.inclusions, e.g. The Prelude)
-//         -> that free-text list
-//       first tier of the ladder (The Setting) -> SHARED_SETUP_LABELS
-//       later tiers (Moment, Story) -> the package_add_ons each adds on top
-//         of the previous tier ("Everything in <prev>, plus")
-// If the fetch fails, the static copy already in the HTML stays on screen.
+// Supabase Storage egress). Everything that can go stale is filled from the DB:
+//   - prices: public.brochure_city_prices, which mirrors compute_booking_total
+//     (package_prices when a venue has rows, else venue_packages). Rendered by
+//     brochure-render.js — the SAME functions the build uses to bake them — so
+//     the baked page and the live refresh can never disagree. Only this city's
+//     rows are shown; a package no venue here offers is hidden.
+//   - venues, stays, add-ons (with per-city availability): live rows.
+//   - inclusions: the same rules as app.js's package cards (fillInclusions).
+// If the fetch fails, the prices baked in at build time stay on screen.
 import { createClient } from '@supabase/supabase-js'
 import { track } from './analytics.js'
 import { SHARED_SETUP_LABELS } from './setup-labels.js'
-import { currentSearch, appendSearchParams, defaultTierForOccasion } from './params.js'
+import { currentSearch, saveSearch, appendSearchParams, defaultTierForOccasion } from './params.js'
+import {
+  REGIONS, regionForCity, summarizeRegion, regionFrom, priceBlockHtml, guestsLine, glanceRowsHtml,
+  venueCardsHtml, stayRowsHtml, addonRowsHtml, packageCtaHtml, bookHref, waHref, ADDON_LABEL, inr, esc,
+} from './brochure-render.js'
 
 // Homepage hero search fields (occasion / city / date / guests), validated by
-// params.js — anything invalid is '' / null. This page uses occasion (badge on
-// the matching package) and guests (flags packages that can't host the party)
-// and forwards all four to /packages, where city/date/guests are applied.
-// URL first, then this tab's last hero search (params.js currentSearch).
+// params.js. URL first, then this tab's last hero search.
 const SEARCH = currentSearch()
 
-const WA = {
-  Gurugram: '919773703982',
-  Jaipur: '919266964666',
-}
+// Which city page this is: set on <html> by the build (or, on the bare
+// template, by the inline script in brochure.html). null = the chooser.
+const REGION = (() => { const c = document.documentElement.dataset.city; return REGIONS[c] ? c : null })()
+const R = REGION ? REGIONS[REGION] : null
 
-const inr = (n) => '₹' + Number(n).toLocaleString('en-IN', { maximumFractionDigits: 0 })
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
-
-// Display names for add-ons whose DB name is admin shorthand. Keyed by name,
-// not id (ids are traps here — see CLAUDE.md §6). Unknown names show as-is.
-const ADDON_LABEL = {
-  'Photo Printouts(10 Colored Photos)': 'Photo Printouts (10 pics)',
-  'Bonfire': 'Bonfire (charcoal pit)',
-  'Skyshots': 'Skyshots (fireworks)',
-}
-
-function waLink(city, pkgName) {
-  const text = pkgName
-    ? `Hi! I'd like to book ${pkgName} with The Picnic Stories.`
-    : `Hi! I'd like to book a picnic with The Picnic Stories.`
-  return `https://wa.me/${WA[city]}?text=${encodeURIComponent(text)}`
-}
-
-// Website booking link. With a package: /packages?tier=<key> opens the venue
-// step for that package (app.js showPackagesPage — /packages is only the venue
-// step since merge plan Phase 2). Without one: /packages, which redirects back
-// here, so a CTA without a package is never rendered in practice.
-function siteLink(pkgKey) {
+// Hero-search fields carried into /packages. A searched city in the OTHER
+// region is dropped, so the venue step never opens on the wrong city.
+function carry() {
   const p = new URLSearchParams()
-  if (pkgKey) p.set('tier', pkgKey)
-  appendSearchParams(p, SEARCH)
-  p.set('utm_source', 'brochure')
-  p.set('utm_medium', 'link')
-  return `/packages?${p}`
+  const city = SEARCH.city && regionForCity(SEARCH.city) === REGION ? SEARCH.city : ''
+  appendSearchParams(p, { ...SEARCH, city })
+  return p
+}
+const siteLink = (key) => bookHref(REGION, key, carry())
+
+function setSlot(name, html) {
+  document.querySelectorAll(`[data-slot="${name}"]`).forEach(el => { el.innerHTML = html })
 }
 
-function renderCtas() {
-  document.querySelectorAll('[data-cta]').forEach(slot => {
-    const card = slot.closest('[data-pkg]')
-    const key = card?.dataset.pkg || null
-    const name = card?.querySelector('h3')?.textContent.trim() || ''
-    slot.innerHTML =
-      `<a class="pk-btn pk-btn--site" href="${siteLink(key)}" data-site>${name ? `Book ${esc(name)} online` : 'Book online'}</a>` +
-      `<p class="pk-cta-label">Or book on WhatsApp</p>` +
-      Object.keys(WA).map(city =>
-        `<a class="pk-btn pk-btn--wa" href="${waLink(city, name)}" target="_blank" rel="noopener noreferrer" data-city="${city}">${city}</a>`
-      ).join('')
-    slot.addEventListener('click', (e) => {
-      const a = e.target.closest('a')
-      if (!a) return
-      if (a.hasAttribute('data-site')) track('brochure_book_online_click', { package_key: key })
-      else if (a.dataset.city) {
-        track('brochure_whatsapp_click', { package_key: key, city: a.dataset.city })
-        // Meta "Contact" — same event app.js fires on its WhatsApp buttons.
-        if (typeof window.fbq === 'function') window.fbq('track', 'Contact')
-      }
-    })
+// This tab's remembered search city must not point at the other city, or the
+// chooser would forward the guest back there next time.
+function syncSearchCity() {
+  if (SEARCH.city && regionForCity(SEARCH.city) !== REGION) {
+    saveSearch({ ...SEARCH, city: REGION === 'jaipur' ? 'Jaipur' : '' })
+  }
+}
+
+function markCurrentCity() {
+  document.querySelectorAll('[data-switch]').forEach(a => {
+    const to = a.dataset.switch
+    if (to === REGION) { a.setAttribute('aria-current', 'page'); return }
+    // Keep occasion / date / guests when switching city (not the city itself).
+    const p = new URLSearchParams()
+    appendSearchParams(p, { ...SEARCH, city: '' })
+    const q = p.toString()
+    if (q) a.href = `/brochure/${to}?${q}`
+    a.addEventListener('click', () => track('brochure_city_switch', { from: REGION, to }))
   })
 }
 
-async function fillLivePrices() {
+function renderCtas() {
+  document.querySelectorAll('[data-pkg]').forEach(card => {
+    const slot = card.querySelector('[data-cta]')
+    if (!slot) return
+    const name = card.querySelector('h3')?.textContent.trim() || ''
+    slot.innerHTML = packageCtaHtml(REGION, card.dataset.pkg, name, carry())
+  })
+  // Cover, final band and sticky bar: this city's team, with a greeting.
+  document.querySelectorAll('[data-wa]').forEach(a => {
+    if (!a.closest('[data-cta]')) a.href = waHref(REGION)
+  })
+}
+
+// One listener for every tracked link on the page (cards re-render live).
+function onPageClick(e) {
+  const toggle = e.target.closest('[data-toggle]')
+  if (toggle) return onToggle(toggle)
+  const a = e.target.closest('a')
+  if (!a) return
+  const card = a.closest('[data-pkg]')
+  const key = card?.dataset.pkg || null
+  if (a.hasAttribute('data-site')) {
+    track('brochure_book_online_click', { package_key: key, region: REGION })
+  } else if (a.hasAttribute('data-wa')) {
+    const placement = card ? 'package' : a.closest('.sticky') ? 'sticky' : a.closest('.final') ? 'final' : 'cover'
+    track('brochure_whatsapp_click', { package_key: key, city: R?.team || null, region: REGION, placement })
+    // Meta "Contact" — same event app.js fires on its WhatsApp buttons.
+    if (typeof window.fbq === 'function') window.fbq('track', 'Contact')
+  } else if (a.dataset.choose) {
+    track('brochure_city_chosen', { region: a.dataset.choose })
+  }
+}
+
+// "Compare all N venues" (brochure-render.js priceBlockHtml).
+function onToggle(b) {
+  const open = b.getAttribute('aria-expanded') !== 'true'
+  b.setAttribute('aria-expanded', String(open))
+  document.getElementById(b.getAttribute('aria-controls'))?.toggleAttribute('hidden', !open)
+  b.querySelector('[data-open-label]')?.toggleAttribute('hidden', open)
+  b.querySelector('[data-close-label]')?.toggleAttribute('hidden', !open)
+  if (open) track('brochure_compare_venues', { package_key: b.dataset.pkgKey || null, region: REGION })
+}
+
+// Phone sticky bar: shown once the cover's buttons have scrolled away.
+function setupSticky() {
+  const bar = document.querySelector('[data-sticky]')
+  const anchor = document.getElementById('cv-ctas')
+  if (!bar || !anchor || !('IntersectionObserver' in window)) return
+  bar.hidden = false
+  bar.inert = true
+  document.body.classList.add('has-sticky')
+  new IntersectionObserver(([en]) => {
+    const on = !en.isIntersecting && en.boundingClientRect.top < 0
+    bar.classList.toggle('is-on', on)
+    bar.inert = !on
+  }).observe(anchor)
+}
+
+// Prices, glance table and the cover's "from" — one render, from this city's rows.
+function applyPrices(summaries) {
+  if (!Object.keys(summaries).length) return // empty result: keep the baked prices
+  const names = {}
+  document.querySelectorAll('[data-pkg]').forEach(card => {
+    const key = card.dataset.pkg
+    const s = summaries[key]
+    names[key] = card.querySelector('h3')?.textContent.trim() || key
+    card.hidden = !s
+    if (!s) return
+    setSlot(`price:${key}`, priceBlockHtml(s, R.name))
+    setSlot(`guests:${key}`, esc(guestsLine(s)))
+  })
+  setSlot('glance', glanceRowsHtml(summaries, names))
+  const from = regionFrom(summaries)
+  if (from != null) setSlot('from', inr(from))
+}
+
+function viewContent(summaries) {
+  const keys = Object.keys(summaries)
+  if (typeof window.fbq !== 'function' || !keys.length) return
+  // Same shape as showPackagesPage in app.js (comparable in Events Manager),
+  // plus the city.
+  window.fbq('track', 'ViewContent', {
+    content_ids: keys,
+    content_name: 'Picnic Packages',
+    content_type: 'product_group',
+    content_category: R.name,
+    currency: 'INR',
+    value: regionFrom(summaries),
+  })
+}
+
+async function fillLive() {
   const url = import.meta.env.VITE_SUPABASE_URL
   const key = import.meta.env.VITE_SUPABASE_ANON_KEY
   if (!url || !key) return
   const supabase = createClient(url, key)
-  const [pkgRes, vpRes, addRes, gridRes, reelRes] = await Promise.all([
+  const PRICE_COLS = 'region, venue_id, venue_name, venue_slug, venue_area, package_key, package_name, included_guests, max_guests, from_no_food, from_with_food, packages_enabled'
+
+  if (!REGION) {
+    const { data, error } = await supabase.from('brochure_city_prices').select(PRICE_COLS)
+    if (error) throw error
+    for (const r of Object.keys(REGIONS)) {
+      const from = regionFrom(summarizeRegion(data || [], r))
+      if (from != null) setSlot(`chooser-from:${r}`, inr(from))
+    }
+    return
+  }
+
+  const [pkgRes, priceRes, addRes, venueRes, reelRes] = await Promise.all([
     supabase.from('packages').select('id, key, is_active, inclusions, package_add_ons(addon_id, sort_order)').eq('is_active', true),
-    supabase.from('venue_packages').select('package_id, price, max_guests').eq('is_active', true),
+    supabase.from('brochure_city_prices').select(PRICE_COLS).eq('region', REGION),
     // category 'setup' = stay-only celebration setups (named like packages,
     // e.g. "The Prelude ₹4,300") — not layerable add-ons, so never on this menu.
     supabase.from('add_ons').select('id, name, price, category').eq('is_active', true).neq('category', 'setup')
       .order('price', { ascending: true }).order('sort_order', { ascending: true }),
-    supabase.from('package_price_grid').select('package_key, from_price_no_food, from_price_with_food'),
+    supabase.from('venues').select('id, name, slug, type, city, region, area, description, sort_order, venue_add_ons(addon_id)')
+      .eq('is_active', true).order('sort_order', { ascending: true, nullsFirst: false }).order('id', { ascending: true }),
     supabase.from('reels').select('id, package_id, ig_kind, ig_code, theme, sort_order').eq('is_active', true)
       .order('sort_order', { ascending: true }).order('id', { ascending: true }),
   ])
 
   if (!pkgRes.error && !reelRes.error) fillReels(pkgRes.data || [], reelRes.data || [])
-
   if (!pkgRes.error && !addRes.error) fillInclusions(pkgRes.data || [], addRes.data || [])
-
-  if (!pkgRes.error && !vpRes.error) {
-    const idByKey = new Map((pkgRes.data || []).map(p => [p.key, p.id]))
-    const minById = new Map()
-    for (const r of vpRes.data || []) {
-      const p = Number(r.price)
-      if (!(p > 0)) continue
-      if (!minById.has(r.package_id) || p < minById.get(r.package_id)) minById.set(r.package_id, p)
-    }
-    // Price table (preferred): lowest no-food and lowest with-food price per package.
-    const gridNoFood = new Map()
-    const gridFood = new Map()
-    if (!gridRes.error) {
-      for (const r of gridRes.data || []) {
-        const nf = Number(r.from_price_no_food), wf = Number(r.from_price_with_food)
-        if (nf > 0 && (!gridNoFood.has(r.package_key) || nf < gridNoFood.get(r.package_key))) gridNoFood.set(r.package_key, nf)
-        if (wf > 0 && (!gridFood.has(r.package_key) || wf < gridFood.get(r.package_key))) gridFood.set(r.package_key, wf)
-      }
-    }
-    const shown = []
-    document.querySelectorAll('[data-pkg]').forEach(card => {
-      const id = idByKey.get(card.dataset.pkg)
-      // Package switched off in admin → don't advertise it here either. Only
-      // trusted when the query returned rows; an empty result keeps the page.
-      if (id === undefined) { if (idByKey.size) card.hidden = true; return }
-      const min = gridNoFood.get(card.dataset.pkg) || minById.get(id)
-      if (min) card.querySelector('[data-price]').textContent = inr(min)
-      const foodEl = card.querySelector('[data-price-food]')
-      const food = gridFood.get(card.dataset.pkg)
-      if (foodEl) {
-        if (food) foodEl.textContent = `with food from ${inr(food)}`
-        else if (!gridRes.error) foodEl.hidden = true
-      }
-      shown.push({ key: card.dataset.pkg, min })
-    })
-    markGuestCaps(vpRes.data || [], idByKey)
-    // Meta Pixel ViewContent — same shape as showPackagesPage in app.js, so
-    // Events Manager numbers stay comparable across the two pages.
-    if (typeof window.fbq === 'function' && shown.length) {
-      const prices = shown.map(s => s.min).filter(p => p > 0)
-      const params = {
-        content_ids:  shown.map(s => s.key),
-        content_name: 'Picnic Packages',
-        content_type: 'product_group',
-        currency:     'INR',
-      }
-      if (prices.length) params.value = Math.min(...prices)
-      window.fbq('track', 'ViewContent', params)
-    }
+  if (priceRes.error) throw priceRes.error
+  const summaries = summarizeRegion(priceRes.data || [], REGION)
+  applyPrices(summaries)
+  if (!venueRes.error) {
+    const cards = venueCardsHtml(venueRes.data || [], summaries)
+    if (cards) setSlot('venues', cards)
+    setSlot('stays', stayRowsHtml(venueRes.data || [], REGION))
   }
-
-  if (!addRes.error && (addRes.data || []).length) {
-    document.querySelector('[data-addons]').innerHTML = addRes.data
-      .map(a => `<li><span>${esc(ADDON_LABEL[a.name] || a.name)}</span><b>${inr(a.price)}</b></li>`)
-      .join('')
+  if (!addRes.error) {
+    const rows = addonRowsHtml(addRes.data || [], venueRes.error ? null : venueRes.data, summaries)
+    if (rows) setSlot('addons', rows)
   }
+  markGuestCaps(summaries)
+  viewContent(summaries)
 }
 
 // ── Hero search: occasion badge + party-size caps ──
 // Occasion → the package it opens on everywhere else (params.js), badged
-// "Best for <occasion>" and scrolled into view. All four packages stay visible.
+// "Best for <occasion>" and scrolled into view. Every package stays visible.
 function applySearchOccasion() {
   if (SEARCH.occasion || SEARCH.guests || SEARCH.date) {
-    track('brochure_search_landed', { occasion: SEARCH.occasion || null, city: SEARCH.city || null, has_date: !!SEARCH.date, guests: SEARCH.guests })
+    track('brochure_search_landed', { occasion: SEARCH.occasion || null, city: SEARCH.city || null, region: REGION, has_date: !!SEARCH.date, guests: SEARCH.guests })
   }
   if (!SEARCH.occasion) return
   const card = document.querySelector(`[data-pkg="${defaultTierForOccasion(SEARCH.occasion)}"]`)
-  if (!card) return
-  card.classList.add('pk-card--suggested')
-  const head = card.querySelector('.pk-card-head > div')
-  if (head) {
-    const badge = document.createElement('p')
-    badge.className = 'pk-badge pk-badge--fit'
-    badge.textContent = `Best for ${SEARCH.occasion}`
-    head.prepend(badge)
-  }
+  if (!card || card.hidden) return
+  card.classList.add('pk--suggested')
+  const badge = document.createElement('p')
+  badge.className = 'pk-badge pk-badge--fit'
+  badge.textContent = `Best for ${SEARCH.occasion}`
+  card.prepend(badge)
   requestAnimationFrame(() => card.scrollIntoView({ block: 'start' }))
 }
 
-// A package "can't host" the party only when EVERY venue offering it caps it
-// below the searched size (venue_packages.max_guests; null = no package cap).
+// A package "can't host" the party only when EVERY venue in this city
+// offering it caps it below the searched size (max_guests; null = no cap).
 // The card stays; it just says so, so nobody books a 4-guest setup for 7.
-function markGuestCaps(vpRows, idByKey) {
+function markGuestCaps(summaries) {
   if (!SEARCH.guests) return
-  const capById = new Map()
-  for (const r of vpRows) {
-    const cap = r.max_guests == null ? Infinity : Number(r.max_guests)
-    capById.set(r.package_id, Math.max(capById.get(r.package_id) ?? 0, cap))
-  }
   document.querySelectorAll('[data-pkg]').forEach(card => {
-    const cap = capById.get(idByKey.get(card.dataset.pkg))
-    if (cap == null || cap === Infinity || SEARCH.guests <= cap) return
-    card.classList.add('pk-card--too-small')
+    const s = summaries[card.dataset.pkg]
+    if (!s || card.querySelector('.pk-cap-note')) return
+    const cap = Math.max(...s.rows.map(r => (r.max == null ? Infinity : Number(r.max))))
+    if (cap === Infinity || SEARCH.guests <= cap) return
+    card.classList.add('pk--too-small')
     const note = document.createElement('p')
     note.className = 'pk-cap-note'
     note.textContent = `Hosts up to ${cap} guests — you searched for ${SEARCH.guests}.`
@@ -213,9 +247,9 @@ function markGuestCaps(vpRows, idByKey) {
 // of the gallery's right column; each theme row swaps its narrow third photo
 // for a tile when a reel carries that theme. No images: the tap opens the reel
 // player below. With no reels (or a failed fetch) the photos stay as they are.
-const PLAY_SVG = (color) => `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="${color}"></path></svg>`
+// Play icon takes the tile's text colour (CSS sets it per city / per theme).
+const PLAY_SVG = () => '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"></path></svg>'
 const ARROW_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"></path></svg>'
-const THEME_COLOR = { blush_pink: '#b0476b', ivory_beige: '#8a5a14', sage_green: '#4f6b45' }
 const THEME_LABEL = { blush_pink: 'blush pink', ivory_beige: 'ivory beige', sage_green: 'sage green' }
 // The tile covers photos the gallery then hides; reuse the first hidden one
 // as the tile's background (no extra download, no photo shown twice).
@@ -269,7 +303,7 @@ function buildPlayer() {
         </div>
         <p class="pk-player-count" aria-live="polite"></p>
         <p class="pk-player-note"></p>
-        <a class="pk-btn pk-player-book" href="#"></a>
+        <a class="btn btn-solid pk-player-book" href="#"></a>
         <a class="pk-player-ig" href="#" target="_blank" rel="noopener noreferrer">Not playing? Open on Instagram ${ARROW_SVG}</a>
       </div>
     </div>`
@@ -427,15 +461,15 @@ function fillReels(pkgs, reels) {
     a.setAttribute('aria-label', list.length > 1 ? `Watch reels of real ${short} setups` : `Watch a reel of a real ${short} setup`)
     a.innerHTML =
       `<span class="pk-reel-pill">Reel</span>` +
-      `<span class="pk-reel-play">${PLAY_SVG('#126a5d')}</span>` +
+      `<span class="pk-reel-play">${PLAY_SVG()}</span>` +
       `<span class="pk-reel-title">Watch a real ${esc(short)}</span>`
     a.addEventListener('click', (e) => {
       track('brochure_reel_click', { placement: 'package', package_key: key, ig_code: list[0].ig_code })
       playerClick(e, {
         kind: 'package', key, title: name,
-        price: card.querySelector('[data-price]')?.textContent.trim() || '',
+        price: card.querySelector('.pr-from b')?.textContent.trim() || '',
         note: `A real ${short} setup. Everything in ${list.length > 1 ? 'these reels' : 'this reel'} is part of the package.`,
-        bookText: `Book ${name} online`, bookHref: siteLink(key),
+        bookText: `Book ${name}`, bookHref: siteLink(key),
       }, list)
     })
     tilePhoto(a, gallery.querySelector(gallery.classList.contains('pk-gallery--prelude') ? 'img:nth-child(2)' : 'img:nth-child(3)'))
@@ -453,7 +487,7 @@ function fillReels(pkgs, reels) {
     a.target = '_blank'
     a.rel = 'noopener noreferrer'
     a.setAttribute('aria-label', `Watch ${THEME_LABEL[theme] || ''} setup reels`)
-    a.innerHTML = `<span class="pk-reel-play">${PLAY_SVG(THEME_COLOR[theme] || '#126a5d')}</span><span>Watch</span>`
+    a.innerHTML = `<span class="pk-reel-play">${PLAY_SVG()}</span><span>Watch</span>`
     a.addEventListener('click', (e) => {
       track('brochure_reel_click', { placement: 'theme', theme, ig_code: list[0].ig_code })
       const label = THEME_LABEL[theme] || ''
@@ -490,11 +524,6 @@ function setIncl(card, items) {
   ul.innerHTML = items.map(n => `<li>${esc(n)}</li>`).join('')
 }
 
-// The Setting's list needs no fetch — it's the shared module /packages uses.
-function fillSettingInclusions() {
-  const card = document.querySelector('[data-pkg="setting"]')
-  if (card) setIncl(card, SHARED_SETUP_LABELS)
-}
 
 function fillInclusions(pkgs, addOns) {
   const byKey = new Map(pkgs.map(p => [p.key, p]))
@@ -520,9 +549,21 @@ function fillInclusions(pkgs, addOns) {
   })
 }
 
-renderCtas()
-applySearchOccasion()
-fillSettingInclusions()
-trackInspiredLinks()
-track('brochure_viewed', { referrer: document.referrer || null })
-fillLivePrices().catch(err => console.warn('[brochure] live prices unavailable, showing defaults', err))
+// The Setting's list needs no fetch — it's the shared module /packages uses.
+function fillSettingInclusions() {
+  const card = document.querySelector('[data-pkg="setting"]')
+  if (card) setIncl(card, SHARED_SETUP_LABELS)
+}
+
+document.addEventListener('click', onPageClick)
+if (REGION) {
+  markCurrentCity()
+  syncSearchCity()
+  renderCtas()
+  applySearchOccasion()
+  fillSettingInclusions()
+  trackInspiredLinks()
+  setupSticky()
+}
+track('brochure_viewed', { region: REGION || 'chooser', referrer: document.referrer || null })
+fillLive().catch(err => console.warn('[brochure] live prices unavailable, showing build-time prices', err))

@@ -1017,7 +1017,8 @@ async function showVenuePage(venueId, pushState = true) {
   if (appState.guestPkgVenue !== venueId) { appState.guestPkgKey = null; appState.guestPkgVenue = null }
 
   const needsCalendar = true
-  if (packageFlowActive(venue) && !packagesLoaded) await loadPackages()
+  // Cottages (partner_bnb with a picnic twin) list the twin's packages too.
+  if ((packageFlowActive(venue) || pkgCottageTwin(venue)) && !packagesLoaded) await loadPackages()
   const [addOns, bookedData] = await Promise.all([
     loadVenueAddOns(venue.id),
     needsCalendar ? fetchBookedData(venue.id, venue.type, venue.max_concurrent_setups || 1) : Promise.resolve(null),
@@ -1714,6 +1715,8 @@ function renderVenueDetail(venue, addOns = []) {
             <hr class="vd-divider">` : ''}
 
             ${cottagePkgBannerHtml(venue)}
+
+            ${cottagePackagesSectionHtml(venue)}
 
             ${venuePackagesSectionHtml(venue)}
 
@@ -3383,7 +3386,21 @@ function packageServiceableAt(tier, catalog) {
 // call the venue-first flow uses — one code path, so the two entry points
 // can't drift.
 const PKG_PAGE_BASE_ADULTS = 2 // "From ₹X" baseline; real price re-firms at the guest step
-let pkgPageState = { occasion: '', tierKey: null, city: '' }
+// City brochures (2026-11-03): /brochure/ncr and /brochure/jaipur send ?region=
+// so the venue step lists only that region's venues (venues.region). Without
+// it (homepage, ads, old links) every city shows, as before. If a region has
+// no venue for the package, fall back to all rather than an empty step.
+const PKG_REGIONS = ['ncr', 'jaipur']
+function pkgInRegion(list) {
+  const r = pkgPageState.region
+  if (!r) return list
+  const mine = list.filter(v => v.region === r)
+  return mine.length ? mine : list
+}
+function pkgBrochureUrl() {
+  return PKG_REGIONS.includes(pkgPageState.region) ? `/brochure/${pkgPageState.region}` : '/brochure'
+}
+let pkgPageState = { occasion: '', tierKey: null, city: '', region: '' }
 
 // Discount-anchor display (2026-07-09, explicit user call): every listed package
 // price also shows a struck-through "reference" price at a flat 40% markup over
@@ -3452,6 +3469,7 @@ async function showPackagesPage(push = true, opts = {}) {
     // the same venue step (bare /packages redirects to /brochure).
     const qs = new URLSearchParams()
     if (opts.tierKey) qs.set('tier', opts.tierKey)
+    if (opts.region) qs.set('region', opts.region)
     appendSearchParams(qs, { occasion: opts.occasion, city: opts.city, date: opts.date, guests: opts.guests })
     const q = qs.toString()
     history.pushState({ page: 'packages' }, document.title, '/packages' + (q ? '?' + q : ''))
@@ -3466,6 +3484,9 @@ async function showPackagesPage(push = true, opts = {}) {
     // to "All cities" when no serviceable venue is in it). date / guests ride
     // along to the venue page via pendingPackage (pkgPageSelectVenue).
     city: opts.city || '', date: opts.date || '', guests: opts.guests || null,
+    // region (2026-11-03): set by the city brochures (/brochure/ncr, /brochure/jaipur)
+    // so the venue step only lists that city's venues. '' = every city.
+    region: PKG_REGIONS.includes(opts.region) ? opts.region : '',
   }
   const el = document.getElementById('packages-content')
   if (!el) return
@@ -3479,7 +3500,7 @@ async function showPackagesPage(push = true, opts = {}) {
   // 2026-10-11). /packages is only the venue step for a chosen tier, so with
   // no (valid) tier there is nothing to show here — send them to the brochure.
   // Bare /packages normally never reaches this: vercel.json redirects it.
-  if (!pkgPageState.tierKey) { window.location.replace('/brochure'); return }
+  if (!pkgPageState.tierKey) { window.location.replace(pkgBrochureUrl()); return }
   if (!(appState.venues || []).length) await loadVenues()
   const venues = pkgEnabledVenues()
   await loadCatalogsForVenues(venues.map(v => v.id))
@@ -3543,7 +3564,7 @@ function renderPackagesPage() {
   // cards here; "Change package" goes back to the brochure's package list.
   const chosen = pkgPageState.tierKey && PACKAGE_TIERS[pkgPageState.tierKey]
   if (chosen) {
-    const offered = venues.filter(v => packageOfferedAt(v.id, chosen.key))
+    const offered = pkgInRegion(venues).filter(v => packageOfferedAt(v.id, chosen.key))
     const prices  = offered.map(v => packageTierPriceAt(v, chosen, venueCatalog(v.id), PKG_PAGE_BASE_ADULTS)).filter(p => p != null)
     const fromTxt = prices.length ? `${offered.length > 1 ? 'from ' : ''}₹${Math.min(...prices).toLocaleString('en-IN')} · ` : ''
     el.innerHTML = `
@@ -3552,7 +3573,7 @@ function renderPackagesPage() {
         <div class="pkgp-hero-copy">
           <p class="pkgp-eyebrow">Your package</p>
           <h1 class="pkgp-title">${escapeHtml(chosen.name)}</h1>
-          <p class="pkgp-sub">${fromTxt}<a href="/brochure#packages">Change package</a></p>
+          <p class="pkgp-sub">${fromTxt}<a href="${pkgBrochureUrl()}#packages">Change package</a></p>
         </div>
       </div>
       ${renderPkgVenuePicker(venues)}
@@ -3743,6 +3764,53 @@ function cottagePkgPick(venue) {
   const price = pkgCottagePriceAt(venue, tier)
   return price == null ? null : { tier, price }
 }
+// Cottage page "Packages here" (2026-10-30): the twin's packages, each priced
+// as 1 night + picnic (same numbers as the /packages picker). Tapping one sets
+// the same pendingPackage the picker sets, so the page switches to the stay +
+// picnic enquiry flow (cottagePkgPick / cottagePkgBannerHtml) — never Airbnb.
+function cottagePackagesSectionHtml(venue) {
+  const twin = pkgCottageTwin(venue)
+  if (!twin) return ''
+  const pick = cottagePkgPick(venue)
+  const cards = venuePkgKeys(twin).map(k => {
+    const t = PACKAGE_TIERS[k]
+    const price = pkgCottagePriceAt(venue, t)
+    if (price == null) return ''
+    const chosen = !!pick && pick.tier.key === k
+    return `
+                <button type="button" class="vd-pkg-card${chosen ? ' vd-pkg-card--chosen' : ''}" onclick="chooseCottagePkg('${escapeHtml(k)}')"${chosen ? ' aria-pressed="true"' : ''}>
+                  ${chosen ? '<span class="vd-pkg-card-badge">Your pick</span>' : ''}
+                  <span class="vd-pkg-card-main">
+                    <span class="vd-pkg-card-name">${escapeHtml(t.name)}</span>
+                    <span class="vd-pkg-card-tagline">${escapeHtml(t.tagline || '')}</span>
+                  </span>
+                  <span class="vd-pkg-card-prices">
+                    <span class="vd-pkg-card-price">₹${Number(price).toLocaleString('en-IN')}</span>
+                    <span class="vd-pkg-card-food">1 night + picnic</span>
+                  </span>
+                </button>`
+  }).join('')
+  if (!cards.trim()) return ''
+  return `
+            <div class="vd-section vd-pkgs">
+              <div class="vd-pkgs-head">
+                <h2 class="vd-section-title">Packages here</h2>
+                <p class="vd-pkgs-sub">1 night + picnic setup, ${PKG_PAGE_BASE_ADULTS} guests, without food. Tap one to request it.</p>
+              </div>
+              <div class="vd-pkgs-grid">${cards}
+              </div>
+            </div>
+            <hr class="vd-divider">`
+}
+window.chooseCottagePkg = function(key) {
+  const venue = appState.lastViewedVenue || appState.currentVenue
+  if (!venue || !PACKAGE_TIERS[key] || !pkgCottageTwin(venue)) return
+  const pending = { occasion: appState.pendingPackage?.occasion || null, tierKey: key, venueId: venue.id }
+  appState.pendingPackage = pending
+  try { sessionStorage.setItem('ps_pending_pkg', JSON.stringify(pending)) } catch (err) { /* private mode */ }
+  track('cottage_package_selected', { venue_id: venue.id, tier: key })
+  showVenuePage(venue.id, false) // same URL: re-render only, no extra history entry
+}
 function cottagePkgBannerHtml(venue) {
   const pick = cottagePkgPick(venue)
   if (!pick) return ''
@@ -3760,7 +3828,7 @@ function renderPkgVenuePicker(venues) {
   // Stored pricing: only venues with an active venue_packages row offer this
   // package — the admin panel is where a package gets enabled per venue.
   // Stay cottages whose picnic twin offers it are listed after the picnic venues.
-  const serviceable = [...venues.filter(v => packageOfferedAt(v.id, tier.key)), ...pkgCottageOptions(tier)]
+  const serviceable = pkgInRegion([...venues.filter(v => packageOfferedAt(v.id, tier.key)), ...pkgCottageOptions(tier)])
   if (!serviceable.length) {
     return `
       <div class="pkgp-venues" id="pkgp-venues">
@@ -14671,6 +14739,7 @@ document.addEventListener('DOMContentLoaded', () => {
       city:     qsSearch.city,
       date:     qsSearch.date,
       guests:   qsSearch.guests,
+      region:   urlParams.get('region') || '', // city brochures; validated in showPackagesPage
       scrollToVenues: urlParams.get('step') === 'venue',
     })
   } else if (venueId) {

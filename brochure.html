@@ -2,11 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- Public packages page (/brochure) — the web version of the packages PDF and,
-       per docs/PLAN_merge_packages_into_brochure_2026-10-11.md, the one public place
-       packages are described. Indexed and in the sitemap since Phase 1 (2026-10-11). -->
-  <meta name="robots" content="index, follow, max-image-preview:large">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <!-- City brochures (2026-11-03, docs/PLAN_city_brochures_redesign_2026-11-03.md).
+       ONE template, three URLs:
+         /brochure          — this file as built: the city chooser (noindex).
+         /brochure/ncr      — dist/brochure/ncr.html, written by scripts/prerender-venues.mjs
+         /brochure/jaipur   — dist/brochure/jaipur.html  (same, data-city="jaipur")
+       The prerender sets <html data-city>, the head tags, and bakes prices into
+       every data-slot from public.brochure_city_prices; brochure.js refreshes
+       them live. Elements marked data-r="ncr|jaipur" show only on that city's
+       page (the prerender also strips the other city's copies). -->
+  <meta name="robots" content="noindex, follow">
   <link rel="canonical" href="https://www.picnicstories.com/brochure">
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
@@ -16,20 +22,41 @@
              font-src https://fonts.gstatic.com;
              img-src 'self' data: https:;
              frame-src https://www.instagram.com;">
-  <title>Our Packages | The Picnic Stories</title>
-  <meta name="description" content="Curated picnic experiences in Delhi NCR, Gurugram and Jaipur — packages, add-ons, venues and themes.">
-  <!-- Link preview card (WhatsApp / Instagram) -->
+  <title>Picnic Packages — Gurugram, Delhi NCR &amp; Jaipur | The Picnic Stories</title>
+  <meta name="description" content="Fully set-up picnics for proposals, birthdays and anniversaries in Gurugram, Delhi NCR and Jaipur. Pick your city to see its packages and prices.">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="Our Picnic Packages — The Picnic Stories">
-  <meta property="og:description" content="Fully set-up picnics for birthdays, anniversaries, proposals and more. Packages from ₹5,900.">
+  <meta property="og:title" content="Picnic packages — Gurugram, Delhi NCR &amp; Jaipur">
+  <meta property="og:description" content="Proposals, birthdays and anniversaries, fully set up. Pick your city to see packages and prices.">
   <meta property="og:image" content="https://www.picnicstories.com/brochure/hero.webp">
   <meta property="og:url" content="https://www.picnicstories.com/brochure">
+  <!--jsonld-->
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,500;0,600;1,400;1,500&family=Be+Vietnam+Pro:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./brochure.css">
+
+  <!-- City before first paint. Built city pages already carry data-city. The
+       bare template (the chooser, or brochure.html in dev) works it out from
+       the path, ?region=, ?city= or this tab's last hero search, and forwards
+       to that city's page. The city map mirrors regionForCity() in
+       brochure-render.js — change both together. -->
+  <script>
+  (function(){
+    var d=document.documentElement; if(d.getAttribute('data-city')) return;
+    var dev=/\.html$/.test(location.pathname);
+    function go(r){ if(dev){ d.setAttribute('data-city',r); return }
+      var qs=new URLSearchParams(location.search); qs.delete('region');
+      var q=qs.toString(); location.replace('/brochure/'+r+(q?'?'+q:'')+location.hash) }
+    var m=location.pathname.match(/^\/brochure\/(ncr|jaipur)\/?$/); if(m){ d.setAttribute('data-city',m[1]); return }
+    var qs=new URLSearchParams(location.search), r=qs.get('region');
+    if(r==='ncr'||r==='jaipur') return go(r);
+    var c=qs.get('city')||''; if(!c){ try{ c=(JSON.parse(sessionStorage.getItem('ps_search')||'{}').city)||'' }catch(e){} }
+    var map={'jaipur':'jaipur','gurugram':'ncr','gurgaon':'ncr','delhi':'ncr','new delhi':'ncr','noida':'ncr','delhi ncr':'ncr','ncr':'ncr','faridabad':'ncr'};
+    var t=map[String(c).trim().toLowerCase()]; if(t) go(t);
+  })();
+  </script>
 
   <!-- Meta Pixel — same pixel and deferred-load pattern as index.html. The fbq
        stub queues PageView + brochure.js's ViewContent synchronously; only the
@@ -57,263 +84,273 @@
   <noscript><img height="1" width="1" style="display:none" alt=""
   src="https://www.facebook.com/tr?id=1366746648648321&ev=PageView&noscript=1"></noscript>
 
-  <header class="pk-top">
-    <a href="/" class="pk-brand">
-      <img src="/logo-mark.png" alt="" width="36" height="36">
+  <header class="tb">
+    <a href="/" class="tb-brand">
+      <img src="/logo-mark.png" alt="" width="32" height="32">
       <span>The Picnic Stories</span>
     </a>
-    <nav class="pk-jump" aria-label="Sections">
-      <a href="#packages">Packages</a>
-      <a href="#addons">Add-ons</a>
-      <a href="#venues">Venues</a>
-      <a href="#themes">Themes</a>
+    <nav class="tb-city only-city" aria-label="Choose city">
+      <a href="/brochure/ncr" data-switch="ncr">Gurugram &amp; Delhi NCR</a>
+      <a href="/brochure/jaipur" data-switch="jaipur">Jaipur</a>
     </nav>
   </header>
 
   <main>
-    <!-- Cover -->
-    <section class="pk-cover">
-      <p class="pk-place">Delhi NCR · Gurugram · Jaipur</p>
-      <p class="pk-eyebrow">Curated picnic</p>
-      <h1>Experiences</h1>
-      <p class="pk-occasions">Birthdays · Anniversaries · Proposals · Bachelorette &amp; more</p>
-      <img class="pk-hero" src="/brochure/hero.webp" width="720" height="509" alt="A macramé tent picnic setup lit with candles and fairy lights at dusk">
-      <p class="pk-lede">We design fully set-up outdoor picnics — tents, florals, music, and every little detail — so all you have to do is show up and celebrate.</p>
-      <p class="pk-note-pill">Food &amp; beverages not included unless listed</p>
+    <!-- ── Chooser (/brochure) ── -->
+    <section class="ch only-chooser" aria-labelledby="ch-h">
+      <p class="eyebrow">Picnic packages</p>
+      <h1 id="ch-h">Where's your picnic?</h1>
+      <p class="sub">Venues and prices are different in each city.</p>
+      <a class="ch-tile" href="/brochure/ncr" data-choose="ncr">
+        <img src="/brochure/ncr-tile.webp" width="720" height="450" alt="A macramé tent picnic lit with candles at dusk">
+        <span class="ch-body">
+          <span class="ch-name">Gurugram &amp; Delhi NCR</span>
+          <span class="ch-from">Packages from <b data-slot="chooser-from:ncr">₹5,900<!--/slot--></b></span>
+          <span class="ch-venues">Beige Cafe · Countryside Offgrid · TerraCottage stays</span>
+          <span class="ch-go">See NCR packages</span>
+        </span>
+      </a>
+      <a class="ch-tile ch-tile--jaipur" href="/brochure/jaipur" data-choose="jaipur">
+        <img src="/brochure/jaipur-tile.webp" width="800" height="500" alt="A macramé tent set up on a terrace below Amer Fort">
+        <span class="ch-body">
+          <span class="ch-name">Jaipur</span>
+          <span class="ch-from">Packages from <b data-slot="chooser-from:jaipur">₹7,400<!--/slot--></b></span>
+          <span class="ch-venues">Castle Valley · House of Amer · GARH · Satoria Villa · Padao</span>
+          <span class="ch-go">See Jaipur packages</span>
+        </span>
+      </a>
     </section>
 
-    <!-- Packages: copy + photos are static here; "from" prices are filled live
-         from venue_packages by packages.js (fallbacks below = values at build). -->
-    <section id="packages" class="pk-section">
-      <p class="pk-eyebrow">Our packages</p>
-      <h2>Pick your tier</h2>
+    <!-- ── City page (/brochure/ncr, /brochure/jaipur) ── -->
+    <div class="only-city">
+      <section class="cv" aria-labelledby="cv-h">
+        <p class="eyebrow">Picnic packages in</p>
+        <h1 id="cv-h"><span data-r="ncr">Gurugram &amp; Delhi NCR</span><span data-r="jaipur">Jaipur</span></h1>
+        <p class="cv-occ">Proposals · Birthdays · Anniversaries · Bachelorettes</p>
+        <img class="cv-hero" data-r="ncr" src="/brochure/hero.webp" width="720" height="509" alt="A macramé tent picnic lit with candles and fairy lights at dusk">
+        <img class="cv-hero" data-r="jaipur" src="/brochure/jaipur-hero.webp" width="1080" height="763" alt="A couple at a candlelit table under a fringed umbrella on a Castle Valley terrace">
+        <p class="cv-lede" data-r="ncr">We set up the whole picnic — tent, flowers, candles, music — at a cafe in the Aravalli foothills or a home in the city. You just turn up and celebrate.</p>
+        <p class="cv-lede" data-r="jaipur">We set up the whole picnic — tent, flowers, candles, music — at a heritage venue with Amer Fort or the Pink City in view. You just turn up and celebrate.</p>
+        <p class="cv-from">Packages from <b data-slot="from">—<!--/slot--></b></p>
+        <div class="cv-ctas" id="cv-ctas">
+          <a class="btn btn-solid" href="https://wa.me/919773703982" data-r="ncr" data-wa target="_blank" rel="noopener noreferrer">WhatsApp the Gurugram team</a>
+          <a class="btn btn-solid" href="https://wa.me/919266964666" data-r="jaipur" data-wa target="_blank" rel="noopener noreferrer">WhatsApp the Jaipur team</a>
+          <a class="btn btn-line" href="#packages">See packages</a>
+        </div>
+        <p class="note-pill">Food &amp; drinks not included unless listed</p>
+      </section>
 
-      <article class="pk-card" data-pkg="the_prelude">
-        <div class="pk-card-head">
-          <div>
-            <p class="pk-tier">Starter</p>
-            <h3>The Prelude</h3>
-            <p class="pk-where">at Beige Cafe · up to 4 guests</p>
+      <section id="glance" class="sec" aria-labelledby="gl-h">
+        <p class="eyebrow">Prices at a glance</p>
+        <h2 id="gl-h">Every setup, from its lowest price</h2>
+        <p class="sub">The lowest price for each package in <span data-r="ncr">Gurugram &amp; Delhi NCR</span><span data-r="jaipur">Jaipur</span>. Tap one for details.</p>
+        <div class="gl">
+          <div class="gl-head" aria-hidden="true"><span>Package</span><span>Without food</span><span>With food</span></div>
+          <div data-slot="glance"><!--/slot--></div>
+        </div>
+      </section>
+
+      <!-- Packages: copy + photos are static; the price block, guest line and
+           inclusions are filled from the DB (baked at build, refreshed live). -->
+      <section id="packages" class="sec" aria-labelledby="pk-h">
+        <p class="eyebrow">Our packages</p>
+        <h2 id="pk-h">Pick your setup</h2>
+        <p class="sub" data-r="ncr">Each price is the lowest in the city. Tap “Compare” to see every venue.</p>
+        <p class="sub" data-r="jaipur">Prices change a lot from venue to venue in Jaipur — tap “Compare” to see them all.</p>
+
+        <article class="pk" id="pkg-the_prelude" data-pkg="the_prelude">
+          <p class="eyebrow">Starter</p>
+          <h3>The Prelude</h3>
+          <p class="pk-guests" data-slot="guests:the_prelude"><!--/slot--></p>
+          <div class="pr" data-slot="price:the_prelude"><p class="pr-from">Price on WhatsApp</p><!--/slot--></div>
+          <p class="pk-tagline">An intimate little world.</p>
+          <ul class="pk-incl">
+            <li>Cozy macramé tent setup</li><li>Ambient fairy lighting</li><li>Curated lamps &amp; floor seating</li><li>Wax candles</li><li>Electric candles</li><li>Fresh flowers</li><li>Bluetooth speaker</li><li>Crockery &amp; cutlery</li><li>Dedicated host support</li>
+          </ul>
+          <div class="pk-gallery pk-gallery--prelude" data-gallery>
+            <img src="/brochure/prelude-1.webp" width="900" height="1125" loading="lazy" alt="A couple toasting inside a lit macramé tent">
+            <img src="/brochure/prelude-2.webp" width="458" height="572" loading="lazy" alt="Prelude setup under a macramé tent in daylight">
+            <img src="/brochure/prelude-3.webp" width="460" height="575" loading="lazy" alt="Candles, roses and a low table set for two">
           </div>
-          <p class="pk-price">from <strong data-price>₹5,900</strong><span class="pk-at">at Beige Cafe</span><span class="pk-at" data-price-food>with food from ₹7,399</span></p>
-        </div>
-        <p class="pk-tagline">An intimate little world.</p>
-        <ul class="pk-incl">
-          <li>Cozy macramé tent setup</li><li>Ambient fairy lighting</li><li>Curated lamps &amp; floor seating</li><li>Wax candles</li><li>Electric candles</li><li>Fresh flowers</li><li>Bluetooth speaker</li><li>Crockery &amp; cutlery</li><li>Dedicated host support</li>
-        </ul>
-        <div class="pk-gallery pk-gallery--prelude" data-gallery>
-          <img src="/brochure/prelude-1.webp" width="900" height="1125" loading="lazy" alt="A couple toasting inside a lit macramé tent">
-          <img src="/brochure/prelude-2.webp" width="458" height="572" loading="lazy" alt="Prelude setup under a macramé tent in daylight">
-          <img src="/brochure/prelude-3.webp" width="460" height="575" loading="lazy" alt="Candles, roses and a low table set for two">
-        </div>
-        <div class="pk-cta" data-cta></div>
-      </article>
+          <div class="pk-cta" data-cta></div>
+        </article>
 
-      <article class="pk-card" data-pkg="the_note">
-        <div class="pk-card-head">
-          <div>
-            <p class="pk-tier">Starter plus</p>
-            <h3>The Note</h3>
-            <p class="pk-where">at Beige Cafe · up to 4 guests</p>
+        <article class="pk" id="pkg-the_note" data-pkg="the_note">
+          <p class="eyebrow">Starter plus</p>
+          <h3>The Note</h3>
+          <p class="pk-guests" data-slot="guests:the_note"><!--/slot--></p>
+          <div class="pr" data-slot="price:the_note"><p class="pr-from">Price on WhatsApp</p><!--/slot--></div>
+          <p class="pk-tagline">The Prelude, with a cake and your message on a board.</p>
+          <ul class="pk-incl">
+            <li>Cozy macramé tent setup</li><li>Ambient fairy lighting</li><li>Curated lamps &amp; floor seating</li><li>Wax candles</li><li>Electric candles</li><li>Fresh flowers</li><li>Bluetooth speaker</li><li>Crockery &amp; cutlery</li><li>Dedicated host support</li><li>Cake</li><li>White sunboard with your message</li>
+          </ul>
+          <div class="pk-gallery pk-gallery--prelude" data-gallery>
+            <img src="/brochure/prelude-1.webp" width="900" height="1125" loading="lazy" alt="A couple toasting inside a lit macramé tent">
+            <img src="/brochure/prelude-2.webp" width="458" height="572" loading="lazy" alt="Prelude setup under a macramé tent in daylight">
+            <img src="/brochure/prelude-3.webp" width="460" height="575" loading="lazy" alt="Candles, roses and a low table set for two">
           </div>
-          <p class="pk-price">from <strong data-price>₹7,400</strong><span class="pk-at">at Beige Cafe</span><span class="pk-at" data-price-food>with food from ₹8,900</span></p>
-        </div>
-        <p class="pk-tagline">The Prelude setup, with a cake and your message on a board.</p>
-        <ul class="pk-incl">
-          <li>Cozy macramé tent setup</li><li>Ambient fairy lighting</li><li>Curated lamps &amp; floor seating</li><li>Wax candles</li><li>Electric candles</li><li>Fresh flowers</li><li>Bluetooth speaker</li><li>Crockery &amp; cutlery</li><li>Dedicated host support</li><li>Cake</li><li>White sunboard with your message</li>
-        </ul>
-        <div class="pk-gallery pk-gallery--prelude" data-gallery>
-          <img src="/brochure/prelude-1.webp" width="900" height="1125" loading="lazy" alt="A couple toasting inside a lit macramé tent">
-          <img src="/brochure/prelude-2.webp" width="458" height="572" loading="lazy" alt="Prelude setup under a macramé tent in daylight">
-          <img src="/brochure/prelude-3.webp" width="460" height="575" loading="lazy" alt="Candles, roses and a low table set for two">
-        </div>
-        <div class="pk-cta" data-cta></div>
-      </article>
+          <div class="pk-cta" data-cta></div>
+        </article>
 
-      <article class="pk-card" data-pkg="setting">
-        <div class="pk-card-head">
-          <div>
-            <p class="pk-tier">Essentials</p>
-            <h3>The Setting</h3>
+        <article class="pk" id="pkg-setting" data-pkg="setting">
+          <p class="eyebrow">Essentials</p>
+          <h3>The Setting</h3>
+          <p class="pk-guests" data-slot="guests:setting"><!--/slot--></p>
+          <div class="pr" data-slot="price:setting"><p class="pr-from">Price on WhatsApp</p><!--/slot--></div>
+          <p class="pk-tagline">Our signature setup, with every detail done.</p>
+          <ul class="pk-incl">
+            <li>Fresh fruits</li><li>Fresh flowers</li><li>Wax candles</li><li>Electric candles</li><li>Macramé tent</li><li>Picnic umbrella</li><li>Portable speaker</li><li>Board with message</li><li>Cutlery &amp; essentials</li><li>Setup &amp; cleanup</li><li>Dedicated host support</li>
+          </ul>
+          <div class="pk-gallery pk-gallery--four" data-gallery>
+            <img src="/brochure/setting-1.webp" width="836" height="365" loading="lazy" alt="A long table with candles, florals and wooden figurines">
+            <img src="/brochure/setting-2.webp" width="480" height="286" loading="lazy" alt="A macramé tent over a table set in a garden">
+            <img src="/brochure/setting-3.webp" width="697" height="572" loading="lazy" alt="Wooden figurines, candles and glassware on a white runner">
+            <img src="/brochure/setting-4.webp" width="341" height="365" loading="lazy" alt="Pampas grass, roses and violet glasses at a place setting">
           </div>
-          <p class="pk-price">from <strong data-price>₹8,900</strong><span class="pk-at">at Beige Cafe</span><span class="pk-at" data-price-food>with food from ₹9,900</span></p>
-        </div>
-        <p class="pk-tagline">The signature setup, beautifully done.</p>
-        <ul class="pk-incl">
-          <li>Fresh Fruits</li><li>Fresh Flowers</li><li>Wax Candles</li><li>Electric Candles</li><li>Macrame Tent</li><li>Picnic Umbrella</li><li>Portable Speaker</li><li>Board with Message</li><li>Cutlery &amp; Essentials</li><li>Setup &amp; cleanup</li><li>Dedicated host support</li>
-        </ul>
-        <div class="pk-gallery pk-gallery--four" data-gallery>
-          <img src="/brochure/setting-1.webp" width="836" height="365" loading="lazy" alt="A long table with candles, florals and wooden figurines">
-          <img src="/brochure/setting-2.webp" width="480" height="286" loading="lazy" alt="A macramé tent over a table set in a garden">
-          <img src="/brochure/setting-3.webp" width="697" height="572" loading="lazy" alt="Wooden figurines, candles and glassware on a white runner">
-          <img src="/brochure/setting-4.webp" width="341" height="365" loading="lazy" alt="Pampas grass, roses and violet glasses at a place setting">
-        </div>
-        <div class="pk-cta" data-cta></div>
-      </article>
+          <div class="pk-cta" data-cta></div>
+        </article>
 
-      <article class="pk-card pk-card--popular" data-pkg="moment">
-        <div class="pk-card-head">
-          <div>
-            <p class="pk-badge">★ Most popular</p>
-            <h3>The Moment</h3>
+        <article class="pk pk--popular" id="pkg-moment" data-pkg="moment">
+          <p class="pk-badge">★ Most popular</p>
+          <p class="eyebrow">Signature</p>
+          <h3>The Moment</h3>
+          <p class="pk-guests" data-slot="guests:moment"><!--/slot--></p>
+          <div class="pr" data-slot="price:moment"><p class="pr-from">Price on WhatsApp</p><!--/slot--></div>
+          <p class="pk-tagline">Bouquet, cake and printed memories.</p>
+          <p class="pk-plus"><span>Everything in The Setting, plus</span></p>
+          <ul class="pk-incl">
+            <li>Photo printouts (10 pics)</li><li>Bouquet</li><li>Cake</li>
+          </ul>
+          <div class="pk-gallery pk-gallery--four" data-gallery>
+            <img src="/brochure/moment-1.webp" width="836" height="365" loading="lazy" alt="A couple with a bouquet at a candlelit picnic">
+            <img src="/brochure/moment-2.webp" width="697" height="572" loading="lazy" alt="A cake with roses, candles and printed photos">
+            <img src="/brochure/moment-3.webp" width="341" height="365" loading="lazy" alt="Printed photos around a place setting with gerberas">
+            <img src="/brochure/moment-4.webp" width="480" height="278" loading="lazy" alt="A couple smiling in a macramé swing">
           </div>
-          <p class="pk-price">from <strong data-price>₹12,900</strong><span class="pk-at">at Beige Cafe</span><span class="pk-at" data-price-food>with food from ₹13,900</span></p>
-        </div>
-        <p class="pk-tagline">Bouquet, cake and printed memories.</p>
-        <p class="pk-plus"><span>Everything in The Setting, plus</span></p>
-        <ul class="pk-incl">
-          <li>Photo Printouts (10 pics)</li><li>Bouquet</li><li>Cake</li>
-        </ul>
-        <div class="pk-gallery pk-gallery--four" data-gallery>
-          <img src="/brochure/moment-1.webp" width="836" height="365" loading="lazy" alt="A couple with a bouquet at a candlelit picnic">
-          <img src="/brochure/moment-2.webp" width="697" height="572" loading="lazy" alt="A cake with roses, candles and printed photos">
-          <img src="/brochure/moment-3.webp" width="341" height="365" loading="lazy" alt="Printed photos around a place setting with gerberas">
-          <img src="/brochure/moment-4.webp" width="480" height="278" loading="lazy" alt="A couple smiling in a macramé swing">
-        </div>
-        <div class="pk-cta" data-cta></div>
-      </article>
+          <div class="pk-cta" data-cta></div>
+        </article>
 
-      <article class="pk-card" data-pkg="story">
-        <div class="pk-card-head">
-          <div>
-            <p class="pk-tier">Premium</p>
-            <h3>The Story</h3>
+        <article class="pk" id="pkg-story" data-pkg="story">
+          <p class="eyebrow">Premium</p>
+          <h3>The Story</h3>
+          <p class="pk-guests" data-slot="guests:story"><!--/slot--></p>
+          <div class="pr" data-slot="price:story"><p class="pr-from">Price on WhatsApp</p><!--/slot--></div>
+          <p class="pk-tagline">The full production — a photographer, fireworks and more.</p>
+          <p class="pk-plus"><span>Everything in The Moment, plus</span></p>
+          <ul class="pk-incl">
+            <li>Photographer</li><li>Cold pyros</li><li>Skyshots (fireworks)</li>
+          </ul>
+          <div class="pk-gallery pk-gallery--four" data-gallery>
+            <img src="/brochure/story-1.webp" width="836" height="365" loading="lazy" alt="A couple under fireworks at night">
+            <img src="/brochure/story-2.webp" width="697" height="572" loading="lazy" alt="A couple kissing in front of cold pyros">
+            <img src="/brochure/story-3.webp" width="480" height="286" loading="lazy" alt="A couple cutting a cake with cold pyros behind">
+            <img src="/brochure/story-4.webp" width="341" height="365" loading="lazy" alt="A cake, roses and printed photos on a pink runner">
           </div>
-          <p class="pk-price">from <strong data-price>₹24,900</strong><span class="pk-at">at Beige Cafe</span><span class="pk-at" data-price-food>with food from ₹25,900</span></p>
+          <div class="pk-cta" data-cta></div>
+        </article>
+
+        <p class="small">Prices cover the guests shown and are confirmed when you book. Our team styles, sets up and clears away — you just show up.</p>
+      </section>
+
+      <section id="venues" class="sec" aria-labelledby="vn-h">
+        <p class="eyebrow">Locations &amp; venues</p>
+        <h2 id="vn-h">Where we set up</h2>
+        <p class="sub" data-r="ncr">Open-air spots in the Aravalli foothills, and our own homes in Gurugram.</p>
+        <p class="sub" data-r="jaipur">Fort views, heritage courtyards and rooftops across Amer and Nahargarh.</p>
+        <div class="vns" data-slot="venues"><!--/slot--></div>
+        <h3 class="h3-sub">Picnic + stay</h3>
+        <p class="sub sub--tight">Stay the night — the setup is ready when you arrive. Prices on WhatsApp.</p>
+        <ul class="stays" data-slot="stays"><!--/slot--></ul>
+        <!-- Slot times = CAFE_SLOTS in app.js (what the booking flow offers). Change both together. -->
+        <h3 class="h3-sub">Time slots</h3>
+        <div class="slots">
+          <div><b>Morning</b><span>9 AM – 12 PM</span></div>
+          <div><b>Afternoon</b><span>1 PM – 4 PM</span></div>
+          <div><b>Evening</b><span>5 PM – 8 PM</span></div>
         </div>
-        <p class="pk-tagline">The full production — photographer and more.</p>
-        <p class="pk-plus"><span>Everything in The Moment, plus</span></p>
-        <ul class="pk-incl">
-          <li>Photographer</li><li>Cold Pyros</li><li>Skyshots (fireworks)</li>
-        </ul>
-        <div class="pk-gallery pk-gallery--four" data-gallery>
-          <img src="/brochure/story-1.webp" width="836" height="365" loading="lazy" alt="A couple under fireworks at night">
-          <img src="/brochure/story-2.webp" width="697" height="572" loading="lazy" alt="A couple kissing in front of cold pyros">
-          <img src="/brochure/story-3.webp" width="480" height="286" loading="lazy" alt="A couple cutting a cake with cold pyros behind">
-          <img src="/brochure/story-4.webp" width="341" height="365" loading="lazy" alt="A cake, roses and printed photos on a pink runner">
+        <p class="sub own-spot">Have your own spot in mind? A backyard, a rooftop, a place that means something — we'll bring the picnic to you.</p>
+      </section>
+
+      <!-- Add-ons: rows are the region's live add_ons (baked at build, refreshed live). -->
+      <section id="addons" class="sec" aria-labelledby="ad-h">
+        <p class="eyebrow">Make it yours</p>
+        <h2 id="ad-h">Add-ons</h2>
+        <p class="sub">Add any of these to any package. Each costs the same at every venue.</p>
+        <ul class="menu" data-addons data-slot="addons"><!--/slot--></ul>
+      </section>
+
+      <section id="themes" class="sec" aria-labelledby="th-h">
+        <p class="eyebrow">Choose your theme</p>
+        <h2 id="th-h">Three colour stories</h2>
+        <p class="sub">Tell us your theme when you book.</p>
+        <div class="pk-theme" data-theme="blush_pink">
+          <h3 class="pk-theme-name pk-theme--pink"><i>blush</i> PINK</h3>
+          <div class="pk-theme-row">
+            <img src="/brochure/theme-pink-1.webp" width="389" height="236" loading="lazy" alt="Blush pink theme: roses on a pink runner">
+            <img src="/brochure/theme-pink-2.webp" width="363" height="236" loading="lazy" alt="Blush pink theme: full setup under a macramé tent">
+            <img src="/brochure/theme-pink-3.webp" width="173" height="232" loading="lazy" alt="Blush pink theme: place setting with roses">
+          </div>
         </div>
-        <div class="pk-cta" data-cta></div>
-      </article>
-
-      <p class="pk-small">Prices shown are starting prices at Beige Cafe; they vary by venue. Styled, delivered &amp; wrapped up by our team — you just show up.</p>
-    </section>
-
-    <!-- Add-ons: rows rendered live from add_ons (is_active) by brochure.js;
-         the static list is the fallback if the fetch fails. -->
-    <section id="addons" class="pk-section">
-      <p class="pk-eyebrow">The Picnic Stories</p>
-      <h2>Add-ons menu</h2>
-      <p class="pk-sub">Any add-on can be layered onto any tier. Some add-ons vary by venue — Skyshots and Movie Screening on request.</p>
-      <ul class="pk-menu" data-addons>
-        <li><span>Bonfire (charcoal pit)</span><b>₹500</b></li>
-        <li><span>Photo Printouts (10 pics)</span><b>₹500</b></li>
-        <li><span>Extra Flowers</span><b>₹1,100</b></li>
-        <li><span>Extra Candles</span><b>₹1,100</b></li>
-        <li><span>Extra Hour</span><b>₹1,100</b></li>
-        <li><span>Cake</span><b>₹1,100</b></li>
-        <li><span>Bouquet</span><b>₹1,500</b></li>
-        <li><span>Cold Pyros</span><b>₹3,000</b></li>
-        <li><span>Skyshots (fireworks)</span><b>₹4,000</b></li>
-        <li><span>Barbeque</span><b>₹4,000</b></li>
-        <li><span>Sip &amp; Paint</span><b>₹4,000</b></li>
-        <li><span>Movie Screening</span><b>₹4,500</b></li>
-        <li><span>Live Music</span><b>₹6,000</b></li>
-        <li><span>Photographer</span><b>₹6,000</b></li>
-      </ul>
-    </section>
-
-    <section id="venues" class="pk-section">
-      <p class="pk-eyebrow">Locations &amp; venues</p>
-      <h2>Gurugram &amp; Delhi NCR</h2>
-      <p class="pk-sub">Handpicked spots — every setup styled by our team</p>
-      <div class="pk-venues">
-        <div class="pk-venue"><p class="pk-vtype">Outdoor · Cafe</p><h4>Beige Cafe</h4><p class="pk-vmeta">Leopard Trail, Gurugram · Included in package price</p><p>A Mediterranean-inspired getaway against the rustic backdrop of the Aravalli hills.</p></div>
-        <div class="pk-venue"><p class="pk-vtype">Outdoor · Nature</p><h4>Countryside Offgrid</h4><p class="pk-vmeta">Leopard Trail, Gurugram · Additional venue charges apply · Subject to availability</p><p>Nature-immersed picnics nestled in the scenic foothills of the Aravalis.</p></div>
-        <div class="pk-venue"><p class="pk-vtype">Outdoor · Cafe</p><h4>The Sunroom</h4><p class="pk-vmeta">Palam Farms, Delhi · Additional venue charges apply · Subject to availability</p><p>A glasshouse-style cafe inside Palam Farms — lush greenery, softly lit cabanas, palm-lined pathways.</p></div>
-        <div class="pk-venue"><p class="pk-vtype">Indoor · All-weather · Setup with stay</p><h4>TerraCottage Ochre</h4><p class="pk-vmeta">DLF Phase 2, Gurugram · Additional venue charges apply · Subject to availability</p><p>A cozy studio apartment in warm terracotta tones — your picnic, indoors.</p></div>
-        <div class="pk-venue"><p class="pk-vtype">Indoor · All-weather · Setup with stay</p><h4>TerraCottage Umber</h4><p class="pk-vmeta">DLF Phase 2, Gurugram · Additional venue charges apply · Subject to availability</p><p>A cozy 2BHK picnic-plus-stay experience in the heart of the city.</p></div>
-        <div class="pk-venue"><p class="pk-vtype">Indoor · All-weather · Setup with stay</p><h4>TerraCottage Sienna</h4><p class="pk-vmeta">DLF Phase 2, Gurugram · Additional venue charges apply · Subject to availability</p><p>Ochre and Umber combined — a full floor with terrace, for bigger celebrations.</p></div>
-      </div>
-
-      <h2 class="pk-h2-gap">Jaipur</h2>
-      <p class="pk-sub">Heritage settings in the Pink City</p>
-      <div class="pk-venues">
-        <div class="pk-venue"><p class="pk-vtype">Outdoor · Restaurant</p><h4>Castle Valley</h4><p class="pk-vmeta">Besides Amer Fort, Jaipur · Included in package price</p><p>Directly opposite the majestic Amer Fort — a perfect blend of historic charm and culinary delight.</p></div>
-        <div class="pk-venue"><p class="pk-vtype">Heritage · Stay available</p><h4>House of Amer</h4><p class="pk-vmeta">Amer, Jaipur · Included in package price · Subject to availability</p><p>An exquisite heritage venue in the historic heart of Amer, near the iconic Jagat Shiromani Temple.</p></div>
-        <div class="pk-venue"><p class="pk-vtype">Heritage hotel · Stay available</p><h4>Om Niwas Suite Hotel</h4><p class="pk-vmeta">Bani Park, Jaipur · Additional venue charges apply · Subject to availability</p><p>A hidden heritage oasis in the serene, tree-lined lanes of Bani Park.</p></div>
-        <div class="pk-venue"><p class="pk-vtype">Heritage · Garden</p><h4>Once Upon A Time at The Bagh</h4><p class="pk-vmeta">Vidyadhar Ji Ka Bagh, Jaipur · Additional venue charges apply · Subject to availability</p><p>A majestic heritage venue inside Jaipur's historic 18th-century Vidyadhar Ji Ka Bagh.</p></div>
-      </div>
-
-      <h2 class="pk-h2-gap">Time slots</h2>
-      <div class="pk-slots">
-        <div><b>Morning</b><span>9:00 AM – 11:00 AM</span></div>
-        <div><b>Sunset</b><span>5:30 PM – 8:00 PM</span></div>
-        <div><b>Custom</b><span>On request</span></div>
-      </div>
-      <p class="pk-sub">Have your own spot in mind? A backyard, rooftop, or a place that means something — we'll bring the picnic to you.</p>
-    </section>
-
-    <section id="themes" class="pk-section">
-      <p class="pk-eyebrow">Choose your theme</p>
-      <h2>Real setups, real moments</h2>
-      <p class="pk-sub">Every theme, styled with your occasion in mind</p>
-      <div class="pk-theme" data-theme="blush_pink">
-        <h3 class="pk-theme-name pk-theme--pink"><i>blush</i> PINK</h3>
-        <div class="pk-theme-row">
-          <img src="/brochure/theme-pink-1.webp" width="389" height="236" loading="lazy" alt="Blush pink theme: roses on a pink runner">
-          <img src="/brochure/theme-pink-2.webp" width="363" height="236" loading="lazy" alt="Blush pink theme: full setup under a macramé tent">
-          <img src="/brochure/theme-pink-3.webp" width="173" height="232" loading="lazy" alt="Blush pink theme: place setting with roses">
+        <div class="pk-theme" data-theme="ivory_beige">
+          <h3 class="pk-theme-name pk-theme--beige"><i>ivory</i> BEIGE</h3>
+          <div class="pk-theme-row">
+            <img src="/brochure/theme-beige-1.webp" width="390" height="236" loading="lazy" alt="Ivory beige theme: white florals and candles">
+            <img src="/brochure/theme-beige-2.webp" width="363" height="236" loading="lazy" alt="Ivory beige theme: arch board setup">
+            <img src="/brochure/theme-beige-3.webp" width="173" height="235" loading="lazy" alt="Ivory beige theme: tent with wooden figurines">
+          </div>
         </div>
-      </div>
-      <div class="pk-theme" data-theme="ivory_beige">
-        <h3 class="pk-theme-name pk-theme--beige"><i>ivory</i> BEIGE</h3>
-        <div class="pk-theme-row">
-          <img src="/brochure/theme-beige-1.webp" width="390" height="236" loading="lazy" alt="Ivory beige theme: white florals and candles">
-          <img src="/brochure/theme-beige-2.webp" width="363" height="236" loading="lazy" alt="Ivory beige theme: arch board setup">
-          <img src="/brochure/theme-beige-3.webp" width="173" height="235" loading="lazy" alt="Ivory beige theme: tent with wooden figurines">
+        <div class="pk-theme" data-theme="sage_green">
+          <h3 class="pk-theme-name pk-theme--green"><i>sage</i> GREEN</h3>
+          <div class="pk-theme-row">
+            <img src="/brochure/theme-green-1.webp" width="390" height="236" loading="lazy" alt="Sage green theme: table with candles and greenery">
+            <img src="/brochure/theme-green-2.webp" width="364" height="236" loading="lazy" alt="Sage green theme: low table setup on grass">
+            <img src="/brochure/theme-green-3.webp" width="181" height="236" loading="lazy" alt="Sage green theme: tent and cushions">
+          </div>
         </div>
-      </div>
-      <div class="pk-theme" data-theme="sage_green">
-        <h3 class="pk-theme-name pk-theme--green"><i>sage</i> GREEN</h3>
-        <div class="pk-theme-row">
-          <img src="/brochure/theme-green-1.webp" width="390" height="236" loading="lazy" alt="Sage green theme: table with candles and greenery">
-          <img src="/brochure/theme-green-2.webp" width="364" height="236" loading="lazy" alt="Sage green theme: low table setup on grass">
-          <img src="/brochure/theme-green-3.webp" width="181" height="236" loading="lazy" alt="Sage green theme: tent and cushions">
+      </section>
+
+      <section class="sec" aria-labelledby="in-h">
+        <p class="eyebrow">Our work</p>
+        <h2 id="in-h">Real setups on Instagram</h2>
+        <p class="sub">Watch setups by occasion.</p>
+        <dl class="pk-reels">
+          <dt>Proposals</dt><dd><a href="https://www.instagram.com/reel/DaIYMCPz-Dp/">Watch 1</a><a href="https://www.instagram.com/reel/DT-HDSjE-bf/">Watch 2</a><a href="https://www.instagram.com/reel/DEmK5dYT0J2/">Watch 3</a><a href="https://www.instagram.com/p/DNf_-B8zuIe/">Watch 4</a></dd>
+          <dt>Birthdays</dt><dd><a href="https://www.instagram.com/reel/DBL3mLpuaXG/">Watch 1</a><a href="https://www.instagram.com/reel/DBTIe5HpAQ3/">Watch 2</a><a href="https://www.instagram.com/p/DBN2Vr7JUYe/">Watch 3</a></dd>
+          <dt>Kids birthday</dt><dd><a href="https://www.instagram.com/reel/DA8cy5xBeps/">Watch 1</a></dd>
+          <dt>Bachelorette</dt><dd><a href="https://www.instagram.com/p/DClrYqUBOAv/">Watch 1</a></dd>
+          <dt>Anniversary</dt><dd><a href="https://www.instagram.com/reel/DQQyQd_Ez1L/">Watch 1</a></dd>
+          <dt>Date</dt><dd><a href="https://www.instagram.com/reel/C4qBHCDhrkn/">Watch 1</a></dd>
+          <dt data-r="ncr">Countryside Offgrid</dt><dd data-r="ncr"><a href="https://www.instagram.com/reel/DBWeTyUPcBD/">Watch 1</a></dd>
+          <dt>Themes</dt><dd><a href="https://www.instagram.com/p/DcV-ieKiR0V/">Beige white</a><a href="https://www.instagram.com/reel/DRCoL2vkxBm/">Green white</a></dd>
+          <dt>At your venue</dt><dd><a href="https://www.instagram.com/reel/DBJT1ZUh5yz/">Watch 1</a><a href="https://www.instagram.com/reel/DdbmuB0p3lr/">Watch 2</a><a href="https://www.instagram.com/reel/C658jk3LRxj/">Watch 3</a></dd>
+        </dl>
+      </section>
+
+      <section class="final" aria-labelledby="fn-h">
+        <h2 id="fn-h">Got a date in mind?</h2>
+        <p>Send us the date, the occasion and how many of you. We'll suggest the right setup and venue.</p>
+        <div class="final-ctas">
+          <a class="btn btn-white" href="https://wa.me/919773703982" data-r="ncr" data-wa target="_blank" rel="noopener noreferrer">WhatsApp +91 97737 03982</a>
+          <a class="btn btn-white" href="https://wa.me/919266964666" data-r="jaipur" data-wa target="_blank" rel="noopener noreferrer">WhatsApp +91 92669 64666</a>
+          <a class="btn btn-outline-white" href="#packages">Choose a package</a>
         </div>
-      </div>
-    </section>
-
-    <section class="pk-section">
-      <p class="pk-eyebrow">Our work</p>
-      <h2>Get inspired</h2>
-      <p class="pk-sub">Tap any link to watch real setups by occasion</p>
-      <dl class="pk-reels">
-        <dt>Proposals</dt><dd><a href="https://www.instagram.com/reel/DaIYMCPz-Dp/">Watch 1</a><a href="https://www.instagram.com/reel/DT-HDSjE-bf/">Watch 2</a><a href="https://www.instagram.com/reel/DEmK5dYT0J2/">Watch 3</a><a href="https://www.instagram.com/p/DNf_-B8zuIe/">Watch 4</a></dd>
-        <dt>Birthdays</dt><dd><a href="https://www.instagram.com/reel/DBL3mLpuaXG/">Watch 1</a><a href="https://www.instagram.com/reel/DBTIe5HpAQ3/">Watch 2</a><a href="https://www.instagram.com/p/DBN2Vr7JUYe/">Watch 3</a></dd>
-        <dt>Kids birthday</dt><dd><a href="https://www.instagram.com/reel/DA8cy5xBeps/">Watch 1</a></dd>
-        <dt>Bachelorette</dt><dd><a href="https://www.instagram.com/p/DClrYqUBOAv/">Watch 1</a></dd>
-        <dt>Anniversary</dt><dd><a href="https://www.instagram.com/reel/DQQyQd_Ez1L/">Watch 1</a></dd>
-        <dt>Date</dt><dd><a href="https://www.instagram.com/reel/C4qBHCDhrkn/">Watch 1</a></dd>
-        <dt>Countryside Offgrid</dt><dd><a href="https://www.instagram.com/reel/DBWeTyUPcBD/">Watch 1</a></dd>
-        <dt>Themes</dt><dd><a href="https://www.instagram.com/p/DcV-ieKiR0V/">Beige white</a><a href="https://www.instagram.com/reel/DRCoL2vkxBm/">Green white</a></dd>
-        <dt>At your venue</dt><dd><a href="https://www.instagram.com/reel/DBJT1ZUh5yz/">Watch 1</a><a href="https://www.instagram.com/reel/DdbmuB0p3lr/">Watch 2</a><a href="https://www.instagram.com/reel/C658jk3LRxj/">Watch 3</a></dd>
-      </dl>
-    </section>
-
-    <section class="pk-final">
-      <h2>Loved what you saw?</h2>
-      <p>Book your picnic today and let us handle every detail — setup, styling, and teardown.</p>
-      <div class="pk-cta pk-cta--final" data-cta></div>
-      <p class="pk-contact">
-        <a href="https://www.instagram.com/the.picnic.stories/">@the.picnic.stories</a> ·
-        <a href="https://picnicstories.com/?utm_source=brochure&amp;utm_medium=link">picnicstories.com</a><br>
-        <span class="nw">+91 97737-03982 (Gurugram)</span> · <span class="nw">+91 92669-64666 (Jaipur)</span><br>
-        Open every day · Morning &amp; sunset slots available
-      </p>
-    </section>
+        <p class="final-contact">
+          <a href="https://www.instagram.com/the.picnic.stories/">@the.picnic.stories</a> ·
+          <a href="/?utm_source=brochure&amp;utm_medium=link">picnicstories.com</a><br>
+          Open every day
+        </p>
+      </section>
+    </div>
   </main>
 
-  <footer class="pk-foot">F&amp;B not included unless stated · Prices subject to confirmation</footer>
+  <footer class="foot">Food &amp; drinks not included unless listed · Prices confirmed when you book</footer>
+
+  <!-- Phone only: appears once the cover's buttons scroll away. -->
+  <div class="sticky only-city" data-sticky hidden>
+    <a class="btn btn-solid" href="https://wa.me/919773703982" data-r="ncr" data-wa target="_blank" rel="noopener noreferrer">WhatsApp us</a>
+    <a class="btn btn-solid" href="https://wa.me/919266964666" data-r="jaipur" data-wa target="_blank" rel="noopener noreferrer">WhatsApp us</a>
+    <a class="btn btn-line" href="#glance">Compare prices</a>
+  </div>
 
   <script type="module" src="./brochure.js"></script>
 </body>

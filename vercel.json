@@ -8,6 +8,11 @@
       "missing": [{ "type": "query", "key": "tier" }],
       "destination": "/brochure",
       "permanent": true
+    },
+    {
+      "source": "/brochure/:slug(gurugram|gurgaon|delhi|delhi-ncr)",
+      "destination": "/brochure/ncr",
+      "permanent": true
     }
   ],
   "rewrites": [

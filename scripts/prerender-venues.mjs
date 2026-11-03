@@ -6,6 +6,10 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { createClient } from '@supabase/supabase-js'
+import {
+  REGIONS, summarizeRegion, regionFrom, priceBlockHtml, guestsLine, glanceRowsHtml, venueCardsHtml,
+  stayRowsHtml, addonRowsHtml, cityMeta, offerCatalogJsonLd, inr, esc as escHtml,
+} from '../brochure-render.js'
 import { loadEnv } from 'vite'
 
 const SITE = (process.env.SITE_URL || 'https://www.picnicstories.com').replace(/\/$/, '')
@@ -775,8 +779,9 @@ async function buildPackagesPage(supabase, template, blogPosts = []) {
     [/<meta name="description"[^>]*>/, `<meta name="description" content="${esc(desc)}">`],
     // Merge plan Phase 2 (2026-10-11): /packages is only the venue step now
     // (bare /packages 308s to /brochure). This shell serves /packages?tier=…,
-    // so it points search engines at /brochure and stays out of the index.
-    [/<link rel="canonical"[^>]*>/, `<link rel="canonical" href="${SITE}/brochure">`],
+    // so it points search engines at the indexed NCR brochure and stays out of
+    // the index (bare /brochure is the noindex city chooser since 2026-11-03).
+    [/<link rel="canonical"[^>]*>/, `<link rel="canonical" href="${SITE}/brochure/ncr">`],
     [/<meta name="robots"[^>]*>/, `<meta name="robots" content="noindex, follow">`],
     [/<meta property="og:title"[^>]*>/, `<meta property="og:title" content="${esc(title)}">`],
     [/<meta property="og:description"[^>]*>/, `<meta property="og:description" content="${esc(desc)}">`],
@@ -1033,7 +1038,7 @@ function blogShell({ title, desc, canonical, jsonLd, heroBlock, mainHtml, ogType
       <a href="/" class="header-brand"><img src="/logo-nav.webp" alt="The Picnic Stories logo">The Picnic Stories</a>
       <nav class="header-nav" aria-label="Site">
         <a href="/blog" class="sec-pill">All posts</a>
-        <a href="/brochure" class="sec-pill">Packages</a>
+        <a href="/brochure/ncr" class="sec-pill">Packages</a>
         <a href="/#venues-section" class="sec-pill">Venues</a>
       </nav>
     </div>
@@ -1045,7 +1050,7 @@ ${mainHtml}
       <div class="cta-band-inner">
         <h2>Make it a story worth telling</h2>
         <p>Pick an occasion, pick a venue — the setup is styled and waiting before you arrive.</p>
-        <a href="/brochure" class="cta-btn">Browse picnic packages</a>
+        <a href="/brochure/ncr" class="cta-btn">Browse picnic packages</a>
       </div>
     </div>
   </main>
@@ -1053,7 +1058,7 @@ ${mainHtml}
     <nav class="footer-links" aria-label="Footer links">
       <a href="/">Home</a>
       <a href="/blog">Blog</a>
-      <a href="/brochure">Packages</a>
+      <a href="/brochure/ncr">Packages</a>
       <a href="/privacy.html">Privacy</a>
       <a href="/terms.html">Terms</a>
     </nav>
@@ -1179,6 +1184,101 @@ ${cards}
   return posts
 }
 
+// ── City brochures (2026-11-03, docs/PLAN_city_brochures_redesign_2026-11-03.md) ──
+// dist/brochure.html (Vite's build of brochure.html) is the template. Writes
+//   dist/brochure/ncr.html     → /brochure/ncr
+//   dist/brochure/jaipur.html  → /brochure/jaipur
+// with <html data-city>, the city's head tags and OfferCatalog JSON-LD, and
+// every data-slot filled from public.brochure_city_prices through the SAME
+// brochure-render.js functions brochure.js uses live. The other city's
+// data-r copies are stripped (no wasted hero download). dist/brochure.html
+// itself stays the chooser, with each city's "from" price baked in.
+// Fails safe: on any fetch error the template is left as is and the client
+// fills everything live.
+
+// Replace the inside of an element carrying data-slot="<name>" (its content
+// ends at the <!--/slot--> marker the template puts there).
+function fillBrochureSlot(html, name, inner) {
+  const re = new RegExp(`(data-slot="${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^>]*>)[\\s\\S]*?(<!--/slot-->)`, 'g')
+  return html.replace(re, (_, open, close) => open + inner + close)
+}
+
+// Remove every element marked data-r="<region>" (simple, non-nested elements:
+// the template only puts data-r on spans, p, h-tags, a, dt, dd and img).
+function stripRegion(html, region) {
+  const attr = `data-r="${region}"`
+  html = html.replace(new RegExp(`<img\\b[^>]*${attr}[^>]*>\\s*`, 'g'), '')
+  return html.replace(new RegExp(`<(span|p|a|dt|dd|h1|h2|h3)\\b([^>]*)${attr}([^>]*)>[\\s\\S]*?</\\1>\\s*`, 'g'), '')
+}
+
+async function buildCityBrochures(supabase, urls) {
+  const file = resolve(DIST, 'brochure.html')
+  if (!existsSync(file)) { console.warn('[prerender] dist/brochure.html missing — city brochures skipped'); return 0 }
+  const template = readFileSync(file, 'utf8')
+  const [priceRes, venueRes, addRes] = await Promise.all([
+    supabase.from('brochure_city_prices').select('region, venue_id, venue_name, venue_slug, venue_area, package_key, package_name, included_guests, max_guests, from_no_food, from_with_food, packages_enabled'),
+    supabase.from('venues').select('id, name, slug, type, city, region, area, description, sort_order, venue_add_ons(addon_id)')
+      .eq('is_active', true).order('sort_order', { ascending: true, nullsFirst: false }).order('id', { ascending: true }),
+    supabase.from('add_ons').select('id, name, price, category').eq('is_active', true).neq('category', 'setup')
+      .order('price', { ascending: true }).order('sort_order', { ascending: true }),
+  ])
+  if (priceRes.error || venueRes.error || addRes.error) {
+    console.warn('[prerender] city brochures: fetch failed — pages will price live only:',
+      (priceRes.error || venueRes.error || addRes.error).message)
+  }
+  const rows = priceRes.data || []
+  const venues = venueRes.data || []
+  let written = 0
+  let chooser = template
+
+  mkdirSync(resolve(DIST, 'brochure'), { recursive: true })
+  for (const region of Object.keys(REGIONS)) {
+    const R = REGIONS[region]
+    const summaries = summarizeRegion(rows, region)
+    const from = regionFrom(summaries)
+    if (from != null) chooser = fillBrochureSlot(chooser, `chooser-from:${region}`, inr(from))
+
+    const meta = cityMeta(region, summaries, venues, SITE)
+    let html = template.replace('<html lang="en">', `<html lang="en" data-city="${region}">`)
+    html = swapHead(html, [
+      [/<meta name="robots"[^>]*>/, '<meta name="robots" content="index, follow, max-image-preview:large">'],
+      [/<link rel="canonical"[^>]*>/, `<link rel="canonical" href="${meta.url}">`],
+      [/<title>[\s\S]*?<\/title>/, `<title>${escHtml(meta.title)}</title>`],
+      [/<meta name="description"[^>]*>/, `<meta name="description" content="${escHtml(meta.description)}">`],
+      [/<meta property="og:title"[^>]*>/, `<meta property="og:title" content="${escHtml(meta.ogTitle)}">`],
+      [/<meta property="og:description"[^>]*>/, `<meta property="og:description" content="${escHtml(meta.ogDescription)}">`],
+      [/<meta property="og:image"[^>]*>/, `<meta property="og:image" content="${meta.ogImage}">`],
+      [/<meta property="og:url"[^>]*>/, `<meta property="og:url" content="${meta.url}">`],
+      [/<!--jsonld-->/, Object.keys(summaries).length ? `<script type="application/ld+json">${offerCatalogJsonLd(region, summaries, SITE)}</script>` : ''],
+    ])
+    for (const other of Object.keys(REGIONS)) if (other !== region) html = stripRegion(html, other)
+
+    if (Object.keys(summaries).length) {
+      const names = {}
+      for (const m of html.matchAll(/data-pkg="([a-z_]+)"[\s\S]*?<h3>([^<]+)<\/h3>/g)) names[m[1]] = m[2].trim()
+      for (const key of Object.keys(names)) {
+        const s = summaries[key]
+        if (!s) { html = html.replace(`data-pkg="${key}"`, `data-pkg="${key}" hidden`); continue }
+        html = fillBrochureSlot(html, `price:${key}`, priceBlockHtml(s, R.name))
+        html = fillBrochureSlot(html, `guests:${key}`, escHtml(guestsLine(s)))
+      }
+      html = fillBrochureSlot(html, 'glance', glanceRowsHtml(summaries, names))
+      if (from != null) html = fillBrochureSlot(html, 'from', inr(from))
+      const cards = venueCardsHtml(venues, summaries)
+      if (cards) html = fillBrochureSlot(html, 'venues', cards)
+      html = fillBrochureSlot(html, 'stays', stayRowsHtml(venues, region))
+      const addons = addonRowsHtml(addRes.data || [], venueRes.error ? null : venues, summaries)
+      if (addons) html = fillBrochureSlot(html, 'addons', addons)
+    }
+    writeFileSync(resolve(DIST, 'brochure', `${R.slug}.html`), html)
+    urls.push(meta.url)
+    written++
+    console.log(`[prerender] brochure: /brochure/${R.slug} (${Object.keys(summaries).length} packages, from ${from != null ? inr(from) : 'n/a'})`)
+  }
+  writeFileSync(file, chooser)
+  return written
+}
+
 async function main() {
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   // Only public, browseable venues. `custom` (Your Own Space) has no detail page.
@@ -1219,9 +1319,9 @@ async function main() {
     // Not in the sitemap since merge plan Phase 2 — /brochure is the indexed page.
     console.log(`[prerender] packages page: /packages`)
   }
-  // /brochure is a Vite page (brochure.html), not prerendered here — listed so
-  // Google finds it (indexable since 2026-10-11, merge plan Phase 1).
-  urls.push(`${SITE}/brochure`)
+  // City brochures (2026-11-03): /brochure/ncr + /brochure/jaipur are the
+  // indexed package pages; bare /brochure is the noindex city chooser.
+  const brochureCount = await buildCityBrochures(supabase, urls)
 
   // Homepage itself (GSC fix 2026-07-15): inject real venue-card links into
   // #venues-grid so Googlebot's raw-HTML crawl of "/" — its highest-authority,
@@ -1241,7 +1341,7 @@ async function main() {
   writeFileSync(resolve(DIST, 'robots.txt'),
     `User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /staff\nSitemap: ${SITE}/sitemap.xml\n`)
 
-  console.log(`[prerender] wrote ${seen.size} venue pages + ${cityPageCount} city pages + ${packagesPage ? 1 : 0} packages page + ${blogPosts.length} blog posts (+ index) + sitemap (${urls.length} urls)`)
+  console.log(`[prerender] wrote ${seen.size} venue pages + ${cityPageCount} city pages + ${packagesPage ? 1 : 0} packages page + ${brochureCount} city brochures + ${blogPosts.length} blog posts (+ index) + sitemap (${urls.length} urls)`)
 }
 
 main().catch((e) => { console.error('[prerender]', e); process.exit(1) })
