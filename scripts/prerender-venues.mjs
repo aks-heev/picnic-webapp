@@ -7,7 +7,7 @@ import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 
 import { resolve } from 'node:path'
 import { createClient } from '@supabase/supabase-js'
 import {
-  REGIONS, summarizeRegion, regionFrom, priceBlockHtml, guestsLine, glanceRowsHtml, venueCardsHtml,
+  REGIONS, summarizeRegion, regionFrom, priceBlockHtml, glanceRowsHtml, venueCardsHtml,
   stayRowsHtml, addonRowsHtml, cityMeta, offerCatalogJsonLd, inr, esc as escHtml,
 } from '../brochure-render.js'
 import { loadEnv } from 'vite'
@@ -1260,7 +1260,6 @@ async function buildCityBrochures(supabase, urls) {
         const s = summaries[key]
         if (!s) { html = html.replace(`data-pkg="${key}"`, `data-pkg="${key}" hidden`); continue }
         html = fillBrochureSlot(html, `price:${key}`, priceBlockHtml(s, R.name))
-        html = fillBrochureSlot(html, `guests:${key}`, escHtml(guestsLine(s)))
       }
       html = fillBrochureSlot(html, 'glance', glanceRowsHtml(summaries, names))
       if (from != null) html = fillBrochureSlot(html, 'from', inr(from))

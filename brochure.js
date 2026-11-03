@@ -19,7 +19,7 @@ import { track } from './analytics.js'
 import { SHARED_SETUP_LABELS } from './setup-labels.js'
 import { currentSearch, saveSearch, appendSearchParams, defaultTierForOccasion } from './params.js'
 import {
-  REGIONS, regionForCity, summarizeRegion, regionFrom, priceBlockHtml, guestsLine, glanceRowsHtml,
+  REGIONS, regionForCity, summarizeRegion, regionFrom, priceBlockHtml, glanceRowsHtml,
   venueCardsHtml, stayRowsHtml, addonRowsHtml, packageCtaHtml, bookHref, waHref, ADDON_LABEL, inr, esc,
 } from './brochure-render.js'
 
@@ -136,7 +136,6 @@ function applyPrices(summaries) {
     card.hidden = !s
     if (!s) return
     setSlot(`price:${key}`, priceBlockHtml(s, R.name))
-    setSlot(`guests:${key}`, esc(guestsLine(s)))
   })
   setSlot('glance', glanceRowsHtml(summaries, names))
   const from = regionFrom(summaries)

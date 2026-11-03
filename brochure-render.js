@@ -145,18 +145,13 @@ export function priceBlockHtml(s, regionName) {
   return h
 }
 
-// "Price covers 4 guests" — the package's included guests (lowest across venues).
-export function guestsLine(s) {
-  return s && s.included ? `Price covers ${s.included} guests` : ''
-}
-
 // "Prices at a glance" rows. names: { key: display name } from the cards.
 export function glanceRowsHtml(summaries, names) {
   return PACKAGE_ORDER.filter(k => summaries[k]).map(k => {
     const s = summaries[k]
     const food = s.headIsFood ? inr(s.head) : (s.fromFood != null ? inr(s.fromFood) : '—')
     return `<a class="gl-row" href="#pkg-${esc(k)}">` +
-      `<span class="gl-name"><b>${esc(names[k] || s.name)}</b><small>${esc(guestsLine(s))}</small></span>` +
+      `<span class="gl-name"><b>${esc(names[k] || s.name)}</b></span>` +
       `<span class="gl-p">${s.headIsFood ? '—' : inr(s.head)}</span><span class="gl-p gl-food">${food}</span></a>`
   }).join('')
 }
