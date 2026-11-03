@@ -2368,7 +2368,7 @@ function pkgAdmPriceTableInfo(pkgId, venueId, table = packagesManagerState.price
   }
 }
 
-function pkgAdmChargedPriceHtml(info) {
+function pkgAdmChargedPriceHtml(info, where = 'packages') {
   const inr = n => '₹' + Number(n).toLocaleString('en-IN')
   const parts = []
   if (!info.hasNoFood) {
@@ -2382,7 +2382,9 @@ function pkgAdmChargedPriceHtml(info) {
       : `<strong>${inr(wd ?? we)}</strong>`)
   }
   if (info.foodCount) parts.push(`with food from ${inr(info.foodMin)}`)
-  return `<span class="pkg-adm-vp-charged" title="Charged from the price table (package_prices), which overrides this row's stored price. Changing it needs SQL for now (plan Phase 3).">${parts.join('<br>')}<br><span class="vf-hint">price table · not editable here</span></span>`
+  // In the venue form the "Price table" button sits right beside this, so say how to edit it there.
+  const hint = where === 'venue' ? 'from the price table' : 'price table · edit in Venues'
+  return `<span class="pkg-adm-vp-charged" title="Charged from the price table (package_prices), which overrides this row's stored price.">${parts.join('<br>')}<br><span class="vf-hint">${hint}</span></span>`
 }
 
 async function loadPackagesManager() {
@@ -11184,7 +11186,7 @@ function renderVfVenuePackages(v) {
     else {
       state = r.is_active ? 'Offered' : '<span class="vf-hint">Paused</span>'
       const info = pkgAdmPriceTableInfo(p.id, v.id, s.priceTable)
-      price = info ? pkgAdmChargedPriceHtml(info) : `<strong>${inr(r.price)}</strong><br><span class="vf-hint">${r.included_guests} incl., +${inr(r.overage_per_person)}/extra</span>`
+      price = info ? pkgAdmChargedPriceHtml(info, 'venue') : `<strong>${inr(r.price)}</strong><br><span class="vf-hint">${r.included_guests} incl., +${inr(r.overage_per_person)}/extra</span>`
     }
     // Everything for this venue happens here (2026-11-03): the Packages tab only
     // lists ACTIVE cafes, so a draft venue can't be set up from there at all.
@@ -11194,7 +11196,7 @@ function renderVfVenuePackages(v) {
          <button type="button" class="vf-action-btn" onclick="vfPeOpen(${p.id}, ${v.id})">Price table</button>
          <button type="button" class="vf-action-btn" onclick="vfEnToggle(${p.id}, ${v.id}, ${!r.is_active})">${r.is_active ? 'Pause' : 'Resume'}</button>`
     const open = (ed) => ed && ed.venueId === v.id && ed.pkgId === p.id
-    return `<tr><td>${escapeHtml(p.name)}</td><td>${state}</td><td>${price}</td><td class="vf-venue-pkg-actions">${actions}</td></tr>
+    return `<tr class="vf-vp-row"><td class="vf-vp-name">${escapeHtml(p.name)}</td><td class="vf-vp-state">${state}</td><td class="vf-vp-price">${price}</td><td class="vf-venue-pkg-actions">${actions}</td></tr>
       ${open(vfEn) ? `<tr class="vf-pe-host"><td colspan="4">${vfEnHtml()}</td></tr>` : ''}
       ${open(vfPe) ? `<tr class="vf-pe-host"><td colspan="4">${vfPeHtml()}</td></tr>` : ''}`
   }).join('')

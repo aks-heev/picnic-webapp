@@ -912,3 +912,41 @@
   .admin-ui .admin-venue-table td.venue-row-actions { order: 8; flex-basis: 100%; display: flex; gap: 8px; margin: 4px 0 0; padding-top: 10px; border-top: 1px solid var(--adm-rule); }
   .admin-ui .admin-venue-table td.venue-row-actions .vf-action-btn { flex: 1; }
 }
+
+/* ── Phone fixes from real-device screenshots — 2026-11-03 22:04 ─────────── */
+
+/* Reels inside the "Brochure reels" fold: the fold IS the frame, so the old card loses its own */
+.admin-ui .pkg-adm-fold .pkg-adm-reels { margin: 0; padding: 0; border: 0; background: none; }
+.admin-ui .pkg-adm-fold .pkg-adm-reels > .vf-section-title { display: none; } /* the fold's summary already says it */
+
+@media (max-width: 640px) {
+  /* Fewer nested frames on the venue form: give the content the width */
+  .admin-ui .venue-form-panel { padding: 16px 12px; border-radius: 12px; }
+  .admin-ui .venue-form-panel .vf-section { padding: 12px; }
+
+  /* Packages at this venue → one compact block per package */
+  .admin-ui .vf-venue-pkg-table,
+  .admin-ui .vf-venue-pkg-table tbody { display: block; width: 100%; }
+  .admin-ui .vf-venue-pkg-table thead { display: none; }
+  .admin-ui .vf-venue-pkg-table tr.vf-vp-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; padding: 12px 0; border-bottom: 1px solid var(--adm-rule); }
+  .admin-ui .vf-venue-pkg-table td { display: block; padding: 0; border: 0; min-width: 0; }
+  .admin-ui .vf-venue-pkg-table .vf-vp-name { font-weight: 600; font-size: 15px; }
+  .admin-ui .vf-venue-pkg-table .vf-vp-state { justify-self: end; font-size: 13px; }
+  .admin-ui .vf-venue-pkg-table .vf-vp-price { grid-column: 1 / -1; font-size: 14px; }
+  .admin-ui .vf-venue-pkg-table .vf-venue-pkg-actions { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 6px; white-space: normal; }
+  .admin-ui .vf-venue-pkg-table .vf-venue-pkg-actions .vf-action-btn { flex: 1 1 0; margin: 0; padding: 8px 6px; min-height: 40px; }
+  .admin-ui .vf-venue-pkg-table tr.vf-pe-host { display: block; }
+  .admin-ui .vf-venue-pkg-table tr.vf-pe-host > td { display: block; padding: 0 0 12px; }
+  .admin-ui .vf-pe { padding: 12px 10px; }
+
+  /* Reels: link / caption / [↑ ↓  chips … Showing ✕] */
+  .admin-ui .pkg-adm-reel-group { padding: 10px; }
+  .admin-ui .pkg-adm-reel-row { gap: 6px 8px; padding: 8px; }
+  .admin-ui .pkg-adm-reel-link { order: 1; flex: 1 1 100%; }
+  .admin-ui .pkg-adm-reel-cap { order: 2; flex: 1 1 100%; white-space: normal; }
+  .admin-ui .pkg-adm-reel-chip { order: 3; }
+  .admin-ui .pkg-adm-reel-row::after { content: ''; order: 4; flex-basis: 100%; height: 0; margin-top: -6px; } /* line break: chips above, controls below */
+  .admin-ui .pkg-adm-reel-move { order: 5; }
+  .admin-ui .pkg-adm-reel-toggle { order: 6; margin-left: auto; }
+  .admin-ui .pkg-adm-reel-row > .pkg-adm-reel-icon { order: 7; }
+}
