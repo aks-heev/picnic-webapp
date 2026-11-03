@@ -772,3 +772,143 @@
 .admin-ui .adm-kv .adm-pay--pending { background: #eeedeb; color: #3f3b37; }
 .admin-ui .adm-kv .adm-pay--failed  { background: #fbe4e2; color: #8a1c1c; }
 .admin-ui .adm-kv .adm-pay-id { margin-left: 6px; font-size: 12px; color: var(--adm-text-3); background: none; }
+
+/* ── Venue readiness (Draft/Live) + packages-at-venue panel — 2026-11-03, ADMIN_VENUE_SETUP_PLAN Phase 2 ── */
+.venue-ready-pill { margin-left: 6px; font: inherit; font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 999px; border: 0; cursor: pointer; white-space: nowrap; }
+.venue-ready-pill--live  { background: #e3f2e8; color: #14532d; }
+.venue-ready-pill--draft { background: #fdf0d5; color: #7a4b00; }
+.venue-ready-pill:focus-visible { outline: none; box-shadow: var(--adm-ring); }
+.vf-readiness { margin: 0 0 16px; padding: 12px 14px; border: 1px solid #f1d9a6; background: #fffaf0; border-radius: var(--adm-radius-sm, 8px); }
+.vf-readiness-title { font-weight: 600; margin-bottom: 6px; color: #7a4b00; }
+.vf-readiness-list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.vf-readiness-go { font: inherit; font-size: 13px; padding: 3px 10px; border-radius: 999px; cursor: pointer; border: 1px solid #e8c77f; background: #fff; color: #7a4b00; }
+.vf-readiness-item--note .vf-readiness-go { border-color: var(--adm-border, #e7e4e0); color: var(--adm-text-2, #5d5853); }
+.vf-readiness-go:hover { background: #fdf0d5; }
+.vf-venue-pkg-table { width: 100%; }
+.vf-venue-pkg-table td { vertical-align: top; }
+.pkg-adm-vp-row--flash td { background: #fdf0d5; transition: background .3s; }
+
+/* ── Price-table editor (package_prices) — 2026-11-03, ADMIN_VENUE_SETUP_PLAN Phase 3 ── */
+.vf-pe { margin: 4px 0 8px; padding: 12px 14px; border: 1px solid var(--adm-border, #e7e4e0); border-radius: var(--adm-radius-sm, 8px); background: var(--adm-raised, #fbfaf9); }
+.vf-pe-table { width: 100%; }
+.vf-pe-table td { vertical-align: top; }
+.vf-pe-table .vf-input { min-width: 0; width: 100%; }
+.vf-pe-table td:nth-child(1) { min-width: 104px; }
+.vf-pe-table td:nth-child(3) { min-width: 96px; }
+.vf-pe-prev { font-size: 12px; line-height: 17px; white-space: nowrap; }
+.vf-pe-err { color: var(--adm-neg, #a3261f); }
+.vf-pe-paste { margin: 10px 0; }
+.vf-pe-paste textarea { width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+.vf-pe-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+.vf-pe-msg { margin: 8px 0 0; }
+.vf-pe-host > td { padding-top: 0; }
+@media (max-width: 720px) { .vf-pe-table { display: block; overflow-x: auto; } }
+
+/* ── Guided "Add venue" setup + in-panel package controls — 2026-11-03, ADMIN_VENUE_SETUP_PLAN Phase 4 ── */
+.vf-wz-on .vf-wz-off { display: none !important; }
+.vf-wz-bar { margin: 0 0 18px; }
+.vf-wz-steps { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; counter-reset: none; }
+.vf-wz-step > span, .vf-wz-step > button { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 13px; padding: 5px 12px 5px 6px; border-radius: 999px; border: 1px solid var(--adm-border, #e7e4e0); background: var(--adm-surface, #fff); color: var(--adm-text-2, #5d5853); }
+.vf-wz-step > button { cursor: pointer; }
+.vf-wz-step > button:hover { background: var(--adm-hover, #f1f0ed); }
+.vf-wz-step b { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; font-size: 11px; background: var(--adm-active, #ecebe8); color: var(--adm-text, #1c1917); }
+.vf-wz-step.is-current > span { border-color: var(--adm-primary, #1c1917); color: var(--adm-text, #1c1917); font-weight: 600; }
+.vf-wz-step.is-current b { background: var(--adm-primary, #1c1917); color: #fff; }
+.vf-wz-step.is-done b { background: #e3f2e8; color: #14532d; }
+.vf-wz-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding-bottom: 10px; border-bottom: 1px solid var(--adm-rule, #f1efec); }
+.vf-wz-exit { margin-left: auto; font: inherit; font-size: 12px; background: none; border: 0; padding: 0; color: var(--adm-text-3, #6e6964); text-decoration: underline; cursor: pointer; }
+.vf-wz-nav { margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--adm-rule, #f1efec); }
+.vf-wz-buttons { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.vf-wz-spacer { flex: 1 1 auto; }
+.vf-wz-review { margin: 0 0 12px; padding: 12px 14px; border-radius: var(--adm-radius-sm, 8px); }
+.vf-wz-review ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.vf-wz-review--todo { background: #fffaf0; border: 1px solid #f1d9a6; color: #7a4b00; }
+.vf-wz-review--ok { background: #eef7f1; border: 1px solid #cfe8d7; color: #14532d; }
+.vf-venue-pkg-actions { white-space: nowrap; }
+.vf-venue-pkg-actions .vf-action-btn { margin: 0 4px 4px 0; }
+@media (max-width: 640px) {
+  .vf-wz-step > span, .vf-wz-step > button { font-size: 12px; padding: 4px 10px 4px 4px; }
+  .vf-wz-buttons .btn { flex: 1 1 auto; }
+  .vf-wz-spacer { display: none; }
+  .vf-venue-pkg-actions { white-space: normal; }
+}
+
+/* ── Admin layout pass (desktop + mobile) — 2026-11-03 ─────────────────── */
+
+/* Packages tab: each package / section folds to one summary line */
+.admin-ui .pkg-adm-card,
+.admin-ui .pkg-adm-fold { padding: 0; margin: 0 0 10px; border: 1px solid var(--adm-border); border-radius: var(--adm-radius); background: var(--adm-surface); }
+.admin-ui .pkg-adm-fold { background: var(--adm-raised); }
+.admin-ui .pkg-adm-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; padding: 14px 18px; cursor: pointer; list-style: none; }
+.admin-ui .pkg-adm-summary::-webkit-details-marker { display: none; }
+.admin-ui .pkg-adm-summary::before { content: ''; flex: none; align-self: center; width: 7px; height: 7px; margin-right: 2px; border-right: 2px solid var(--adm-text-3); border-bottom: 2px solid var(--adm-text-3); transform: rotate(-45deg); transition: transform .15s ease; }
+.admin-ui details[open] > .pkg-adm-summary::before { transform: rotate(45deg); }
+.admin-ui .pkg-adm-summary:hover { background: var(--adm-hover); border-radius: var(--adm-radius); }
+.admin-ui .pkg-adm-summary:focus-visible { outline: none; box-shadow: var(--adm-ring); border-radius: var(--adm-radius); }
+.admin-ui .pkg-adm-sum-name { font-weight: 600; font-size: 15px; }
+.admin-ui .pkg-adm-sum-tagline { color: var(--adm-text-2); font-size: 13px; }
+.admin-ui .pkg-adm-sum-meta { margin-left: auto; font-size: 13px; color: var(--adm-text-3); }
+.admin-ui .pkg-adm-sum-warn { color: var(--adm-neg); }
+.admin-ui .pkg-adm-sum-tag { margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; background: var(--adm-accent-soft); color: var(--adm-accent-strong); }
+.admin-ui .pkg-adm-card-body { padding: 14px 18px 18px; border-top: 1px solid var(--adm-rule); }
+.admin-ui .pkg-adm-fold .pkg-adm-new { margin: 0; border: 0; padding: 0; background: none; }
+
+/* Venue pricing table: compact numeric inputs; anything wider scrolls instead of being cut off */
+.admin-ui .pkg-adm-scroll { overflow-x: auto; margin-top: 8px; }
+.admin-ui .pkg-adm-table--vp { min-width: 780px; }
+.admin-ui .pkg-adm-table--vp td { vertical-align: middle; }
+.admin-ui .pkg-adm-table--vp .vf-input { width: 100%; min-width: 72px; max-width: 112px; }
+.admin-ui .pkg-adm-table--vp td[data-label="Price ₹"] .vf-input { max-width: 128px; }
+.admin-ui .pkg-adm-vp-venue { min-width: 150px; font-weight: 500; }
+.admin-ui .pkg-adm-vp-check,
+.admin-ui .pkg-adm-vp-act { white-space: nowrap; }
+.admin-ui .pkg-adm-vp-act .btn { min-height: 34px; padding: 6px 12px; font-size: 13px; }
+.admin-ui .pkg-adm-vp-gap { max-width: 220px; font-size: 12px; color: #9a3412; }
+
+@media (max-width: 700px) {
+  .admin-ui .pkg-adm-summary { padding: 12px 14px; }
+  .admin-ui .pkg-adm-sum-meta { margin-left: 0; flex-basis: 100%; padding-left: 19px; }
+  .admin-ui .pkg-adm-card-body { padding: 12px 14px 14px; }
+  /* Pricing table → one stacked block per venue */
+  .admin-ui .pkg-adm-table--vp { min-width: 0; }
+  .admin-ui .pkg-adm-table--vp,
+  .admin-ui .pkg-adm-table--vp tbody { display: block; }
+  .admin-ui .pkg-adm-table--vp thead { display: none; }
+  .admin-ui .pkg-adm-table--vp tr { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; padding: 12px 0; border-bottom: 1px solid var(--adm-rule); }
+  .admin-ui .pkg-adm-table--vp td { display: block; padding: 0; border: 0; }
+  .admin-ui .pkg-adm-table--vp td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 4px; font-size: 12px; color: var(--adm-text-3); }
+  .admin-ui .pkg-adm-table--vp .vf-input { max-width: none; min-width: 0; box-sizing: border-box; }
+  .admin-ui .pkg-adm-table--vp td { min-width: 0; }
+  .admin-ui :is(.pkg-adm-vp-venue, .pkg-adm-vp-offmsg, .pkg-adm-vp-act, .pkg-adm-vp-gap) { grid-column: 1 / -1; }
+  .admin-ui .pkg-adm-vp-check { align-self: end; padding-bottom: 10px !important; }
+  .admin-ui .pkg-adm-vp-act { display: flex !important; gap: 8px; }
+  .admin-ui .pkg-adm-vp-act .btn { flex: 1; }
+  .admin-ui .pkg-adm-vp-gap:empty { display: none; }
+}
+
+/* Venues tab: while a venue is open, the list steps aside so the form is on top */
+.admin-ui #venues-tab.vf-editing #venues-list-container,
+.admin-ui #venues-tab.vf-editing #add-venue-btn { display: none; }
+
+/* Guided setup: drop the toggles row when nothing in it belongs to this step */
+.admin-ui .vf-wz-on .vf-actions:not(:has(> :not(.vf-wz-off))) { display: none; }
+
+/* Venue list on phones: compact 3-line cards (name / pills / area · guests · price) */
+@media (max-width: 768px) {
+  .admin-ui .admin-venue-table tr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 12px 14px; }
+  .admin-ui .admin-venue-table tr::before { content: ''; order: 4; flex-basis: 100%; height: 0; margin-top: -4px; } /* line break before the meta line */
+  .admin-ui .admin-venue-table td { padding: 0; border: 0; font-size: 13px; }
+  .admin-ui .admin-venue-table td::before { display: none; }
+  .admin-ui .admin-venue-table td.venue-drag-cell { display: none; }
+  .admin-ui .admin-venue-table td.venue-row-name { order: 1; flex-basis: 100%; margin: 0; font-size: 15px; font-weight: 600; }
+  .admin-ui .admin-venue-table td[data-label="Type"] { order: 2; }
+  .admin-ui .admin-venue-table td[data-label="Status"] { order: 3; }
+  .admin-ui .admin-venue-table td[data-label="Area"] { order: 5; }
+  .admin-ui .admin-venue-table td[data-label="Capacity"] { order: 6; }
+  .admin-ui .admin-venue-table td[data-label="Price"] { order: 7; }
+  .admin-ui .admin-venue-table td:is([data-label="Area"], [data-label="Capacity"], [data-label="Price"]) { color: var(--adm-text-2); white-space: nowrap; }
+  .admin-ui .admin-venue-table td:is([data-label="Capacity"], [data-label="Price"])::before { content: '· '; display: inline; min-width: 0; margin: 0; font: inherit; letter-spacing: 0; text-transform: none; color: var(--adm-text-3); }
+  .admin-ui .admin-venue-table td[data-label="Capacity"]::after { content: ' guests'; }
+  .admin-ui .admin-venue-table td.venue-row-actions { order: 8; flex-basis: 100%; display: flex; gap: 8px; margin: 4px 0 0; padding-top: 10px; border-top: 1px solid var(--adm-rule); }
+  .admin-ui .admin-venue-table td.venue-row-actions .vf-action-btn { flex: 1; }
+}

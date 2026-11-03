@@ -2344,20 +2344,60 @@ async function loadPackages() {
 // card's "Venue pricing" table (SPEC_stored_package_pricing_2026-07-10.md).
 // Derived pricing (base + add-on sum) is dead — enabling a package at a venue
 // means creating its priced row here.
-let packagesManagerState = { packages: [], addons: [], venues: [], venuePackages: [], reels: [] }
+let packagesManagerState = { packages: [], addons: [], venues: [], venuePackages: [], reels: [], priceTable: [], priceTableError: null }
+
+// ── Charged price for a venue × package (2026-11-03, ADMIN_VENUE_SETUP_PLAN Phase 0) ──
+// compute_booking_total checks package_prices FIRST ("price table wins"): if ANY
+// active package_prices row exists for the pair, venue_packages.price is never
+// read. Editing it in the table below would change nothing a customer pays, so
+// for those pairs the Price cell shows the price-table numbers read-only.
+// Mirrors the RPC's rules: no-food rows have guests = NULL and day_type
+// any/weekday/weekend; with-food rows are per guest count. Display only, never
+// used to price a booking (CLAUDE.md §7).
+function pkgAdmPriceTableInfo(pkgId, venueId, table = packagesManagerState.priceTable) {
+  const rows = (table || [])
+    .filter(r => r.package_id === pkgId && r.venue_id === venueId)
+  if (!rows.length) return null
+  const noFood = rows.filter(r => !r.with_food)
+  const food = rows.filter(r => r.with_food)
+  return {
+    noFood: { any: noFood.find(r => r.day_type === 'any')?.price, weekday: noFood.find(r => r.day_type === 'weekday')?.price, weekend: noFood.find(r => r.day_type === 'weekend')?.price },
+    hasNoFood: noFood.length > 0,
+    foodMin: food.length ? Math.min(...food.map(r => Number(r.price))) : null,
+    foodCount: food.length,
+  }
+}
+
+function pkgAdmChargedPriceHtml(info) {
+  const inr = n => '₹' + Number(n).toLocaleString('en-IN')
+  const parts = []
+  if (!info.hasNoFood) {
+    parts.push('<strong>No-food: not bookable</strong>')
+  } else {
+    // weekday/weekend rows beat 'any' for their day (RPC orders day_type = 'any' last)
+    const wd = info.noFood.weekday ?? info.noFood.any
+    const we = info.noFood.weekend ?? info.noFood.any
+    parts.push(wd != null && we != null && Number(wd) !== Number(we)
+      ? `<strong>${inr(wd)}</strong> weekday · <strong>${inr(we)}</strong> weekend`
+      : `<strong>${inr(wd ?? we)}</strong>`)
+  }
+  if (info.foodCount) parts.push(`with food from ${inr(info.foodMin)}`)
+  return `<span class="pkg-adm-vp-charged" title="Charged from the price table (package_prices), which overrides this row's stored price. Changing it needs SQL for now (plan Phase 3).">${parts.join('<br>')}<br><span class="vf-hint">price table · not editable here</span></span>`
+}
 
 async function loadPackagesManager() {
   const container = document.getElementById('packages-manager-container')
   if (!container) return
   container.innerHTML = '<p class="admin-loading">Loading packages…</p>'
   try {
-    const [pkgRes, addonRes, venueRes, vpRes, reelRes] = await Promise.all([
+    const [pkgRes, addonRes, venueRes, vpRes, reelRes, ppRes] = await Promise.all([
       supabase.from('packages').select('*, package_add_ons(addon_id, sort_order)').order('sort_order', { ascending: true }),
       supabase.from('add_ons').select('id, name, price').eq('is_active', true).order('sort_order', { ascending: true }),
       supabase.from('venues').select('id, name, type, packages_enabled, base_price, metadata, venue_add_ons(addon_id)')
         .eq('type', 'cafe').eq('is_active', true).order('id', { ascending: true }),
       supabase.from('venue_packages').select('*'), // incl. inactive rows — admin sees everything
       supabase.from('reels').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true }),
+      supabase.from('package_prices').select('venue_id, package_id, with_food, guests, day_type, price').eq('is_active', true),
     ])
     if (pkgRes.error) throw pkgRes.error
     if (addonRes.error) throw addonRes.error
@@ -2371,8 +2411,13 @@ async function loadPackagesManager() {
       // Brochure reels: a load failure (e.g. table missing) must not take the
       // whole Packages tab down — the section just shows empty.
       reels: reelRes.error ? [] : (reelRes.data || []),
+      // Price table failure must not take the tab down, but it must not fail
+      // silently either: without it every Price cell would look editable again.
+      priceTable: ppRes.error ? [] : (ppRes.data || []),
+      priceTableError: ppRes.error || null,
     }
     if (reelRes.error) console.error('Failed to load reels:', reelRes.error)
+    if (ppRes.error) console.error('Failed to load package_prices:', ppRes.error)
     renderPackagesManager()
   } catch (err) {
     console.error('Failed to load packages manager:', err)
@@ -2711,6 +2756,21 @@ async function movePkgReel(id, dir) {
 }
 window.movePkgReel = movePkgReel
 
+// Packages tab layout (2026-11-03): every package card and the two top sections
+// fold to one summary line, so the tab is scannable instead of ~7,700px tall.
+// Open/closed state survives the re-render that follows every save.
+const pkgAdmOpen = new Set()
+function pkgAdmToggle(el) {
+  const k = el.dataset.fold || el.dataset.pkgId
+  if (el.open) pkgAdmOpen.add(String(k)); else pkgAdmOpen.delete(String(k))
+}
+window.pkgAdmToggle = pkgAdmToggle
+function pkgAdmFold(key, title, meta, inner) {
+  return `<details class="pkg-adm-fold" data-fold="${key}" ${pkgAdmOpen.has(key) ? 'open' : ''} ontoggle="pkgAdmToggle(this)">
+    <summary class="pkg-adm-summary"><span class="pkg-adm-sum-name">${title}</span>${meta ? `<span class="pkg-adm-sum-meta">${meta}</span>` : ''}</summary>
+    <div class="pkg-adm-card-body">${inner}</div></details>`
+}
+
 function renderPackagesManager() {
   const container = document.getElementById('packages-manager-container')
   if (!container) return
@@ -2721,7 +2781,10 @@ function renderPackagesManager() {
     return
   }
 
-  container.innerHTML = pkgAdmNewFormHtml() + pkgAdmReelsSectionHtml() + packages.map(pkg => {
+  const reelCount = (packagesManagerState.reels || []).length
+  container.innerHTML = pkgAdmFold('new', '+ New package', '', pkgAdmNewFormHtml()) +
+    pkgAdmFold('reels', 'Brochure reels', `${reelCount} reel${reelCount === 1 ? '' : 's'}`, pkgAdmReelsSectionHtml()) +
+    packages.map(pkg => {
     const addonIds = (pkg.package_add_ons || []).slice().sort((a, b) => a.sort_order - b.sort_order).map(pa => pa.addon_id)
 
     const checklist = addons.map(a => `
@@ -2750,22 +2813,29 @@ function renderPackagesManager() {
       if (!vp) {
         return `
         <tr id="${rowId}" class="pkg-adm-vp-row pkg-adm-vp-row--off">
-          <td>${escapeHtml(v.name)}${offCafe}</td>
-          <td colspan="5"><span class="vf-hint">Not offered at this venue</span></td>
-          <td><button type="button" class="btn btn--secondary pkg-adm-vp-btn" onclick="enablePkgVenueRow(${pkg.id}, ${v.id})">+ Enable</button></td>
-          <td>${gapHtml}</td>
+          <td class="pkg-adm-vp-venue">${escapeHtml(v.name)}${offCafe}</td>
+          <td colspan="5" class="pkg-adm-vp-offmsg"><span class="vf-hint">Not offered at this venue</span></td>
+          <td class="pkg-adm-vp-act"><button type="button" class="btn btn--secondary pkg-adm-vp-btn" onclick="enablePkgVenueRow(${pkg.id}, ${v.id})">+ Enable</button></td>
+          <td class="pkg-adm-vp-gap">${gapHtml === '—' ? '' : gapHtml}</td>
         </tr>`
       }
       return `
         <tr id="${rowId}" class="pkg-adm-vp-row${vp.is_active ? '' : ' pkg-adm-vp-row--inactive'}${missingIds.length ? ' pkg-adm-row--warn' : ''}">
-          <td>${escapeHtml(v.name)}${offCafe}</td>
-          <td><input type="number" class="vf-input pkg-adm-vp-price" value="${Number(vp.price)}" min="1" step="100" /></td>
-          <td><input type="number" class="vf-input pkg-adm-vp-incl" value="${vp.included_guests}" min="1" step="1" /></td>
-          <td><input type="number" class="vf-input pkg-adm-vp-overage" value="${Number(vp.overage_per_person)}" min="0" step="100" /></td>
-          <td><input type="number" class="vf-input pkg-adm-vp-max" value="${vp.max_guests ?? ''}" min="1" step="1" placeholder="venue cap" /></td>
-          <td><label class="vf-toggle-label"><input type="checkbox" class="pkg-adm-vp-active" ${vp.is_active ? 'checked' : ''} /> Active</label></td>
-          <td><button type="button" class="btn btn--primary pkg-adm-vp-btn" onclick="savePkgVenueRow(${pkg.id}, ${v.id})">Save</button></td>
-          <td><button type="button" class="btn btn--secondary pkg-adm-vp-btn" onclick="removePkgVenueRow(${pkg.id}, ${v.id}, '${escapeHtml(pkg.name)}', '${escapeHtml(v.name)}')">Remove</button> ${gapHtml === '—' ? '' : gapHtml}</td>
+          <td class="pkg-adm-vp-venue">${escapeHtml(v.name)}${offCafe}</td>
+          <td data-label="Price ₹">${(() => {
+            const info = pkgAdmPriceTableInfo(pkg.id, v.id)
+            // Hidden input keeps the stored price so Save writes it back unchanged.
+            return info
+              ? `<input type="hidden" class="pkg-adm-vp-price" value="${Number(vp.price)}" />${pkgAdmChargedPriceHtml(info)}`
+              : `<input type="number" class="vf-input pkg-adm-vp-price" value="${Number(vp.price)}" min="1" step="100" />`
+          })()}</td>
+          <td data-label="Incl. guests"><input type="number" class="vf-input pkg-adm-vp-incl" value="${vp.included_guests}" min="1" step="1" /></td>
+          <td data-label="Overage ₹/extra"><input type="number" class="vf-input pkg-adm-vp-overage" value="${Number(vp.overage_per_person)}" min="0" step="100" /></td>
+          <td data-label="Max guests"><input type="number" class="vf-input pkg-adm-vp-max" value="${vp.max_guests ?? ''}" min="1" step="1" placeholder="venue cap" /></td>
+          <td class="pkg-adm-vp-check"><label class="vf-toggle-label"><input type="checkbox" class="pkg-adm-vp-active" ${vp.is_active ? 'checked' : ''} /> Active</label></td>
+          <td class="pkg-adm-vp-act"><button type="button" class="btn btn--primary pkg-adm-vp-btn" onclick="savePkgVenueRow(${pkg.id}, ${v.id})">Save</button>
+            <button type="button" class="btn btn--secondary pkg-adm-vp-btn" onclick="removePkgVenueRow(${pkg.id}, ${v.id}, '${escapeHtml(pkg.name)}', '${escapeHtml(v.name)}')">Remove</button></td>
+          <td class="pkg-adm-vp-gap">${gapHtml === '—' ? '' : gapHtml}</td>
         </tr>`
     }).join('')
     const zeroRowsWarning = activeRowCount === 0
@@ -2774,8 +2844,17 @@ function renderPackagesManager() {
 
     const occasionOptions = pkgAdmOccasionOptions(pkg.occasion)
 
+    const sumMeta = activeRowCount
+      ? `Offered at ${activeRowCount} venue${activeRowCount === 1 ? '' : 's'}`
+      : '<span class="pkg-adm-sum-warn">Not offered anywhere</span>'
     return `
-      <div class="pkg-adm-card" data-pkg-id="${pkg.id}">
+      <details class="pkg-adm-card" data-pkg-id="${pkg.id}" ${pkgAdmOpen.has(String(pkg.id)) ? 'open' : ''} ontoggle="pkgAdmToggle(this)">
+        <summary class="pkg-adm-summary">
+          <span class="pkg-adm-sum-name">${escapeHtml(pkg.name)}${pkg.is_featured ? ' <span class="pkg-adm-sum-tag">Most picked</span>' : ''}</span>
+          <span class="pkg-adm-sum-tagline">${escapeHtml(pkg.tagline || '')}${pkg.occasion ? ' · ' + escapeHtml(pkg.occasion) : ''}</span>
+          <span class="pkg-adm-sum-meta">${sumMeta}</span>
+        </summary>
+        <div class="pkg-adm-card-body">
         <div class="vf-row">
           <div class="vf-field">
             <label class="vf-label">Name</label>
@@ -2807,13 +2886,17 @@ function renderPackagesManager() {
                  onchange="addPkgAdmImagesMulti(this, ${pkg.id})" style="display:none" />
         </label>
         <button type="button" class="btn btn--primary" style="margin-top:16px" onclick="savePackageCard(${pkg.id})">Save ${escapeHtml(pkg.name)}</button>
-        <div class="vf-section-title" style="margin-top:16px">Venue pricing <span class="vf-hint">(stored prices — the ONLY place package prices live; flat up to Incl. guests, + Overage per extra adult; Max guests empty = venue capacity)</span></div>
+        <div class="vf-section-title" style="margin-top:16px">Venue pricing <span class="vf-hint">(flat up to Incl. guests, + Overage per extra adult; Max guests empty = venue capacity. Where a venue has price-table rows, the Price cell shows what is actually charged and is read-only)</span></div>
+        ${packagesManagerState.priceTableError ? '<p class="venues-error" style="margin:8px 0">⚠ Couldn\'t load the price table. Prices below may NOT be what customers are charged. Reload before editing.</p>' : ''}
         ${zeroRowsWarning}
+        <div class="pkg-adm-scroll">
         <table class="pkg-adm-table pkg-adm-table--vp">
           <thead><tr><th>Venue</th><th>Price ₹</th><th>Incl. guests</th><th>Overage ₹/extra</th><th>Max guests</th><th>Active</th><th></th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
-      </div>`
+        </div>
+        </div>
+      </details>`
   }).join('')
 
   // Image rows need real DOM to attach drag-reorder listeners to, so they're
@@ -2879,14 +2962,14 @@ function enablePkgVenueRow(pkgId, venueId) {
   const venueName = tr.querySelector('td')?.innerHTML || ''
   tr.classList.remove('pkg-adm-vp-row--off')
   tr.innerHTML = `
-    <td>${venueName}</td>
-    <td><input type="number" class="vf-input pkg-adm-vp-price" value="" min="1" step="100" placeholder="required" /></td>
-    <td><input type="number" class="vf-input pkg-adm-vp-incl" value="6" min="1" step="1" /></td>
-    <td><input type="number" class="vf-input pkg-adm-vp-overage" value="0" min="0" step="100" /></td>
-    <td><input type="number" class="vf-input pkg-adm-vp-max" value="" min="1" step="1" placeholder="venue cap" /></td>
-    <td><label class="vf-toggle-label"><input type="checkbox" class="pkg-adm-vp-active" checked /> Active</label></td>
-    <td><button type="button" class="btn btn--primary pkg-adm-vp-btn" onclick="savePkgVenueRow(${pkgId}, ${venueId})">Save</button></td>
-    <td><span class="vf-hint">not saved yet</span></td>`
+    <td class="pkg-adm-vp-venue">${venueName}</td>
+    <td data-label="Price ₹"><input type="number" class="vf-input pkg-adm-vp-price" value="" min="1" step="100" placeholder="required" /></td>
+    <td data-label="Incl. guests"><input type="number" class="vf-input pkg-adm-vp-incl" value="6" min="1" step="1" /></td>
+    <td data-label="Overage ₹/extra"><input type="number" class="vf-input pkg-adm-vp-overage" value="0" min="0" step="100" /></td>
+    <td data-label="Max guests"><input type="number" class="vf-input pkg-adm-vp-max" value="" min="1" step="1" placeholder="venue cap" /></td>
+    <td class="pkg-adm-vp-check"><label class="vf-toggle-label"><input type="checkbox" class="pkg-adm-vp-active" checked /> Active</label></td>
+    <td class="pkg-adm-vp-act"><button type="button" class="btn btn--primary pkg-adm-vp-btn" onclick="savePkgVenueRow(${pkgId}, ${venueId})">Save</button></td>
+    <td class="pkg-adm-vp-gap"><span class="vf-hint">not saved yet</span></td>`
   tr.querySelector('.pkg-adm-vp-price')?.focus()
 }
 window.enablePkgVenueRow = enablePkgVenueRow
@@ -11009,8 +11092,425 @@ window.deleteAddOn      = deleteAddOn
 
 let venueManagerState = {
   venues: [],
-  editingId: null
+  editingId: null,
+  // Readiness inputs (Phase 2). Loaded beside the venues; a failure here only
+  // blanks the Draft/Live pills, never the venue list itself.
+  venuePackages: [], packages: [], priceTable: [], readinessError: null,
 }
+
+// ── Venue readiness: Draft vs Live (2026-11-03, ADMIN_VENUE_SETUP_PLAN Phase 2) ──
+// "Live" = nothing a guest needs is missing. Blocking items make it Draft;
+// advisory items are shown but don't. Rules were checked against live data
+// the day they were written (expected Draft: 23, 27, 31, 32). Custom venues
+// (the guest's own address) have nothing to check.
+// Each item carries `go`: the form element to scroll to.
+function venueReadiness(v) {
+  const s = venueManagerState
+  const blocking = [], advisory = []
+  if (v.type === 'custom') return { blocking, advisory }
+  const imgs = Array.isArray(v.images) ? v.images : []
+  if (!(v.description || '').trim()) blocking.push({ label: 'Description', go: 'vf-description' })
+  if (imgs.length < 3) blocking.push({ label: `Photos (${imgs.length} of 3)`, go: 'vf-images-list' })
+  if (!(v.maps_url || '').trim()) blocking.push({ label: 'Maps link', go: 'vf-maps-url' })
+  if (!v.team_id) blocking.push({ label: 'Team', go: 'vf-team' })
+  if (v.type === 'cafe' && v.packages_enabled) {
+    // Priced = an active package with an active row that the pricing function can
+    // charge: price-table rows exist (they win), or a positive stored price.
+    const activePkg = new Set(s.packages.filter(p => p.is_active).map(p => p.id))
+    const priced = s.venuePackages.filter(r => r.venue_id === v.id && r.is_active && activePkg.has(r.package_id) &&
+      (s.priceTable.some(pp => pp.venue_id === v.id && pp.package_id === r.package_id) || Number(r.price) > 0))
+    if (!priced.length) blocking.push({ label: 'At least one priced package', go: 'vf-venue-packages' })
+  } else if (v.type === 'cafe') {
+    if (!(Number(v.base_price) > 0)) blocking.push({ label: 'Setup price', go: 'vf-base-price' })
+  } else if (v.type === 'self_managed' || v.type === 'combo') {
+    if (!(Number(v.base_price) > 0)) blocking.push({ label: 'Nightly rate', go: 'vf-base-price' })
+  } else if (v.type === 'partner_bnb') {
+    const tiers = Array.isArray(v.metadata?.tiers) ? v.metadata.tiers : []
+    if (!(Number(v.base_price) > 0) && !tiers.length) blocking.push({ label: 'Price or tiers', go: 'vf-base-price' })
+  }
+  // CLAUDE.md §14: carousels load img.thumb || img.url. Admin uploads are
+  // 1600px with no 800px thumb, so these load ~2.5x the bytes. Costly, not broken.
+  const noThumb = imgs.filter(i => !i.thumb).length
+  if (noThumb) advisory.push({ label: `${noThumb} photo${noThumb > 1 ? 's' : ''} without a small version (load slower)`, go: 'vf-images-list' })
+  return { blocking, advisory }
+}
+
+function venueReadinessPillHtml(v) {
+  if (venueManagerState.readinessError) return ''
+  const { blocking, advisory } = venueReadiness(v)
+  const tip = [...blocking.map(i => 'Missing: ' + i.label), ...advisory.map(i => 'Note: ' + i.label)].join('\n')
+  const cls = blocking.length ? 'venue-ready-pill--draft' : 'venue-ready-pill--live'
+  const text = blocking.length ? `Draft · ${blocking.length} missing` : (advisory.length ? 'Ready · note' : 'Ready')
+  return ` <button type="button" class="venue-ready-pill ${cls}" title="${escapeHtml(tip || 'Nothing missing')}" onclick="openVenueForm(${v.id})">${text}</button>`
+}
+
+function renderVfReadiness(v) {
+  const box = document.getElementById('vf-readiness')
+  if (!box) return
+  if (!v || venueManagerState.readinessError) { box.hidden = true; box.innerHTML = ''; return }
+  const { blocking, advisory } = venueReadiness(v)
+  if (!blocking.length && !advisory.length) { box.hidden = true; box.innerHTML = ''; return }
+  const item = (i, kind) => `<li class="vf-readiness-item vf-readiness-item--${kind}"><button type="button" class="vf-readiness-go" onclick="vfGoTo('${i.go}')">${escapeHtml(i.label)}</button></li>`
+  box.innerHTML = `
+    <div class="vf-readiness-title">${blocking.length ? `Draft: ${blocking.length} thing${blocking.length > 1 ? 's' : ''} missing before guests see a complete venue` : 'Ready, with a note'}</div>
+    <ul class="vf-readiness-list">${blocking.map(i => item(i, 'missing')).join('')}${advisory.map(i => item(i, 'note')).join('')}</ul>
+    <p class="vf-hint">Reflects the last saved version. Save to refresh.</p>`
+  box.hidden = false
+}
+
+function vfGoTo(id) {
+  const el = document.getElementById(id)
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  if (typeof el.focus === 'function' && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) el.focus({ preventScroll: true })
+}
+window.vfGoTo = vfGoTo
+
+// "Packages at this venue": every package's state and CHARGED price for one
+// venue, in one place instead of across 5 cards. Read-only: editing stays in
+// the Packages tab rows (savePkgVenueRow finds rows by DOM id, so a second
+// editable copy here would collide). "Edit" jumps to the exact row.
+function renderVfVenuePackages(v) {
+  const box = document.getElementById('vf-venue-packages')
+  if (!box) return
+  const s = venueManagerState
+  if (!v || v.type !== 'cafe' || s.readinessError) { box.hidden = true; box.innerHTML = ''; return }
+  const pkgs = s.packages.filter(p => p.is_active)
+  const inr = n => '₹' + Number(n).toLocaleString('en-IN')
+  const rows = pkgs.map(p => {
+    const r = s.venuePackages.find(x => x.venue_id === v.id && x.package_id === p.id)
+    let state, price = '—'
+    if (!r) state = '<span class="vf-hint">Not offered</span>'
+    else {
+      state = r.is_active ? 'Offered' : '<span class="vf-hint">Paused</span>'
+      const info = pkgAdmPriceTableInfo(p.id, v.id, s.priceTable)
+      price = info ? pkgAdmChargedPriceHtml(info) : `<strong>${inr(r.price)}</strong><br><span class="vf-hint">${r.included_guests} incl., +${inr(r.overage_per_person)}/extra</span>`
+    }
+    // Everything for this venue happens here (2026-11-03): the Packages tab only
+    // lists ACTIVE cafes, so a draft venue can't be set up from there at all.
+    const actions = !r
+      ? `<button type="button" class="vf-action-btn" onclick="vfEnOpen(${p.id}, ${v.id})">Turn on</button>`
+      : `<button type="button" class="vf-action-btn" onclick="vfEnOpen(${p.id}, ${v.id})">Edit</button>
+         <button type="button" class="vf-action-btn" onclick="vfPeOpen(${p.id}, ${v.id})">Price table</button>
+         <button type="button" class="vf-action-btn" onclick="vfEnToggle(${p.id}, ${v.id}, ${!r.is_active})">${r.is_active ? 'Pause' : 'Resume'}</button>`
+    const open = (ed) => ed && ed.venueId === v.id && ed.pkgId === p.id
+    return `<tr><td>${escapeHtml(p.name)}</td><td>${state}</td><td>${price}</td><td class="vf-venue-pkg-actions">${actions}</td></tr>
+      ${open(vfEn) ? `<tr class="vf-pe-host"><td colspan="4">${vfEnHtml()}</td></tr>` : ''}
+      ${open(vfPe) ? `<tr class="vf-pe-host"><td colspan="4">${vfPeHtml()}</td></tr>` : ''}`
+  }).join('')
+  box.innerHTML = `
+    <div class="vf-section-title">Packages at this venue</div>
+    ${(document.getElementById('vf-packages-enabled')?.checked ?? v.packages_enabled) ? '' : '<p class="vf-hint">Packages are switched off for this venue, so guests don\'t see these. Tick "Packages" to show them.</p>'}
+    <table class="pkg-adm-table vf-venue-pkg-table"><thead><tr><th>Package</th><th>Status</th><th>Charged price</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+  box.hidden = false
+}
+
+async function vfJumpToPkgRow(pkgId, venueId) {
+  switchTab('packages')
+  const id = `pkgvp-${pkgId}-${venueId}`
+  // switchTab kicks off loadPackagesManager(); wait (max ~6s) for the row to render.
+  for (let i = 0; i < 30; i++) {
+    const row = document.getElementById(id)
+    if (row) {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      row.classList.add('pkg-adm-vp-row--flash')
+      setTimeout(() => row.classList.remove('pkg-adm-vp-row--flash'), 2400)
+      return
+    }
+    await new Promise(r => setTimeout(r, 200))
+  }
+  showToast('Opened Packages. Find the venue row in the package card.', 'success')
+}
+window.vfJumpToPkgRow = vfJumpToPkgRow
+
+// ── Turn a package on / edit / pause at THIS venue (venue_packages) ──────────
+// Same table, same checks and same upsert as the Packages tab's savePkgVenueRow,
+// done from the venue so a draft (inactive) venue can be set up end to end.
+let vfEn = null // { venueId, pkgId, pkgName, exists, priceLocked, price, incl, overage, max, error, busy }
+
+// Most common setting for this package at other venues: the Prelude-style
+// 4-guest cap etc. carries over instead of a generic 6.
+function vfEnDefaults(pkgId) {
+  const rows = venueManagerState.venuePackages.filter(r => r.package_id === pkgId && r.is_active)
+  const mode = vals => {
+    const c = new Map(); vals.forEach(x => c.set(x, (c.get(x) || 0) + 1))
+    let best, n = 0; c.forEach((k, x) => { if (k > n) { n = k; best = x } }); return best
+  }
+  return {
+    incl: mode(rows.map(r => r.included_guests)) ?? 6,
+    overage: mode(rows.map(r => Number(r.overage_per_person))) ?? 0,
+    max: mode(rows.map(r => r.max_guests ?? '')) ?? '',
+  }
+}
+
+function vfEnOpen(pkgId, venueId) {
+  const s = venueManagerState
+  const r = s.venuePackages.find(x => x.venue_id === venueId && x.package_id === pkgId)
+  const d = r ? { incl: r.included_guests, overage: Number(r.overage_per_person), max: r.max_guests ?? '' } : vfEnDefaults(pkgId)
+  vfPe = null
+  vfEn = { venueId, pkgId, pkgName: s.packages.find(p => p.id === pkgId)?.name || ('#' + pkgId), exists: !!r,
+    // Price-table rows win (Phase 0): the stored price is never charged then, so don't invite editing it here.
+    priceLocked: s.priceTable.some(pp => pp.venue_id === venueId && pp.package_id === pkgId),
+    price: r ? Number(r.price) : '', incl: d.incl, overage: d.overage, max: d.max, error: '', busy: false }
+  vfPeRerender()
+}
+
+function vfEnHtml() {
+  const e = vfEn
+  const noEnter = `onkeydown="if(event.key==='Enter'){event.preventDefault()}"`
+  return `
+    <div class="vf-pe">
+      <div class="vf-section-title">${escapeHtml(e.pkgName)} · ${e.exists ? 'edit' : 'turn on'} at this venue</div>
+      <div class="vf-row">
+        <div class="vf-field"><label class="vf-label">Price ₹ <span class="vf-hint">(${e.priceLocked ? 'charged from the price table; this is only a fallback' : 'no-food price, flat up to included guests'})</span></label>
+          <input type="number" id="vf-en-price" class="vf-input" min="1" step="100" value="${escapeHtml(e.price)}" ${e.priceLocked ? 'disabled' : ''} placeholder="required" ${noEnter} /></div>
+        <div class="vf-field"><label class="vf-label">Included guests</label>
+          <input type="number" id="vf-en-incl" class="vf-input" min="1" step="1" value="${escapeHtml(e.incl)}" ${noEnter} /></div>
+        <div class="vf-field"><label class="vf-label">Overage ₹ per extra guest</label>
+          <input type="number" id="vf-en-overage" class="vf-input" min="0" step="100" value="${escapeHtml(e.overage)}" ${noEnter} /></div>
+        <div class="vf-field"><label class="vf-label">Max guests <span class="vf-hint">(empty = venue capacity)</span></label>
+          <input type="number" id="vf-en-max" class="vf-input" min="1" step="1" value="${escapeHtml(e.max)}" ${noEnter} /></div>
+      </div>
+      ${e.exists ? '' : '<p class="vf-hint">Guests, overage and max are copied from how this package is set up at other venues. Add with-food or weekend prices afterwards with "Price table".</p>'}
+      ${e.error ? `<p class="venues-error vf-pe-msg">${escapeHtml(e.error)}</p>` : ''}
+      <div class="vf-pe-actions">
+        <button type="button" class="btn btn--primary" ${e.busy ? 'disabled' : ''} onclick="vfEnSave()">${e.exists ? 'Save' : 'Turn on'}</button>
+        <button type="button" class="vf-action-btn" onclick="vfEnClose()">Cancel</button>
+      </div>
+    </div>`
+}
+
+function vfEnClose() { vfEn = null; vfPeRerender() }
+
+// After any venue_packages / package_prices write from the venue form.
+async function vfAfterPackageWrite(venueId) {
+  await loadVenueManager()
+  if (typeof loadPackages === 'function') await loadPackages() // storefront tiers on this page, like savePkgVenueRow
+  const v = venueManagerState.venues.find(x => x.id === venueId)
+  if (v) { renderVfVenuePackages(v); renderVfReadiness(v) }
+}
+
+async function vfEnSave() {
+  if (!vfEn || vfEn.busy) return
+  if (!appState.session) return showToast('Admin login required', 'error')
+  const val = id => document.getElementById(id)?.value.trim() ?? ''
+  const price = vfEn.priceLocked ? Number(vfEn.price) : Number(val('vf-en-price'))
+  const included = parseInt(val('vf-en-incl'), 10)
+  const overage = Number(val('vf-en-overage') || 0)
+  const maxRaw = val('vf-en-max')
+  const maxGuests = maxRaw === '' ? null : parseInt(maxRaw, 10)
+  // Mirrors the table's CHECK constraints (same as savePkgVenueRow).
+  let err = ''
+  if (!Number.isFinite(price) || price <= 0) err = 'Price must be a positive number'
+  else if (!Number.isInteger(included) || included < 1) err = 'Included guests must be at least 1'
+  else if (!Number.isFinite(overage) || overage < 0) err = 'Overage can\'t be negative'
+  else if (maxGuests !== null && (!Number.isInteger(maxGuests) || maxGuests < included)) err = 'Max guests must be at least the included guests (or empty)'
+  if (err) { vfEn.error = err; vfEn.price = val('vf-en-price'); vfEn.incl = val('vf-en-incl'); vfEn.overage = val('vf-en-overage'); vfEn.max = maxRaw; return vfPeRerender() }
+  const row = { venue_id: vfEn.venueId, package_id: vfEn.pkgId, price, included_guests: included,
+    overage_per_person: overage, max_guests: maxGuests, updated_at: new Date().toISOString() }
+  if (!vfEn.exists) row.is_active = true // editing keeps the current paused/offered state
+  vfEn.busy = true; vfPeRerender()
+  try {
+    const { error } = await supabase.from('venue_packages').upsert(row, { onConflict: 'venue_id,package_id' })
+    if (error) throw error
+    showToast(`${vfEn.pkgName} ${vfEn.exists ? 'updated' : 'turned on'}`, 'success')
+    const venueId = vfEn.venueId
+    vfEn = null
+    await vfAfterPackageWrite(venueId)
+  } catch (e) {
+    console.error(e)
+    if (vfEn) { vfEn.busy = false; vfEn.error = e.message || String(e); vfPeRerender() }
+  }
+}
+
+async function vfEnToggle(pkgId, venueId, makeActive) {
+  if (!appState.session) return showToast('Admin login required', 'error')
+  const name = venueManagerState.packages.find(p => p.id === pkgId)?.name || 'This package'
+  if (!makeActive && !confirm(`Pause ${name} at this venue?\n\nIt disappears from this venue on the site until you resume it. Prices are kept.`)) return
+  try {
+    const { error } = await supabase.from('venue_packages')
+      .update({ is_active: makeActive, updated_at: new Date().toISOString() })
+      .eq('venue_id', venueId).eq('package_id', pkgId)
+    if (error) throw error
+    showToast(`${name} ${makeActive ? 'resumed' : 'paused'}`, 'success')
+    await vfAfterPackageWrite(venueId)
+  } catch (e) {
+    console.error(e)
+    showToast('Failed: ' + (e.message || e), 'error')
+  }
+}
+Object.assign(window, { vfEnOpen, vfEnClose, vfEnSave, vfEnToggle })
+
+// ── Price-table editor (2026-11-03, ADMIN_VENUE_SETUP_PLAN Phase 3) ──────────
+// Edits package_prices for ONE venue × package through
+// admin_set_package_prices (SQL): replace-all, dry run by default. Flow:
+// edit rows → Preview (dry run: the real compute_booking_total prices every row,
+// nothing is kept) → Save (enabled only when the preview matches the rows on
+// screen and every row priced). Prices shown are what the function returned,
+// never local arithmetic (CLAUDE.md §7).
+let vfPe = null // { venueId, pkgId, pkgName, rows, preview, previewSig, includedGuests, storedPrice, error, paste, busy }
+
+function vfPeNorm(rows) {
+  const num = x => (x === '' || x == null || !Number.isFinite(Number(x))) ? null : Number(x)
+  return rows.map(r => ({
+    with_food: !!r.with_food,
+    guests: r.with_food ? num(r.guests) : null,
+    day_type: r.day_type || 'any',
+    price: num(r.price),
+    food_credit: num(r.food_credit),
+    food_items: num(r.food_items),
+  }))
+}
+const vfPeSig = () => JSON.stringify(vfPeNorm(vfPe.rows))
+
+function vfPeOpen(pkgId, venueId) {
+  const s = venueManagerState
+  const vp = s.venuePackages.find(r => r.venue_id === venueId && r.package_id === pkgId)
+  const rows = s.priceTable.filter(r => r.venue_id === venueId && r.package_id === pkgId)
+    .map(r => ({ with_food: !!r.with_food, guests: r.guests ?? '', day_type: r.day_type || 'any', price: r.price, food_credit: r.food_credit ?? '', food_items: r.food_items ?? '' }))
+    .sort((a, b) => (a.with_food - b.with_food) || ((a.guests || 0) - (b.guests || 0)) || a.day_type.localeCompare(b.day_type))
+  vfEn = null // one inline editor at a time
+  vfPe = { venueId, pkgId, pkgName: s.packages.find(p => p.id === pkgId)?.name || ('#' + pkgId), rows,
+    preview: null, previewSig: null, includedGuests: vp?.included_guests, storedPrice: vp?.price, error: '', paste: false, busy: false }
+  vfPeRerender()
+}
+
+function vfPeRerender() {
+  const id = vfPe?.venueId ?? venueManagerState.editingId
+  const v = venueManagerState.venues.find(x => x.id === id)
+  if (v) renderVfVenuePackages(v)
+  document.querySelector('.vf-pe')?.scrollIntoView({ block: 'nearest' })
+}
+
+function vfPeClose() { vfPe = null; vfPeRerender() }
+
+function vfPeHtml() {
+  const pe = vfPe
+  const inr = n => '₹' + Number(n).toLocaleString('en-IN')
+  const fresh = pe.preview && pe.previewSig === vfPeSig()
+  const noEnter = `onkeydown="if(event.key==='Enter'){event.preventDefault()}"`
+  const prevCell = i => {
+    if (!fresh) return '<span class="vf-hint">—</span>'
+    const p = pe.preview[i] || {}
+    const part = (label, price, err) => err ? `<span class="vf-pe-err">${label}: ${escapeHtml(err)}</span>` : (price != null ? `${label} <strong>${inr(price)}</strong>` : '')
+    const parts = [part('Weekday', p.weekday_price, p.weekday_error), part('Weekend', p.weekend_price, p.weekend_error)].filter(Boolean)
+    return parts.join('<br>') + (p.with_food ? '' : `<br><span class="vf-hint">at ${p.guests} guests</span>`)
+  }
+  const rows = pe.rows.map((r, i) => `
+    <tr>
+      <td><select class="vf-input" onchange="vfPeSet(${i}, 'with_food', this.value === '1', true)">
+        <option value="0" ${r.with_food ? '' : 'selected'}>No food</option><option value="1" ${r.with_food ? 'selected' : ''}>With food</option></select></td>
+      <td><input type="number" class="vf-input" min="1" step="1" value="${escapeHtml(r.with_food ? r.guests : '')}" ${r.with_food ? '' : 'disabled placeholder="—"'} oninput="vfPeSet(${i}, 'guests', this.value)" ${noEnter} /></td>
+      <td><select class="vf-input" onchange="vfPeSet(${i}, 'day_type', this.value)">
+        ${['any', 'weekday', 'weekend'].map(d => `<option value="${d}" ${r.day_type === d ? 'selected' : ''}>${d}</option>`).join('')}</select></td>
+      <td><input type="number" class="vf-input" min="1" step="100" value="${escapeHtml(r.price ?? '')}" oninput="vfPeSet(${i}, 'price', this.value)" ${noEnter} /></td>
+      <td><input type="number" class="vf-input" min="0" step="500" value="${escapeHtml(r.food_credit ?? '')}" placeholder="—" oninput="vfPeSet(${i}, 'food_credit', this.value)" ${noEnter} /></td>
+      <td><input type="number" class="vf-input" min="1" step="1" value="${escapeHtml(r.food_items ?? '')}" placeholder="—" oninput="vfPeSet(${i}, 'food_items', this.value)" ${noEnter} /></td>
+      <td class="vf-pe-prev">${prevCell(i)}</td>
+      <td><button type="button" class="vf-action-btn" title="Remove row" onclick="vfPeRemove(${i})">✕</button></td>
+    </tr>`).join('')
+  const allPriced = fresh && pe.preview.every(p => !p.weekday_error && !p.weekend_error)
+  return `
+    <div class="vf-pe">
+      <div class="vf-section-title">${escapeHtml(pe.pkgName)} · price table</div>
+      <p class="vf-hint">These rows are what guests are charged for this package here (the price table beats the stored price). Saving replaces all of them.
+        No-food rows: leave Guests empty, extra guests use the Packages tab overage. With-food rows: one per guest count.
+        A weekday or weekend row beats an "any" row on its days.</p>
+      <table class="pkg-adm-table vf-pe-table"><thead><tr><th>Food</th><th>Guests</th><th>Day</th><th>Price ₹</th><th>Voucher ₹</th><th>Food items</th><th>Charged (preview)</th><th></th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="8" class="vf-hint">No rows. Saving like this removes the price table: no-food bookings are charged the stored price${pe.storedPrice != null ? ' (' + inr(pe.storedPrice) + ')' : ''} and with-food booking stops.</td></tr>`}</tbody></table>
+      ${pe.paste ? `
+        <div class="vf-pe-paste">
+          <textarea id="vf-pe-paste-text" class="vf-input" rows="4" placeholder="One row per line: food (yes/no), guests, day, price, voucher, food items&#10;yes	4	weekend	17900	5000&#10;no		any	8900"></textarea>
+          <p class="vf-hint">Tab-separated (copied from a sheet) or comma-separated. Empty cells allowed. Rows are added to the ones above.</p>
+          <button type="button" class="vf-action-btn" onclick="vfPeApplyPaste()">Add pasted rows</button>
+        </div>` : ''}
+      ${pe.error ? `<p class="venues-error vf-pe-msg">${escapeHtml(pe.error)}</p>` : ''}
+      <div class="vf-pe-actions">
+        <button type="button" class="vf-action-btn" onclick="vfPeAdd()">+ Row</button>
+        <button type="button" class="vf-action-btn" onclick="vfPeTogglePaste()">${pe.paste ? 'Hide paste' : 'Paste rows'}</button>
+        <button type="button" class="btn btn--secondary" ${pe.busy ? 'disabled' : ''} onclick="vfPeRun(true)">Preview</button>
+        <button type="button" class="btn btn--primary" id="vf-pe-save" ${pe.busy || !allPriced ? 'disabled' : ''} onclick="vfPeRun(false)" title="${allPriced ? '' : 'Preview first: every row must price'}">Save prices</button>
+        <button type="button" class="vf-action-btn" onclick="vfPeClose()">Close</button>
+      </div>
+    </div>`
+}
+
+// Typing must not re-render (it would steal focus). It updates state, marks the
+// preview stale and disables Save in place. Structural changes re-render.
+function vfPeSet(i, field, value, rerender = false) {
+  if (!vfPe || !vfPe.rows[i]) return
+  vfPe.rows[i][field] = value
+  if (field === 'with_food' && !value) vfPe.rows[i].guests = ''
+  vfPe.error = ''
+  if (rerender) return vfPeRerender()
+  document.querySelectorAll('.vf-pe-prev').forEach(td => { td.innerHTML = '<span class="vf-hint">—</span>' })
+  const save = document.getElementById('vf-pe-save'); if (save) save.disabled = true
+}
+function vfPeAdd() { vfPe.rows.push({ with_food: false, guests: '', day_type: 'any', price: '', food_credit: '', food_items: '' }); vfPeRerender() }
+function vfPeRemove(i) { vfPe.rows.splice(i, 1); vfPeRerender() }
+function vfPeTogglePaste() { vfPe.paste = !vfPe.paste; vfPeRerender() }
+
+// Parses pasted lines into rows. Returns { rows, errors }; exported for tests.
+function vfPeParsePaste(text) {
+  const rows = [], errors = []
+  String(text || '').split(/\r?\n/).forEach((line, n) => {
+    if (!line.trim()) return
+    // Tab-separated (copied from a sheet): commas inside a cell can only be
+    // thousands separators ("₹17,900"), so strip them. Comma-separated: commas
+    // are the separator, so numbers must be typed without them.
+    const tsv = line.includes('\t')
+    const cells = (tsv ? line.split('\t') : line.split(',')).map(c => c.trim().replace(tsv ? /[₹\s,]/g : /[₹\s]/g, ''))
+    const [food, guests, day, price, credit, items] = cells
+    const f = String(food || '').toLowerCase()
+    if (!/^(yes|y|no|n|true|false|1|0|food|nofood)$/.test(f)) { errors.push(`Line ${n + 1}: first cell must be yes or no (food)`); return }
+    const d = String(day || 'any').toLowerCase() || 'any'
+    if (!['any', 'weekday', 'weekend'].includes(d)) { errors.push(`Line ${n + 1}: day must be any, weekday or weekend`); return }
+    rows.push({ with_food: /^(yes|y|true|1|food)$/.test(f), guests: guests || '', day_type: d, price: price || '', food_credit: credit || '', food_items: items || '' })
+  })
+  return { rows, errors }
+}
+function vfPeApplyPaste() {
+  const { rows, errors } = vfPeParsePaste(document.getElementById('vf-pe-paste-text')?.value)
+  vfPe.rows.push(...rows)
+  vfPe.error = errors.join(' · ')
+  if (!errors.length) vfPe.paste = false
+  vfPeRerender()
+}
+
+async function vfPeRun(dryRun) {
+  if (!vfPe || vfPe.busy) return
+  if (!appState.session) return showToast('Admin login required', 'error')
+  const sig = vfPeSig()
+  if (!dryRun) {
+    if (!(vfPe.preview && vfPe.previewSig === sig)) return showToast('Preview first', 'error')
+    if (!vfPe.rows.length && !confirm(`Remove the whole price table for ${vfPe.pkgName}?\n\nNo-food bookings will be charged the stored price and with-food booking stops.`)) return
+  }
+  vfPe.busy = true; vfPe.error = ''; vfPeRerender()
+  try {
+    const { data, error } = await supabase.rpc('admin_set_package_prices', {
+      p_venue_id: vfPe.venueId, p_package_id: vfPe.pkgId, p_rows: vfPeNorm(vfPe.rows), p_dry_run: dryRun,
+    })
+    if (error) throw error
+    if (dryRun) {
+      vfPe.preview = data.preview || []
+      vfPe.previewSig = sig
+    } else {
+      showToast(`${vfPe.pkgName}: ${data.inserted} price rows saved`, 'success')
+      const venueId = vfPe.venueId
+      vfPe = null
+      await loadVenueManager() // refreshes priceTable + the list's pills
+      const v = venueManagerState.venues.find(x => x.id === venueId)
+      if (v) { renderVfVenuePackages(v); renderVfReadiness(v) }
+      return
+    }
+  } catch (err) {
+    console.error(err)
+    if (vfPe) vfPe.error = err.message || String(err)
+  } finally {
+    if (vfPe) { vfPe.busy = false; vfPeRerender() }
+  }
+}
+Object.assign(window, { vfPeOpen, vfPeClose, vfPeSet, vfPeAdd, vfPeRemove, vfPeTogglePaste, vfPeApplyPaste, vfPeRun })
 
 async function loadVenueManager() {
   if (!appState.session) return
@@ -11018,13 +11518,26 @@ async function loadVenueManager() {
   if (!container) return
   container.innerHTML = '<p class="loading-text">Loading venues…</p>'
   try {
-    const { data, error } = await supabase
-      .from('venues')
-      .select('id, name, type, setting, area, city, capacity_min, capacity_max, base_price, is_active, requires_confirmation, packages_enabled, free_guests_upto, overage_per_person, images, menu_pages, external_url, maps_url, metadata, description, max_concurrent_setups, airbnb_ical_url, last_ical_sync_at, last_ical_sync_status, sort_order, team_id')
-      .order('sort_order', { ascending: true, nullsFirst: false })
-      .order('id', { ascending: true })
+    const [venueRes, vpRes, pkgRes, ppRes] = await Promise.all([
+      supabase
+        .from('venues')
+        .select('id, name, type, setting, area, city, capacity_min, capacity_max, base_price, is_active, requires_confirmation, packages_enabled, free_guests_upto, overage_per_person, images, menu_pages, external_url, maps_url, metadata, description, max_concurrent_setups, airbnb_ical_url, last_ical_sync_at, last_ical_sync_status, sort_order, team_id')
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('id', { ascending: true }),
+      supabase.from('venue_packages').select('venue_id, package_id, price, included_guests, overage_per_person, max_guests, is_active'),
+      supabase.from('packages').select('id, name, is_active, sort_order').order('sort_order', { ascending: true }),
+      // food_credit/food_items too: the price-table editor round-trips every column it saves
+      supabase.from('package_prices').select('venue_id, package_id, with_food, guests, day_type, price, food_credit, food_items').eq('is_active', true),
+    ])
+    const { data, error } = venueRes
     if (error) throw error
     venueManagerState.venues = data || []
+    const rErr = vpRes.error || pkgRes.error || ppRes.error
+    if (rErr) console.error('Venue readiness data failed to load:', rErr)
+    venueManagerState.readinessError = rErr || null
+    venueManagerState.venuePackages = vpRes.data || []
+    venueManagerState.packages = pkgRes.data || []
+    venueManagerState.priceTable = ppRes.data || []
     renderVenueList()
   } catch (err) {
     console.error(err)
@@ -11070,7 +11583,7 @@ function renderVenueList() {
             <td data-label="Area">${escapeHtml(v.area || '—')}</td>
             <td data-label="Capacity">${v.capacity_min}–${v.capacity_max}</td>
             <td data-label="Price">₹${Number(v.base_price).toLocaleString('en-IN')}</td>
-            <td data-label="Status"><span class="venue-status-pill ${v.is_active ? 'venue-status-active' : 'venue-status-inactive'}">${v.is_active ? 'Active' : 'Inactive'}</span></td>
+            <td data-label="Status"><span class="venue-status-pill ${v.is_active ? 'venue-status-active' : 'venue-status-inactive'}">${v.is_active ? 'Active' : 'Inactive'}</span>${venueReadinessPillHtml(v)}</td>
             <td class="venue-row-actions">
               <button class="vf-action-btn" onclick="openVenueForm(${v.id})">Edit</button>
               <button class="vf-action-btn vf-action-btn--${v.is_active ? 'deactivate' : 'activate'}" onclick="toggleVenueActive(${v.id}, ${!v.is_active})">${v.is_active ? 'Deactivate' : 'Activate'}</button>
@@ -11132,6 +11645,9 @@ async function openVenueForm(venueId) {
   const title = document.getElementById('vfp-title')
   if (!panel) return
 
+  vfPe = null // never carry an open price editor across venues
+  vfEn = null
+
   // Load the add-on catalogue before rendering the checklist.
   await loadVfAddOns()
 
@@ -11155,13 +11671,22 @@ async function openVenueForm(venueId) {
     populateVenueForm(venue)
     const selected = await loadVfAddonSelection(venueId)
     renderVfAddons(selected)
+    renderVfReadiness(venue)
+    renderVfVenuePackages(venue)
   } else {
     venueManagerState.editingId = null
     title.textContent = 'Add Venue'
     clearVenueForm()
+    renderVfReadiness(null)
+    renderVfVenuePackages(null)
   }
+  // New venues get the guided setup; editing an existing one keeps the full form.
+  if (venueId) vfWzExit(); else vfWzStart()
 
   panel.classList.remove('hidden')
+  // While a venue is open the list steps aside: the form appears at the top
+  // instead of below 19+ rows (8,000px on a phone). Closing brings it back.
+  document.getElementById('venues-tab')?.classList.add('vf-editing')
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
@@ -11169,6 +11694,8 @@ function closeVenueForm() {
   const panel = document.getElementById('venue-form-panel')
   if (panel) panel.classList.add('hidden')
   venueManagerState.editingId = null
+  if (vfWz) vfWzExit()
+  document.getElementById('venues-tab')?.classList.remove('vf-editing')
 }
 
 function clearVenueForm() {
@@ -11263,6 +11790,58 @@ function updateVfTypeVisibility(type) {
   // AND combo (the whole-property listing is a separate listing on Airbnb).
   if (icalSection) icalSection.style.display = (type === 'self_managed' || type === 'combo') ? '' : 'none'
   if (icalComboHint) icalComboHint.style.display = type === 'combo' ? '' : 'none'
+  updateVfPricingLabels(type)
+  if (vfWz) renderVfWz() // the Packages step exists only for cafes
+}
+
+// Per-type meaning of base_price / free_guests_upto / overage_per_person
+// (2026-11-03, ADMIN_VENUE_SETUP_PLAN Phase 1). Every sentence here was checked
+// against compute_booking_total's live body:
+//  - cafe + package chosen → venue_packages / package_prices; these columns
+//    price only a booking made WITHOUT a package (needs a time slot).
+//  - self_managed / combo → (base + overage beyond free guests) × nights.
+//  - partner_bnb → picnic setup only, NOT × nights. The form saves
+//    free_guests_upto = null, so metadata.tiers decide the charge whenever
+//    present and base_price is only the shown "starting price".
+//  - custom → the function returns 0; totals are quoted by hand.
+// Labels only: no field is hidden or saved differently here.
+function updateVfPricingLabels(type) {
+  const base = document.getElementById('vf-base-price-label')
+  const free = document.getElementById('vf-free-guests-label')
+  const over = document.getElementById('vf-overage-label')
+  const note = document.getElementById('vf-pricing-note')
+  if (!base || !free || !over || !note) return
+  const pkgsOn = !!document.getElementById('vf-packages-enabled')?.checked
+  const h = s => ` <span class="vf-hint">(${s})</span>`
+  let b, f, o, n = ''
+  if (type === 'cafe' && pkgsOn) {
+    b = 'No-package price (₹)' + h('only for a booking made without a package')
+    f = 'Free guests up to' + h('no-package bookings only')
+    o = 'Overage per extra guest (₹)' + h('no-package bookings only')
+    n = 'Packages are on: a guest who picks a package pays the price in the Packages tab. The three no-package fields only price a custom setup booked without a package.'
+  } else if (type === 'cafe') {
+    b = 'Setup price (₹)' + h('flat up to Free guests, then Overage per extra guest')
+    f = 'Free guests up to' + h('setup price is flat through this many guests')
+    o = 'Overage per extra guest (₹)'
+  } else if (type === 'self_managed' || type === 'combo') {
+    b = 'Nightly rate (₹)' + h('charged per night')
+    f = 'Guests included per night' + h('nightly rate is flat through this many guests')
+    o = 'Extra guest per night (₹)'
+    n = 'Stay total = (nightly rate + extra guests) × nights, plus add-ons.'
+  } else if (type === 'partner_bnb') {
+    b = 'Starting price shown to guests (₹)' + h('picnic setup only — the stay is booked on Airbnb')
+    f = 'Free guests up to'
+    o = 'Overage per guest beyond the last tier (₹)'
+    n = 'Charged price comes from the Pricing Tiers below (not multiplied by nights). With no tiers, the starting price is charged flat.'
+  } else {
+    b = 'Base Price (₹)' + h('not used for pricing')
+    f = 'Free guests up to' + h('not used for pricing')
+    o = 'Overage per person (₹)' + h('not used for pricing')
+    n = 'Custom-location bookings price at ₹0 in the booking calculator. Quote the total manually.'
+  }
+  base.innerHTML = b; free.innerHTML = f; over.innerHTML = o
+  note.textContent = n
+  note.hidden = !n
 }
 
 // ── Per-venue add-on mapping (venue_add_ons) ───────────────────────────
@@ -11688,9 +12267,164 @@ function readVfTiers() {
   }))
 }
 
+// ── Guided "Add venue" setup (2026-11-03, ADMIN_VENUE_SETUP_PLAN Phase 4) ─────
+// Not a second form: a step-by-step VIEW of the venue form. Every form block in
+// admin.html carries data-wz-step; in guided mode only the current step's blocks
+// show (layered on top of the per-type visibility). Saving goes through the same
+// saveVenueForm() as the classic form.
+// Rules: every Next saves the venue as an INACTIVE draft (nothing typed is lost,
+// guests never see a half-built venue). Publish re-checks venueReadiness() on the
+// saved row and refuses while anything is missing.
+let vfWz = null // { step, reached, busy, msg }
+const VF_WZ_STEPS = [
+  { key: 'basics',   label: 'Basics',           hint: 'Name, type, where it is and which team runs it.' },
+  { key: 'photos',   label: 'Photos & details', hint: 'At least 3 photos. Menu pages and what\'s included, if the venue has them.' },
+  { key: 'pricing',  label: 'Pricing',          hint: 'What guests pay, and the add-ons they can choose here.' },
+  { key: 'packages', label: 'Packages',         hint: 'Tick "Packages", then turn on each package this venue offers and set its price.', cafeOnly: true },
+  { key: 'review',   label: 'Review & publish', hint: 'Check what\'s missing, then publish. Until then the venue stays hidden from guests.' },
+]
+const vfWzSteps = () => {
+  const type = document.getElementById('vf-type')?.value
+  return VF_WZ_STEPS.filter(s => !s.cafeOnly || type === 'cafe')
+}
+
+function vfWzStart() { vfWz = { step: 'basics', reached: 0, busy: false, msg: '' }; renderVfWz() }
+function vfWzExit() { vfWz = null; renderVfWz() }
+
+function renderVfWz() {
+  const form = document.getElementById('venue-admin-form')
+  const bar = document.getElementById('vf-wz-bar')
+  const nav = document.getElementById('vf-wz-nav')
+  if (!form || !bar || !nav) return
+  form.classList.toggle('vf-wz-on', !!vfWz)
+  if (!vfWz) {
+    form.querySelectorAll('[data-wz-step]').forEach(el => el.classList.remove('vf-wz-off'))
+    bar.hidden = nav.hidden = true; bar.innerHTML = nav.innerHTML = ''
+    return
+  }
+  const steps = vfWzSteps()
+  // Type changed away from cafe while on Packages: fall back to Review.
+  if (!steps.some(s => s.key === vfWz.step)) vfWz.step = 'review'
+  const idx = steps.findIndex(s => s.key === vfWz.step)
+  vfWz.reached = Math.max(vfWz.reached, idx)
+  form.querySelectorAll('[data-wz-step]').forEach(el => el.classList.toggle('vf-wz-off', el.dataset.wzStep !== vfWz.step))
+  const cur = steps[idx]
+  bar.innerHTML = `
+    <ol class="vf-wz-steps">${steps.map((s, i) => `<li class="vf-wz-step${i === idx ? ' is-current' : ''}${i < idx ? ' is-done' : ''}">
+      ${i <= vfWz.reached && i !== idx ? `<button type="button" onclick="vfWzGo('${s.key}')">` : '<span>'}<b>${i + 1}</b> ${escapeHtml(s.label)}${i <= vfWz.reached && i !== idx ? '</button>' : '</span>'}</li>`).join('')}</ol>
+    <div class="vf-wz-head"><strong>${escapeHtml(cur.label)}</strong> <span class="vf-hint">${escapeHtml(cur.hint)}</span>
+      <button type="button" class="vf-wz-exit" onclick="vfWzExit()">Show all fields</button></div>`
+  bar.hidden = false
+
+  const savedId = parseInt(document.getElementById('vf-id').value, 10) || null
+  let review = ''
+  if (cur.key === 'review') {
+    const v = savedId && venueManagerState.venues.find(x => x.id === savedId)
+    const { blocking, advisory } = v ? venueReadiness(v) : { blocking: [{ label: 'Save the venue first', go: 'vf-name' }], advisory: [] }
+    review = blocking.length
+      ? `<div class="vf-wz-review vf-wz-review--todo"><strong>Before publishing, add:</strong>
+           <ul>${blocking.map(i => `<li><button type="button" class="vf-readiness-go" onclick="vfWzGoTo('${i.go}')">${escapeHtml(i.label)}</button></li>`).join('')}</ul></div>`
+      : `<div class="vf-wz-review vf-wz-review--ok"><strong>Everything a guest needs is in place.</strong>${advisory.length ? `<br><span class="vf-hint">${advisory.map(a => escapeHtml(a.label)).join(' · ')}</span>` : ''}</div>`
+    vfWz.canPublish = !blocking.length
+  }
+  nav.innerHTML = `${review}
+    ${vfWz.msg ? `<p class="venues-error vf-pe-msg">${escapeHtml(vfWz.msg)}</p>` : ''}
+    <div class="vf-wz-buttons">
+      ${idx > 0 ? `<button type="button" class="btn btn--secondary" ${vfWz.busy ? 'disabled' : ''} onclick="vfWzBack()">Back</button>` : ''}
+      <span class="vf-wz-spacer"></span>
+      ${cur.key === 'review'
+        ? `<button type="button" class="btn btn--secondary" ${vfWz.busy ? 'disabled' : ''} onclick="vfWzSaveDraft()">Save draft &amp; close</button>
+           <button type="button" class="btn btn--primary" ${vfWz.busy || !vfWz.canPublish ? 'disabled' : ''} onclick="vfWzPublish()">Publish</button>`
+        : `<button type="button" class="btn btn--primary" ${vfWz.busy ? 'disabled' : ''} onclick="vfWzNext()">${vfWz.busy ? 'Saving…' : 'Save & next'}</button>`}
+    </div>`
+  nav.hidden = false
+}
+
+// Minimal per-step checks; everything else is the Review checklist's job.
+function vfWzStepError(step) {
+  if (step !== 'basics') return ''
+  const val = id => (document.getElementById(id)?.value || '').trim()
+  if (!val('vf-name')) return 'Add the venue name.'
+  if (!val('vf-description')) return 'Add a description guests will read.'
+  if (!val('vf-city')) return 'Add the city.'
+  const min = parseInt(val('vf-cap-min'), 10), max = parseInt(val('vf-cap-max'), 10)
+  if (!(min >= 1) || !(max >= min)) return 'Guests: min must be at least 1 and max at least min.'
+  return ''
+}
+
+async function vfWzSaveDraft(close = true) {
+  vfWz.busy = true; vfWz.msg = ''; renderVfWz()
+  try {
+    const id = await saveVenueForm({ stayOpen: true, active: false })
+    const v = venueManagerState.venues.find(x => x.id === id)
+    if (v) { renderVfVenuePackages(v); renderVfReadiness(v) }
+    if (close) { showToast('Draft saved. It stays hidden until you publish.', 'success'); vfWz = null; renderVfWz(); closeVenueForm(); return id }
+    return id
+  } catch (e) {
+    vfWz.msg = 'Couldn\'t save: ' + (e.message || e); return null
+  } finally {
+    if (vfWz) { vfWz.busy = false; renderVfWz() }
+  }
+}
+
+async function vfWzNext() {
+  if (!vfWz || vfWz.busy) return
+  const err = vfWzStepError(vfWz.step)
+  if (err) { vfWz.msg = err; return renderVfWz() }
+  const id = await vfWzSaveDraft(false)
+  if (!id || !vfWz) return
+  const steps = vfWzSteps(), idx = steps.findIndex(s => s.key === vfWz.step)
+  vfWz.step = steps[Math.min(idx + 1, steps.length - 1)].key
+  renderVfWz()
+  document.getElementById('venue-form-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function vfWzBack() {
+  const steps = vfWzSteps(), idx = steps.findIndex(s => s.key === vfWz.step)
+  vfWz.step = steps[Math.max(idx - 1, 0)].key; vfWz.msg = ''; renderVfWz()
+}
+function vfWzGo(key) { vfWz.step = key; vfWz.msg = ''; renderVfWz() }
+// Review-list links: jump to the step that holds the field, then to the field.
+function vfWzGoTo(elId) {
+  const el = document.getElementById(elId)
+  const step = el?.closest('[data-wz-step]')?.dataset.wzStep
+  if (step && step !== 'none') vfWzGo(step)
+  vfGoTo(elId)
+}
+
+async function vfWzPublish() {
+  if (!vfWz || vfWz.busy) return
+  // Save the latest edits as a draft, then re-check readiness on the SAVED row.
+  const id = await vfWzSaveDraft(false)
+  if (!id || !vfWz) return
+  const v = venueManagerState.venues.find(x => x.id === id)
+  if (!v || venueReadiness(v).blocking.length) { vfWz.msg = 'Still missing something: see the list above.'; return renderVfWz() }
+  vfWz.busy = true; renderVfWz()
+  try {
+    await saveVenueForm({ stayOpen: true, active: true })
+    showToast(`${v.name} is live`, 'success')
+    vfWz = null; renderVfWz(); closeVenueForm()
+  } catch (e) {
+    if (vfWz) { vfWz.busy = false; vfWz.msg = 'Couldn\'t publish: ' + (e.message || e); renderVfWz() }
+  }
+}
+Object.assign(window, { vfWzExit, vfWzNext, vfWzBack, vfWzGo, vfWzGoTo, vfWzSaveDraft, vfWzPublish })
+
 async function handleVenueFormSubmit(event) {
   event.preventDefault()
-  if (!appState.session) return showToast('Admin login required', 'error')
+  // Guided setup owns its own buttons; a stray submit (Enter in a field) must
+  // not run the classic save-and-close path mid-wizard.
+  if (vfWz) return
+  return saveVenueForm()
+}
+
+// The one venue save path, shared by the classic form and the guided wizard.
+// opts.stayOpen: keep the form open, adopt the new id (draft saves).
+// opts.active:   override the "Active" checkbox (wizard drafts stay inactive).
+// Returns the saved venue id, or null on failure (stayOpen re-throws instead).
+async function saveVenueForm(opts = {}) {
+  const { stayOpen = false, active } = opts
+  if (!appState.session) { showToast('Admin login required', 'error'); return null }
   const id = document.getElementById('vf-id').value
   const type = document.getElementById('vf-type').value
   const isPartnerTiered = type === 'partner_bnb'
@@ -11761,6 +12495,7 @@ async function handleVenueFormSubmit(event) {
     menu_pages: menuPages,
     metadata
   }
+  if (typeof active === 'boolean') payload.is_active = active
 
   try {
     let error
@@ -11775,12 +12510,23 @@ async function handleVenueFormSubmit(event) {
     if (error) throw error
     // Persist the per-venue add-on mapping (venue_add_ons).
     if (savedVenueId) await saveVenueAddOns(savedVenueId)
+    if (stayOpen) {
+      // Later saves must UPDATE this row, never insert a second one.
+      document.getElementById('vf-id').value = savedVenueId
+      venueManagerState.editingId = savedVenueId
+      document.getElementById('vf-active').checked = !!payload.is_active
+      await loadVenueManager()
+      return savedVenueId
+    }
     showToast(id ? 'Venue updated!' : 'Venue added!', 'success')
     closeVenueForm()
     loadVenueManager()
+    return savedVenueId
   } catch (err) {
     console.error(err)
+    if (stayOpen) throw err
     showToast('Failed to save venue: ' + err.message, 'error')
+    return null
   }
 }
 
@@ -14380,6 +15126,18 @@ function initAdminPage() {
   if (venueForm) venueForm.addEventListener('submit', handleVenueFormSubmit)
   const vfpClose = document.getElementById('vfp-close')
   if (vfpClose) vfpClose.addEventListener('click', closeVenueForm)
+  // Type changes must re-apply the per-type sections + labels. Without this
+  // (pre-2026-11-03) a new venue stayed on the cafe layout after picking another
+  // type, and hidden defaults (partner tiers 9900/12900/…, rooms 2/2) were saved
+  // unseen.
+  const vfTypeSel = document.getElementById('vf-type')
+  if (vfTypeSel) vfTypeSel.addEventListener('change', () => updateVfTypeVisibility(vfTypeSel.value))
+  const vfPkgToggle = document.getElementById('vf-packages-enabled')
+  if (vfPkgToggle) vfPkgToggle.addEventListener('change', () => {
+    updateVfPricingLabels(document.getElementById('vf-type')?.value)
+    const v = venueManagerState.venues.find(x => x.id === venueManagerState.editingId)
+    if (v) renderVfVenuePackages(v) // its "Packages are off" note follows the tick box
+  })
   const shell = document.getElementById('admin-dashboard')
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {

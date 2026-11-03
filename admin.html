@@ -236,8 +236,12 @@
                     </div>
                     <form id="venue-admin-form" class="venue-admin-form">
                         <input type="hidden" id="vf-id" />
+                        <!-- Readiness checklist (Draft/Live), filled by renderVfReadiness() -->
+                        <div id="vf-readiness" class="vf-readiness" data-wz-step="none" hidden></div>
+                        <!-- Guided "Add venue" setup: step bar (renderVfWz in app.js) -->
+                        <div id="vf-wz-bar" class="vf-wz-bar" hidden></div>
 
-                        <div class="vf-row">
+                        <div class="vf-row" data-wz-step="basics">
                             <div class="vf-field">
                                 <label class="vf-label">Venue Name *</label>
                                 <input type="text" id="vf-name" class="vf-input" required placeholder="e.g. Haveli 14 — Heritage Stay" />
@@ -268,12 +272,12 @@
                             </div>
                         </div>
 
-                        <div class="vf-field">
+                        <div class="vf-field" data-wz-step="basics">
                             <label class="vf-label">Description *</label>
                             <textarea id="vf-description" class="vf-input vf-textarea" rows="4" required placeholder="Venue description shown to customers..."></textarea>
                         </div>
 
-                        <div class="vf-row">
+                        <div class="vf-row" data-wz-step="basics">
                             <div class="vf-field">
                                 <label class="vf-label">Area</label>
                                 <input type="text" id="vf-area" class="vf-input" placeholder="e.g. Old City, C-Scheme" />
@@ -285,32 +289,34 @@
                         </div>
 
                         <div class="vf-row">
-                            <div class="vf-field">
+                            <div class="vf-field" data-wz-step="basics">
                                 <label class="vf-label">Min Guests</label>
                                 <input type="number" id="vf-cap-min" class="vf-input" min="1" value="2" />
                             </div>
-                            <div class="vf-field">
+                            <div class="vf-field" data-wz-step="basics">
                                 <label class="vf-label">Max Guests</label>
                                 <input type="number" id="vf-cap-max" class="vf-input" min="1" value="10" />
                             </div>
-                            <div class="vf-field">
-                                <label class="vf-label">Base Price (₹)</label>
+                            <div class="vf-field" data-wz-step="pricing">
+                                <label class="vf-label" id="vf-base-price-label">Base Price (₹)</label>
                                 <input type="number" id="vf-base-price" class="vf-input" min="0" step="100" value="0" />
                             </div>
-                            <div class="vf-field">
+                            <div class="vf-field" data-wz-step="pricing">
                                 <label class="vf-label">Concurrent Setups <span class="vf-hint">(how many bookings can share this venue at the same time)</span></label>
                                 <input type="number" id="vf-max-setups" class="vf-input" min="1" value="1" />
                             </div>
                         </div>
+                        <!-- Filled per type by updateVfPricingLabels() (app.js) -->
+                        <p id="vf-pricing-note" class="vf-hint vf-pricing-note" data-wz-step="pricing" hidden></p>
 
                         <!-- External URL (partner_bnb only) -->
-                        <div class="vf-field vf-partner-only" style="display:none">
+                        <div class="vf-field vf-partner-only" style="display:none" data-wz-step="basics">
                             <label class="vf-label">Airbnb URL</label>
                             <input type="url" id="vf-external-url" class="vf-input" placeholder="https://airbnb.com/rooms/..." />
                         </div>
 
                         <!-- Google Maps link (all venue types) -->
-                        <div class="vf-field">
+                        <div class="vf-field" data-wz-step="basics">
                             <label class="vf-label">Maps Link <span class="vf-hint">(paste a Google Maps share link; powers the "Get Directions" button in confirmation emails)</span></label>
                             <div class="vf-input-row">
                                 <input type="url" id="vf-maps-url" class="vf-input" placeholder="https://maps.app.goo.gl/..." />
@@ -319,7 +325,7 @@
                         </div>
 
                         <!-- Images -->
-                        <div class="vf-field">
+                        <div class="vf-field" data-wz-step="photos">
                             <label class="vf-label">Images</label>
                             <div id="vf-images-list" class="vf-images-list"></div>
                             <label class="vf-add-btn" id="vf-add-image">
@@ -330,7 +336,7 @@
                         </div>
 
                         <!-- Menu pages -->
-                        <div class="vf-field">
+                        <div class="vf-field" data-wz-step="photos">
                             <label class="vf-label">Menu pages <span class="vf-hint">(upload 2–3 menu pages as images; drag to reorder — guests view them before booking)</span></label>
                             <div id="vf-menu-list" class="vf-images-list"></div>
                             <label class="vf-add-btn" id="vf-add-menu">
@@ -341,18 +347,18 @@
                         </div>
 
                         <!-- What's Included -->
-                        <div class="vf-field">
+                        <div class="vf-field" data-wz-step="photos">
                             <label class="vf-label">What's Included <span style="font-weight:400;opacity:.6">(comma-separated)</span></label>
                             <input type="text" id="vf-includes" class="vf-input" placeholder="e.g. Full picnic setup, Curated menu, Setup &amp; cleanup" />
                         </div>
 
                         <!-- Simple pricing: flat base price through N guests, then overage.
                              All venue types except partner_bnb (see vf-not-partner-only). -->
-                        <div class="vf-section vf-not-partner-only">
+                        <div class="vf-section vf-not-partner-only" data-wz-step="pricing">
                             <div class="vf-section-title">Pricing</div>
                             <div class="vf-row">
                                 <div class="vf-field">
-                                    <label class="vf-label">Free guests up to <span class="vf-hint">(base price is flat through this many guests)</span></label>
+                                    <label class="vf-label" id="vf-free-guests-label">Free guests up to <span class="vf-hint">(base price is flat through this many guests)</span></label>
                                     <input type="number" id="vf-free-guests-upto" class="vf-input" min="1" step="1" value="6" />
                                 </div>
                             </div>
@@ -362,21 +368,21 @@
                              stays) only — these venues' price increases in multiple real
                              steps (e.g. catering scaling) that the flat+overage model above
                              can't represent without changing their actual prices. -->
-                        <div class="vf-section vf-partner-only" style="display:none">
+                        <div class="vf-section vf-partner-only" style="display:none" data-wz-step="pricing">
                             <div class="vf-section-title">Pricing Tiers <span class="vf-hint">(stepped guest pricing)</span></div>
                             <div id="vf-tiers-list" class="vf-tiers-list"></div>
                             <button type="button" id="vf-add-tier" class="vf-add-btn" onclick="addVfTier()">+ Add Tier</button>
                         </div>
 
-                        <div class="vf-row" style="margin-top:10px">
+                        <div class="vf-row" style="margin-top:10px" data-wz-step="pricing">
                             <div class="vf-field">
-                                <label class="vf-label">Overage per person (₹)</label>
+                                <label class="vf-label" id="vf-overage-label">Overage per person (₹)</label>
                                 <input type="number" id="vf-overage" class="vf-input" min="0" step="100" value="2000" />
                             </div>
                         </div>
 
                         <!-- BnB metadata (self_managed only) -->
-                        <div id="vf-bnb-section" class="vf-section vf-bnb-only" style="display:none">
+                        <div id="vf-bnb-section" class="vf-section vf-bnb-only" style="display:none" data-wz-step="photos">
                             <div class="vf-section-title">Property Details</div>
                             <div class="vf-row">
                                 <div class="vf-field">
@@ -409,7 +415,7 @@
 
                         <!-- Airbnb iCal sync (self_managed + combo — a combo venue may have its own
                              whole-property Airbnb listing distinct from each child floor's listing) -->
-                        <div id="vf-ical-section" class="vf-section vf-ical-only" style="display:none">
+                        <div id="vf-ical-section" class="vf-section vf-ical-only" style="display:none" data-wz-step="pricing">
                             <div class="vf-section-title">Airbnb Calendar Sync</div>
                             <div class="vf-field">
                                 <label class="vf-label">Airbnb iCal Import URL <span class="vf-hint">(Airbnb → Listing → Availability → Connect/Export Calendar → copy the .ics link; leaving this blank disables import for this venue)</span></label>
@@ -418,8 +424,11 @@
                             </div>
                         </div>
 
+                        <!-- Packages at this venue (cafe only), filled by renderVfVenuePackages() -->
+                        <div id="vf-venue-packages" class="vf-section vf-venue-packages" data-wz-step="packages" hidden></div>
+
                         <!-- Add-ons offered here -->
-                        <div class="vf-section">
+                        <div class="vf-section" data-wz-step="pricing">
                             <div class="vf-section-title">
                                 Add-ons offered here
                                 <button type="button" class="vf-add-btn vf-addons-prefill" onclick="prefillVfAddons()">Prefill from type</button>
@@ -429,24 +438,26 @@
                         </div>
 
                         <div class="vf-row vf-actions">
-                            <label class="vf-toggle-label">
+                            <label class="vf-toggle-label" data-wz-step="none">
                                 <input type="checkbox" id="vf-active" checked />
                                 Active (visible to customers)
                             </label>
-                            <label class="vf-toggle-label">
+                            <label class="vf-toggle-label" data-wz-step="pricing">
                                 <input type="checkbox" id="vf-requires-confirmation" />
                                 Requires confirmation (query-only booking)
                             </label>
-                            <label class="vf-toggle-label vf-cafe-only" style="display:none">
+                            <label class="vf-toggle-label vf-cafe-only" style="display:none" data-wz-step="packages">
                                 <input type="checkbox" id="vf-packages-enabled" />
                                 Packages (show tier cards on this venue's page)
                             </label>
-                            <label class="vf-toggle-label vf-cafe-only" style="display:none">
+                            <label class="vf-toggle-label vf-cafe-only" style="display:none" data-wz-step="pricing">
                                 <input type="checkbox" id="vf-food-offline" />
                                 Food arranged offline (self-sourced — not included in price)
                             </label>
-                            <button type="submit" class="btn btn--primary">Save Venue</button>
+                            <button type="submit" class="btn btn--primary" data-wz-step="none">Save Venue</button>
                         </div>
+                        <!-- Guided setup: Back / Next / Publish (renderVfWz in app.js) -->
+                        <div id="vf-wz-nav" class="vf-wz-nav" hidden></div>
                     </form>
                 </div>
             </div>
@@ -527,7 +538,7 @@
             <div id="packages-tab" class="tab-content" role="tabpanel" hidden>
                 <div class="tab-header">
                     <h1>Packages</h1>
-                    <p class="vf-hint">Setting / Moment / Story tiers used in the venue-first packages flow (cafe venues). Price shown per venue is derived live from base price + this tier's add-ons — it is never typed in directly. Food-included reflects each venue's own setting and can't be overridden here.</p>
+                    <p class="vf-hint">Packages guests can book at cafe venues. Open a package to edit what it includes and where it is offered. Prices are set per venue: the stored price below, or the venue's price table (food, weekday/weekend) where one exists, which is what guests are charged. To set up one venue end to end, open it in Venues.</p>
                 </div>
                 <div id="packages-manager-container">
                     <!-- Populated by JS -->
