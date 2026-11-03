@@ -830,7 +830,9 @@ body {
   display: block;
 }
 
-.nav-brand h2 {
+.nav-brand h2,
+.nav-brand .brand-name {
+  display: block;
   font-family: var(--font-serif);
   color: var(--boho-text-dark);
   margin: 0;
@@ -5479,7 +5481,8 @@ body.menu-viewer-open {
   .navbar--solid {
     background: rgba(255, 248, 245, 0.96) !important;
   }
-  .nav-brand h2 {
+  .nav-brand h2,
+  .nav-brand .brand-name {
     font-size: 16px;
   }
   .brand-tagline {
@@ -11510,6 +11513,7 @@ body.vd-scroll-lock { overflow: hidden; }
 
 /* Navbar over the dark hero (home, top of page only: .navbar--solid is added on scroll). */
 .navbar:not(.navbar--solid) .nav-brand-text h2,
+.navbar:not(.navbar--solid) .nav-brand-text .brand-name,
 .navbar:not(.navbar--solid) .brand-tagline,
 .navbar:not(.navbar--solid) .nav-home-link { color: #fdf8f3; }
 .navbar:not(.navbar--solid) .nav-mybookings-btn { color: #fdf8f3; border-color: rgba(253, 248, 243, 0.6); background: transparent; }

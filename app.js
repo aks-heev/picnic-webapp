@@ -806,7 +806,9 @@ function venueCardHtml(venue, opts = {}) {
 // arrows, swipe AND auto-advance - so no nav path can bypass it.
 function carouselSlidesHtml(imgs, name) {
   return imgs.map((img, i) => {
-    const alt = escapeHtml(img.alt || name || '')
+    // Per-image alt: N slides all saying just the venue name read as duplicate
+    // alt text. First slide keeps the bare name; the rest are numbered.
+    const alt = escapeHtml(img.alt || (name ? (i === 0 ? name : `${name} — photo ${i + 1}`) : ''))
     // Cards render at ~400px CSS wide, so the 800px `thumb` variant is the
     // right source here - `url` is the 1600px one, kept for the detail hero.
     // Falls back to url for refs with no thumb (inactive venues, whose images
@@ -1607,7 +1609,7 @@ function renderVenueDetail(venue, addOns = []) {
           <button class="vd-gallery-thumb ${i === 0 ? 'vd-gallery-thumb--active' : ''}"
                   data-img-url="${escapeHtml(img.url)}"
                   aria-label="View photo ${i + 1}">
-            <img src="${escapeHtml(img.thumb || img.url)}" alt="${escapeHtml(img.alt || venue.name)}" loading="lazy">
+            <img src="${escapeHtml(img.thumb || img.url)}" alt="${escapeHtml(img.alt || `${venue.name} — photo ${i + 1}`)}" loading="lazy">
           </button>`).join('')}
        </div>`
     : ''
