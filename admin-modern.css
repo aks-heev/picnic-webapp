@@ -924,19 +924,35 @@
   .admin-ui .venue-form-panel { padding: 16px 12px; border-radius: 12px; }
   .admin-ui .venue-form-panel .vf-section { padding: 12px; }
 
-  /* Packages at this venue → one compact block per package */
+  /* Packages at this venue → one compact block per package.
+     Child combinators ONLY: the price-table editor is a table nested inside this
+     one, and descendant selectors here collapsed it into unlabelled boxes. */
   .admin-ui .vf-venue-pkg-table,
-  .admin-ui .vf-venue-pkg-table tbody { display: block; width: 100%; }
-  .admin-ui .vf-venue-pkg-table thead { display: none; }
-  .admin-ui .vf-venue-pkg-table tr.vf-vp-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; padding: 12px 0; border-bottom: 1px solid var(--adm-rule); }
-  .admin-ui .vf-venue-pkg-table td { display: block; padding: 0; border: 0; min-width: 0; }
-  .admin-ui .vf-venue-pkg-table .vf-vp-name { font-weight: 600; font-size: 15px; }
-  .admin-ui .vf-venue-pkg-table .vf-vp-state { justify-self: end; font-size: 13px; }
-  .admin-ui .vf-venue-pkg-table .vf-vp-price { grid-column: 1 / -1; font-size: 14px; }
-  .admin-ui .vf-venue-pkg-table .vf-venue-pkg-actions { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 6px; white-space: normal; }
-  .admin-ui .vf-venue-pkg-table .vf-venue-pkg-actions .vf-action-btn { flex: 1 1 0; margin: 0; padding: 8px 6px; min-height: 40px; }
-  .admin-ui .vf-venue-pkg-table tr.vf-pe-host { display: block; }
-  .admin-ui .vf-venue-pkg-table tr.vf-pe-host > td { display: block; padding: 0 0 12px; }
+  .admin-ui .vf-venue-pkg-table > tbody { display: block; width: 100%; }
+  .admin-ui .vf-venue-pkg-table > thead { display: none; }
+  .admin-ui .vf-venue-pkg-table > tbody > tr.vf-vp-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; padding: 12px 0; border-bottom: 1px solid var(--adm-rule); }
+  .admin-ui .vf-venue-pkg-table > tbody > tr > td { display: block; padding: 0; border: 0; min-width: 0; }
+  .admin-ui .vf-venue-pkg-table > tbody > tr > .vf-vp-name { font-weight: 600; font-size: 15px; }
+  .admin-ui .vf-venue-pkg-table > tbody > tr > .vf-vp-state { justify-self: end; font-size: 13px; }
+  .admin-ui .vf-venue-pkg-table > tbody > tr > .vf-vp-price { grid-column: 1 / -1; font-size: 14px; }
+  .admin-ui .vf-venue-pkg-table > tbody > tr > .vf-venue-pkg-actions { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 6px; white-space: normal; }
+  .admin-ui .vf-venue-pkg-table > tbody > tr > .vf-venue-pkg-actions .vf-action-btn { flex: 1 1 0; margin: 0; padding: 8px 6px; min-height: 40px; }
+  .admin-ui .vf-venue-pkg-table > tbody > tr.vf-pe-host { display: block; }
+  .admin-ui .vf-venue-pkg-table > tbody > tr.vf-pe-host > td { padding: 0 0 12px; }
+
+  /* Price-table editor on phones: one labelled card per price row
+     (Food · Guests · Day / Price · Voucher · Items / Charged …  ✕) */
+  .admin-ui .vf-pe-table,
+  .admin-ui .vf-pe-table > tbody { display: block; width: 100%; }
+  .admin-ui .vf-pe-table > thead { display: none; }
+  .admin-ui .vf-pe-table > tbody > tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 10px; margin-bottom: 8px; border: 1px solid var(--adm-border); border-radius: var(--adm-radius-sm); background: var(--adm-surface); }
+  .admin-ui .vf-pe-table > tbody > tr > td { display: block; padding: 0; border: 0; min-width: 0 !important; }
+  .admin-ui .vf-pe-table > tbody > tr > td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 4px; font-size: 12px; color: var(--adm-text-3); }
+  .admin-ui .vf-pe-table .vf-input { width: 100%; min-width: 0; box-sizing: border-box; padding-left: 10px; padding-right: 10px; }
+  .admin-ui .vf-pe-table select.vf-input { padding-right: 28px; background-position: right 8px center; }
+  .admin-ui .vf-pe-table > tbody > tr > td.vf-pe-prev { grid-column: 1 / 3; align-self: center; white-space: normal; }
+  .admin-ui .vf-pe-table > tbody > tr > td.vf-pe-del { grid-column: 3; justify-self: end; align-self: center; }
+  .admin-ui .vf-pe-table > tbody > tr > td[colspan] { grid-column: 1 / -1; }
   .admin-ui .vf-pe { padding: 12px 10px; }
 
   /* Reels: link / caption / [↑ ↓  chips … Showing ✕] */

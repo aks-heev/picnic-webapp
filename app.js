@@ -11400,16 +11400,16 @@ function vfPeHtml() {
   }
   const rows = pe.rows.map((r, i) => `
     <tr>
-      <td><select class="vf-input" onchange="vfPeSet(${i}, 'with_food', this.value === '1', true)">
-        <option value="0" ${r.with_food ? '' : 'selected'}>No food</option><option value="1" ${r.with_food ? 'selected' : ''}>With food</option></select></td>
-      <td><input type="number" class="vf-input" min="1" step="1" value="${escapeHtml(r.with_food ? r.guests : '')}" ${r.with_food ? '' : 'disabled placeholder="—"'} oninput="vfPeSet(${i}, 'guests', this.value)" ${noEnter} /></td>
-      <td><select class="vf-input" onchange="vfPeSet(${i}, 'day_type', this.value)">
+      <td data-label="Food"><select class="vf-input" onchange="vfPeSet(${i}, 'with_food', this.value === '1', true)">
+        <option value="0" ${r.with_food ? '' : 'selected'}>No</option><option value="1" ${r.with_food ? 'selected' : ''}>Yes</option></select></td>
+      <td data-label="Guests"><input type="number" class="vf-input" min="1" step="1" value="${escapeHtml(r.with_food ? r.guests : '')}" ${r.with_food ? '' : 'disabled placeholder="—"'} oninput="vfPeSet(${i}, 'guests', this.value)" ${noEnter} /></td>
+      <td data-label="Day"><select class="vf-input" onchange="vfPeSet(${i}, 'day_type', this.value)">
         ${['any', 'weekday', 'weekend'].map(d => `<option value="${d}" ${r.day_type === d ? 'selected' : ''}>${d}</option>`).join('')}</select></td>
-      <td><input type="number" class="vf-input" min="1" step="100" value="${escapeHtml(r.price ?? '')}" oninput="vfPeSet(${i}, 'price', this.value)" ${noEnter} /></td>
-      <td><input type="number" class="vf-input" min="0" step="500" value="${escapeHtml(r.food_credit ?? '')}" placeholder="—" oninput="vfPeSet(${i}, 'food_credit', this.value)" ${noEnter} /></td>
-      <td><input type="number" class="vf-input" min="1" step="1" value="${escapeHtml(r.food_items ?? '')}" placeholder="—" oninput="vfPeSet(${i}, 'food_items', this.value)" ${noEnter} /></td>
-      <td class="vf-pe-prev">${prevCell(i)}</td>
-      <td><button type="button" class="vf-action-btn" title="Remove row" onclick="vfPeRemove(${i})">✕</button></td>
+      <td data-label="Price ₹"><input type="number" class="vf-input" min="1" step="100" value="${escapeHtml(r.price ?? '')}" oninput="vfPeSet(${i}, 'price', this.value)" ${noEnter} /></td>
+      <td data-label="Voucher ₹"><input type="number" class="vf-input" min="0" step="500" value="${escapeHtml(r.food_credit ?? '')}" placeholder="—" oninput="vfPeSet(${i}, 'food_credit', this.value)" ${noEnter} /></td>
+      <td data-label="Food items"><input type="number" class="vf-input" min="1" step="1" value="${escapeHtml(r.food_items ?? '')}" placeholder="—" oninput="vfPeSet(${i}, 'food_items', this.value)" ${noEnter} /></td>
+      <td class="vf-pe-prev" data-label="Charged (preview)">${prevCell(i)}</td>
+      <td class="vf-pe-del"><button type="button" class="vf-action-btn" title="Remove row" aria-label="Remove row" onclick="vfPeRemove(${i})">✕</button></td>
     </tr>`).join('')
   const allPriced = fresh && pe.preview.every(p => !p.weekday_error && !p.weekend_error)
   return `
