@@ -89,6 +89,7 @@
                         <span class="adm-side-label">Daily</span>
                         <button class="tab-btn active" data-tab="queries" role="tab" aria-selected="true">Queries <span id="nav-q-count" class="adm-nav-count num" hidden></span></button>
                         <button class="tab-btn" data-tab="bookings" role="tab" aria-selected="false">Bookings</button>
+                        <button class="tab-btn" data-tab="action-required" role="tab" aria-selected="false">Action required <span id="nav-act-count" class="adm-nav-count num" hidden></span></button>
                         <button class="tab-btn" data-tab="add-booking" role="tab" aria-selected="false">Add booking</button>
                         <button class="tab-btn" data-tab="availability" role="tab" aria-selected="false">Availability</button>
                         <button class="tab-btn" data-tab="staff-ops" role="tab" aria-selected="false">Staff ops</button>
@@ -137,6 +138,19 @@
                 </div>
                 <div id="queries-container" class="data-container">
                     <!-- Queries will be populated here by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Action Required Tab (confirmed bookings past their close-by day, still not closed) -->
+            <div id="action-required-tab" class="tab-content" role="tabpanel" hidden>
+                <div class="tab-header">
+                    <div>
+                        <h1>Action required</h1>
+                        <p id="act-summary" class="adm-sub"></p>
+                    </div>
+                </div>
+                <div id="action-required-container" class="data-container">
+                    <!-- Rendered by renderActionRequired() in app.js -->
                 </div>
             </div>
 

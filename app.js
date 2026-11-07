@@ -3161,27 +3161,92 @@ async function compressImageForUpload(file, maxEdge = 1600, quality = 0.78) {
   }
 }
 
+// Produce the sm (800px) + lg (1600px) WebP pair the /opt pipeline expects,
+// so a fresh admin upload lands in the same shape the 2026-09-07 batch
+// migration gave existing images, instead of only ever producing one size
+// with no thumb. Card carousels fall back to the lg copy when `thumb` is
+// empty (CLAUDE.md s14) - that silent fallback is what was quietly
+// inflating egress for every venue/package photo added after that
+// migration, since this upload path never wrote a thumb. Decodes the
+// source once and re-encodes it at both sizes.
+//
+// Unlike compressImageForUpload, this always re-encodes at the target
+// quality - an already-WebP file no longer skips compression, so a
+// design-tool export that happens to already be WebP still gets normalized
+// instead of uploaded verbatim at whatever size/quality it arrived at.
+// Falls back to the original file for `lg` and to `null` for `sm` on any
+// failure: an upload must never fail because optimization did.
+async function makeImageVariants(file, { lgEdge = 1600, smEdge = 800, quality = 0.78 } = {}) {
+  if (!file || !file.type || !file.type.startsWith('image/')) return { lg: file, sm: null }
+
+  let bmp
+  try {
+    bmp = await createImageBitmap(file) // applies EXIF orientation
+  } catch (err) {
+    console.warn('[img] decode failed, uploading original, no thumb', err)
+    return { lg: file, sm: null }
+  }
+
+  const baseName = file.name.replace(/\.[^.]+$/, '')
+  const encodeAt = async (maxEdge) => {
+    try {
+      const scale = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height))
+      const w = Math.max(1, Math.round(bmp.width * scale))
+      const h = Math.max(1, Math.round(bmp.height * scale))
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      canvas.getContext('2d').drawImage(bmp, 0, 0, w, h)
+      return await new Promise(res => canvas.toBlob(res, 'image/webp', quality))
+    } catch (err) {
+      console.warn(`[img] encode at ${maxEdge}px failed`, err)
+      return null
+    }
+  }
+
+  try {
+    const [lgBlob, smBlob] = await Promise.all([encodeAt(lgEdge), encodeAt(smEdge)])
+    const lg = (lgBlob && lgBlob.size < file.size) ? new File([lgBlob], `${baseName}.webp`, { type: 'image/webp' }) : file
+    const sm = smBlob ? new File([smBlob], `${baseName}.webp`, { type: 'image/webp' }) : null
+    if (lg !== file || sm) {
+      console.log(`[img] ${file.name} ${(file.size/1024).toFixed(0)}KB -> lg ${lg === file ? 'kept original' : (lgBlob.size/1024).toFixed(0)+'KB'}${sm ? `, sm ${(smBlob.size/1024).toFixed(0)}KB` : ''}`)
+    }
+    return { lg, sm }
+  } finally {
+    bmp.close?.()
+  }
+}
+
 window.handlePkgAdmImageUpload = async function(input, pkgId, index) {
-  const file = await compressImageForUpload(input.files[0])
-  if (!file) return
+  const { lg, sm } = await makeImageVariants(input.files[0])
+  if (!lg) return
   if (!appState.session) return showToast('Admin login required', 'error')
 
-  const ext  = file.name.split('.').pop()
-  const path = `pkg-${pkgId}-${Date.now()}-${index}.${ext}`
+  const ext  = lg.name.split('.').pop()
+  const base = `pkg-${pkgId}-${Date.now()}-${index}`
 
   const row = input.closest('.vf-image-row')
   const label = row.querySelector('.vf-img-upload-btn')
   label.textContent = 'Uploading…'
 
   try {
-    const { error: upErr } = await supabase.storage.from('package-images').upload(path, file, { upsert: true, cacheControl: '31536000' })
-    if (upErr) throw upErr
-    const { data: { publicUrl } } = supabase.storage.from('package-images').getPublicUrl(path)
+    const { error: lgErr } = await supabase.storage.from('package-images').upload(`opt/lg/${base}.${ext}`, lg, { upsert: true, cacheControl: '31536000' })
+    if (lgErr) throw lgErr
+    const { data: { publicUrl } } = supabase.storage.from('package-images').getPublicUrl(`opt/lg/${base}.${ext}`)
+
+    let thumbUrl = ''
+    if (sm) {
+      const smExt = sm.name.split('.').pop()
+      const { error: smErr } = await supabase.storage.from('package-images').upload(`opt/sm/${base}.${smExt}`, sm, { upsert: true, cacheControl: '31536000' })
+      if (smErr) console.warn('[img] sm upload failed, card carousels will fall back to lg', smErr)
+      else thumbUrl = supabase.storage.from('package-images').getPublicUrl(`opt/sm/${base}.${smExt}`).data.publicUrl
+    }
 
     row.querySelector('.vf-img-url').value = publicUrl
-    row.querySelector('.vf-img-name').value = file.name
+    row.querySelector('.vf-img-thumburl').value = thumbUrl
+    row.querySelector('.vf-img-name').value = lg.name
     row.querySelector('.vf-img-preview-wrap').innerHTML =
-      `<img class="vf-img-thumb" src="${publicUrl}" alt="" /><span class="vf-img-filename" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>`
+      `<img class="vf-img-thumb" src="${thumbUrl || publicUrl}" alt="" /><span class="vf-img-filename" title="${escapeHtml(lg.name)}">${escapeHtml(lg.name)}</span>`
     label.textContent = '↺ Replace photo'
     showToast('Photo uploaded', 'success')
   } catch (err) {
@@ -3206,31 +3271,40 @@ window.addPkgAdmImagesMulti = async function(input, pkgId) {
   const list = document.getElementById(`pkg-adm-images-${pkgId}`)
 
   await Promise.all(files.map(async (rawFile, i) => {
-    const file = await compressImageForUpload(rawFile)
     const rowIndex = startIndex + i
     const row   = list.querySelector(`.vf-image-row[data-index="${rowIndex}"]`)
     const label = row?.querySelector('.vf-img-upload-btn')
     if (label) label.textContent = 'Uploading…'
 
     try {
-      const ext  = file.name.split('.').pop()
-      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-      const path = `pkg-${pkgId}-${Date.now()}-${i}-${safe}`
+      const { lg, sm } = await makeImageVariants(rawFile)
+      const ext  = lg.name.split('.').pop()
+      const safeBase = rawFile.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_')
+      const base = `pkg-${pkgId}-${Date.now()}-${i}-${safeBase}`
 
-      const { error: upErr } = await supabase.storage.from('package-images').upload(path, file, { upsert: true, cacheControl: '31536000' })
-      if (upErr) throw upErr
-      const { data: { publicUrl } } = supabase.storage.from('package-images').getPublicUrl(path)
+      const { error: lgErr } = await supabase.storage.from('package-images').upload(`opt/lg/${base}.${ext}`, lg, { upsert: true, cacheControl: '31536000' })
+      if (lgErr) throw lgErr
+      const { data: { publicUrl } } = supabase.storage.from('package-images').getPublicUrl(`opt/lg/${base}.${ext}`)
+
+      let thumbUrl = ''
+      if (sm) {
+        const smExt = sm.name.split('.').pop()
+        const { error: smErr } = await supabase.storage.from('package-images').upload(`opt/sm/${base}.${smExt}`, sm, { upsert: true, cacheControl: '31536000' })
+        if (smErr) console.warn('[img] sm upload failed, card carousels will fall back to lg', smErr)
+        else thumbUrl = supabase.storage.from('package-images').getPublicUrl(`opt/sm/${base}.${smExt}`).data.publicUrl
+      }
 
       if (row) {
-        row.querySelector('.vf-img-url').value  = publicUrl
-        row.querySelector('.vf-img-name').value = file.name
+        row.querySelector('.vf-img-url').value       = publicUrl
+        row.querySelector('.vf-img-thumburl').value  = thumbUrl
+        row.querySelector('.vf-img-name').value      = lg.name
         row.querySelector('.vf-img-preview-wrap').innerHTML =
-          `<img class="vf-img-thumb" src="${publicUrl}" alt="" /><span class="vf-img-filename" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>`
+          `<img class="vf-img-thumb" src="${thumbUrl || publicUrl}" alt="" /><span class="vf-img-filename" title="${escapeHtml(lg.name)}">${escapeHtml(lg.name)}</span>`
         if (label) label.textContent = '↺ Replace photo'
       }
     } catch (err) {
       console.error(err)
-      showToast(`Failed: ${file.name} — ${err.message}`, 'error')
+      showToast(`Failed: ${rawFile.name} — ${err.message}`, 'error')
       if (label) label.textContent = '↑ Upload photo'
     }
   }))
@@ -7651,6 +7725,8 @@ function applyAuthState(session) {
     if (adminLogin)     adminLogin.classList.add('hidden')
     if (adminDashboard) adminDashboard.classList.remove('hidden')
     loadQueries()
+    // Also fills the "Action required" nav count, so overdue closes show without opening a tab.
+    loadBookings()
     loadMenuLinks()
     // Deep link: admin.html#add-booking lands the phone straight on the form
     // (Supabase session persists in localStorage, so a bookmarked link works).
@@ -7797,6 +7873,7 @@ async function loadBookings() {
 
     loadedBookings = bookingsWithOrders
     renderBookings(loadedBookings)
+    renderActionRequired(loadedBookings)
   } catch (error) {
     console.error(error)
     showToast('Failed to load bookings', 'error')
@@ -8916,6 +8993,83 @@ function renderBookings(bookings) {
     container.innerHTML = `<div class="adm-list adm-list--bookings">${ADM_BK_THEAD}<div class="adm-empty-row"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(body)}</span></div></div>`
     return
   }
+  container.innerHTML = `<div class="adm-list adm-list--bookings">${ADM_BK_THEAD}${parts.join('')}</div>`
+}
+
+// ================================================================
+// ACTION REQUIRED (act)
+// ================================================================
+// Confirmed bookings whose close-by day has passed and that still aren't closed.
+//   picnic                → close by the end of the event day (preferred_date)
+//   stay / picnic + stay  → close by the end of the checkout day
+// "Not closed" is bookingStatusMod() === 'confirmed' — the same test the Bookings badge
+// uses, so a booking with a booking_costs row counts as closed even if booking_status is
+// null (rows #6/#60/#64/#65 are like that). Postponed and Cancelled are excluded by it too.
+// Day boundary is IST (sttIstToday), matching the "Overdue booking closures" morning task.
+// Reuses the Bookings row markup, so the Close button and detail are identical.
+
+function actDueDate(b) { return admRange(b).end }
+
+function actOverdue(bookings, today) {
+  return (bookings || []).filter(b => {
+    if (bookingStatusMod(b) !== 'confirmed') return false
+    const due = actDueDate(b)
+    return !!due && due < today
+  })
+}
+
+function renderActionRequired(bookings) {
+  const today = sttIstToday()
+  const teamId = admTeamId()
+  const rows = actOverdue(bookings, today)
+
+  // Nav count ignores the Team filter — a booking left open in the other city is still yours to close.
+  const badge = document.getElementById('nav-act-count')
+  if (badge) { badge.textContent = String(rows.length); badge.hidden = !rows.length }
+
+  const container = document.getElementById('action-required-container')
+  if (!container) return
+  const inTeam = rows.filter(b => admInTeam(b, teamId))
+
+  const sum = document.getElementById('act-summary')
+  if (sum) {
+    const owing = inTeam.filter(b => Number(b.total_amount || 0) - Number(b.advance_amount || 0) > 0)
+    const airbnbOwing = owing.filter(b => isAirbnbRef(b.external_booking_ref)).length
+    let html = inTeam.length
+      ? `${admPlural(inTeam.length, 'booking')} past ${inTeam.length === 1 ? 'its' : 'their'} close-by day and not closed`
+      : 'Every booking is closed on time'
+    if (owing.length) {
+      html += ` · <span class="adm-overdue">${owing.length} still show${owing.length === 1 ? 's' : ''} a balance</span>` +
+        (airbnbOwing ? ` — ${airbnbOwing} ${airbnbOwing === 1 ? 'is an Airbnb stay' : 'are Airbnb stays'}: Airbnb collected it, record it with “Received in full” when closing` : '')
+    }
+    sum.innerHTML = html
+  }
+
+  if (!inTeam.length) {
+    const hidden = rows.length - inTeam.length
+    const body = hidden
+      ? `${admPlural(hidden, 'booking')} in the other team still ${hidden === 1 ? 'needs' : 'need'} closing — set Team to All.`
+      : 'Picnics are due by the end of the event day, stays by the end of checkout day.'
+    container.innerHTML = `<div class="adm-list adm-list--bookings">${ADM_BK_THEAD}<div class="adm-empty-row"><strong>Nothing to close</strong><span>${escapeHtml(body)}</span></div></div>`
+    return
+  }
+
+  // One group per due day, oldest first: the longest-open booking is at the top.
+  const byDue = new Map()
+  inTeam.forEach(b => {
+    const d = actDueDate(b)
+    if (!byDue.has(d)) byDue.set(d, [])
+    byDue.get(d).push(b)
+  })
+  const parts = [...byDue.keys()].sort().map(d => {
+    const late = Math.round((admD(today) - admD(d)) / 864e5)
+    const items = byDue.get(d).sort((a, b) => admOpsKey(a, d).localeCompare(admOpsKey(b, d)))
+    return admGroupHtml(
+      `Due ${admDayLabel(d, today)} · ${admPlural(late, 'day')} overdue`,
+      admPlural(items.length, 'booking'),
+      items.map(b => admBookingRowHtml(b, { day: d })).join('')
+    )
+  })
   container.innerHTML = `<div class="adm-list adm-list--bookings">${ADM_BK_THEAD}${parts.join('')}</div>`
 }
 
@@ -10623,6 +10777,8 @@ function switchTab(tabName) {
     loadAddBookingForm()
   } else if (tabName === 'bookings') {
     loadBookings()
+  } else if (tabName === 'action-required') {
+    loadBookings()   // renders this tab too
   } else if (tabName === 'menu-link') {
     loadMenuLinks()
   } else if (tabName === 'venues') {
@@ -10729,6 +10885,7 @@ function setAdminTeamFilter(city, btn) {
   })
   renderQueries(loadedQueries)
   renderBookings(loadedBookings)
+  renderActionRequired(loadedBookings)
 }
 
 // Bookings-tab date bucket filter (Upcoming/Past/All). Scoped to its own
@@ -10932,12 +11089,14 @@ function renderAddOnsList() {
 }
 
 window.handleAfImageUpload = async function(input) {
-  const file = await compressImageForUpload(input.files[0])
+  // add_ons.image_url is a single column spec'd as the sm (800px) variant -
+  // it's only ever shown at card size, never enlarged. See CLAUDE.md s14.
+  const file = await compressImageForUpload(input.files[0], 800)
   if (!file) return
   if (!appState.session) return showToast('Admin login required', 'error')
 
   const ext  = file.name.split('.').pop()
-  const path = `addon-${Date.now()}.${ext}`
+  const path = `opt/sm/addon-${Date.now()}.${ext}`
   const label = document.getElementById('af-img-label')
   label.textContent = 'Uploading…'
 
@@ -11989,27 +12148,36 @@ function renderVfImages(images) {
 }
 
 window.handleVfImageUpload = async function(input, index) {
-  const file = await compressImageForUpload(input.files[0])
-  if (!file) return
+  const { lg, sm } = await makeImageVariants(input.files[0])
+  if (!lg) return
   if (!appState.session) return showToast('Admin login required', 'error')
 
-  const ext  = file.name.split('.').pop()
-  const path = `venue-${Date.now()}-${index}.${ext}`
+  const ext  = lg.name.split('.').pop()
+  const base = `venue-${Date.now()}-${index}`
 
   const row = input.closest('.vf-image-row')
   const label = row.querySelector('.vf-img-upload-btn')
   label.textContent = 'Uploading…'
 
   try {
-    const { error: upErr } = await supabase.storage.from('venue-images').upload(path, file, { upsert: true, cacheControl: '31536000' })
-    if (upErr) throw upErr
+    const { error: lgErr } = await supabase.storage.from('venue-images').upload(`opt/lg/${base}.${ext}`, lg, { upsert: true, cacheControl: '31536000' })
+    if (lgErr) throw lgErr
 
-    const { data: { publicUrl } } = supabase.storage.from('venue-images').getPublicUrl(path)
+    const { data: { publicUrl } } = supabase.storage.from('venue-images').getPublicUrl(`opt/lg/${base}.${ext}`)
+
+    let thumbUrl = ''
+    if (sm) {
+      const smExt = sm.name.split('.').pop()
+      const { error: smErr } = await supabase.storage.from('venue-images').upload(`opt/sm/${base}.${smExt}`, sm, { upsert: true, cacheControl: '31536000' })
+      if (smErr) console.warn('[img] sm upload failed, card carousels will fall back to lg', smErr)
+      else thumbUrl = supabase.storage.from('venue-images').getPublicUrl(`opt/sm/${base}.${smExt}`).data.publicUrl
+    }
 
     row.querySelector('.vf-img-url').value = publicUrl
-    row.querySelector('.vf-img-name').value = file.name
+    row.querySelector('.vf-img-thumburl').value = thumbUrl
+    row.querySelector('.vf-img-name').value = lg.name
     const wrap = row.querySelector('.vf-img-preview-wrap')
-    wrap.innerHTML = `<img class="vf-img-thumb" src="${publicUrl}" alt="" /><span class="vf-img-filename" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>`
+    wrap.innerHTML = `<img class="vf-img-thumb" src="${thumbUrl || publicUrl}" alt="" /><span class="vf-img-filename" title="${escapeHtml(lg.name)}">${escapeHtml(lg.name)}</span>`
     label.textContent = '↺ Replace photo'
     showToast('Photo uploaded', 'success')
   } catch (err) {
@@ -12204,32 +12372,63 @@ window.addVfImagesMulti = async function(input, type) {
   const list = document.getElementById(listId)
 
   await Promise.all(files.map(async (rawFile, i) => {
-    const file = await compressImageForUpload(rawFile)
     const rowIndex = startIndex + i
     const row   = list.querySelector(`.vf-image-row[data-index="${rowIndex}"]`)
     const label = row?.querySelector('.vf-img-upload-btn')
     if (label) label.textContent = 'Uploading…'
 
     try {
-      const ext  = file.name.split('.').pop()
-      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-      const path = `${prefix}-${Date.now()}-${i}-${safe}`
+      // Menu pages only ever show full-size in the lightbox viewer, so they
+      // stay single-size. Only venue photos need the sm thumb that card
+      // carousels pull via `thumb || url` - see CLAUDE.md s14.
+      if (isVenue) {
+        const { lg, sm } = await makeImageVariants(rawFile)
+        const ext = lg.name.split('.').pop()
+        const safeBase = rawFile.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_')
+        const base = `${prefix}-${Date.now()}-${i}-${safeBase}`
 
-      const { error: upErr } = await supabase.storage.from('venue-images').upload(path, file, { upsert: true, cacheControl: '31536000' })
-      if (upErr) throw upErr
+        const { error: lgErr } = await supabase.storage.from('venue-images').upload(`opt/lg/${base}.${ext}`, lg, { upsert: true, cacheControl: '31536000' })
+        if (lgErr) throw lgErr
+        const { data: { publicUrl } } = supabase.storage.from('venue-images').getPublicUrl(`opt/lg/${base}.${ext}`)
 
-      const { data: { publicUrl } } = supabase.storage.from('venue-images').getPublicUrl(path)
+        let thumbUrl = ''
+        if (sm) {
+          const smExt = sm.name.split('.').pop()
+          const { error: smErr } = await supabase.storage.from('venue-images').upload(`opt/sm/${base}.${smExt}`, sm, { upsert: true, cacheControl: '31536000' })
+          if (smErr) console.warn('[img] sm upload failed, card carousels will fall back to lg', smErr)
+          else thumbUrl = supabase.storage.from('venue-images').getPublicUrl(`opt/sm/${base}.${smExt}`).data.publicUrl
+        }
 
-      if (row) {
-        row.querySelector('.vf-img-url').value  = publicUrl
-        row.querySelector('.vf-img-name').value = file.name
-        row.querySelector('.vf-img-preview-wrap').innerHTML =
-          `<img class="vf-img-thumb" src="${publicUrl}" alt="" /><span class="vf-img-filename" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>`
-        if (label) label.textContent = isVenue ? '↺ Replace photo' : '↺ Replace page'
+        if (row) {
+          row.querySelector('.vf-img-url').value       = publicUrl
+          row.querySelector('.vf-img-thumburl').value  = thumbUrl
+          row.querySelector('.vf-img-name').value      = lg.name
+          row.querySelector('.vf-img-preview-wrap').innerHTML =
+            `<img class="vf-img-thumb" src="${thumbUrl || publicUrl}" alt="" /><span class="vf-img-filename" title="${escapeHtml(lg.name)}">${escapeHtml(lg.name)}</span>`
+          if (label) label.textContent = '↺ Replace photo'
+        }
+      } else {
+        const file = await compressImageForUpload(rawFile)
+        const ext  = file.name.split('.').pop()
+        const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+        const path = `${prefix}-${Date.now()}-${i}-${safe}`
+
+        const { error: upErr } = await supabase.storage.from('venue-images').upload(path, file, { upsert: true, cacheControl: '31536000' })
+        if (upErr) throw upErr
+
+        const { data: { publicUrl } } = supabase.storage.from('venue-images').getPublicUrl(path)
+
+        if (row) {
+          row.querySelector('.vf-img-url').value  = publicUrl
+          row.querySelector('.vf-img-name').value = file.name
+          row.querySelector('.vf-img-preview-wrap').innerHTML =
+            `<img class="vf-img-thumb" src="${publicUrl}" alt="" /><span class="vf-img-filename" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>`
+          if (label) label.textContent = '↺ Replace page'
+        }
       }
     } catch (err) {
       console.error(err)
-      showToast(`Failed: ${file.name} — ${err.message}`, 'error')
+      showToast(`Failed: ${rawFile.name} — ${err.message}`, 'error')
       if (label) label.textContent = isVenue ? '↑ Upload photo' : '↑ Upload page'
     }
   }))
