@@ -14,7 +14,9 @@ Builds on `docs/STAFF_STATUS_TOOL_PLAN.md` and `docs/STAFF_ACCESS_BY_LOCATION_PL
 
 Three findings. The one you asked about is the second.
 
-### 0.1 🔴 Any signed-in customer can rewrite your prices. Live right now.
+### 0.1 ✅ FIXED — Any signed-in customer could rewrite your prices
+
+> **Verified fixed 2026-11-07** against live `pg_policies`: no INSERT/UPDATE/DELETE policy on `venue_packages`, `site_settings` or `teams` is `USING true` / `WITH CHECK true` any more. The only remaining blanket write policy in `public` is `orders.anon_insert_orders` (INSERT, intentional). Original finding kept below for history.
 
 `venue_packages` carries three policies — `Authenticated insert`, `Authenticated update`,
 `Authenticated delete` — every one of them `USING true WITH CHECK true`. No admin check at all.

@@ -4203,6 +4203,15 @@ async function renderHomePackagesSection() {
   }).join('')
 
   section.style.display = ''
+  // Keep the "N packages" copy in index.html in step with what actually rendered.
+  const pkgCount = grid.querySelectorAll('.pkg-card').length
+  const NUM_WORDS = ['zero','one','two','three','four','five','six','seven','eight','nine','ten']
+  if (pkgCount > 0) {
+    const word = NUM_WORDS[pkgCount] ?? String(pkgCount)
+    document.querySelectorAll('[data-pkg-count-word]').forEach(el => {
+      el.textContent = el.dataset.pkgCountWord === 'cap' ? word.charAt(0).toUpperCase() + word.slice(1) : word
+    })
+  }
   setupHomePkgAutoSwipe(grid)
 }
 
