@@ -1,0 +1,2316 @@
+{
+ "property": "sc-domain:picnicstories.com",
+ "start": "2026-07-25",
+ "end": "2026-10-22",
+ "dimension": "query",
+ "site_totals": {
+  "clicks": 226,
+  "impressions": 4506,
+  "ctr": 0.05015534842432313,
+  "position": 9.564358632933866
+ },
+ "coverage_pct": 43.6,
+ "pulled_at": "2026-10-25T11:01:04",
+ "totals": {
+  "clicks": 86,
+  "impressions": 1963,
+  "ctr": 4.38
+ },
+ "rows": [
+  {
+   "keys": [
+    "the picnic stories"
+   ],
+   "clicks": 53,
+   "impressions": 139,
+   "ctr": 0.381294964028777,
+   "position": 1.3741007194244603
+  },
+  {
+   "keys": [
+    "picnic stories"
+   ],
+   "clicks": 14,
+   "impressions": 52,
+   "ctr": 0.2692307692307692,
+   "position": 3.2884615384615383
+  },
+  {
+   "keys": [
+    "picnic story"
+   ],
+   "clicks": 5,
+   "impressions": 48,
+   "ctr": 0.10416666666666667,
+   "position": 10.104166666666666
+  },
+  {
+   "keys": [
+    "birthday picnic setup"
+   ],
+   "clicks": 2,
+   "impressions": 18,
+   "ctr": 0.1111111111111111,
+   "position": 6.833333333333333
+  },
+  {
+   "keys": [
+    "countryside offgrid prices"
+   ],
+   "clicks": 2,
+   "impressions": 276,
+   "ctr": 0.007246376811594203,
+   "position": 8.141304347826086
+  },
+  {
+   "keys": [
+    "the picnic"
+   ],
+   "clicks": 2,
+   "impressions": 96,
+   "ctr": 0.020833333333333332,
+   "position": 7.322916666666667
+  },
+  {
+   "keys": [
+    "the picnic story"
+   ],
+   "clicks": 2,
+   "impressions": 44,
+   "ctr": 0.045454545454545456,
+   "position": 5.9772727272727275
+  },
+  {
+   "keys": [
+    "best place for anniversary celebration in delhi with family"
+   ],
+   "clicks": 1,
+   "impressions": 3,
+   "ctr": 0.3333333333333333,
+   "position": 22
+  },
+  {
+   "keys": [
+    "birthday picnic"
+   ],
+   "clicks": 1,
+   "impressions": 8,
+   "ctr": 0.125,
+   "position": 4.625
+  },
+  {
+   "keys": [
+    "boho birthday decor"
+   ],
+   "clicks": 1,
+   "impressions": 1,
+   "ctr": 1,
+   "position": 10
+  },
+  {
+   "keys": [
+    "picnic arrangement"
+   ],
+   "clicks": 1,
+   "impressions": 6,
+   "ctr": 0.16666666666666666,
+   "position": 8.666666666666668
+  },
+  {
+   "keys": [
+    "picnic setup"
+   ],
+   "clicks": 1,
+   "impressions": 14,
+   "ctr": 0.07142857142857142,
+   "position": 4
+  },
+  {
+   "keys": [
+    "the sunroom palam farms"
+   ],
+   "clicks": 1,
+   "impressions": 49,
+   "ctr": 0.02040816326530612,
+   "position": 9.204081632653061
+  },
+  {
+   "keys": [
+    "3rd"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 2
+  },
+  {
+   "keys": [
+    "airbnb near me"
+   ],
+   "clicks": 0,
+   "impressions": 3,
+   "ctr": 0,
+   "position": 2
+  },
+  {
+   "keys": [
+    "and food"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 8
+  },
+  {
+   "keys": [
+    "anniversary celebration in delhi"
+   ],
+   "clicks": 0,
+   "impressions": 44,
+   "ctr": 0,
+   "position": 10.727272727272727
+  },
+  {
+   "keys": [
+    "at venue"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 4
+  },
+  {
+   "keys": [
+    "baby shower restaurants near me"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 13
+  },
+  {
+   "keys": [
+    "bachelorette party"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 12.5
+  },
+  {
+   "keys": [
+    "beige cafe"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 11
+  },
+  {
+   "keys": [
+    "beige cafe aravali"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 6
+  },
+  {
+   "keys": [
+    "beige cafe aravali hills"
+   ],
+   "clicks": 0,
+   "impressions": 7,
+   "ctr": 0,
+   "position": 11.714285714285714
+  },
+  {
+   "keys": [
+    "beige cafe delhi"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 11
+  },
+  {
+   "keys": [
+    "beige cafe gurgaon"
+   ],
+   "clicks": 0,
+   "impressions": 4,
+   "ctr": 0,
+   "position": 15.75
+  },
+  {
+   "keys": [
+    "beige cafe leopard trail"
+   ],
+   "clicks": 0,
+   "impressions": 101,
+   "ctr": 0,
+   "position": 9.227722772277227
+  },
+  {
+   "keys": [
+    "beige cafe leopard trail gurgaon"
+   ],
+   "clicks": 0,
+   "impressions": 15,
+   "ctr": 0,
+   "position": 11.266666666666667
+  },
+  {
+   "keys": [
+    "beige delhi"
+   ],
+   "clicks": 0,
+   "impressions": 4,
+   "ctr": 0,
+   "position": 9.5
+  },
+  {
+   "keys": [
+    "beige leopard trail"
+   ],
+   "clicks": 0,
+   "impressions": 13,
+   "ctr": 0,
+   "position": 11.538461538461538
+  },
+  {
+   "keys": [
+    "beige place"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 11
+  },
+  {
+   "keys": [
+    "best place for proposal near me"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 1
+  },
+  {
+   "keys": [
+    "best places for anniversary celebration in delhi"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 15
+  },
+  {
+   "keys": [
+    "best places to propose in delhi"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 11
+  },
+  {
+   "keys": [
+    "birthday destinations near me"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 15
+  },
+  {
+   "keys": [
+    "birthday picnics"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 9
+  },
+  {
+   "keys": [
+    "birthday planner in gurgaon"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 43
+  },
+  {
+   "keys": [
+    "boho decor"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 4
+  },
+  {
+   "keys": [
+    "boho theme"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 8
+  },
+  {
+   "keys": [
+    "cafe anniversary ideas"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 9.5
+  },
+  {
+   "keys": [
+    "cafe beige leopard trail"
+   ],
+   "clicks": 0,
+   "impressions": 3,
+   "ctr": 0,
+   "position": 11.333333333333334
+  },
+  {
+   "keys": [
+    "cafe picnic"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 8
+  },
+  {
+   "keys": [
+    "candle light picnic"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 46
+  },
+  {
+   "keys": [
+    "castle farms restaurant"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 60
+  },
+  {
+   "keys": [
+    "cattage"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 3
+  },
+  {
+   "keys": [
+    "company picnic"
+   ],
+   "clicks": 0,
+   "impressions": 3,
+   "ctr": 0,
+   "position": 4.666666666666666
+  },
+  {
+   "keys": [
+    "company picnic event planner"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 13
+  },
+  {
+   "keys": [
+    "company picnic venues near me"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 1
+  },
+  {
+   "keys": [
+    "cottage"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 4
+  },
+  {
+   "keys": [
+    "cottage entry"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 3
+  },
+  {
+   "keys": [
+    "country side off grid"
+   ],
+   "clicks": 0,
+   "impressions": 5,
+   "ctr": 0,
+   "position": 9.8
+  },
+  {
+   "keys": [
+    "country side offgrid"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 12
+  },
+  {
+   "keys": [
+    "countryside off grid"
+   ],
+   "clicks": 0,
+   "impressions": 19,
+   "ctr": 0,
+   "position": 11.210526315789474
+  },
+  {
+   "keys": [
+    "countryside off grid gurgaon"
+   ],
+   "clicks": 0,
+   "impressions": 3,
+   "ctr": 0,
+   "position": 13.333333333333334
+  },
+  {
+   "keys": [
+    "countryside offgrid"
+   ],
+   "clicks": 0,
+   "impressions": 205,
+   "ctr": 0,
+   "position": 12.62439024390244
+  },
+  {
+   "keys": [
+    "countryside offgrid about"
+   ],
+   "clicks": 0,
+   "impressions": 17,
+   "ctr": 0,
+   "position": 7.882352941176471
+  },
+  {
+   "keys": [
+    "countryside offgrid by kura"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 19
+  },
+  {
+   "keys": [
+    "countryside offgrid gurgaon"
+   ],
+   "clicks": 0,
+   "impressions": 3,
+   "ctr": 0,
+   "position": 14.666666666666666
+  },
+  {
+   "keys": [
+    "countryside offgrid leopard trail"
+   ],
+   "clicks": 0,
+   "impressions": 43,
+   "ctr": 0,
+   "position": 9.488372093023257
+  },
+  {
+   "keys": [
+    "countryside offgrid photos"
+   ],
+   "clicks": 0,
+   "impressions": 18,
+   "ctr": 0,
+   "position": 10.055555555555555
+  },
+  {
+   "keys": [
+    "countryside offgrid reviews"
+   ],
+   "clicks": 0,
+   "impressions": 3,
+   "ctr": 0,
+   "position": 11.666666666666666
+  },
+  {
+   "keys": [
+    "couple picnic packages"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 7
+  },
+  {
+   "keys": [
+    "couples birthday celebration"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 8
+  },
+  {
+   "keys": [
+    "date activities"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 6
+  },
+  {
+   "keys": [
+    "date and day ideas"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 13
+  },
+  {
+   "keys": [
+    "date ideas"
+   ],
+   "clicks": 0,
+   "impressions": 4,
+   "ctr": 0,
+   "position": 6.75
+  },
+  {
+   "keys": [
+    "date ideas in jaipur"
+   ],
+   "clicks": 0,
+   "impressions": 3,
+   "ctr": 0,
+   "position": 20.333333333333332
+  },
+  {
+   "keys": [
+    "date ideas nearby"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 8
+  },
+  {
+   "keys": [
+    "date planner"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 2
+  },
+  {
+   "keys": [
+    "dates idea"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 9
+  },
+  {
+   "keys": [
+    "event company in delhi"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 115
+  },
+  {
+   "keys": [
+    "event decor near me"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 55
+  },
+  {
+   "keys": [
+    "event management in gurgoun, delhi with phone number"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 61
+  },
+  {
+   "keys": [
+    "event planner near me"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 46
+  },
+  {
+   "keys": [
+    "event rental near me"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 13
+  },
+  {
+   "keys": [
+    "for birthday celebration"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 2
+  },
+  {
+   "keys": [
+    "for how many people"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 2
+  },
+  {
+   "keys": [
+    "funky picnic"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 50
+  },
+  {
+   "keys": [
+    "holiday cottage"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 3
+  },
+  {
+   "keys": [
+    "hotel om niwas"
+   ],
+   "clicks": 0,
+   "impressions": 5,
+   "ctr": 0,
+   "position": 35
+  },
+  {
+   "keys": [
+    "hotel om niwas jaipur"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 34
+  },
+  {
+   "keys": [
+    "house of amer"
+   ],
+   "clicks": 0,
+   "impressions": 3,
+   "ctr": 0,
+   "position": 25.333333333333332
+  },
+  {
+   "keys": [
+    "house of stories"
+   ],
+   "clicks": 0,
+   "impressions": 4,
+   "ctr": 0,
+   "position": 68.25
+  },
+  {
+   "keys": [
+    "i am in gurgaon"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 2
+  },
+  {
+   "keys": [
+    "i need more"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 2
+  },
+  {
+   "keys": [
+    "in delhi"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 9
+  },
+  {
+   "keys": [
+    "in india delhi ncr"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 18
+  },
+  {
+   "keys": [
+    "india"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 3
+  },
+  {
+   "keys": [
+    "indian castle hill"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 67
+  },
+  {
+   "keys": [
+    "jaipur"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 2
+  },
+  {
+   "keys": [
+    "jaipur anniversary celebration"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 22
+  },
+  {
+   "keys": [
+    "jaipur me"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 2
+  },
+  {
+   "keys": [
+    "jaipur picnic palace"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 47.5
+  },
+  {
+   "keys": [
+    "jaipur picnic spots"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 55
+  },
+  {
+   "keys": [
+    "kharchi"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 4
+  },
+  {
+   "keys": [
+    "late night picnic"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 43
+  },
+  {
+   "keys": [
+    "lets party decor"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 7
+  },
+  {
+   "keys": [
+    "location"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 5
+  },
+  {
+   "keys": [
+    "low cost or free"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 6
+  },
+  {
+   "keys": [
+    "luxury picnic"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 2
+  },
+  {
+   "keys": [
+    "luxury picnic set up"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 4
+  },
+  {
+   "keys": [
+    "marriage proposal ideas"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 3
+  },
+  {
+   "keys": [
+    "more"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 2
+  },
+  {
+   "keys": [
+    "nature"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 4
+  },
+  {
+   "keys": [
+    "new picnic"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 11
+  },
+  {
+   "keys": [
+    "off grid leopard trail"
+   ],
+   "clicks": 0,
+   "impressions": 5,
+   "ctr": 0,
+   "position": 10
+  },
+  {
+   "keys": [
+    "offgrid gurgaon"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 10.5
+  },
+  {
+   "keys": [
+    "offgrid leopard trail"
+   ],
+   "clicks": 0,
+   "impressions": 113,
+   "ctr": 0,
+   "position": 9.486725663716815
+  },
+  {
+   "keys": [
+    "om niwas"
+   ],
+   "clicks": 0,
+   "impressions": 12,
+   "ctr": 0,
+   "position": 31.416666666666668
+  },
+  {
+   "keys": [
+    "om niwas homestay shimla"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 35
+  },
+  {
+   "keys": [
+    "om niwas hotel jaipur"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 40
+  },
+  {
+   "keys": [
+    "om niwas jaipur"
+   ],
+   "clicks": 0,
+   "impressions": 10,
+   "ctr": 0,
+   "position": 32.7
+  },
+  {
+   "keys": [
+    "om niwas suite hotel"
+   ],
+   "clicks": 0,
+   "impressions": 18,
+   "ctr": 0,
+   "position": 28.055555555555557
+  },
+  {
+   "keys": [
+    "om niwas suite hotel jaipur"
+   ],
+   "clicks": 0,
+   "impressions": 6,
+   "ctr": 0,
+   "position": 41.666666666666664
+  },
+  {
+   "keys": [
+    "once upon a time at bagh"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 24
+  },
+  {
+   "keys": [
+    "once upon a time at nahargarh"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 35.5
+  },
+  {
+   "keys": [
+    "once upon a time at the bagh"
+   ],
+   "clicks": 0,
+   "impressions": 8,
+   "ctr": 0,
+   "position": 18
+  },
+  {
+   "keys": [
+    "once upon a time at the bagh ghat ki guni jaipur jaipur nagar nigam area rajasthan"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 10
+  },
+  {
+   "keys": [
+    "once upon a time at the bagh menu"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 30
+  },
+  {
+   "keys": [
+    "once upon a time at the bagh offers"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 25
+  },
+  {
+   "keys": [
+    "once upon a time at the bagh reviews"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 30
+  },
+  {
+   "keys": [
+    "once upon a time bagh"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 22
+  },
+  {
+   "keys": [
+    "once upon a time in bagh"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 20
+  },
+  {
+   "keys": [
+    "options ?"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 1
+  },
+  {
+   "keys": [
+    "or kuch"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 2
+  },
+  {
+   "keys": [
+    "out at bagh"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 22
+  },
+  {
+   "keys": [
+    "out at the bagh"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 25
+  },
+  {
+   "keys": [
+    "outdoor birthday celebration ideas"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 2
+  },
+  {
+   "keys": [
+    "outdoor birthday party"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 2
+  },
+  {
+   "keys": [
+    "outdoor birthday party ideas"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 4.5
+  },
+  {
+   "keys": [
+    "outdoor party places near me"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 8
+  },
+  {
+   "keys": [
+    "outdoor picnic birthday decoration"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 11
+  },
+  {
+   "keys": [
+    "party place near me"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 8
+  },
+  {
+   "keys": [
+    "party places near me"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 15
+  },
+  {
+   "keys": [
+    "patio cottage"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 1
+  },
+  {
+   "keys": [
+    "pic nic company"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 4
+  },
+  {
+   "keys": [
+    "pickpack"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 1
+  },
+  {
+   "keys": [
+    "picnic"
+   ],
+   "clicks": 0,
+   "impressions": 14,
+   "ctr": 0,
+   "position": 7.357142857142857
+  },
+  {
+   "keys": [
+    "picnic affair"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 29
+  },
+  {
+   "keys": [
+    "picnic at night"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 62
+  },
+  {
+   "keys": [
+    "picnic bachelorette party"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 6
+  },
+  {
+   "keys": [
+    "picnic birthday celebration"
+   ],
+   "clicks": 0,
+   "impressions": 4,
+   "ctr": 0,
+   "position": 3.25
+  },
+  {
+   "keys": [
+    "picnic birthday ideas"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 2
+  },
+  {
+   "keys": [
+    "picnic birthday party"
+   ],
+   "clicks": 0,
+   "impressions": 15,
+   "ctr": 0,
+   "position": 4.666666666666666
+  },
+  {
+   "keys": [
+    "picnic birthday party ideas"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 5.5
+  },
+  {
+   "keys": [
+    "picnic blog"
+   ],
+   "clicks": 0,
+   "impressions": 6,
+   "ctr": 0,
+   "position": 14.666666666666666
+  },
+  {
+   "keys": [
+    "picnic camp hill"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 61
+  },
+  {
+   "keys": [
+    "picnic cancel"
+   ],
+   "clicks": 0,
+   "impressions": 11,
+   "ctr": 0,
+   "position": 7
+  },
+  {
+   "keys": [
+    "picnic cancellation policy"
+   ],
+   "clicks": 0,
+   "impressions": 5,
+   "ctr": 0,
+   "position": 3
+  },
+  {
+   "keys": [
+    "picnic celebration"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 5.5
+  },
+  {
+   "keys": [
+    "picnic company"
+   ],
+   "clicks": 0,
+   "impressions": 23,
+   "ctr": 0,
+   "position": 7.956521739130435
+  },
+  {
+   "keys": [
+    "picnic cottage"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 17
+  },
+  {
+   "keys": [
+    "picnic dates"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 7
+  },
+  {
+   "keys": [
+    "picnic decor"
+   ],
+   "clicks": 0,
+   "impressions": 4,
+   "ctr": 0,
+   "position": 7.25
+  },
+  {
+   "keys": [
+    "picnic decoration"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 2.5
+  },
+  {
+   "keys": [
+    "picnic dishes ideas"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 6
+  },
+  {
+   "keys": [
+    "picnic event"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 2
+  },
+  {
+   "keys": [
+    "picnic experience"
+   ],
+   "clicks": 0,
+   "impressions": 9,
+   "ctr": 0,
+   "position": 36
+  },
+  {
+   "keys": [
+    "picnic food ideas"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 9
+  },
+  {
+   "keys": [
+    "picnic hostel"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 30
+  },
+  {
+   "keys": [
+    "picnic hotel"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 9
+  },
+  {
+   "keys": [
+    "picnic house"
+   ],
+   "clicks": 0,
+   "impressions": 3,
+   "ctr": 0,
+   "position": 24.333333333333332
+  },
+  {
+   "keys": [
+    "picnic on 57th"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 55
+  },
+  {
+   "keys": [
+    "picnic package"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 1
+  },
+  {
+   "keys": [
+    "picnic party"
+   ],
+   "clicks": 0,
+   "impressions": 8,
+   "ctr": 0,
+   "position": 5
+  },
+  {
+   "keys": [
+    "picnic picnic"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 36
+  },
+  {
+   "keys": [
+    "picnic places in jaipur"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 13
+  },
+  {
+   "keys": [
+    "picnic planner"
+   ],
+   "clicks": 0,
+   "impressions": 3,
+   "ctr": 0,
+   "position": 4.666666666666666
+  },
+  {
+   "keys": [
+    "picnic planners"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 11.5
+  },
+  {
+   "keys": [
+    "picnic planning"
+   ],
+   "clicks": 0,
+   "impressions": 14,
+   "ctr": 0,
+   "position": 5.5
+  },
+  {
+   "keys": [
+    "picnic proposal"
+   ],
+   "clicks": 0,
+   "impressions": 5,
+   "ctr": 0,
+   "position": 7.4
+  },
+  {
+   "keys": [
+    "picnic proposal set up"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 2
+  },
+  {
+   "keys": [
+    "picnic restaurant"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 3
+  },
+  {
+   "keys": [
+    "picnic s"
+   ],
+   "clicks": 0,
+   "impressions": 3,
+   "ctr": 0,
+   "position": 10
+  },
+  {
+   "keys": [
+    "picnic schichten"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 25
+  },
+  {
+   "keys": [
+    "picnic set up"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 5
+  },
+  {
+   "keys": [
+    "picnic setup for birthday"
+   ],
+   "clicks": 0,
+   "impressions": 4,
+   "ctr": 0,
+   "position": 5
+  },
+  {
+   "keys": [
+    "picnic setup rental"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 4.5
+  },
+  {
+   "keys": [
+    "picnic setup service"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 3.5
+  },
+  {
+   "keys": [
+    "picnic setups"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 13
+  },
+  {
+   "keys": [
+    "picnic spot gurgaon"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 77
+  },
+  {
+   "keys": [
+    "picnic spot in gurgaon"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 68
+  },
+  {
+   "keys": [
+    "picnic spot in jaipur"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 64
+  },
+  {
+   "keys": [
+    "picnic spot near jaipur"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 64
+  },
+  {
+   "keys": [
+    "picnic theme birthday party"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 6
+  },
+  {
+   "keys": [
+    "picnic themed birthday party"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 7
+  },
+  {
+   "keys": [
+    "picnic venues"
+   ],
+   "clicks": 0,
+   "impressions": 13,
+   "ctr": 0,
+   "position": 14.923076923076923
+  },
+  {
+   "keys": [
+    "picnic with"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 1
+  },
+  {
+   "keys": [
+    "picnic's"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 1
+  },
+  {
+   "keys": [
+    "picnics"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 12
+  },
+  {
+   "keys": [
+    "picnik"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 3
+  },
+  {
+   "keys": [
+    "piknic cafe"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 9
+  },
+  {
+   "keys": [
+    "piknik story"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 9
+  },
+  {
+   "keys": [
+    "pinterest jaipur"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 9
+  },
+  {
+   "keys": [
+    "places to eat near me"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 14
+  },
+  {
+   "keys": [
+    "planning"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 5
+  },
+  {
+   "keys": [
+    "posh picnics"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 53
+  },
+  {
+   "keys": [
+    "private"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 2
+  },
+  {
+   "keys": [
+    "private alfresco space"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 8
+  },
+  {
+   "keys": [
+    "private birthday celebration in jaipur"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 37
+  },
+  {
+   "keys": [
+    "private surprise birthday party"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 1
+  },
+  {
+   "keys": [
+    "project picnic"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 53
+  },
+  {
+   "keys": [
+    "proposal ideas in delhi"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 8
+  },
+  {
+   "keys": [
+    "proposal in delhi"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 10
+  },
+  {
+   "keys": [
+    "proposal in jaipur"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 3
+  },
+  {
+   "keys": [
+    "proposal marriage"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 10
+  },
+  {
+   "keys": [
+    "proposal picnic setup"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 3
+  },
+  {
+   "keys": [
+    "proposal setup in gurgaon"
+   ],
+   "clicks": 0,
+   "impressions": 4,
+   "ctr": 0,
+   "position": 2.75
+  },
+  {
+   "keys": [
+    "proposal venue"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 8
+  },
+  {
+   "keys": [
+    "school picnic places in jaipur"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 64
+  },
+  {
+   "keys": [
+    "show me"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 2
+  },
+  {
+   "keys": [
+    "st henry picnic"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 39
+  },
+  {
+   "keys": [
+    "stori jaipur"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 7
+  },
+  {
+   "keys": [
+    "stories jaipur"
+   ],
+   "clicks": 0,
+   "impressions": 12,
+   "ctr": 0,
+   "position": 23.5
+  },
+  {
+   "keys": [
+    "stories the organic farm cafe"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 42
+  },
+  {
+   "keys": [
+    "sun room"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 53
+  },
+  {
+   "keys": [
+    "sunroom"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 50
+  },
+  {
+   "keys": [
+    "sunroom cafe"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 32
+  },
+  {
+   "keys": [
+    "sunroom cafe delhi"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 18
+  },
+  {
+   "keys": [
+    "sunroom cafe gurgaon"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 22
+  },
+  {
+   "keys": [
+    "sunroom gurgaon"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 22
+  },
+  {
+   "keys": [
+    "sunroom india"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 42
+  },
+  {
+   "keys": [
+    "sunroom palam farms"
+   ],
+   "clicks": 0,
+   "impressions": 3,
+   "ctr": 0,
+   "position": 8.333333333333332
+  },
+  {
+   "keys": [
+    "surprise birthday party"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 8
+  },
+  {
+   "keys": [
+    "taracota"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 7
+  },
+  {
+   "keys": [
+    "teepees"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 6
+  },
+  {
+   "keys": [
+    "tercotta"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 6
+  },
+  {
+   "keys": [
+    "terra cottage"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 1
+  },
+  {
+   "keys": [
+    "terracota house"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 13
+  },
+  {
+   "keys": [
+    "terracotta"
+   ],
+   "clicks": 0,
+   "impressions": 4,
+   "ctr": 0,
+   "position": 7.75
+  },
+  {
+   "keys": [
+    "terracotta hues"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 4
+  },
+  {
+   "keys": [
+    "terracotta room"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 5
+  },
+  {
+   "keys": [
+    "terracottage"
+   ],
+   "clicks": 0,
+   "impressions": 10,
+   "ctr": 0,
+   "position": 4.9
+  },
+  {
+   "keys": [
+    "the beige cafe"
+   ],
+   "clicks": 0,
+   "impressions": 65,
+   "ctr": 0,
+   "position": 10.061538461538461
+  },
+  {
+   "keys": [
+    "the beige cafe aravali hills"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 11.5
+  },
+  {
+   "keys": [
+    "the beige cafe leopard trail"
+   ],
+   "clicks": 0,
+   "impressions": 6,
+   "ctr": 0,
+   "position": 9.166666666666666
+  },
+  {
+   "keys": [
+    "the blades picnic prices"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 56
+  },
+  {
+   "keys": [
+    "the picknick"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 9
+  },
+  {
+   "keys": [
+    "the picnic company"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 7
+  },
+  {
+   "keys": [
+    "the picnic post"
+   ],
+   "clicks": 0,
+   "impressions": 3,
+   "ctr": 0,
+   "position": 6
+  },
+  {
+   "keys": [
+    "the picnics"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 10
+  },
+  {
+   "keys": [
+    "the picnik"
+   ],
+   "clicks": 0,
+   "impressions": 10,
+   "ctr": 0,
+   "position": 8.8
+  },
+  {
+   "keys": [
+    "the piknik"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 11
+  },
+  {
+   "keys": [
+    "the sun room"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 10.5
+  },
+  {
+   "keys": [
+    "the sunroom"
+   ],
+   "clicks": 0,
+   "impressions": 3,
+   "ctr": 0,
+   "position": 15
+  },
+  {
+   "keys": [
+    "the sunroom palam farms dwarka"
+   ],
+   "clicks": 0,
+   "impressions": 4,
+   "ctr": 0,
+   "position": 10
+  },
+  {
+   "keys": [
+    "the sunroom photos"
+   ],
+   "clicks": 0,
+   "impressions": 3,
+   "ctr": 0,
+   "position": 10
+  },
+  {
+   "keys": [
+    "the sunroom, palam farms, dwarka"
+   ],
+   "clicks": 0,
+   "impressions": 6,
+   "ctr": 0,
+   "position": 9.5
+  },
+  {
+   "keys": [
+    "thepicnic"
+   ],
+   "clicks": 0,
+   "impressions": 6,
+   "ctr": 0,
+   "position": 4.666666666666666
+  },
+  {
+   "keys": [
+    "things to do for anniversary near me"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 10
+  },
+  {
+   "keys": [
+    "tracota"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 8
+  },
+  {
+   "keys": [
+    "wedding decorators near me"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 13
+  },
+  {
+   "keys": [
+    "whatsapp"
+   ],
+   "clicks": 0,
+   "impressions": 2,
+   "ctr": 0,
+   "position": 2.5
+  },
+  {
+   "keys": [
+    "where to go for a picnic near me"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 10
+  },
+  {
+   "keys": [
+    "with night stay"
+   ],
+   "clicks": 0,
+   "impressions": 1,
+   "ctr": 0,
+   "position": 12
+  },
+  {
+   "keys": [
+    "\u092a\u093f\u0915\u0928\u093f\u0915"
+   ],
+   "clicks": 0,
+   "impressions": 7,
+   "ctr": 0,
+   "position": 2.571428571428571
+  }
+ ]
+}

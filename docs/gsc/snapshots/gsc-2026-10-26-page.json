@@ -1,0 +1,210 @@
+{
+ "property": "sc-domain:picnicstories.com",
+ "start": "2026-09-26",
+ "end": "2026-10-23",
+ "dimension": "page",
+ "site_totals": {
+  "clicks": 101,
+  "impressions": 1162,
+  "ctr": 0.08691910499139414,
+  "position": 7.164371772805508
+ },
+ "coverage_pct": 125.1,
+ "pulled_at": "2026-10-26T04:03:16",
+ "totals": {
+  "clicks": 102,
+  "impressions": 1454,
+  "ctr": 7.02
+ },
+ "rows": [
+  {
+   "keys": [
+    "https://www.picnicstories.com/"
+   ],
+   "clicks": 53,
+   "impressions": 382,
+   "ctr": 0.1387434554973822,
+   "position": 5.458115183246074
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/blog/picnic-proposal-ideas-gurugram-delhi-ncr"
+   ],
+   "clicks": 15,
+   "impressions": 128,
+   "ctr": 0.1171875,
+   "position": 7.8984375
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/blog/birthday-picnic-ideas-gurugram"
+   ],
+   "clicks": 11,
+   "impressions": 93,
+   "ctr": 0.11827956989247312,
+   "position": 5.344086021505376
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/blog/anniversary-celebration-ideas-delhi-ncr"
+   ],
+   "clicks": 6,
+   "impressions": 151,
+   "ctr": 0.039735099337748346,
+   "position": 7.947019867549669
+  },
+  {
+   "keys": [
+    "http://www.picnicstories.com/"
+   ],
+   "clicks": 4,
+   "impressions": 213,
+   "ctr": 0.018779342723004695,
+   "position": 6.807511737089202
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/packages"
+   ],
+   "clicks": 3,
+   "impressions": 48,
+   "ctr": 0.0625,
+   "position": 6.75
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/venues/terracottage-umber"
+   ],
+   "clicks": 3,
+   "impressions": 16,
+   "ctr": 0.1875,
+   "position": 3.75
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/picnic-venues-gurugram"
+   ],
+   "clicks": 2,
+   "impressions": 60,
+   "ctr": 0.03333333333333333,
+   "position": 6.583333333333333
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/terms"
+   ],
+   "clicks": 2,
+   "impressions": 21,
+   "ctr": 0.09523809523809523,
+   "position": 7.666666666666667
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/cancellation"
+   ],
+   "clicks": 1,
+   "impressions": 50,
+   "ctr": 0.02,
+   "position": 6.26
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/picnic-venues-jaipur"
+   ],
+   "clicks": 1,
+   "impressions": 76,
+   "ctr": 0.013157894736842105,
+   "position": 10.263157894736842
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/venues/once-upon-a-time-at-the-bagh"
+   ],
+   "clicks": 1,
+   "impressions": 32,
+   "ctr": 0.03125,
+   "position": 7.53125
+  },
+  {
+   "keys": [
+    "http://picnicstories.com/"
+   ],
+   "clicks": 0,
+   "impressions": 3,
+   "ctr": 0,
+   "position": 3.3333333333333335
+  },
+  {
+   "keys": [
+    "https://picnicstories.com/"
+   ],
+   "clicks": 0,
+   "impressions": 46,
+   "ctr": 0,
+   "position": 3.369565217391304
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/blog"
+   ],
+   "clicks": 0,
+   "impressions": 51,
+   "ctr": 0,
+   "position": 7.2745098039215685
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/blog/romantic-picnic-date-gurugram"
+   ],
+   "clicks": 0,
+   "impressions": 21,
+   "ctr": 0,
+   "position": 7.571428571428571
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/venues/beige-cafe"
+   ],
+   "clicks": 0,
+   "impressions": 17,
+   "ctr": 0,
+   "position": 9.235294117647058
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/venues/castle-valley"
+   ],
+   "clicks": 0,
+   "impressions": 5,
+   "ctr": 0,
+   "position": 10.2
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/venues/countryside-offgrid"
+   ],
+   "clicks": 0,
+   "impressions": 18,
+   "ctr": 0,
+   "position": 10.11111111111111
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/venues/om-niwas-suite-hotel-stay"
+   ],
+   "clicks": 0,
+   "impressions": 19,
+   "ctr": 0,
+   "position": 26.263157894736842
+  },
+  {
+   "keys": [
+    "https://www.picnicstories.com/venues/terracottage-ochre"
+   ],
+   "clicks": 0,
+   "impressions": 4,
+   "ctr": 0,
+   "position": 4.5
+  }
+ ]
+}
