@@ -183,11 +183,11 @@ async function fillLive() {
       .order('price', { ascending: true }).order('sort_order', { ascending: true }),
     supabase.from('venues').select('id, name, slug, type, city, region, area, description, sort_order, venue_add_ons(addon_id)')
       .eq('is_active', true).order('sort_order', { ascending: true, nullsFirst: false }).order('id', { ascending: true }),
-    supabase.from('reels').select('id, package_id, ig_kind, ig_code, theme, sort_order').eq('is_active', true)
+    supabase.from('reels').select('id, package_id, venue_id, ig_kind, ig_code, theme, sort_order').eq('is_active', true)
       .order('sort_order', { ascending: true }).order('id', { ascending: true }),
   ])
 
-  if (!pkgRes.error && !reelRes.error) fillReels(pkgRes.data || [], reelRes.data || [])
+  if (!pkgRes.error && !reelRes.error) fillReels(pkgRes.data || [], reelsForThisCity(reelRes.data || [], venueRes.error ? [] : venueRes.data || []))
   if (!pkgRes.error && !addRes.error) fillInclusions(pkgRes.data || [], addRes.data || [])
   if (priceRes.error) throw priceRes.error
   const summaries = summarizeRegion(priceRes.data || [], REGION)
@@ -433,6 +433,18 @@ function playerClick(e, ctx, list) {
   e.preventDefault()
   openPlayer(ctx, list, e.currentTarget)
   return true
+}
+
+// reels.venue_id (2026-11-07): a reel shot at a venue in the OTHER city is
+// dropped here. Reels with no venue, or whose venue isn't in the active list
+// (inactive, or the venues fetch failed), stay — never hide on missing data.
+function reelsForThisCity(reels, venues) {
+  const regionOf = new Map(venues.map(v => [v.id, v.region]))
+  return reels.filter(r => {
+    if (r.venue_id == null) return true
+    const region = regionOf.get(r.venue_id)
+    return region == null || region === REGION
+  })
 }
 
 function fillReels(pkgs, reels) {

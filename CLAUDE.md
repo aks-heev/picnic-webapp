@@ -265,7 +265,7 @@ Storage serves **pre-encoded variants**, not originals. Do not point new code at
 
 **Why this exists:** cached-egress overrun restricted the entire project on 2026-09-06 — HTTP 402 on storage, REST *and* auth for ~6 hours, with no warning email (the grace period was already spent). Measured result after the fix: a real phone session went from 55-62MB to **1.57MB**.
 
-Pipeline: `scripts/upload-optimized-images.mjs` (env-var service key, dry-run by default) + `supabase/migrations/20260907_repoint_images_to_optimized_variants.sql` (rollback SQL in its header). Rollback table: `public.image_refs_backup_20260907`.
+Pipeline: `scripts/upload-optimized-images.mjs` (env-var service key, dry-run by default) + `supabase/migrations/20260907_repoint_images_to_optimized_variants.sql` (rollback SQL in its header). Rollback table: `archive.image_refs_backup_20260907` (moved out of `public` 2026-11-07 — the header's rollback SQL must read `archive.` now).
 
 ⚠️ **Enumerating images under the anon key silently misses rows.** `anon_select_add_ons` filters `is_active = true`, which is how add-on 31 got skipped. Use the service-role key for any pipeline re-run.
 

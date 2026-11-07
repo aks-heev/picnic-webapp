@@ -2395,7 +2395,7 @@ async function loadPackagesManager() {
     const [pkgRes, addonRes, venueRes, vpRes, reelRes, ppRes] = await Promise.all([
       supabase.from('packages').select('*, package_add_ons(addon_id, sort_order)').order('sort_order', { ascending: true }),
       supabase.from('add_ons').select('id, name, price').eq('is_active', true).order('sort_order', { ascending: true }),
-      supabase.from('venues').select('id, name, type, packages_enabled, base_price, metadata, venue_add_ons(addon_id)')
+      supabase.from('venues').select('id, name, city, type, packages_enabled, base_price, metadata, venue_add_ons(addon_id)')
         .eq('type', 'cafe').eq('is_active', true).order('id', { ascending: true }),
       supabase.from('venue_packages').select('*'), // incl. inactive rows — admin sees everything
       supabase.from('reels').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true }),
@@ -2536,6 +2536,17 @@ function pkgAdmReelPackages() {
   return (packagesManagerState.packages || []).filter(p => p.is_active)
 }
 
+// reels.venue_id (2026-11-07): the venue a reel was shot at. Its city decides
+// which /brochure/<city> shows it; no venue = every city. Picker lists the
+// active picnic (cafe) venues already loaded for this tab.
+function pkgAdmReelVenueOpts(selected) {
+  const sel = selected == null ? '' : String(selected)
+  return `<option value=""${sel === '' ? ' selected' : ''}>No venue (all cities)</option>` +
+    (packagesManagerState.venues || []).map(v =>
+      `<option value="${v.id}"${String(v.id) === sel ? ' selected' : ''}>${escapeHtml(v.name)}${v.city ? ` · ${escapeHtml(v.city)}` : ''}</option>`
+    ).join('')
+}
+
 function pkgAdmReelsSectionHtml() {
   return '<div class="pkg-adm-reels" id="pkg-adm-reels"></div>'
 }
@@ -2574,6 +2585,7 @@ function renderPkgAdmReels() {
           ${r.caption ? `<span class="pkg-adm-reel-cap">${escapeHtml(r.caption)}</span>` : ''}
           ${theme ? `<span class="pkg-adm-reel-chip">${theme}</span>` : ''}
           ${r.occasion ? `<span class="pkg-adm-reel-chip">${escapeHtml(r.occasion)}</span>` : ''}
+          <select class="vf-input pkg-adm-reel-venue" aria-label="Venue for reel ${escapeHtml(r.ig_code)}" onchange="setPkgReelVenue(${r.id}, this.value)">${pkgAdmReelVenueOpts(r.venue_id)}</select>
           <button type="button" class="pkg-adm-reel-toggle${r.is_active ? ' is-on' : ''}" aria-pressed="${r.is_active}" onclick="togglePkgReel(${r.id})">${r.is_active ? 'Showing' : 'Hidden'}</button>
           <button type="button" class="pkg-adm-reel-icon" aria-label="Delete reel ${escapeHtml(r.ig_code)}" onclick="deletePkgReel(${r.id})">✕</button>
         </div>`
@@ -2604,6 +2616,10 @@ function renderPkgAdmReels() {
       <div class="vf-field">
         <label class="vf-label" for="pkg-reel-occ">Occasion <span class="vf-hint">(optional)</span></label>
         <select class="vf-input" id="pkg-reel-occ">${occOpts}</select>
+      </div>
+      <div class="vf-field">
+        <label class="vf-label" for="pkg-reel-venue">Venue <span class="vf-hint">(sets which city shows it)</span></label>
+        <select class="vf-input" id="pkg-reel-venue">${pkgAdmReelVenueOpts(null)}</select>
       </div>
     </div>
     <div class="vf-row">
@@ -2684,6 +2700,7 @@ async function addPkgReel() {
     ig_code: parsed.code,
     theme: document.getElementById('pkg-reel-theme')?.value || null,
     occasion: document.getElementById('pkg-reel-occ')?.value || null,
+    venue_id: document.getElementById('pkg-reel-venue')?.value ? parseInt(document.getElementById('pkg-reel-venue').value, 10) : null,
     caption: document.getElementById('pkg-reel-cap')?.value.trim() || null,
     sort_order: group.reduce((m, r) => Math.max(m, r.sort_order || 0), 0) + 1,
   }
@@ -2719,6 +2736,22 @@ async function togglePkgReel(id) {
   }
 }
 window.togglePkgReel = togglePkgReel
+
+async function setPkgReelVenue(id, value) {
+  if (!appState.session) return showToast('Admin login required', 'error')
+  const venueId = value ? parseInt(value, 10) : null
+  try {
+    const { error } = await supabase.from('reels').update({ venue_id: venueId }).eq('id', id)
+    if (error) throw error
+    showToast('Reel venue saved', 'success')
+    await reloadPkgReels()
+  } catch (err) {
+    console.error(err)
+    showToast('Failed to save venue: ' + err.message, 'error')
+    await reloadPkgReels() // put the picker back to the stored value
+  }
+}
+window.setPkgReelVenue = setPkgReelVenue
 
 async function deletePkgReel(id) {
   if (!appState.session) return showToast('Admin login required', 'error')
