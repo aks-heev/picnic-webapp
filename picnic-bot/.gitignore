@@ -5,3 +5,4 @@ node_modules/
 replay/shadow-log.csv
 replay/shadow-cases/*.json
 !replay/shadow-cases/EXAMPLE-thread.json
+replay/private/

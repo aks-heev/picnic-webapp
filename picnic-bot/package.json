@@ -16,6 +16,7 @@
     "replay:both": "npm run replay:gemini && npm run replay:anthropic",
     "probe": "node --env-file=.env src/probe-tier.mjs",
     "chat": "node --env-file=.env replay/chat-server.mjs",
-    "shadow": "node --env-file=.env replay/shadow.mjs"
+    "shadow": "node --env-file=.env replay/shadow.mjs",
+    "extract:eval": "node --env-file=.env replay/extract-eval.mjs"
   }
 }
