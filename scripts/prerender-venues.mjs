@@ -282,7 +282,7 @@ function buildCityPages(template, allVenues, urls) {
 
     // --- Venue card ---
     const cardHtml = (v) => {
-      const img      = v.images?.[0]?.url || HERO_FALLBACK
+      const img      = v.images?.[0]?.thumb || v.images?.[0]?.url || HERO_FALLBACK  // cards render ≤600px: 800px sm variant, not lg
       const capacity = v.capacity_max
         ? `${v.capacity_min}–${v.capacity_max} guests`
         : `${v.capacity_min}+ guests`
@@ -618,7 +618,7 @@ function buildHomeVenueGridHtml(venues) {
   const indoor  = venues.filter(v => v.type !== 'custom' && homeVenueSetting(v) === 'indoor')
 
   const card = (v) => {
-    const img = v.images?.[0]?.url || HERO_FALLBACK
+    const img = v.images?.[0]?.thumb || v.images?.[0]?.url || HERO_FALLBACK  // cards render ≤600px: 800px sm variant, not lg
     const capacity = v.capacity_max
       ? `${v.capacity_min}–${v.capacity_max} guests`
       : `${v.capacity_min}+ guests`
