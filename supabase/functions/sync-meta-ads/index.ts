@@ -21,6 +21,16 @@
  * from that campaign having gone dark. This is the single most dangerous bug this
  * function can have.
  *
+ * 🔴 All-zero guard (v8, 2026-10-21): from 2026-09-22 to 2026-10-21 every run returned
+ * rows for exactly the days campaigns delivered, but with spend=0 and impressions=0, and
+ * each run overwrote the trailing 30 days of real spend with ₹0 (≈₹28k erased) while
+ * logging ok=true and emailing team@ a false "₹0 spend" alarm daily. Meta never emits an
+ * insights row for a no-delivery day, so a response whose every row is 0 spend AND 0
+ * impressions is malformed by definition: the run now refuses to write, logs a raw
+ * sample + a diagnose() probe set, and records ok=false in ad_sync_runs. GRAPH_VERSION
+ * bumped v21.0 → v25.0 at the same time (not the cause). ROOT CAUSE (v11): requesting
+ * `actions` in the same daily campaign query zeroes spend/impressions — see fetchInsights.
+ *
  * Invoke manually with a POST body `{"since":"YYYY-MM-DD","until":"YYYY-MM-DD"}` to
  * backfill or repair a gap — defaults to the trailing 30 days when the body is absent or
  * empty. Meta may truncate very wide `time_increment=1` windows; page in ~30-day chunks
@@ -45,7 +55,7 @@ const TEAM_EMAIL = Deno.env.get("TEAM_EMAIL") ?? "team@picnicstories.com"
 
 const META_TOKEN = Deno.env.get("META_ACCESS_TOKEN")
 const AD_ACCOUNT_ID = Deno.env.get("META_AD_ACCOUNT_ID") ?? "565789031303932"
-const GRAPH_VERSION = "v21.0"
+const GRAPH_VERSION = "v25.0"
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`
 
 const DEFAULT_WINDOW_DAYS = 30
@@ -169,14 +179,34 @@ async function fetchCampaignGoals(): Promise<Map<string, string>> {
   return map
 }
 
+/** 🔴 Metrics and `actions` MUST be fetched in two separate calls. Root-caused
+ *  2026-10-21: since ~2026-09-24, a level=campaign&time_increment=1 request that includes
+ *  `actions` alongside spend/impressions comes back with every row's spend="0",
+ *  impressions="0" and `reach` silently dropped — HTTP 200, no error. The identical
+ *  request without `actions` returns correct numbers (verified: 2026-09-22 = 267.24 +
+ *  321.57 = 588.81, matching Ads Manager to the paisa). Meta also silently serves these
+ *  calls as v26.0 regardless of the requested version. Never re-merge the field lists. */
 async function fetchInsights(since: string, until: string): Promise<InsightRow[]> {
   const timeRange = encodeURIComponent(JSON.stringify({ since, until }))
-  const url =
+  const base =
     `${GRAPH_BASE}/act_${AD_ACCOUNT_ID}/insights` +
-    `?level=campaign&time_increment=1&time_range=${timeRange}` +
-    `&fields=campaign_id,campaign_name,spend,impressions,clicks,reach,actions` +
-    `&limit=100&access_token=${META_TOKEN}`
-  return await fetchAllPages<InsightRow>(url)
+    `?level=campaign&time_increment=1&time_range=${timeRange}&limit=100&access_token=${META_TOKEN}`
+  const [metrics, acts] = await Promise.all([
+    fetchAllPages<InsightRow>(`${base}&fields=campaign_id,campaign_name,spend,impressions,clicks,reach`),
+    fetchAllPages<{ campaign_id: string; date_start: string; actions?: InsightRow["actions"] }>(`${base}&fields=campaign_id,actions`),
+  ])
+  const actionsByKey = new Map(acts.map((a) => [`${a.campaign_id}|${a.date_start}`, a.actions]))
+  const out = metrics.map((m) => ({ ...m, actions: actionsByKey.get(`${m.campaign_id}|${m.date_start}`) }))
+  // Actions-only days (no delivery, but Meta attributes a late conversation to the
+  // campaign — e.g. NCR 2026-09-23, 2026-10-02) are kept as ₹0-spend rows so `results`
+  // totals keep matching Ads Manager.
+  const seen = new Set(metrics.map((m) => `${m.campaign_id}|${m.date_start}`))
+  for (const a of acts) {
+    if (!seen.has(`${a.campaign_id}|${a.date_start}`) && a.actions?.length) {
+      out.push({ campaign_id: a.campaign_id, date_start: a.date_start, spend: "0", impressions: "0", actions: a.actions })
+    }
+  }
+  return out
 }
 
 /** Meta's insights don't return a single "results" number — that's a UI-computed metric
@@ -209,6 +239,48 @@ function pickResult(
   }
   const n = Math.round(Number(best.value))
   return { results: Number.isFinite(n) ? n : null, indicator: best.action_type }
+}
+
+/** Compact raw-row sample for logs/errors: field names present + the money/delivery
+ *  values exactly as Meta sent them. No token, no PII. */
+function rawSample(insights: InsightRow[], n = 3): string {
+  return JSON.stringify(
+    insights.slice(0, n).map((r) => ({
+      keys: Object.keys(r),
+      campaign_id: r.campaign_id,
+      date_start: r.date_start,
+      spend: r.spend,
+      impressions: r.impressions,
+    })),
+  )
+}
+
+/** Runs only when the all-zero guard trips. Captures who the token is, what it may do,
+ *  and what Meta reports for the same window at ACCOUNT level, so the cause is visible
+ *  in ad_sync_runs.error without anyone needing the secret. Never throws. */
+async function diagnose(since: string, until: string): Promise<string> {
+  const timeRange = encodeURIComponent(JSON.stringify({ since, until }))
+  const probes: Record<string, string> = {
+    me: `${GRAPH_BASE}/me?fields=id,name`,
+    permissions: `${GRAPH_BASE}/me/permissions`,
+    account: `${GRAPH_BASE}/act_${AD_ACCOUNT_ID}?fields=name,account_status,disable_reason,amount_spent,currency,timezone_name`,
+    account_insights: `${GRAPH_BASE}/act_${AD_ACCOUNT_ID}/insights?fields=spend,impressions,reach&time_range=${timeRange}`,
+    v_camp_total: `${GRAPH_BASE}/act_${AD_ACCOUNT_ID}/insights?level=campaign&fields=campaign_id,spend,impressions&time_range=${timeRange}`,
+    v_camp_daily_min: `${GRAPH_BASE}/act_${AD_ACCOUNT_ID}/insights?level=campaign&time_increment=1&fields=campaign_id,spend,impressions&time_range=${timeRange}&limit=3`,
+    v_camp_daily_reach: `${GRAPH_BASE}/act_${AD_ACCOUNT_ID}/insights?level=campaign&time_increment=1&fields=campaign_id,spend,impressions,reach&time_range=${timeRange}&limit=3`,
+    v_camp_daily_actions: `${GRAPH_BASE}/act_${AD_ACCOUNT_ID}/insights?level=campaign&time_increment=1&fields=campaign_id,spend,impressions,actions&time_range=${timeRange}&limit=3`,
+    v_acct_daily: `${GRAPH_BASE}/act_${AD_ACCOUNT_ID}/insights?time_increment=1&fields=spend,impressions&time_range=${timeRange}&limit=3`,
+  }
+  const out: Record<string, unknown> = {}
+  for (const [k, u] of Object.entries(probes)) {
+    try {
+      const res = await fetch(`${u}${u.includes("?") ? "&" : "?"}access_token=${META_TOKEN}`)
+      out[k] = { status: res.status, body: (await res.text()).replace(/"actions":\[[^\]]*\]/g, '"actions":[…]').slice(0, 500) }
+    } catch (e) {
+      out[k] = { error: String(e) }
+    }
+  }
+  return JSON.stringify(out)
 }
 
 async function upsertInsights(rows: AdInsightsUpsertRow[]): Promise<void> {
@@ -266,6 +338,8 @@ Deno.serve(async (req) => {
   try {
     const [campaigns, insights, goals] = await Promise.all([fetchCampaigns(), fetchInsights(since, until), fetchCampaignGoals()])
 
+    console.log(`sync-meta-ads ${today}: graph ${GRAPH_VERSION} returned ${insights.length} insight rows; sample ${rawSample(insights)}`)
+
     const rows: AdInsightsUpsertRow[] = insights.map((r) => {
       const meta = campaigns.get(r.campaign_id)
       const { results, indicator } = pickResult(r.actions, goals.get(r.campaign_id))
@@ -284,6 +358,17 @@ Deno.serve(async (req) => {
         effective_status_at_sync: status,
       }
     })
+
+    // 🔴 All-zero guard — see file header. Meta omits no-delivery days, so rows that
+    // exist but carry no spend and no impressions anywhere are a malformed response.
+    // Writing them would overwrite real history with ₹0. Fail loudly instead.
+    const anyDelivery = rows.some((r) => r.spend_inr > 0 || (r.impressions ?? 0) > 0)
+    if (rows.length > 0 && !anyDelivery) {
+      throw new Error(
+        `Graph ${GRAPH_VERSION} returned ${rows.length} campaign-day rows, all with 0 spend and 0 impressions ` +
+          `— refusing to overwrite ad_insights. Sample: ${rawSample(insights)} Diagnose: ${await diagnose(since, until)}`,
+      )
+    }
 
     await upsertInsights(rows)
     await writeSyncRun(since, until, rows.length, true, null)
@@ -338,7 +423,9 @@ Deno.serve(async (req) => {
     const msg = String(err)
     console.error("sync-meta-ads error:", msg)
     await writeSyncRun(since, until, 0, false, msg)
-    return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { "Content-Type": "application/json" } })
+    // Public endpoint (verify_jwt=false): full detail lives in ad_sync_runs.error (admin-only
+    // RLS) and the function logs, never in the response body.
+    return new Response(JSON.stringify({ ok: false, error: "sync failed — see ad_sync_runs" }), { status: 500, headers: { "Content-Type": "application/json" } })
   }
 })
 
