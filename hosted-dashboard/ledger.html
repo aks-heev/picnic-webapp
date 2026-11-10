@@ -81,7 +81,7 @@
   .sec h2 { font-family: var(--serif); font-weight: 400; font-size: 18px; margin: 0; flex: 1; }
   .sec .chip { min-height: 36px; font-size: 13px; }
   .row { display: flex; gap: 10px; align-items: baseline; padding: 11px 2px; border-top: 1px solid var(--hair); cursor: pointer; }
-  .row:first-child { border-top: 0; }
+  .thead + .row { border-top: 0; }
   .row .t { flex: 1; min-width: 0; }
   .row .t b { font-weight: 600; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .t small { color: var(--muted); font-size: 12.5px; }
@@ -93,6 +93,38 @@
   .voidbox button { font: inherit; font-size: 14px; min-height: 44px; border-radius: var(--r-sm); padding: 0 14px; cursor: pointer; border: 1px solid var(--hair); background: var(--card); color: var(--ink-2); margin-right: 6px; }
   .voidbox button.danger { background: var(--red); border-color: var(--red); color: #fff; }
   .empty { color: var(--muted); text-align: center; padding: 18px 0; font-size: 13.5px; }
+  .filters, .thead, .sum, .row .d { display: none; }
+
+  /* ---------- desktop: entry form beside a filterable ledger table ---------- */
+  @media (min-width: 900px) {
+    .wrap { max-width: 1240px; padding: 22px 22px 40px; }
+    .mast h1 { font-size: 28px; }
+    .bal { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; overflow: visible; margin: 0 0 16px; padding: 0; }
+    .bal .b { padding: 13px 16px; min-width: 0; border-radius: var(--r); }
+    .bal .b .v { font-size: 21px; }
+    .cols { display: grid; grid-template-columns: 372px minmax(0, 1fr); gap: 18px; align-items: start; }
+    .side .card { margin-bottom: 0; }
+    .chip { min-height: 36px; font-size: 13.5px; } .chip.sug { min-height: 32px; }
+    .chips { gap: 6px; margin-bottom: 12px; } #f .field, .amt, .seg { margin-bottom: 12px; }
+    .seg button { min-height: 40px; } .save { min-height: 48px; }
+    .amt input { font-size: 26px; padding: 5px 0; }
+    .filters { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+    .filters .field { margin: 0; min-height: 40px; padding: 7px 10px; font-size: 14px; width: auto; background: var(--card); }
+    .filters #q { flex: 1; min-width: 180px; }
+    .sum { display: block; color: var(--muted); font-size: 12.5px; margin: 0 2px 8px; font-variant-numeric: tabular-nums; }
+    #list.card { padding: 0 16px; }
+    .thead, .row { display: grid; grid-template-columns: 62px minmax(0, 2.2fr) minmax(0, 1.5fr) minmax(0, 1.2fr) 58px 116px; gap: 12px; align-items: baseline; }
+    .thead { padding: 11px 2px 9px; font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--hair); position: sticky; top: 0; background: var(--card); border-radius: var(--r) var(--r) 0 0; }
+    .thead span:last-child, .row .a { text-align: right; }
+    .row { padding: 9px 2px; font-size: 14px; }
+    .row:hover { background: var(--bg); }
+    .row .t small { display: none; }
+    .row .d { display: block; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+    .row .d.dt { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .row .rv { display: inline-block; font-size: 11px; background: var(--amber-bg); color: var(--amber); border-radius: 6px; padding: 1px 6px; margin-left: 6px; vertical-align: 1px; }
+    .voidbox { max-width: 520px; }
+  }
+  @media (max-width: 899px) { .row .rv { display: none; } }
 </style>
 </head>
 <body>
@@ -135,9 +167,10 @@ const EXPENSE_CATS = [
 ];
 const RECEIPT_CATS = [['Booking income', 'Booking'], ['Airbnb payouts', 'Airbnb payout'], ['Razorpay & UPI receipts', 'Razorpay / UPI'], ['Uncategorised', 'Other']];
 const QKEY = 'tps-ledger-queue-v1';
+const WIDE = window.matchMedia('(min-width: 900px)');
 
 const S = { acc: null, uid: null, me: null, accounts: [], balances: [], entries: [], bookings: [],
-            mode: 'out', cat: null, account: null, to: null, date: istDay(), mine: true, openId: null, saving: false };
+            mode: 'out', cat: null, account: null, to: null, date: istDay(), mine: true, openId: null, saving: false, q: '', fAcc: '', fType: '', fReview: false };
 
 /* ---------- offline queue ---------- */
 const qRead = () => { try { return JSON.parse(localStorage.getItem(QKEY) || '[]'); } catch (e) { return []; } };
@@ -189,7 +222,7 @@ async function loadData() {
   const [a, b, e, k] = await Promise.all([
     sb.from('money_accounts').select('code,label,kind,sort,active').order('sort'),
     sb.from('money_account_balances').select('code,balance'),
-    sb.from('money_entries').select('id,entry_date,account,direction,amount,kind,category,description,booking_id,counter_account,source,created_by,created_at,voided_at,void_reason')
+    sb.from('money_entries').select('id,entry_date,account,direction,amount,kind,category,description,booking_id,counter_account,source,created_by,created_at,voided_at,void_reason,needs_review')
       .order('entry_date', { ascending: false }).order('id', { ascending: false }).limit(1000),
     sb.from('bookings').select('id,full_name,preferred_date,checkout_date').eq('region', 'ncr').eq('confirmed', true)
       .gte('preferred_date', from).lte('preferred_date', to).order('preferred_date', { ascending: false }),
@@ -226,6 +259,7 @@ function renderShell() {
     <div class="mast"><h1>Money <em>book</em></h1><a href="/">Dashboards</a><button type="button" onclick="signOut()">Sign out</button></div>
     <div id="bal" class="bal"></div>
     <div id="queue"></div>
+    <div class="cols"><div class="side">
     <form class="card" id="f" novalidate>
       <div class="seg" role="group" aria-label="Entry type">
         <button type="button" data-mode="out">Spent</button><button type="button" data-mode="in">Received</button><button type="button" data-mode="xfer">Transfer</button>
@@ -243,8 +277,22 @@ function renderShell() {
       <button class="save" type="submit" id="save">Save</button>
       <div class="msg" id="msg" role="status"></div>
     </form>
-    <div class="sec"><h2>Recent</h2><button type="button" class="chip" id="mine"></button></div>
-    <div class="card" id="list"></div>`;
+    </div><div class="main">
+    <div class="sec"><h2 id="list-h">Recent</h2><button type="button" class="chip" id="mine"></button></div>
+    <div class="filters">
+      <input class="field" id="q" type="search" placeholder="Search description, category or booking #" aria-label="Search entries" />
+      <select class="field" id="f-acc" aria-label="Account"></select>
+      <select class="field" id="f-type" aria-label="Type"><option value="">All types</option><option value="expense">Spent</option><option value="receipt">Received</option><option value="transfer">Transfers</option><option value="other">Opening, deposit, review</option></select>
+      <button type="button" class="chip" id="f-rev" aria-pressed="false">Needs review</button>
+    </div>
+    <div class="sum" id="sum"></div>
+    <div class="card" id="list"></div>
+    </div></div>`;
+  $('f-acc').innerHTML = `<option value="">All accounts</option>` + S.accounts.map(a => `<option value="${esc(a.code)}">${esc(shortLabel(a.code))}</option>`).join('');
+  $('q').addEventListener('input', () => { S.q = $('q').value.trim().toLowerCase(); renderList(); });
+  $('f-acc').addEventListener('change', () => { S.fAcc = $('f-acc').value; renderList(); });
+  $('f-type').addEventListener('change', () => { S.fType = $('f-type').value; renderList(); });
+  $('f-rev').addEventListener('click', () => { S.fReview = !S.fReview; renderList(); });
   $('f').addEventListener('submit', onSave);
   document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => { S.mode = b.dataset.mode; S.cat = null; S.to = null; say(''); renderForm(); }));
   $('mine').addEventListener('click', () => { S.mine = !S.mine; renderList(); });
@@ -313,17 +361,36 @@ window.qRetry = ref => { const q = qRead(); q.forEach(i => { if (i.row.source_re
 window.qDrop = ref => { qWrite(qRead().filter(i => i.row.source_ref !== ref)); renderQueue(); say(''); };
 
 function renderList() {
+  const wide = WIDE.matches;
   $('mine').textContent = S.mine && S.me ? 'Showing mine' : 'Showing all';
   $('mine').classList.toggle('on', S.mine && !!S.me);
-  const rows = S.entries.filter(x => !(S.mine && S.me) || x.account === S.me || x.counter_account === S.me || x.created_by === S.uid).slice(0, 40);
-  if (!rows.length) { $('list').innerHTML = `<div class="empty">Nothing here yet.</div>`; return; }
-  $('list').innerHTML = rows.map(x => {
+  $('list-h').textContent = wide ? 'Ledger' : 'Recent';
+  $('f-rev').classList.toggle('on', S.fReview); $('f-rev').setAttribute('aria-pressed', S.fReview);
+  let rows = S.entries.filter(x => !(S.mine && S.me) || x.account === S.me || x.counter_account === S.me || x.created_by === S.uid);
+  if (wide) {                                             // filters exist only on the desktop layout
+    if (S.fAcc) rows = rows.filter(x => x.account === S.fAcc || x.counter_account === S.fAcc);
+    if (S.fType) rows = rows.filter(x => S.fType === 'other' ? !['expense', 'receipt', 'transfer'].includes(x.kind) : x.kind === S.fType);
+    if (S.fReview) rows = rows.filter(x => x.needs_review && !x.voided_at);
+    if (S.q) rows = rows.filter(x => [x.description, x.category, x.booking_id ? '#' + x.booking_id : '', shortLabel(x.account)].join(' ').toLowerCase().includes(S.q));
+    const live = rows.filter(x => !x.voided_at);
+    const tin = live.filter(x => x.direction === 'in').reduce((t, x) => t + Number(x.amount), 0);
+    const tout = live.filter(x => x.direction === 'out').reduce((t, x) => t + Number(x.amount), 0);
+    $('sum').textContent = `${rows.length} ${rows.length === 1 ? 'entry' : 'entries'} · in ${inr(tin)} · out ${inr(tout)}` + (rows.length > 400 ? ' · showing the latest 400' : '');
+  }
+  rows = rows.slice(0, wide ? 400 : 40);
+  const head = `<div class="thead"><span>Date</span><span>Description</span><span>Category</span><span>Account</span><span>Booking</span><span>Amount</span></div>`;
+  if (!rows.length) { $('list').innerHTML = head + `<div class="empty">${wide ? 'No entries match.' : 'Nothing here yet.'}</div>`; return; }
+  $('list').innerHTML = head + rows.map(x => {
     const title = x.description || x.category || x.kind;
     const who = x.counter_account ? `${shortLabel(x.account)} → ${shortLabel(x.counter_account)}` : shortLabel(x.account);
     const sub = [niceDate(x.entry_date), who, x.description ? x.category : null, x.booking_id ? '#' + x.booking_id : null, x.voided_at ? 'voided: ' + x.void_reason : null].filter(Boolean).join(' · ');
     const open = S.openId === x.id && !x.voided_at;
     return `<div class="row${x.voided_at ? ' void' : ''}" data-id="${x.id}" tabindex="0" role="button" aria-expanded="${open}">
-        <div class="t"><b>${esc(title)}</b><small>${esc(sub)}</small></div>
+        <span class="d dt">${esc(niceDate(x.entry_date))}</span>
+        <div class="t"><b>${esc(title)}${x.needs_review && !x.voided_at ? '<span class="rv">review</span>' : ''}</b><small>${esc(sub)}</small></div>
+        <span class="d">${esc(x.voided_at ? 'voided: ' + x.void_reason : (x.category || ''))}</span>
+        <span class="d">${esc(who)}</span>
+        <span class="d">${x.booking_id ? '#' + x.booking_id : ''}</span>
         <div class="a ${x.direction === 'in' ? 'in' : ''}">${x.direction === 'in' ? '+' : '−'}${inr(x.amount)}</div></div>` +
       (open ? `<div class="voidbox"><input class="field" id="vr" maxlength="120" placeholder="Why is this entry wrong?" aria-label="Reason for voiding" />
         <button type="button" class="danger" onclick="voidEntry(${x.id})">Void this entry</button><button type="button" onclick="closeRow()">Cancel</button>
@@ -335,6 +402,7 @@ function renderList() {
     r.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
   });
 }
+WIDE.addEventListener('change', () => { if ($('list')) renderList(); });
 window.closeRow = () => { S.openId = null; renderList(); };
 window.voidEntry = async id => {
   const reason = ($('vr').value || '').trim();
