@@ -16,6 +16,7 @@
 -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+<script src="/region.js"></script>
 <style>
   :root {
     color-scheme: dark;
@@ -391,7 +392,8 @@
 /* ============ CONFIG ============ */
 const SUPABASE_URL  = "https://evmftrogyzoudiccqkya.supabase.co";
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2bWZ0cm9neXpvdWRpY2Nxa3lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTM5OTUsImV4cCI6MjA5NTI4OTk5NX0.ka2tLAY7xpe08X8TlNVgft4V__Qv7Ol27rd0daOtI4I";
-const ALLOWED = ["aksh.eeev@gmail.com"];
+/* RBAC v2: owners only (Aksheev, Neeraj, Adhiraj). The ad/analytics tables are owner-only in RLS too. */
+const PAGE_ROLES = ["owner"];
 const LEAD_CONFIDENCE_MIN = 20; // don't render a hard gate verdict below this many leads
 const FATIGUE_FREQUENCY   = 3.5;
 const TARGET_COST_PER_CONV = 25;
@@ -1068,8 +1070,9 @@ function signInScreen(message) {
 async function boot() {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { signInScreen(""); return; }
-  const email = ((session.user && session.user.email) || "").trim().toLowerCase();
-  if (!ALLOWED.includes(email)) {
+  const acc = await TPS_REGION.authorize(sb, { roles: PAGE_ROLES });
+  if (acc === "redirect") return;
+  if (!acc) {
     await sb.auth.signOut();
     signInScreen("That account does not have access to this dashboard.");
     return;

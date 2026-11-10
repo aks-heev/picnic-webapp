@@ -6,6 +6,7 @@
 <meta name="robots" content="noindex, nofollow" />
 <title>The Picnic Stories — Dashboards</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+<script src="/region.js"></script>
 <style>
   :root {
     color-scheme: light;
@@ -53,6 +54,16 @@
   .dcard p { color: var(--muted); font-size: 12.5px; margin: 0; line-height: 1.45; flex: 1; }
   .dcard .go { margin-top: 10px; font-size: 12px; font-weight: 600; color: var(--terracotta); }
   .state { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .mast .btn + .btn { margin-left: 0; }
+  .pw { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r); padding: 16px 18px; margin-bottom: 14px; max-width: 420px; }
+  .pw h2 { font-family: var(--serif); font-weight: 400; font-size: 17px; margin: 0 0 10px; }
+  .pw label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-2); margin: 0 0 5px; }
+  .pw input { width: 100%; box-sizing: border-box; padding: 9px 11px; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--hair); border-radius: 9px; margin-bottom: 10px; }
+  .pw .row { display: flex; gap: 8px; align-items: center; }
+  .pw .row .btn { margin-left: 0; }
+  .pw .primary { background: var(--terracotta); color: #fff; border-color: var(--terracotta); }
+  .pw-msg { font-size: 12.5px; margin-top: 8px; min-height: 16px; }
+  .pw-msg.err { color: var(--red); } .pw-msg.ok { color: var(--olive, #5c6b42); }
 </style>
 </head>
 <body>
@@ -73,7 +84,7 @@
    ============================================================ */
 const SUPABASE_URL = 'https://evmftrogyzoudiccqkya.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2bWZ0cm9neXpvdWRpY2Nxa3lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTM5OTUsImV4cCI6MjA5NTI4OTk5NX0.ka2tLAY7xpe08X8TlNVgft4V__Qv7Ol27rd0daOtI4I';
-const ALLOWED = ['aksh.eeev@gmail.com'];
+/* RBAC v2: access comes from the database (rpc my_access via region.js), not an email list. */
 
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: { persistSession: true, autoRefreshToken: true },
@@ -120,15 +131,19 @@ function signInScreen(message) {
 async function signOut() { await sb.auth.signOut(); location.reload(); }
 window.signOut = signOut;
 
-function renderHub(email) {
+function renderHub(email, acc) {
+  const isOwner = acc.role === 'owner';
+  const scope = isOwner ? 'all regions' : (acc.regions || []).map(r => r === 'ncr' ? 'Gurugram & Delhi' : 'Jaipur').join(', ');
   document.getElementById('root').innerHTML = `
     <div class="mast">
       <div class="brand">
         <h1>The Picnic <em>Stories</em></h1>
-        <div class="scope">Signed in as ${esc(email)}</div>
+        <div class="scope">Signed in as ${esc(acc.display_name || email)} · ${esc(acc.role)} · ${esc(scope)}</div>
       </div>
+      <button class="btn" onclick="togglePw()">Change password</button>
       <button class="btn" onclick="signOut()">Sign out</button>
     </div>
+    <div id="pw-box"></div>
     <div class="cards">
       <a class="dcard" href="/bookings">
         <div class="icon">📒</div>
@@ -139,24 +154,24 @@ function renderHub(email) {
       <a class="dcard" href="/revenue-dashboard">
         <div class="icon">📒</div>
         <h2>Business dashboard (everything)</h2>
-        <p>Revenue, bookings, occupancy and expenses on one page. Switch between
-           Gurugram &amp; Delhi and Jaipur at the top.</p>
+        <p>Revenue, bookings, occupancy and expenses on one page.${isOwner ? ` Switch between
+           Gurugram &amp; Delhi and Jaipur at the top.` : ''}</p>
         <div class="go">Open →</div>
       </a>
-      <a class="dcard" href="/meta-dashboard">
+      ${isOwner ? `<a class="dcard" href="/meta-dashboard">
         <div class="icon">📣</div>
         <h2>Meta Ads dashboard</h2>
         <p>Spend, delivery health, pixel funnel and ad-set performance for the
            account's paid campaigns. The ad-spend and performance view.</p>
         <div class="go">Open →</div>
-      </a>
-      <a class="dcard" href="/growth">
+      </a>` : ''}
+      ${isOwner ? `<a class="dcard" href="/growth">
         <div class="icon">📈</div>
         <h2>Growth</h2>
         <p>Visitors, WhatsApp taps and the booking path from PostHog, beside
            bookings, revenue and ad spend by channel, plus Google search.</p>
         <div class="go">Open →</div>
-      </a>
+      </a>` : ''}
       <a class="dcard" href="/calendar">
         <div class="icon">📅</div>
         <h2>Bookings calendar</h2>
@@ -167,18 +182,51 @@ function renderHub(email) {
     </div>`;
 }
 
-/* Same ALLOWED-list check as index.html — the database decides who can READ
-   (RLS), this only decides who gets shown a dashboard instead of an error. */
+/* Change password for the signed-in account (Supabase Auth updateUser). */
+function togglePw() {
+  const box = document.getElementById('pw-box');
+  if (box.innerHTML) { box.innerHTML = ''; return; }
+  box.innerHTML = `
+    <form class="pw" id="pw-form" autocomplete="off">
+      <h2>Change password</h2>
+      <label for="pw-new">New password (at least 8 characters)</label>
+      <input id="pw-new" type="password" autocomplete="new-password" minlength="8" required />
+      <label for="pw-new2">Repeat new password</label>
+      <input id="pw-new2" type="password" autocomplete="new-password" minlength="8" required />
+      <div class="row"><button class="btn primary" type="submit" id="pw-go">Save password</button><button class="btn" type="button" onclick="togglePw()">Cancel</button></div>
+      <div class="pw-msg" id="pw-msg"></div>
+    </form>`;
+  document.getElementById('pw-form').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const a = document.getElementById('pw-new').value, b = document.getElementById('pw-new2').value;
+    const msg = document.getElementById('pw-msg'), btn = document.getElementById('pw-go');
+    msg.className = 'pw-msg';
+    if (a.length < 8) { msg.className = 'pw-msg err'; msg.textContent = 'Use at least 8 characters.'; return; }
+    if (a !== b) { msg.className = 'pw-msg err'; msg.textContent = 'The two passwords do not match.'; return; }
+    btn.disabled = true; btn.textContent = 'Saving…';
+    const { error } = await sb.auth.updateUser({ password: a });
+    btn.disabled = false; btn.textContent = 'Save password';
+    if (error) { msg.className = 'pw-msg err'; msg.textContent = error.message || 'Could not change the password.'; return; }
+    msg.className = 'pw-msg ok'; msg.textContent = 'Password changed. Use it next time you sign in.';
+    document.getElementById('pw-new').value = ''; document.getElementById('pw-new2').value = '';
+  });
+}
+window.togglePw = togglePw;
+
+/* The database decides who can READ (RLS); this only decides who gets shown
+   the hub instead of an error, and which cards they see. */
 async function boot() {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { signInScreen(''); return; }
   const email = (session.user && session.user.email) || '';
-  if (!ALLOWED.includes(email.trim().toLowerCase())) {
+  const acc = await TPS_REGION.authorize(sb);
+  if (acc === 'redirect') return;
+  if (!acc) {
     await sb.auth.signOut();
     signInScreen('That account does not have access to these dashboards.');
     return;
   }
-  renderHub(email);
+  renderHub(email, acc);
 }
 
 sb.auth.onAuthStateChange((event) => {

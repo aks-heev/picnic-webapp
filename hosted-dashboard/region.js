@@ -8,6 +8,11 @@
 
    City values must match venues.city exactly (CLAUDE.md: use venues.city for
    location routing, never the venues.team_id → teams.city join).
+
+   ACCESS (RBAC v2, docs/RBAC_PLAN_v2_2026-11-10.md): TPS_REGION.authorize()
+   asks the database who the signed-in person is (rpc my_access) and limits
+   the switch to their regions. It is the front door only: what each person
+   can READ is decided by the rbac_* RLS policies, not by this file.
    ============================================================ */
 (function () {
   const REGIONS = {
@@ -46,14 +51,39 @@
       if (!c) return key === 'ncr';
       return REGIONS[key].cities.some(x => x.toLowerCase() === c);
     },
+    access: null,
+    allowed: Object.keys(REGIONS),
+    /* Returns the my_access() object, null when this account may not use the
+       page, or 'redirect' when it is reloading into one of the person's own
+       regions. opts.roles limits the page to those roles. */
+    async authorize(sb, opts) {
+      let acc = null;
+      try {
+        const { data, error } = await sb.rpc('my_access');
+        if (!error) acc = data;
+      } catch (e) { acc = null; }
+      if (!acc || !acc.role) return null;
+      if (opts && opts.roles && !opts.roles.includes(acc.role)) return null;
+      const allowed = acc.role === 'owner'
+        ? Object.keys(REGIONS)
+        : (acc.regions || []).filter(r => REGIONS[r]);
+      if (!allowed.length) return null;
+      this.access = acc;
+      this.allowed = allowed;
+      if (!allowed.includes(key)) { this.set(allowed[0], true); return 'redirect'; }
+      return acc;
+    },
     switcherHtml() {
+      const shown = Object.entries(REGIONS).filter(([k]) => this.allowed.includes(k));
+      if (shown.length < 2) return '';
       return `<span class="rgn" role="group" aria-label="Region">` +
-        Object.entries(REGIONS).map(([k, r]) =>
+        shown.map(([k, r]) =>
           `<button type="button" class="${k === key ? 'on' : ''}" aria-pressed="${k === key}" ` +
           `onclick="TPS_REGION.set('${k}')">${esc(r.short)}</button>`).join('') + `</span>`;
     },
-    set(k) {
-      if (!REGIONS[k] || k === key) return;
+    set(k, force) {
+      if (!REGIONS[k] || (k === key && !force)) return;
+      if (!this.allowed.includes(k)) return;
       try { localStorage.setItem(KEY, k); } catch (e) {}
       const u = new URL(location.href);
       u.searchParams.set('region', k);

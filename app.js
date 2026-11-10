@@ -7752,17 +7752,67 @@ async function handleAdminLogout() {
   showToast('Logged out', 'success')
 }
 
+// RBAC v2 (docs/RBAC_PLAN_v2_2026-11-10.md): who may use the admin panel comes from
+// the database (rpc my_access → app_users), not from VITE_ADMIN_EMAIL. Cached per user
+// id so the TOKEN_REFRESHED events that re-run applyAuthState don't re-query.
+// UI gating here is cosmetic; every action is also enforced by RLS / function guards.
+let admAccessCache = { uid: null, acc: null }
+const ADM_OWNER_ONLY_TABS = ['staff-ops', 'packages', 'add-ons', 'hero-image', 'teams']
+async function admFetchAccess(session) {
+  const uid = session?.user?.id || null
+  if (!uid) return null
+  if (admAccessCache.uid === uid) return admAccessCache.acc
+  let acc = null
+  try {
+    const { data, error } = await supabase.rpc('my_access')
+    if (!error && data && data.role) acc = data
+  } catch (e) { acc = null }
+  admAccessCache = { uid, acc }
+  return acc
+}
+function admApplyAccess(acc) {
+  appState.access = acc
+  const isOwner = acc?.role === 'owner'
+  // Tabs a manager cannot use (global catalogue, staff links, site settings).
+  ADM_OWNER_ONLY_TABS.forEach(tab => {
+    document.querySelectorAll(`.adm-nav [data-tab="${tab}"]`).forEach(b => { b.hidden = !isOwner })
+  })
+  // Region filter: a single-region user is pinned to it and the pills are hidden.
+  const regions = isOwner ? ['ncr', 'jaipur'] : (acc?.regions || [])
+  const pills = document.querySelector('.adm-side-team')
+  if (regions.length === 1) {
+    const team = regions[0] === 'jaipur' ? 'jaipur' : 'gurugram'
+    if (adminTeamFilter !== team) {
+      adminTeamFilter = team
+      document.querySelectorAll('.adm-team-pill').forEach(p => p.classList.toggle('active', (p.dataset.team || null) === team))
+    }
+    if (pills) pills.hidden = true
+  } else if (pills) {
+    pills.hidden = false
+  }
+}
+
 // Toggle admin UI based on auth state.
 // SECURITY: only set appState.session and show the dashboard if the session
-// belongs to the admin email. OTP-verified customers trigger the same
-// onAuthStateChange listener — this check keeps them out of the admin panel.
+// belongs to someone with an app_users role. OTP-verified customers trigger the same
+// onAuthStateChange listener — they have no role, so this keeps them out of the admin panel.
+let admAuthSeq = 0
 function applyAuthState(session) {
+  const seq = ++admAuthSeq
+  if (!session) { admAccessCache = { uid: null, acc: null }; applyAuthStateResolved(null, null); return }
+  admFetchAccess(session).then(acc => {
+    if (seq !== admAuthSeq) return   // a newer auth event already won
+    applyAuthStateResolved(session, acc)
+  })
+}
+function applyAuthStateResolved(session, acc) {
   const adminLogin     = document.getElementById('admin-login')
   const adminDashboard = document.getElementById('admin-dashboard')
 
-  const isAdmin = !!(session && session.user?.email === ADMIN_EMAIL)
+  const isAdmin = !!(session && acc)
 
   if (isAdmin) {
+    admApplyAccess(acc)
     appState.session = session
     if (adminLogin)     adminLogin.classList.add('hidden')
     if (adminDashboard) adminDashboard.classList.remove('hidden')
@@ -7787,6 +7837,7 @@ function applyAuthState(session) {
     }
   } else {
     appState.session = null   // never let a customer session bleed into admin state
+    appState.access = null
     if (adminLogin)     adminLogin.classList.remove('hidden')
     if (adminDashboard) adminDashboard.classList.add('hidden')
     const adminForm = document.getElementById('admin-login-form')
@@ -14398,7 +14449,7 @@ function abkApplyPrefill() {
 // targetOrigin doesn't match the parent — and the payload is ids and dates, no guest data.
 // 🔴 A new dashboard domain must be added here AND to the frame-ancestors header for
 // /admin in vercel.json, or the calendar's dialog shows a refused frame.
-const ADMIN_EMBED_PARENTS = ['https://picnic-dashboard-nu.vercel.app']
+const ADMIN_EMBED_PARENTS = ['https://picnic-dashboard-nu.vercel.app', 'https://dashboard.picnicstories.com']
 const ADMIN_EMBED = typeof window !== 'undefined' && window.parent !== window &&
   new URLSearchParams(location.search).get('embed') === '1'
 function abkNotifyEmbedParent(id, date, checkout, kind) {

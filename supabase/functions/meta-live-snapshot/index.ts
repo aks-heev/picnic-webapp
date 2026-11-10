@@ -15,9 +15,10 @@
  * verify_jwt only proves the bearer is a validly-signed project JWT, and the public anon
  * key (embedded in every page's source) IS one. Verified live 2026-09-23: v4 returned live
  * audience data to `Authorization: Bearer <anon key>`. So this function additionally
- * resolves the caller via /auth/v1/user and requires the admin email — the same single
- * email every RLS policy on bookings/venues/ad_insights/ad_sync_runs is gated on. Keep
- * verify_jwt=true as well (it rejects unsigned garbage before any code runs).
+ * asks the database who the caller is (rpc my_access, with the caller's own bearer) and
+ * requires role = 'owner' — RBAC v2 (docs/RBAC_PLAN_v2_2026-11-10.md). The anon key alone
+ * gets `permission denied` from my_access, so it fails closed. Keep verify_jwt=true as
+ * well (it rejects unsigned garbage before any code runs).
  *
  * 🔴 CORS — this is called cross-origin from picnic-dashboard-nu.vercel.app. OPTIONS must
  * short-circuit before the auth check (browsers never send credentials on a preflight)
@@ -45,9 +46,6 @@ const PIXEL_ID = Deno.env.get("META_PIXEL_ID") ?? "1366746648648321"
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "https://evmftrogyzoudiccqkya.supabase.co"
 const GRAPH_VERSION = "v21.0"
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`
-
-// Same single admin email every RLS policy on the dashboard tables checks.
-const ALLOWED_EMAILS = ["aksh.eeev@gmail.com"]
 
 const CACHE_TTL_MS = 7 * 60 * 1000
 const FATIGUE_FREQUENCY = 3.5
@@ -275,16 +273,19 @@ async function loadAudiences() {
   }
 }
 
-/** Resolve the bearer to a real signed-in user and require the admin email. */
+/** Ask the database who the bearer is (app_users via my_access) and require an owner. */
 async function callerIsAdmin(req: Request): Promise<boolean> {
   const auth = req.headers.get("Authorization") ?? ""
   if (!auth.startsWith("Bearer ")) return false
   const apikey = Deno.env.get("SUPABASE_ANON_KEY") ?? req.headers.get("apikey") ?? ""
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { Authorization: auth, apikey } })
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/my_access`, {
+    method: "POST",
+    headers: { Authorization: auth, apikey, "Content-Type": "application/json" },
+    body: "{}",
+  })
   if (!res.ok) return false
-  const user = await res.json().catch(() => null)
-  const email = String(user?.email ?? "").trim().toLowerCase()
-  return email !== "" && ALLOWED_EMAILS.includes(email)
+  const acc = await res.json().catch(() => null)
+  return acc?.role === "owner"
 }
 
 const SECTIONS: Record<string, () => Promise<unknown>> = {
@@ -301,7 +302,7 @@ Deno.serve(async (req) => {
   const jsonHeaders = { "Content-Type": "application/json", ...CORS_HEADERS }
   const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: jsonHeaders })
 
-  if (!(await callerIsAdmin(req))) return reply({ error: "forbidden — admin sign-in required" }, 403)
+  if (!(await callerIsAdmin(req))) return reply({ error: "forbidden — owner sign-in required" }, 403)
   if (!META_TOKEN) return reply({ error: "META_ACCESS_TOKEN secret is not set" }, 500)
 
   const section = new URL(req.url).searchParams.get("section") ?? "all"

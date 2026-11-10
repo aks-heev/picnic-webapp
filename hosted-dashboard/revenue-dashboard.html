@@ -1216,13 +1216,16 @@ window.refresh = async function () {
    data — but it would look like the business dashboard, and it isn't.
    Widening this list alone does NOT grant a partner access; the RLS policies
    have to change too, or they will sign in and see zero rows. */
-const ALLOWED = ['aksh.eeev@gmail.com'];
+/* RBAC v2: who may open this page comes from the database (my_access), not an email list. */
+const PAGE_ROLES = ['owner', 'manager'];
 
 async function boot() {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { signInScreen(''); return; }
   S.email = (session.user && session.user.email) || '';
-  if (!ALLOWED.includes(S.email.trim().toLowerCase())) {
+  const acc = await TPS_REGION.authorize(sb, { roles: PAGE_ROLES });
+  if (acc === 'redirect') return;
+  if (!acc) {
     await sb.auth.signOut();
     signInScreen('That account does not have access to this dashboard.');
     return;
@@ -1237,7 +1240,7 @@ async function boot() {
        broken dashboard — send them back to the door rather than to an error. */
     if (/does not have read access/i.test(m)) {
       await sb.auth.signOut();
-      signInScreen('That account cannot see the business data. Sign in with the owner account.');
+      signInScreen('That account cannot see the business data for this region.');
       return;
     }
     document.getElementById('root').innerHTML = `<div class="state err"><strong>Couldn’t load the dashboard.</strong><div>${esc(m)}</div><div style="margin-top:9px; font-size:12px;">Reload the page to retry, or <a href="#" onclick="signOut();return false;">sign out</a>.</div></div>`;
