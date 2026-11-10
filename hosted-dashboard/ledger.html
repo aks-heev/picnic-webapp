@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="robots" content="noindex, nofollow" />
+<meta name="theme-color" content="#f8f4ee" />
+<title>The Picnic Stories — Ledger</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+<script src="/region.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f8f4ee; --card: #ffffff; --ink: #2a2521; --ink-2: #4f463d; --muted: #6b6259;
+    --hair: #e6ddd1; --terracotta: #b8552a; --terracotta-bg: #fbeee5; --olive: #5c6b42;
+    --olive-bg: #e9eedd; --red: #a43520; --red-bg: #f9e7e2; --amber-bg: #fbf1d9; --amber: #7a5a10;
+    --serif: Georgia, "Times New Roman", "Iowan Old Style", "Palatino Linotype", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --r: 14px; --r-sm: 10px;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--ink); font-size: 15px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 14px 14px calc(40px + env(safe-area-inset-bottom)); }
+  .state { text-align: center; padding: 60px 20px; color: var(--muted); }
+
+  /* sign-in: same card as the hub */
+  .signin-wrap { min-height: 76vh; display: flex; align-items: center; justify-content: center; padding: 24px 0; }
+  .signin-card { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r); padding: 34px 26px 26px; width: 100%; max-width: 380px; box-shadow: 0 1px 2px rgba(42,37,33,.04), 0 8px 28px rgba(42,37,33,.06); }
+  .signin-brand { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--terracotta); font-weight: 600; }
+  .signin-card h1 { font-size: 22px; margin: 10px 0 2px; }
+  .signin-sub { color: var(--muted); font-size: 13px; margin: 0 0 22px; }
+  .signin-card label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-2); margin: 0 0 5px; }
+  .signin-card input { width: 100%; padding: 11px 12px; font: inherit; font-size: 16px; color: var(--ink); background: var(--bg); border: 1px solid var(--hair); border-radius: 9px; margin-bottom: 14px; }
+  .signin-card button { width: 100%; padding: 12px 14px; font: inherit; font-weight: 600; color: #fff; background: var(--terracotta); border: 0; border-radius: 9px; cursor: pointer; }
+  .signin-card button:disabled { opacity: .6; }
+  .signin-msg { min-height: 18px; margin-top: 12px; font-size: 12.5px; color: var(--red); text-align: center; }
+
+  .mast { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .mast h1 { font-family: var(--serif); font-weight: 400; font-size: 22px; margin: 0; flex: 1; }
+  .mast h1 em { font-style: italic; color: var(--terracotta); }
+  .mast a, .mast button { font: inherit; font-size: 13px; color: var(--ink-2); background: var(--card); border: 1px solid var(--hair); border-radius: var(--r-sm); padding: 8px 11px; min-height: 40px; text-decoration: none; cursor: pointer; display: inline-flex; align-items: center; }
+
+  .bal { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin: 0 -14px 12px; padding-left: 14px; padding-right: 14px; scrollbar-width: none; }
+  .bal::-webkit-scrollbar { display: none; }
+  .bal .b { flex: 0 0 auto; background: var(--card); border: 1px solid var(--hair); border-radius: var(--r-sm); padding: 9px 12px; min-width: 112px; }
+  .bal .b.me { border-color: var(--terracotta); background: var(--terracotta-bg); }
+  .bal .b .l { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+  .bal .b .v { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .bal .b .v.neg { color: var(--red); }
+
+  .card { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r); padding: 14px; margin-bottom: 14px; }
+  .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--bg); border: 1px solid var(--hair); border-radius: 12px; padding: 4px; margin-bottom: 14px; }
+  .seg button { font: inherit; font-weight: 600; font-size: 14.5px; border: 0; background: none; color: var(--ink-2); padding: 0 6px; min-height: 44px; border-radius: 9px; cursor: pointer; }
+  .seg button.on { background: var(--terracotta); color: #fff; }
+
+  .amt { display: flex; align-items: center; gap: 6px; border: 1px solid var(--hair); background: var(--bg); border-radius: 12px; padding: 4px 14px; margin-bottom: 14px; }
+  .amt:focus-within { outline: 2px solid var(--terracotta); outline-offset: 1px; border-color: transparent; }
+  .amt span { font-size: 26px; color: var(--muted); }
+  .amt input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; font-size: 30px; font-weight: 650; color: var(--ink); padding: 8px 0; outline: none; font-variant-numeric: tabular-nums; }
+  .lab { font-size: 12px; font-weight: 600; color: var(--ink-2); margin: 0 0 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
+  .chip { font: inherit; font-size: 14px; border: 1px solid var(--hair); background: var(--card); color: var(--ink-2); padding: 0 13px; min-height: 44px; border-radius: 999px; cursor: pointer; }
+  .chip.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .chip.sug { min-height: 36px; font-size: 13px; background: var(--bg); border-style: dashed; }
+  .chip:focus-visible, .seg button:focus-visible, .save:focus-visible { outline: 2px solid var(--terracotta); outline-offset: 2px; }
+  .field { width: 100%; font: inherit; font-size: 16px; color: var(--ink); background: var(--bg); border: 1px solid var(--hair); border-radius: var(--r-sm); padding: 11px 12px; min-height: 46px; margin-bottom: 14px; }
+  .field:focus { outline: 2px solid var(--terracotta); outline-offset: 1px; border-color: transparent; }
+  .save { width: 100%; font: inherit; font-size: 16px; font-weight: 650; color: #fff; background: var(--terracotta); border: 0; border-radius: 12px; min-height: 54px; cursor: pointer; }
+  .save:disabled { opacity: .55; }
+  .msg { font-size: 13px; min-height: 18px; margin-top: 9px; text-align: center; }
+  .msg.err { color: var(--red); } .msg.ok { color: var(--olive); }
+
+  .queue { background: var(--amber-bg); color: var(--amber); border-radius: var(--r-sm); padding: 9px 12px; font-size: 13px; margin-bottom: 12px; display: flex; gap: 8px; align-items: center; }
+  .queue button { font: inherit; font-size: 12.5px; margin-left: auto; border: 1px solid currentColor; background: none; color: inherit; border-radius: 8px; padding: 6px 10px; min-height: 36px; cursor: pointer; }
+  .queue.bad { background: var(--red-bg); color: var(--red); display: block; }
+  .queue.bad div { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+
+  .sec { display: flex; align-items: center; gap: 8px; margin: 4px 2px 8px; }
+  .sec h2 { font-family: var(--serif); font-weight: 400; font-size: 18px; margin: 0; flex: 1; }
+  .sec .chip { min-height: 36px; font-size: 13px; }
+  .row { display: flex; gap: 10px; align-items: baseline; padding: 11px 2px; border-top: 1px solid var(--hair); cursor: pointer; }
+  .row:first-child { border-top: 0; }
+  .row .t { flex: 1; min-width: 0; }
+  .row .t b { font-weight: 600; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .t small { color: var(--muted); font-size: 12.5px; }
+  .row .a { font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .row .a.in { color: var(--olive); }
+  .row.void .t b, .row.void .a { text-decoration: line-through; color: var(--muted); }
+  .voidbox { padding: 4px 2px 12px; }
+  .voidbox .field { margin-bottom: 8px; }
+  .voidbox button { font: inherit; font-size: 14px; min-height: 44px; border-radius: var(--r-sm); padding: 0 14px; cursor: pointer; border: 1px solid var(--hair); background: var(--card); color: var(--ink-2); margin-right: 6px; }
+  .voidbox button.danger { background: var(--red); border-color: var(--red); color: #fff; }
+  .empty { color: var(--muted); text-align: center; padding: 18px 0; font-size: 13.5px; }
+</style>
+</head>
+<body>
+<div id="root" class="wrap"><div class="state">Loading…</div></div>
+
+<script>
+/* ============================================================
+   Ledger — phone entry for the one money book (public.money_entries).
+   Plan: docs/LEDGER_MONEY_BOOK_PLAN_2026-11-10.md, phase 2.
+
+   Same Supabase project, anon key and sign-in as the hub. The anon key is
+   public by design; RLS decides everything. Only people whose my_access()
+   grants the 'money' capability on NCR can read or write a row here.
+
+   Rules this page must keep:
+   - Never DELETE. A wrong entry is voided (voided_at + void_reason).
+   - One row per movement. A transfer is ONE row with counter_account.
+   - Every save carries a client-made source_ref ('app:<uuid>') and goes
+     through INSERT ... ON CONFLICT DO NOTHING, so the offline queue can be
+     replayed without ever double-entering.
+   - Dates are the business's day (Asia/Kolkata), not the phone's.
+   ============================================================ */
+const SUPABASE_URL = 'https://evmftrogyzoudiccqkya.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2bWZ0cm9neXpvdWRpY2Nxa3lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTM5OTUsImV4cCI6MjA5NTI4OTk5NX0.ka2tLAY7xpe08X8TlNVgft4V__Qv7Ol27rd0daOtI4I';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { persistSession: true, autoRefreshToken: true } });
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const inr = n => '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+const istDay = (offset = 0) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(Date.now() + offset * 864e5));
+const niceDate = iso => { const d = new Date(iso + 'T00:00:00'); return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }); };
+
+/* [stored category, chip label]. Stored names match the migrated rows so reports stay one list. */
+const EXPENSE_CATS = [
+  ['Food & beverages', 'Food'], ['Fuel & transport', 'Transport'], ['Decor & event supplies', 'Decor & flowers'],
+  ['Photography', 'Photography'], ['Housekeeping & supplies', 'BnB supplies'], ['Staff welfare (Sunny)', 'Sunny'],
+  ['Staff & labour', 'Labour'], ['Meta ads', 'Meta ads'], ['Printing & stationery', 'Printing'],
+  ['Venue & vendor payouts', 'Venue payout'], ['Rent', 'Rent'], ['Utilities', 'Utilities'],
+  ['Software & fees', 'Software & fees'], ['Security deposit', 'Deposit'], ['Uncategorised', 'Other'],
+];
+const RECEIPT_CATS = [['Booking income', 'Booking'], ['Airbnb payouts', 'Airbnb payout'], ['Razorpay & UPI receipts', 'Razorpay / UPI'], ['Uncategorised', 'Other']];
+const QKEY = 'tps-ledger-queue-v1';
+
+const S = { acc: null, uid: null, me: null, accounts: [], balances: [], entries: [], bookings: [],
+            mode: 'out', cat: null, account: null, to: null, date: istDay(), mine: true, openId: null, saving: false };
+
+/* ---------- offline queue ---------- */
+const qRead = () => { try { return JSON.parse(localStorage.getItem(QKEY) || '[]'); } catch (e) { return []; } };
+const qWrite = q => { try { localStorage.setItem(QKEY, JSON.stringify(q)); } catch (e) {} };
+let flushing = false;
+async function flush() {
+  if (flushing) return; flushing = true;
+  let q = qRead(), changed = false;
+  for (const item of q) {
+    if (item.failed) continue;
+    let error = null;
+    try { ({ error } = await sb.from('money_entries').upsert(item.row, { onConflict: 'source_ref', ignoreDuplicates: true })); }
+    catch (e) { error = { message: String(e && e.message || e), network: true }; }
+    if (!error) { item.done = true; changed = true; continue; }
+    const net = error.network || !error.code || /fetch|network|load failed/i.test(error.message || '');
+    if (net) break;                                   // still offline: keep everything, try later
+    item.failed = error.message || 'The database refused this entry.'; changed = true;
+  }
+  q = q.filter(i => !i.done); qWrite(q);
+  flushing = false;
+  if (changed) await loadData();
+  if ($('bal')) { renderBalances(); renderList(); renderQueue(); }
+}
+window.addEventListener('online', flush);
+
+/* ---------- sign-in (same as hub) ---------- */
+function signInScreen(message) {
+  $('root').innerHTML = `
+    <div class="signin-wrap"><div class="signin-card">
+      <div class="signin-brand">The Picnic Stories</div><h1>Ledger</h1><p class="signin-sub">Sign in to continue</p>
+      <form id="signin-form" autocomplete="on">
+        <label for="si-email">Email</label><input id="si-email" type="email" autocomplete="username" required />
+        <label for="si-pass">Password</label><input id="si-pass" type="password" autocomplete="current-password" required />
+        <button type="submit" id="si-go">Sign in</button>
+      </form><div id="si-msg" class="signin-msg">${message ? esc(message) : ''}</div>
+    </div></div>`;
+  $('signin-form').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const btn = $('si-go'); btn.disabled = true; btn.textContent = 'Signing in…'; $('si-msg').textContent = '';
+    const { error } = await sb.auth.signInWithPassword({ email: $('si-email').value.trim(), password: $('si-pass').value });
+    if (error) { btn.disabled = false; btn.textContent = 'Sign in'; $('si-msg').textContent = error.message || 'Sign-in failed.'; return; }
+    boot();
+  });
+}
+
+/* ---------- data ---------- */
+async function loadData() {
+  const from = istDay(-12), to = istDay(30);
+  const [a, b, e, k] = await Promise.all([
+    sb.from('money_accounts').select('code,label,kind,sort,active').order('sort'),
+    sb.from('money_account_balances').select('code,balance'),
+    sb.from('money_entries').select('id,entry_date,account,direction,amount,kind,category,description,booking_id,counter_account,source,created_by,created_at,voided_at,void_reason')
+      .order('entry_date', { ascending: false }).order('id', { ascending: false }).limit(1000),
+    sb.from('bookings').select('id,full_name,preferred_date,checkout_date').eq('region', 'ncr').eq('confirmed', true)
+      .gte('preferred_date', from).lte('preferred_date', to).order('preferred_date', { ascending: false }),
+  ]);
+  if (a.error || e.error) return a.error || e.error;
+  S.accounts = (a.data || []).filter(x => x.active);
+  S.balances = b.data || []; S.entries = e.data || []; S.bookings = k.data || [];
+  return null;
+}
+const label = code => (S.accounts.find(a => a.code === code) || {}).label || code;
+const shortLabel = code => label(code).replace(/\s*\(.*\)$/, '');
+
+/* Categories ordered by how often THIS person used them; description suggestions per category. */
+function rankedCats() {
+  const base = S.mode === 'in' ? RECEIPT_CATS : EXPENSE_CATS;
+  const n = {};
+  S.entries.forEach(x => { if (x.account === (S.me || x.account) && !x.voided_at) n[x.category] = (n[x.category] || 0) + 1; });
+  return base.map((c, i) => ({ c, i, n: c[0] === 'Uncategorised' ? -1 : (n[c[0]] || 0) })).sort((x, y) => y.n - x.n || x.i - y.i).map(x => x.c);
+}
+function suggestions(cat) {
+  const n = {};
+  S.entries.forEach(x => {
+    if (x.category !== cat || x.voided_at || !x.description) return;
+    const d = x.description.trim().toLowerCase();
+    if (d.length > 22 || /\d{2,}/.test(d)) return;          // skip one-offs like "bkg #229 food payment"
+    n[d] = (n[d] || 0) + 1;
+  });
+  return Object.entries(n).filter(([, c]) => c >= 2).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([d]) => d);
+}
+
+/* ---------- render ---------- */
+function renderShell() {
+  $('root').innerHTML = `
+    <div class="mast"><h1>Money <em>book</em></h1><a href="/">Dashboards</a><button type="button" onclick="signOut()">Sign out</button></div>
+    <div id="bal" class="bal"></div>
+    <div id="queue"></div>
+    <form class="card" id="f" novalidate>
+      <div class="seg" role="group" aria-label="Entry type">
+        <button type="button" data-mode="out">Spent</button><button type="button" data-mode="in">Received</button><button type="button" data-mode="xfer">Transfer</button>
+      </div>
+      <label class="amt" for="amt"><span>₹</span><input id="amt" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Amount in rupees" /></label>
+      <div id="cat-box"><div class="lab" id="cat-lab">Category</div><div class="chips" id="cats"></div></div>
+      <div class="chips" id="sugs" hidden></div>
+      <div id="to-box" hidden><div class="lab">To</div><div class="chips" id="tos"></div></div>
+      <input class="field" id="desc" maxlength="120" autocomplete="off" placeholder="What was it? (optional)" aria-label="Description" />
+      <div class="lab" id="acc-lab">Paid from</div><div class="chips" id="accs"></div>
+      <div class="lab">Date</div>
+      <div class="chips" id="dates"></div>
+      <input class="field" id="date" type="date" hidden aria-label="Entry date" />
+      <div id="bk-box"><div class="lab">Booking (optional)</div><select class="field" id="bk" aria-label="Booking"></select></div>
+      <button class="save" type="submit" id="save">Save</button>
+      <div class="msg" id="msg" role="status"></div>
+    </form>
+    <div class="sec"><h2>Recent</h2><button type="button" class="chip" id="mine"></button></div>
+    <div class="card" id="list"></div>`;
+  $('f').addEventListener('submit', onSave);
+  document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => { S.mode = b.dataset.mode; S.cat = null; S.to = null; say(''); renderForm(); }));
+  $('mine').addEventListener('click', () => { S.mine = !S.mine; renderList(); });
+  $('date').addEventListener('change', () => { if ($('date').value) { S.date = $('date').value; renderDates(); } });
+}
+
+function renderBalances() {
+  const by = Object.fromEntries(S.balances.map(b => [b.code, Number(b.balance)]));
+  const order = S.accounts.slice().sort((a, b) => (a.code === S.me ? -1 : b.code === S.me ? 1 : a.sort - b.sort));
+  $('bal').innerHTML = order.map(a => {
+    const v = by[a.code] || 0, me = a.code === S.me;
+    return `<div class="b${me ? ' me' : ''}"><div class="l">${me ? 'You hold' : esc(shortLabel(a.code))}</div><div class="v${v < 0 ? ' neg' : ''}">${v < 0 ? '−' : ''}${inr(Math.abs(v))}</div></div>`;
+  }).join('');
+}
+
+function chip(text, on, attrs, cls) { return `<button type="button" class="chip${on ? ' on' : ''}${cls ? ' ' + cls : ''}" aria-pressed="${!!on}" ${attrs}>${esc(text)}</button>`; }
+
+function renderForm() {
+  document.querySelectorAll('.seg button').forEach(b => b.classList.toggle('on', b.dataset.mode === S.mode));
+  const xfer = S.mode === 'xfer';
+  $('cat-box').hidden = xfer; $('to-box').hidden = !xfer; $('bk-box').hidden = xfer;
+  $('acc-lab').textContent = S.mode === 'out' ? 'Paid from' : S.mode === 'in' ? 'Received by' : 'From';
+  $('desc').placeholder = xfer ? 'Note (optional)' : S.mode === 'in' ? 'Who / which booking? (optional)' : 'What was it? (optional)';
+  if (!xfer) {
+    $('cats').innerHTML = rankedCats().map(([c, l]) => chip(l, S.cat === c, `data-cat="${esc(c)}"`)).join('');
+    $('cats').querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => { S.cat = b.dataset.cat; renderForm(); }));
+  }
+  const sug = (!xfer && S.cat && S.cat !== 'Uncategorised') ? suggestions(S.cat) : [];
+  $('sugs').hidden = !sug.length;
+  $('sugs').innerHTML = sug.map(d => chip(d, false, `data-d="${esc(d)}"`, 'sug')).join('');
+  $('sugs').querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => { $('desc').value = b.dataset.d; }));
+  if (!S.account) S.account = S.me || 'bank';
+  $('accs').innerHTML = S.accounts.filter(a => a.kind !== 'staff').map(a => chip(a.code === S.me ? 'Me' : shortLabel(a.code), S.account === a.code, `data-acc="${esc(a.code)}"`)).join('');
+  $('accs').querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => { S.account = b.dataset.acc; if (S.to === S.account) S.to = null; renderForm(); }));
+  if (xfer) {
+    $('tos').innerHTML = S.accounts.filter(a => a.code !== S.account).map(a => chip(a.code === S.me ? 'Me' : shortLabel(a.code), S.to === a.code, `data-to="${esc(a.code)}"`)).join('');
+    $('tos').querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => { S.to = b.dataset.to; renderForm(); }));
+  }
+  const keep = $('bk').value;
+  $('bk').innerHTML = `<option value="">No booking</option>` + S.bookings.map(b =>
+    `<option value="${b.id}">#${b.id} · ${esc(b.full_name || 'Guest')} · ${niceDate(b.preferred_date)}${b.checkout_date ? ' (stay)' : ''}</option>`).join('');
+  $('bk').value = keep;
+  renderDates();
+}
+
+function renderDates() {
+  const t = istDay(), y = istDay(-1), other = S.date !== t && S.date !== y;
+  $('dates').innerHTML = chip('Today', S.date === t, 'data-d="t"') + chip('Yesterday', S.date === y, 'data-d="y"') + chip(other ? niceDate(S.date) : 'Other date', other, 'data-d="o"');
+  $('dates').querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => {
+    if (b.dataset.d === 't') { S.date = t; $('date').hidden = true; }
+    else if (b.dataset.d === 'y') { S.date = y; $('date').hidden = true; }
+    else { $('date').hidden = false; $('date').max = t; $('date').value = S.date; $('date').focus(); }
+    renderDates();
+  }));
+}
+
+function renderQueue() {
+  const q = qRead(), wait = q.filter(i => !i.failed), bad = q.filter(i => i.failed);
+  $('queue').innerHTML =
+    (wait.length ? `<div class="queue">${wait.length} ${wait.length === 1 ? 'entry is' : 'entries are'} saved on this phone and will send when you are back online.<button type="button" onclick="flush()">Send now</button></div>` : '') +
+    bad.map(i => `<div class="queue bad"><b>Not saved:</b> ${esc(i.row.description || i.row.category)} ${inr(i.row.amount)} — ${esc(i.failed)}
+      <div><button type="button" onclick="qRetry('${esc(i.row.source_ref)}')">Try again</button><button type="button" onclick="qDrop('${esc(i.row.source_ref)}')">Discard</button></div></div>`).join('');
+}
+window.flush = flush;
+window.qRetry = ref => { const q = qRead(); q.forEach(i => { if (i.row.source_ref === ref) delete i.failed; }); qWrite(q); flush(); };
+window.qDrop = ref => { qWrite(qRead().filter(i => i.row.source_ref !== ref)); renderQueue(); say(''); };
+
+function renderList() {
+  $('mine').textContent = S.mine && S.me ? 'Showing mine' : 'Showing all';
+  $('mine').classList.toggle('on', S.mine && !!S.me);
+  const rows = S.entries.filter(x => !(S.mine && S.me) || x.account === S.me || x.counter_account === S.me || x.created_by === S.uid).slice(0, 40);
+  if (!rows.length) { $('list').innerHTML = `<div class="empty">Nothing here yet.</div>`; return; }
+  $('list').innerHTML = rows.map(x => {
+    const title = x.description || x.category || x.kind;
+    const who = x.counter_account ? `${shortLabel(x.account)} → ${shortLabel(x.counter_account)}` : shortLabel(x.account);
+    const sub = [niceDate(x.entry_date), who, x.description ? x.category : null, x.booking_id ? '#' + x.booking_id : null, x.voided_at ? 'voided: ' + x.void_reason : null].filter(Boolean).join(' · ');
+    const open = S.openId === x.id && !x.voided_at;
+    return `<div class="row${x.voided_at ? ' void' : ''}" data-id="${x.id}" tabindex="0" role="button" aria-expanded="${open}">
+        <div class="t"><b>${esc(title)}</b><small>${esc(sub)}</small></div>
+        <div class="a ${x.direction === 'in' ? 'in' : ''}">${x.direction === 'in' ? '+' : '−'}${inr(x.amount)}</div></div>` +
+      (open ? `<div class="voidbox"><input class="field" id="vr" maxlength="120" placeholder="Why is this entry wrong?" aria-label="Reason for voiding" />
+        <button type="button" class="danger" onclick="voidEntry(${x.id})">Void this entry</button><button type="button" onclick="closeRow()">Cancel</button>
+        <div class="msg err" id="vmsg"></div></div>` : '');
+  }).join('');
+  $('list').querySelectorAll('.row').forEach(r => {
+    const go = () => { const id = Number(r.dataset.id); S.openId = S.openId === id ? null : id; renderList(); };
+    r.addEventListener('click', go);
+    r.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+  });
+}
+window.closeRow = () => { S.openId = null; renderList(); };
+window.voidEntry = async id => {
+  const reason = ($('vr').value || '').trim();
+  if (reason.length < 3) { $('vmsg').textContent = 'Say why, in a few words.'; return; }
+  const { error } = await sb.from('money_entries').update({ voided_at: new Date().toISOString(), voided_by: S.uid, void_reason: reason }).eq('id', id);
+  if (error) { $('vmsg').textContent = error.message || 'Could not void it.'; return; }
+  S.openId = null; await loadData(); renderBalances(); renderList();
+};
+
+/* ---------- save ---------- */
+function say(text, cls) { const m = $('msg'); m.textContent = text; m.className = 'msg ' + (cls || ''); }
+async function onSave(ev) {
+  ev.preventDefault();
+  if (S.saving) return;
+  const amount = Math.round(parseFloat(String($('amt').value).replace(/,/g, '')) * 100) / 100;
+  const desc = $('desc').value.trim();
+  const xfer = S.mode === 'xfer';
+  if (!(amount > 0)) return say('Enter the amount.', 'err');
+  if (amount > 5000000) return say('That amount looks too large. Check it.', 'err');
+  if (!xfer && !S.cat) return say('Pick a category.', 'err');
+  if (!xfer && S.cat === 'Uncategorised' && !desc) return say('For "Other", say what it was.', 'err');
+  if (xfer && !S.to) return say('Pick where the money went.', 'err');
+  if (S.date > istDay()) return say('The date cannot be in the future.', 'err');
+  const toKind = xfer ? (S.accounts.find(a => a.code === S.to) || {}).kind : null;
+  const row = {
+    entry_date: S.date, account: S.account, amount, description: desc || null,
+    direction: S.mode === 'in' ? 'in' : 'out',
+    kind: xfer ? 'transfer' : S.mode === 'in' ? 'receipt' : S.cat === 'Security deposit' ? 'deposit' : 'expense',
+    category: xfer ? (toKind === 'staff' ? 'Transfer: Sunny advances' : toKind === 'bank' ? 'Transfer: to Bank' : toKind === 'cash' ? 'Transfer: Cash' : 'Transfer: partner') : S.cat,
+    counter_account: xfer ? S.to : null,
+    booking_id: !xfer && $('bk').value ? Number($('bk').value) : null,
+    needs_review: !xfer && S.cat === 'Uncategorised',
+    source: 'app', source_ref: 'app:' + (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2)),
+  };
+  S.saving = true; $('save').disabled = true; $('save').textContent = 'Saving…';
+  const q = qRead(); q.push({ row }); qWrite(q);        // queue first: a dropped connection never loses it
+  await flush();
+  S.saving = false; $('save').disabled = false; $('save').textContent = 'Save';
+  const left = qRead().find(i => i.row.source_ref === row.source_ref);
+  if (left && left.failed) { say('Not saved. See the note at the top.', 'err'); return; }
+  $('amt').value = ''; $('desc').value = ''; $('bk').value = ''; S.cat = xfer ? null : S.cat; S.to = null;
+  say(left ? 'Saved on this phone. It will send when you are online.' : `Saved: ${inr(amount)}.`, 'ok');
+  renderBalances(); renderForm(); renderList();
+  $('amt').focus();
+}
+
+async function signOut() { await sb.auth.signOut(); location.reload(); }
+window.signOut = signOut;
+
+async function boot() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { signInScreen(''); return; }
+  S.uid = session.user.id;
+  const acc = await TPS_REGION.authorize(sb);
+  if (acc === 'redirect') return;
+  if (!acc) { await sb.auth.signOut(); signInScreen('That account does not have access.'); return; }
+  S.acc = acc;
+  const err = await loadData();
+  if (err || !S.accounts.length) {
+    $('root').innerHTML = `<div class="state">This account cannot open the money book.<br><br><a href="/">Back to dashboards</a></div>`;
+    return;
+  }
+  const first = String(acc.display_name || '').trim().split(/\s+/)[0].toLowerCase();
+  S.me = (S.accounts.find(a => a.code === first && a.kind === 'partner') || {}).code || null;
+  S.account = S.me || 'bank';
+  renderShell(); renderBalances(); renderForm(); renderList(); renderQueue();
+  flush();
+}
+sb.auth.onAuthStateChange(event => { if (event === 'SIGNED_OUT') signInScreen(''); });
+boot();
+</script>
+</body>
+</html>

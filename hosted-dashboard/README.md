@@ -36,6 +36,7 @@ read fails, the calendar still shows bookings and says what is missing.
 | `/` | `index.html` | hub: one sign-in, a card per dashboard |
 | `/revenue-dashboard` | `revenue-dashboard.html` | revenue, P&L, occupancy, bookings table |
 | `/meta-dashboard` | `meta-dashboard.html` | Meta ads |
+| `/ledger` | `ledger.html` | phone entry for the one money book (`money_entries`): spent / received / transfer, balances per account, void (never delete), offline queue replayed on `source_ref`. Gurugram only, owners only (RLS). `/money` is already the P&L tab of `views.html`, so this is `/ledger`. Plan: `docs/LEDGER_MONEY_BOOK_PLAN_2026-11-10.md` |
 | `/calendar` | `calendar.html` | bookings calendar (below) |
 | `/growth` | `growth.html` | PostHog visitors + demand path, bookings/revenue/spend by channel, Search Console (docs/GROWTH_DASHBOARD_PLAN.md). Reads `web_*` / `gsc_*` tables filled by `sync-posthog` / `sync-gsc` |
 
