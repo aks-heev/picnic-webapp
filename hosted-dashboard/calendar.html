@@ -6,6 +6,7 @@
 <meta name="robots" content="noindex, nofollow" />
 <title>The Picnic Stories — Bookings Calendar</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+<script src="/region.js"></script>
 <style>
   :root {
     color-scheme: light;
@@ -294,7 +295,7 @@
    ============================================================ */
 const SUPABASE_URL  = 'https://evmftrogyzoudiccqkya.supabase.co';
 const SUPABASE_ANON  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2bWZ0cm9neXpvdWRpY2Nxa3lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTM5OTUsImV4cCI6MjA5NTI4OTk5NX0.ka2tLAY7xpe08X8TlNVgft4V__Qv7Ol27rd0daOtI4I';
-const CITIES = ['Gurugram', 'Delhi'];          // same book as the business dashboard
+const CITIES = TPS_REGION.cities;              // region picked by the NCR / Jaipur switch (region.js)
 const TEAM_PHONES = ['7742363777', '7425055501'];  // standing exclusions (CLAUDE.md §8)
 const ALLOWED = ['aksh.eeev@gmail.com'];
 
@@ -354,7 +355,7 @@ async function load() {
   ]);
   if (bkRes.error) throw new Error(`Could not read bookings — ${bkRes.error.message}`);
   const raw = bkRes.data || [];
-  if (!raw.length) throw new Error('Signed in, but no bookings came back. This account does not have read access to the business data.');
+  if (!raw.length) throw new Error(`Signed in, but no ${TPS_REGION.label} bookings came back. Either there are none yet, or this account does not have read access to the business data.`);
   S.venues = (venRes && !venRes.error) ? (venRes.data || []) : [];
   S.avail = (avRes && !avRes.error) ? (avRes.data || []) : [];
   S.calDataErr = (venRes && venRes.error) || (avRes && avRes.error) ? 'Airbnb blocks and venue capacity could not be read; bookings are still shown.' : '';
@@ -462,7 +463,7 @@ function render() {
       <div class="brand">
         <a class="back" href="/">← Dashboards</a>
         <h1>The Picnic <em>Stories</em></h1>
-        <div class="scope">Bookings calendar · Gurugram &amp; Delhi</div>
+        <div class="scope">${TPS_REGION.switcherHtml()}Bookings calendar · ${esc(TPS_REGION.label)}</div>
       </div>
       <div class="mast-ctl">
         <button type="button" class="btn" onclick="refresh()" title="Re-read the booking system">Refresh</button>
@@ -1065,7 +1066,7 @@ function signInScreen(message) {
       <div class="signin-card">
         <div class="signin-brand">The Picnic Stories</div>
         <h1>Bookings calendar</h1>
-        <p class="signin-sub">Gurugram &amp; Delhi</p>
+        <p class="signin-sub">${esc(TPS_REGION.label)}</p>
         <form id="signin-form" autocomplete="on">
           <label for="si-email">Email</label>
           <input id="si-email" type="email" autocomplete="username" required />

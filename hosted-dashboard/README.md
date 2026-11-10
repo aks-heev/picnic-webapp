@@ -1,6 +1,13 @@
 # Hosted business dashboard
 
-A standalone, single-file dashboard for the Gurugram & Delhi book. It is **not**
+A standalone dashboard for the business, one region (book) at a time.
+
+**Regions (2026-11-10).** `region.js` holds the NCR (Gurugram + Delhi) / Jaipur
+switch used by `revenue-dashboard`, `views` (/bookings, /sales, /stays, /money)
+and `calendar`. Picked by `?region=ncr|jaipur`, else the last choice, else NCR.
+It scopes bookings and venues by `venues.city`, expenses by their `city` text
+(blank = NCR), and occupancy by the region's venue ids. The two books are never
+summed. `meta-dashboard` has its own city filter; `growth` is not region-scoped. It is **not**
 part of the picnic-webapp site and must never become a route inside it — it ships
 as its own Vercel project so a mistake here can never take down picnicstories.com.
 

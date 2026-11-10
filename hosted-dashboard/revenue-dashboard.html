@@ -7,6 +7,7 @@
 <title>The Picnic Stories — Business Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+<script src="/region.js"></script>
 <style>
   :root {
     color-scheme: light;
@@ -292,8 +293,8 @@
 const SUPABASE_URL  = 'https://evmftrogyzoudiccqkya.supabase.co';
 const SUPABASE_ANON  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2bWZ0cm9neXpvdWRpY2Nxa3lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTM5OTUsImV4cCI6MjA5NTI4OTk5NX0.ka2tLAY7xpe08X8TlNVgft4V__Qv7Ol27rd0daOtI4I';
 
-/* Region scope: this dashboard is the Gurugram & Delhi book. Jaipur has its own. */
-const CITIES = ['Gurugram', 'Delhi'];
+/* Region scope: one book at a time, picked by the NCR / Jaipur switch (region.js). */
+const CITIES = TPS_REGION.cities;
 /* Standing exclusions (CLAUDE.md §8): team phones + Test* names. */
 const TEAM_PHONES = ['7742363777', '7425055501'];
 
@@ -359,7 +360,7 @@ const S = {
    admin email, so an unauthenticated or non-admin session gets [] rather than an
    error — which is why load() checks for an empty bookings set explicitly. */
 async function load() {
-  const [bkRes, costRes, addRes, expRes, occRes] = await Promise.all([
+  const [bkRes, costRes, addRes, expRes, occRes, venRes] = await Promise.all([
     sb.from('bookings')
       .select('id, full_name, mobile_number, preferred_date, checkout_date, time_slot, occasion, ' +
               'total_amount, advance_amount, payment_status, entry_source, external_booking_ref, ' +
@@ -376,14 +377,17 @@ async function load() {
        older DB shouldn't break the whole dashboard load, so its error is not
        thrown below — just surfaced as an empty occupancy section. */
     sb.from('monthly_occupancy_self_managed').select('venue_id, venue_name, month, active_days, nights_booked, occupancy_pct'),
+    /* Region's venue ids, to scope occupancy (the view carries no city). */
+    sb.from('venues').select('id').in('city', CITIES),
   ]);
 
   for (const [label, res] of [['bookings', bkRes], ['costs', costRes], ['add-ons', addRes], ['expenses', expRes]]) {
     if (res.error) throw new Error(`Could not read ${label} — ${res.error.message}`);
   }
-  S.occupancy = (occRes && !occRes.error) ? (occRes.data || []) : [];
+  const regionVenueIds = new Set(((venRes && !venRes.error) ? (venRes.data || []) : []).map(v => String(v.id)));
+  S.occupancy = (occRes && !occRes.error) ? (occRes.data || []).filter(o => regionVenueIds.has(String(o.venue_id))) : [];
   const raw = bkRes.data || [];
-  if (!raw.length) throw new Error('Signed in, but no bookings came back. This account does not have read access to the business data.');
+  if (!raw.length) throw new Error(`Signed in, but no ${TPS_REGION.label} bookings came back. Either there are none yet, or this account does not have read access to the business data.`);
   S.dbOk = true; S.sheetOk = true;
 
   const costBy = new Map();
@@ -396,7 +400,7 @@ async function load() {
   });
 
   S.expenses = (expRes.data || [])
-    .filter(e => money(e.amount) > 0)
+    .filter(e => money(e.amount) > 0 && TPS_REGION.hasCity(e.city))
     .map(e => ({
       date: parseDate(e.spend_date),
       business: String(e.business || '').trim() || '—',
@@ -764,7 +768,7 @@ function render() {
     <div class="mast">
       <div class="brand">
         <h1>The Picnic <em>Stories</em></h1>
-        <div class="scope">Gurugram &amp; Delhi · ${period} · ${byBooked ? 'by date booked' : 'by event date'}</div>
+        <div class="scope">${TPS_REGION.switcherHtml()}${esc(TPS_REGION.label)} · ${period} · ${byBooked ? 'by date booked' : 'by event date'}</div>
       </div>
       <div class="mast-ctl">
         <div class="ctl"><label for="f-basis">Basis</label><select id="f-basis" title="Event date places money in the month the booking happens (stays split per night). Booked on places it in the month the booking was made.">${opt('event', 'Event date', f.basis)}${opt('booked', 'Booked on', f.basis)}</select></div>
@@ -1152,7 +1156,7 @@ function signInScreen(message) {
       <div class="signin-card">
         <div class="signin-brand">The Picnic Stories</div>
         <h1>Business dashboard</h1>
-        <p class="signin-sub">Gurugram &amp; Delhi</p>
+        <p class="signin-sub">${esc(TPS_REGION.label)}</p>
         <form id="signin-form" autocomplete="on">
           <label for="si-email">Email</label>
           <input id="si-email" type="email" autocomplete="username" required />
